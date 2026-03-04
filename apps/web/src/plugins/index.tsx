@@ -1504,6 +1504,14 @@ function ProjectWikiPluginPage() {
   );
 }
 
+function PluginTestPage() {
+  return (
+    <Card size="small" title="Test Plugin">
+      <Text>hello world.</Text>
+    </Card>
+  );
+}
+
 const advancedMockState = createSlice({
   name: 'advancedMock',
   initialState: {
@@ -1841,6 +1849,18 @@ const autoSyncPlugin: ModernWebPlugin = {
   }
 };
 
+const testPlugin: ModernWebPlugin = {
+  id: 'test',
+  setup(api) {
+    api.extendSubSettingNav(tabs => {
+      tabs.test = {
+        name: 'test',
+        component: PluginTestPage
+      };
+    });
+  }
+};
+
 const runtime = new WebPluginRuntime();
 [
   statisticsPlugin,
@@ -1850,7 +1870,8 @@ const runtime = new WebPluginRuntime();
   exportSwaggerPlugin,
   importPluginPack,
   genServicesPlugin,
-  autoSyncPlugin
+  autoSyncPlugin,
+  testPlugin
 ].forEach(plugin => runtime.use(plugin));
 
 export const webPlugins = runtime;

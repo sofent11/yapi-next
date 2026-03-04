@@ -4,6 +4,7 @@ import { Alert, Button, Card, Col, Form, Input, Row, Tabs, message } from 'antd'
 import { LockOutlined, MailOutlined, UserOutlined } from '@ant-design/icons';
 import { useGetUserStatusQuery, useLoginMutation, useRegisterUserMutation } from '../services/yapi-api';
 import LogoSVG from '../components/LogoSVG';
+import { webPlugins } from '../plugins';
 import './HomePage.scss';
 import './LoginPage.scss';
 
@@ -35,6 +36,7 @@ export function LoginPage() {
   const [login, loginState] = useLoginMutation();
   const [registerUser, registerState] = useRegisterUserMutation();
   const [activeKey, setActiveKey] = useState<string>('login');
+  const ThirdLogin = webPlugins.getThirdLoginComponent() as React.ComponentType | null;
 
   async function handleLogin(values: LoginFormValues) {
     const response = await login({
@@ -130,6 +132,14 @@ export function LoginPage() {
                               登录
                             </Button>
                           </Form.Item>
+                          {ThirdLogin ? (
+                            <div className="login-third-party">
+                              <div className="qsso-breakline">
+                                <span className="qsso-breakword">或</span>
+                              </div>
+                              <ThirdLogin />
+                            </div>
+                          ) : null}
                         </Form>
                       )
                     },

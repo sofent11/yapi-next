@@ -7,6 +7,7 @@ import { resReturn } from './common/api-response';
 import { mapError } from './common/error-response';
 import { InputMap, hasHttpPrefix, pickJson, pickNumber, pickOneOrMany, pickString } from './common/request-utils';
 import { InterfaceCompatService } from './services/interface-compat.service';
+import { InterfaceConflictService } from './services/interface-conflict.service';
 import { ProjectCompatService } from './services/project-compat.service';
 import { SessionAuthService } from './services/session-auth.service';
 import { SpecService } from './services/spec.service';
@@ -16,9 +17,27 @@ export class InterfaceCompatController {
   constructor(
     private readonly sessionService: SessionAuthService,
     private readonly interfaceService: InterfaceCompatService,
+    private readonly interfaceConflictService: InterfaceConflictService,
     private readonly projectService: ProjectCompatService,
     private readonly specService: SpecService
   ) {}
+
+  @Get('solve_conflict')
+  async solveConflict(@Req() req: FastifyRequest, @Query() query: InputMap) {
+    const interfaceId = pickNumber(query.id);
+    if (!interfaceId) {
+      return { errno: 400, errmsg: '接口id不能为空' };
+    }
+    const user = await this.sessionService.getCurrentUser(req);
+    if (!user) {
+      return { errno: 40011, errmsg: '请登录...' };
+    }
+    return this.interfaceConflictService.touch(
+      interfaceId,
+      Number(user._id || 0),
+      String(user.username || '')
+    );
+  }
 
   @Post('add')
   async add(@Req() req: FastifyRequest, @Body() body: InputMap) {

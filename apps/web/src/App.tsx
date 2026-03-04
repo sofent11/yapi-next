@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { Layout, Spin } from 'antd';
+import { Alert, Layout, Spin } from 'antd';
 import { useGetUserStatusQuery } from './services/yapi-api';
 import { LegacyHeader } from './components/LegacyHeader';
 import { LegacyFooter } from './components/LegacyFooter';
@@ -22,6 +22,20 @@ import './styles.css';
 const { Content } = Layout;
 
 registerDynamicReducers(webPlugins.getDynamicReducers());
+
+function shouldShowBrowserHint(): boolean {
+  if (typeof window === 'undefined') return false;
+  const ua = String(window.navigator.userAgent || '');
+  const vendor = String(window.navigator.vendor || '');
+  const hasChrome = /\bChrome\b/i.test(ua) || /\bCriOS\b/i.test(ua);
+  const isChromiumEdge = /\bEdg\//i.test(ua);
+  const isOpera = /\bOPR\//i.test(ua);
+  const isSamsung = /\bSamsungBrowser\//i.test(ua);
+  const isChromium = hasChrome || isChromiumEdge || isOpera || isSamsung;
+  if (isChromium) return false;
+  if (/Google Inc\./i.test(vendor)) return false;
+  return true;
+}
 
 function LoadingView() {
   return (
@@ -67,6 +81,7 @@ export function App() {
   }, []);
 
   const redirectToLogin = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
+  const browserHint = useMemo(() => shouldShowBrowserHint(), []);
 
   if (statusQuery.isLoading && !statusQuery.data) {
     return <LoadingView />;
@@ -74,12 +89,23 @@ export function App() {
 
   if (!isLoggedIn) {
     return (
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<LoginPage />} />
-        {renderRoutes(appRoutes, 'public')}
-        <Route path="*" element={<Navigate to={redirectToLogin} replace />} />
-      </Routes>
+      <>
+        {browserHint ? (
+          <Alert
+            banner
+            closable
+            type="warning"
+            message="YApi 的接口测试等功能仅支持 Chrome 浏览器，请使用 Chrome 浏览器获得完整功能。"
+            style={{ zIndex: 9 }}
+          />
+        ) : null}
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          {renderRoutes(appRoutes, 'public')}
+          <Route path="*" element={<Navigate to={redirectToLogin} replace />} />
+        </Routes>
+      </>
     );
   }
 
@@ -97,6 +123,15 @@ export function App() {
           study={Boolean((user as unknown as Record<string, unknown> | null)?.study)}
         />
         <LegacyNotify enabled={String(user?.role || '') === 'admin'} />
+        {browserHint ? (
+          <Alert
+            banner
+            closable
+            type="warning"
+            message="YApi 的接口测试等功能仅支持 Chrome 浏览器，请使用 Chrome 浏览器获得完整功能。"
+            style={{ zIndex: 9 }}
+          />
+        ) : null}
         <Content className="legacy-content-wrap">
           <Routes>
             <Route path="/" element={<Navigate to="/group" replace />} />

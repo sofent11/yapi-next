@@ -381,6 +381,42 @@ function sanitizeReqBodyForm(input: unknown): EditFormBodyParam[] {
     .filter(item => item.name.length > 0);
 }
 
+function normalizeCaseParamMap(input: unknown): Record<string, unknown> {
+  const output: Record<string, unknown> = {};
+  safeObjectArray<Record<string, unknown>>(input).forEach(item => {
+    const name = String(item.name || '').trim();
+    if (!name) return;
+    const rawValue = item.value ?? item.example ?? '';
+    if (typeof rawValue === 'string') {
+      const text = rawValue.trim();
+      if (!text) {
+        output[name] = '';
+        return;
+      }
+      try {
+        output[name] = json5.parse(text);
+        return;
+      } catch (_err) {
+        output[name] = rawValue;
+        return;
+      }
+    }
+    output[name] = rawValue;
+  });
+  return output;
+}
+
+function normalizeCaseHeaderMap(input: unknown): Record<string, string> {
+  const output: Record<string, string> = {};
+  safeObjectArray<Record<string, unknown>>(input).forEach(item => {
+    const name = String(item.name || '').trim();
+    if (!name) return;
+    const value = item.value ?? item.example ?? '';
+    output[name] = String(value ?? '');
+  });
+  return output;
+}
+
 function extractPathParams(pathValue: string): string[] {
   const set = new Set<string>();
   String(pathValue || '')
@@ -736,6 +772,13 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   const [runBody, setRunBody] = useState('{}');
   const [runResponse, setRunResponse] = useState('');
   const [runLoading, setRunLoading] = useState(false);
+  const [caseRunMethod, setCaseRunMethod] = useState('GET');
+  const [caseRunPath, setCaseRunPath] = useState('');
+  const [caseRunQuery, setCaseRunQuery] = useState('{}');
+  const [caseRunHeaders, setCaseRunHeaders] = useState('{}');
+  const [caseRunBody, setCaseRunBody] = useState('{}');
+  const [caseRunResponse, setCaseRunResponse] = useState('');
+  const [caseRunLoading, setCaseRunLoading] = useState(false);
   const [listKeyword, setListKeyword] = useState('');
   const [listPage, setListPage] = useState(1);
   const [menuKeyword, setMenuKeyword] = useState('');
@@ -775,7 +818,6 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   const [reqSchemaEditorMode, setReqSchemaEditorMode] = useState<'text' | 'visual'>('visual');
   const [resSchemaEditorMode, setResSchemaEditorMode] = useState<'text' | 'visual'>('visual');
   const [editConflictState, setEditConflictState] = useState<EditConflictState>({ status: 'idle' });
-  const editConflictSocketRef = useRef<WebSocket | null>(null);
   const popstateForwardingRef = useRef(false);
   const [form] = Form.useForm<EditForm>();
   const [addInterfaceForm] = Form.useForm<AddInterfaceForm>();
@@ -1147,6 +1189,17 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     return map;
   }, [autoTestRows]);
   const caseEnvProjects = (caseEnvListQuery.data?.data || STABLE_EMPTY_ARRAY) as CaseEnvProjectItem[];
+  const caseEnvOptions = useMemo(() => {
+    const detail = (caseDetailQuery.data?.data || null) as Record<string, unknown> | null;
+    const projectId = Number(detail?.project_id || 0);
+    if (projectId <= 0 || !Array.isArray(caseEnvProjects)) return [];
+    const project = caseEnvProjects.find(item => Number(item?._id || 0) === projectId);
+    if (!project || !Array.isArray(project.env)) return [];
+    return project.env
+      .map(item => String(item?.name || '').trim())
+      .filter(Boolean)
+      .map(name => ({ label: name, value: name }));
+  }, [caseDetailQuery.data, caseEnvProjects]);
 
   useEffect(() => {
     if (menuRows.length === 0) {
@@ -1300,70 +1353,60 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     const shouldWatchConflict = action === 'api' && interfaceId > 0 && tab === 'edit';
     if (!shouldWatchConflict) {
       setEditConflictState({ status: 'idle' });
-      if (editConflictSocketRef.current) {
-        editConflictSocketRef.current.close();
-        editConflictSocketRef.current = null;
-      }
       return;
     }
 
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const socketUrl = `${wsProtocol}://${window.location.host}/api/interface/solve_conflict?id=${interfaceId}`;
     setEditConflictState({ status: 'loading' });
+    let destroyed = false;
+    let pollTimer: number | null = null;
 
-    let finished = false;
-    let fallbackTimer: number | null = window.setTimeout(() => {
-      if (finished) return;
-      setEditConflictState({ status: 'ready' });
-    }, 3000);
+    const applyPayload = (payload: Record<string, unknown>) => {
+      const errno = Number(payload.errno || 0);
+      if (errno === 0) {
+        setEditConflictState({ status: 'ready' });
+        return;
+      }
+      const data = (payload.data || {}) as Record<string, unknown>;
+      setEditConflictState({
+        status: 'locked',
+        uid: Number(data.uid || errno || 0),
+        username: String(data.username || '未知用户')
+      });
+    };
 
-    try {
-      const socket = new WebSocket(socketUrl);
-      editConflictSocketRef.current = socket;
-      socket.onmessage = event => {
-        finished = true;
-        if (fallbackTimer != null) {
-          window.clearTimeout(fallbackTimer);
-          fallbackTimer = null;
+    const runCheck = async () => {
+      try {
+        const response = await fetch(`/api/interface/solve_conflict?id=${interfaceId}`, {
+          credentials: 'include'
+        });
+        const payload = (await response.json()) as Record<string, unknown>;
+        if (destroyed) return;
+        if (payload && typeof payload === 'object' && typeof payload.errno !== 'undefined') {
+          applyPayload(payload);
+        } else if (Number(payload.errcode || 0) === 0) {
+          applyPayload({ errno: 0, data: payload.data });
+        } else {
+          setEditConflictState({ status: 'error' });
         }
-        try {
-          const payload = JSON.parse(String(event.data || '{}')) as Record<string, unknown>;
-          const errno = Number(payload.errno || 0);
-          if (errno === 0) {
-            setEditConflictState({ status: 'ready' });
-            return;
-          }
-          const data = (payload.data || {}) as Record<string, unknown>;
-          setEditConflictState({
-            status: 'locked',
-            uid: Number(data.uid || errno || 0),
-            username: String(data.username || '未知用户')
-          });
-        } catch (_err) {
-          setEditConflictState({ status: 'ready' });
+      } catch (_err) {
+        if (!destroyed) {
+          setEditConflictState({ status: 'error' });
         }
-      };
-      socket.onerror = () => {
-        finished = true;
-        if (fallbackTimer != null) {
-          window.clearTimeout(fallbackTimer);
-          fallbackTimer = null;
+      } finally {
+        if (!destroyed) {
+          pollTimer = window.setTimeout(() => {
+            void runCheck();
+          }, 4000);
         }
-        setEditConflictState({ status: 'error' });
-      };
-    } catch (_err) {
-      setEditConflictState({ status: 'error' });
-    }
+      }
+    };
+
+    void runCheck();
 
     return () => {
-      finished = true;
-      if (fallbackTimer != null) {
-        window.clearTimeout(fallbackTimer);
-      }
-      const socket = editConflictSocketRef.current;
-      editConflictSocketRef.current = null;
-      if (socket) {
-        socket.close();
+      destroyed = true;
+      if (pollTimer != null) {
+        window.clearTimeout(pollTimer);
       }
     };
   }, [action, interfaceId, tab]);
@@ -1428,6 +1471,28 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     if (action !== 'case') return;
     const detail = (caseDetailQuery.data?.data || null) as Record<string, unknown> | null;
     if (!detail) return;
+    const method = String(detail.method || 'GET').toUpperCase();
+    const path = `${props.basepath || ''}${String(detail.path || '')}`;
+    const reqQuery = normalizeCaseParamMap(detail.req_query);
+    const reqHeaders = normalizeCaseHeaderMap(detail.req_headers);
+    const reqBodyType = String(detail.req_body_type || 'form').toLowerCase();
+    let reqBody: unknown;
+    if (reqBodyType === 'form') {
+      reqBody = normalizeCaseParamMap(detail.req_body_form);
+    } else if (reqBodyType === 'json') {
+      const raw = String(detail.req_body_other || '').trim();
+      if (!raw) {
+        reqBody = {};
+      } else {
+        try {
+          reqBody = json5.parse(raw);
+        } catch (_err) {
+          reqBody = raw;
+        }
+      }
+    } else {
+      reqBody = String(detail.req_body_other || '');
+    }
     caseForm.setFieldsValue({
       casename: String(detail.casename || ''),
       case_env: String(detail.case_env || ''),
@@ -1440,7 +1505,24 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       req_body_type: String(detail.req_body_type || 'form'),
       req_body_other: String(detail.req_body_other || '')
     });
+    setCaseRunMethod(method);
+    setCaseRunPath(path);
+    setCaseRunQuery(JSON.stringify(reqQuery, null, 2));
+    setCaseRunHeaders(JSON.stringify(reqHeaders, null, 2));
+    setCaseRunBody(typeof reqBody === 'string' ? reqBody : JSON.stringify(reqBody ?? {}, null, 2));
+    setCaseRunResponse('');
   }, [action, caseDetailQuery.data, caseForm]);
+
+  useEffect(() => {
+    if (action !== 'case') {
+      setAutoTestDetailItem(null);
+      return;
+    }
+    setAutoTestDetailItem(prev => {
+      if (!prev) return null;
+      return String(prev.id || '') === String(caseId || '') ? prev : null;
+    });
+  }, [action, caseId]);
 
   useEffect(() => {
     if (action !== 'col') return;
@@ -2449,19 +2531,38 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       interfaceId: focusInterfaceId,
       caseId: focusCaseId
     };
+    const caseRequestMeta = {
+      type: 'case' as const,
+      projectId: props.projectId,
+      interfaceId: focusInterfaceId,
+      caseId: focusCaseId || ''
+    };
     try {
-      const beforePayload = await webPlugins.runBeforeCollectionRequest(
-        {
-          method: 'GET',
-          url: requestUrl,
-          colId: selectedColId,
-          type: 'col',
-          caseId: focusCaseId,
-          projectId: props.projectId,
-          interfaceId: focusInterfaceId
-        },
-        requestMeta
-      );
+      const beforePayload = focusCaseId
+        ? await webPlugins.runBeforeRequest(
+            {
+              method: 'GET',
+              url: requestUrl,
+              colId: selectedColId,
+              type: 'case',
+              caseId: focusCaseId,
+              projectId: props.projectId,
+              interfaceId: focusInterfaceId
+            },
+            caseRequestMeta
+          )
+        : await webPlugins.runBeforeCollectionRequest(
+            {
+              method: 'GET',
+              url: requestUrl,
+              colId: selectedColId,
+              type: 'col',
+              caseId: focusCaseId,
+              projectId: props.projectId,
+              interfaceId: focusInterfaceId
+            },
+            requestMeta
+          );
       if (beforePayload && typeof beforePayload === 'object' && beforePayload.url) {
         const nextUrl = String(beforePayload.url || '').trim();
         if (nextUrl) {
@@ -2490,6 +2591,33 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         const body = beforePayload.body;
         requestBody = typeof body === 'string' ? body : JSON.stringify(body);
       }
+      if (!focusCaseId && Array.isArray(caseRows) && caseRows.length > 0) {
+        await Promise.all(
+          caseRows.map(async row => {
+            const rowCaseId = String((row as Record<string, unknown>)._id || (row as Record<string, unknown>).id || '');
+            const rowInterfaceId = Number(
+              (row as Record<string, unknown>).interface_id || (row as Record<string, unknown>).interfaceId || 0
+            );
+            await webPlugins.runBeforeCollectionRequest(
+              {
+                method: String((row as Record<string, unknown>).method || 'GET').toUpperCase(),
+                url: String((row as Record<string, unknown>).path || ''),
+                colId: selectedColId,
+                type: 'col',
+                caseId: rowCaseId,
+                projectId: props.projectId,
+                interfaceId: rowInterfaceId
+              },
+              {
+                type: 'col',
+                projectId: props.projectId,
+                caseId: rowCaseId,
+                interfaceId: rowInterfaceId
+              }
+            );
+          })
+        );
+      }
       const response = await fetch(requestUrl, {
         method: requestMethod,
         credentials: 'include',
@@ -2505,27 +2633,52 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         ? (data as AutoTestReport)
         : (data.data as AutoTestReport)) || { list: [] };
       const normalizedList = Array.isArray(report.list) ? report.list : [];
-      const hookedList = await Promise.all(
-        normalizedList.map(async item => {
-          const pluginResult = await webPlugins.runAfterCollectionRequest(
-            { ...(item as unknown as Record<string, unknown>) },
-            {
-              type: 'col',
-              projectId: props.projectId,
-              caseId: String(item.id || ''),
-              interfaceId: Number(
-                (item as unknown as Record<string, unknown>).interface_id ||
-                  (item as unknown as Record<string, unknown>).interfaceId ||
-                  0
-              )
-            }
+      const hookedList = focusCaseId
+        ? await Promise.all(
+            normalizedList.map(async item => {
+              if (String(item.id || '') !== String(focusCaseId)) {
+                return item as AutoTestResultItem;
+              }
+              const pluginResult = await webPlugins.runAfterRequest(
+                { ...(item as unknown as Record<string, unknown>) },
+                {
+                  type: 'case',
+                  projectId: props.projectId,
+                  caseId: String(item.id || ''),
+                  interfaceId: Number(
+                    (item as unknown as Record<string, unknown>).interface_id ||
+                      (item as unknown as Record<string, unknown>).interfaceId ||
+                      0
+                  )
+                }
+              );
+              return {
+                ...item,
+                ...(pluginResult as Record<string, unknown>)
+              } as AutoTestResultItem;
+            })
+          )
+        : await Promise.all(
+            normalizedList.map(async item => {
+              const pluginResult = await webPlugins.runAfterCollectionRequest(
+                { ...(item as unknown as Record<string, unknown>) },
+                {
+                  type: 'col',
+                  projectId: props.projectId,
+                  caseId: String(item.id || ''),
+                  interfaceId: Number(
+                    (item as unknown as Record<string, unknown>).interface_id ||
+                      (item as unknown as Record<string, unknown>).interfaceId ||
+                      0
+                  )
+                }
+              );
+              return {
+                ...item,
+                ...(pluginResult as Record<string, unknown>)
+              } as AutoTestResultItem;
+            })
           );
-          return {
-            ...item,
-            ...(pluginResult as Record<string, unknown>)
-          } as AutoTestResultItem;
-        })
-      );
       report.list = hookedList;
       setAutoTestReport(report);
       setAutoTestModalOpen(true);
@@ -2541,6 +2694,86 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       message.error(String((err as Error).message || err || '执行测试失败'));
     } finally {
       setAutoTestRunning(false);
+    }
+  }
+
+  async function handleRunCaseRequest(detail: Record<string, unknown>) {
+    let queryData: unknown;
+    let headerData: unknown;
+    let bodyData: unknown;
+    const bodyType = String(caseForm.getFieldValue('req_body_type') || detail.req_body_type || 'form').toLowerCase();
+    try {
+      queryData = parseJsonText(caseRunQuery, 'Query 参数');
+      headerData = parseJsonText(caseRunHeaders, 'Header 参数');
+      if (bodyType === 'raw' || bodyType === 'file') {
+        bodyData = String(caseRunBody || '');
+      } else {
+        bodyData = parseJsonText(caseRunBody, 'Body 参数');
+      }
+    } catch (err) {
+      message.error((err as Error).message || '参数格式错误');
+      return;
+    }
+
+    const method = caseRunMethod.toUpperCase();
+    const routeMethod = method.toLowerCase();
+    const routePath = ['get', 'post', 'put', 'delete', 'patch', 'head', 'options'].includes(routeMethod)
+      ? routeMethod
+      : 'post';
+    const url = `/api/test/${routePath}`;
+    const queryMode = routeMethod === 'get' || routeMethod === 'head' || routeMethod === 'options';
+    const interfaceId = Number(detail.interface_id || detail.interfaceId || 0);
+    const payload = {
+      interface_id: interfaceId,
+      method,
+      path: caseRunPath,
+      req_query: queryData,
+      req_headers: headerData,
+      req_body: bodyData
+    };
+    const requestMeta = {
+      type: 'case' as const,
+      projectId: props.projectId,
+      interfaceId,
+      caseId
+    };
+
+    setCaseRunLoading(true);
+    setCaseRunResponse('');
+    try {
+      const pluginPayload = await webPlugins.runBeforeRequest(payload, requestMeta);
+      const queryString = queryMode ? `?payload=${encodeURIComponent(JSON.stringify(pluginPayload))}` : '';
+      const response = await fetch(`${url}${queryString}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: queryMode ? undefined : JSON.stringify(pluginPayload),
+        credentials: 'include'
+      });
+      const text = await response.text();
+      let responsePayload: Record<string, unknown> = {
+        raw: text,
+        method,
+        path: caseRunPath,
+        interfaceId,
+        caseId
+      };
+      try {
+        const obj = JSON.parse(text);
+        responsePayload = {
+          ...responsePayload,
+          ...(obj as Record<string, unknown>)
+        };
+      } catch (_err) {
+        // Keep raw text.
+      }
+      const pluginResult = await webPlugins.runAfterRequest(responsePayload, requestMeta);
+      setCaseRunResponse(stringifyPretty(pluginResult));
+    } catch (err) {
+      setCaseRunResponse(String((err as Error).message || err));
+    } finally {
+      setCaseRunLoading(false);
     }
   }
 
@@ -3651,7 +3884,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
                     style={{ marginBottom: 16 }}
                     type="warning"
                     showIcon
-                    message="WebSocket 连接失败，暂时无法进行多人编辑冲突检测。"
+                    message="多人编辑冲突检测暂时不可用，请稍后重试。"
                   />
                 ) : null}
                 <Form<EditForm> form={form} layout="vertical">
@@ -4227,19 +4460,18 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
               };
             }
             const CustomTab = tabItem.component;
+            if (!CustomTab) return null;
             return {
               key,
               label: tabItem.name,
-              children: CustomTab ? (
+              children: (
                 <CustomTab
                   projectId={props.projectId}
                   interfaceData={currentInterface as unknown as Record<string, unknown>}
                 />
-              ) : (
-                <LegacyErrMsg title="插件页未实现" desc="该插件页尚未在新前端实现。" />
               )
             };
-          })}
+          }).filter(Boolean) as any}
         />
       </Card>
     );
@@ -4442,16 +4674,29 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     if (!detail || Object.keys(detail).length === 0) {
       return <LegacyErrMsg title="测试用例不存在" desc="该用例可能已被删除，请重新选择。" />;
     }
+    const currentCaseReport = autoTestDetailItem && String(autoTestDetailItem.id || '') === String(caseId || '')
+      ? autoTestDetailItem
+      : autoTestResultMap.get(String(caseId || '')) || null;
 
     return (
       <Card>
         <div className="legacy-interface-list-toolbar">
           <Text strong>{String(detail.casename || '测试用例')}</Text>
+          <Space size={8}>
+            <Button size="small" loading={autoTestRunning} onClick={() => void runAutoTestInPage(caseId)}>
+              运行测试
+            </Button>
+            <Button size="small" onClick={() => navigateWithGuard(`/project/${props.projectId}/interface/col/${selectedColId || ''}`)}>
+              返回集合
+            </Button>
+            {Number(detail.interface_id || 0) > 0 ? (
+              <Button size="small" onClick={() => navigateWithGuard(`/project/${props.projectId}/interface/api/${Number(detail.interface_id || 0)}`)}>
+                对应接口
+              </Button>
+            ) : null}
+          </Space>
           {canEdit ? (
             <Space size={8}>
-              <Button size="small" onClick={() => navigateWithGuard(`/project/${props.projectId}/interface/col/${selectedColId || ''}`)}>
-                返回集合
-              </Button>
               <Button size="small" icon={<CopyOutlined />} onClick={() => void handleCopyCase(caseId)}>
                 克隆用例
               </Button>
@@ -4475,6 +4720,9 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
               <Space>
                 <Tag>{String(detail.method || '-')}</Tag>
                 <span>{String(detail.path || detail.title || '-')}</span>
+                {Number(detail.interface_id || 0) > 0 ? (
+                  <Link to={`/project/${props.projectId}/interface/api/${Number(detail.interface_id || 0)}`}>查看接口</Link>
+                ) : null}
               </Space>
             </Descriptions.Item>
           </Descriptions>
@@ -4485,7 +4733,16 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
             </Form.Item>
             <Space style={{ width: '100%' }} align="start">
               <Form.Item label="环境" name="case_env" style={{ minWidth: 260, flex: 1 }}>
-                <Input placeholder="如：dev / test / prod" disabled={!canEdit} />
+                <AutoComplete
+                  options={caseEnvOptions}
+                  disabled={!canEdit}
+                  placeholder="如：dev / test / prod"
+                  filterOption={(inputValue, option) =>
+                    String(option?.value || '')
+                      .toLowerCase()
+                      .includes(String(inputValue || '').toLowerCase())
+                  }
+                />
               </Form.Item>
               <Form.Item label="启用脚本" name="enable_script" valuePropName="checked" style={{ width: 120 }}>
                 <Switch disabled={!canEdit} checkedChildren="开" unCheckedChildren="关" />
@@ -4521,6 +4778,68 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
             </Form.Item>
           </div>
         </Form>
+        <Card size="small" title="测试结果" style={{ marginTop: 16 }}>
+          {currentCaseReport ? (
+            <Space direction="vertical" style={{ width: '100%' }} size={10}>
+              <Space wrap>
+                <Tag color={currentCaseReport.code === 0 ? 'success' : currentCaseReport.code === 1 ? 'warning' : 'error'}>
+                  {currentCaseReport.code === 0 ? '通过' : currentCaseReport.code === 1 ? '失败' : '异常'}
+                </Tag>
+                <span>HTTP Status: {currentCaseReport.status ?? '-'}</span>
+                <span>{String(currentCaseReport.statusText || '')}</span>
+              </Space>
+              <div>
+                <Text strong>断言结果</Text>
+                <Input.TextArea
+                  rows={4}
+                  readOnly
+                  value={Array.isArray(currentCaseReport.validRes) && currentCaseReport.validRes.length > 0
+                    ? currentCaseReport.validRes.map(item => String(item.message || '')).join('\n')
+                    : '无'}
+                />
+              </div>
+              <div>
+                <Text strong>请求参数</Text>
+                <Input.TextArea rows={4} readOnly value={stringifyPretty(currentCaseReport.params)} />
+              </div>
+              <div>
+                <Text strong>响应头</Text>
+                <Input.TextArea rows={4} readOnly value={stringifyPretty(currentCaseReport.res_header)} />
+              </div>
+              <div>
+                <Text strong>响应体</Text>
+                <Input.TextArea rows={8} readOnly value={stringifyPretty(currentCaseReport.res_body)} />
+              </div>
+            </Space>
+          ) : (
+            <LegacyErrMsg title="暂无测试结果" desc="点击“运行测试”后可在此查看断言和响应详情。" />
+          )}
+        </Card>
+        <Card size="small" title="调试请求" style={{ marginTop: 16 }}>
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Space wrap>
+              <Select
+                value={caseRunMethod}
+                onChange={setCaseRunMethod}
+                style={{ width: 120 }}
+                options={RUN_METHODS.map(item => ({ label: item, value: item }))}
+              />
+              <Input value={caseRunPath} onChange={event => setCaseRunPath(event.target.value)} style={{ minWidth: 420 }} />
+              <Button type="primary" loading={caseRunLoading} onClick={() => void handleRunCaseRequest(detail)}>
+                发送请求
+              </Button>
+            </Space>
+            <Alert type="info" showIcon message="调试请求参数需使用 JSON 格式" />
+            <Text strong>Query</Text>
+            <Input.TextArea rows={4} value={caseRunQuery} onChange={event => setCaseRunQuery(event.target.value)} />
+            <Text strong>Headers</Text>
+            <Input.TextArea rows={4} value={caseRunHeaders} onChange={event => setCaseRunHeaders(event.target.value)} />
+            <Text strong>Body</Text>
+            <Input.TextArea rows={6} value={caseRunBody} onChange={event => setCaseRunBody(event.target.value)} />
+            <Text strong>响应</Text>
+            <Input.TextArea rows={10} value={caseRunResponse} readOnly placeholder="点击“发送请求”后显示结果" />
+          </Space>
+        </Card>
       </Card>
     );
   }

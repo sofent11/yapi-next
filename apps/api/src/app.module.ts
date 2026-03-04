@@ -32,6 +32,7 @@ import { InterfaceCatService } from './services/interface-cat.service';
 import { InterfaceCompatService } from './services/interface-compat.service';
 import { InterfaceTreeService } from './services/interface-tree.service';
 import { InterfaceTreeCacheService } from './services/interface-tree-cache.service';
+import { InterfaceConflictService } from './services/interface-conflict.service';
 import { OpenapiParserService } from './services/openapi-parser.service';
 import { PerfMetricsService } from './services/perf-metrics.service';
 import { ProjectAuthService } from './services/project-auth.service';
@@ -91,6 +92,7 @@ import { LogCompatService } from './services/log-compat.service';
     InterfaceCompatService,
     InterfaceTreeService,
     InterfaceTreeCacheService,
+    InterfaceConflictService,
     OpenapiParserService,
     PerfMetricsService,
     ProjectAuthService,

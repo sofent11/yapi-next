@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Card, Col, Input, Modal, Progress, Row, Select, Space, Switch, Tabs, Typography, Upload, message, Tooltip, Radio } from 'antd';
+import json5 from 'json5';
 import type { SpecImportResult } from '@yapi-next/shared-types';
 import {
   useExportSpecMutation,
+  useGetCatMenuQuery,
   useGetImportTaskQuery,
   useImportSpecMutation,
   useInterUploadMutation
@@ -24,6 +26,38 @@ type SyncMode = 'normal' | 'good' | 'merge';
 type ExportFormat = 'openapi3' | 'swagger2';
 type ExportStatus = 'all' | 'open';
 
+type LegacyImportParam = Record<string, unknown> & {
+  name?: string;
+  value?: unknown;
+  example?: unknown;
+  required?: string | number | boolean;
+  type?: string;
+  desc?: string;
+};
+
+type LegacyImportApi = Record<string, unknown> & {
+  title?: string;
+  path?: string;
+  method?: string;
+  catname?: string;
+  desc?: string;
+  req_params?: LegacyImportParam[];
+  req_query?: LegacyImportParam[];
+  req_headers?: LegacyImportParam[];
+  req_body_type?: string;
+  req_body_form?: LegacyImportParam[];
+  req_body_other?: string;
+  req_body_is_json_schema?: boolean;
+  res_body_type?: string;
+  res_body?: string;
+  res_body_is_json_schema?: boolean;
+};
+
+type LegacyImportPayload = {
+  cats: Array<{ name?: string; desc?: string }>;
+  apis: LegacyImportApi[];
+};
+
 function syncModeLabel(mode: SyncMode): string {
   if (mode === 'normal') return '普通模式';
   if (mode === 'good') return '智能合并';
@@ -36,6 +70,266 @@ function taskStatusLabel(status?: string): string {
   if (status === 'success') return '已完成';
   if (status === 'failed') return '失败';
   return status || '-';
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function parseMaybeJsonText(input: unknown): unknown {
+  const raw = String(input || '').trim();
+  if (!raw) return undefined;
+  try {
+    return json5.parse(raw);
+  } catch (_err) {
+    return undefined;
+  }
+}
+
+function normalizeMethod(input: unknown): string {
+  const method = String(input || 'GET').trim().toUpperCase();
+  const supported = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
+  return supported.includes(method) ? method : 'GET';
+}
+
+function normalizePath(input: unknown): string {
+  const path = String(input || '').trim();
+  if (!path) return '/';
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function requiredFlag(input: unknown): boolean {
+  return !(input === false || input === '0' || input === 0);
+}
+
+function inferSchemaFromValue(value: unknown): Record<string, unknown> {
+  if (value === null) return { type: 'null' };
+  if (Array.isArray(value)) {
+    return {
+      type: 'array',
+      items: value.length > 0 ? inferSchemaFromValue(value[0]) : { type: 'string' }
+    };
+  }
+  if (typeof value === 'string') return { type: 'string' };
+  if (typeof value === 'boolean') return { type: 'boolean' };
+  if (typeof value === 'number') return { type: Number.isInteger(value) ? 'integer' : 'number' };
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+    Object.keys(obj).forEach(key => {
+      properties[key] = inferSchemaFromValue(obj[key]);
+      required.push(key);
+    });
+    const output: Record<string, unknown> = {
+      type: 'object',
+      properties
+    };
+    if (required.length > 0) output.required = required;
+    return output;
+  }
+  return { type: 'string' };
+}
+
+function normalizeLegacyImportPayload(input: unknown): LegacyImportPayload | null {
+  const source = asObject(input);
+  const apis = Array.isArray(source.apis) ? (source.apis as LegacyImportApi[]) : [];
+  if (apis.length === 0) return null;
+  const cats = Array.isArray(source.cats) ? (source.cats as Array<{ name?: string; desc?: string }>) : [];
+  return { cats, apis };
+}
+
+function buildOpenApiFromLegacyImport(params: {
+  projectId: number;
+  defaultCatName: string;
+  payload: LegacyImportPayload;
+}): Record<string, unknown> {
+  const tagDescMap = new Map<string, string>();
+  params.payload.cats.forEach(item => {
+    const name = String(item?.name || '').trim();
+    if (!name) return;
+    tagDescMap.set(name, String(item?.desc || ''));
+  });
+
+  const paths: Record<string, Record<string, unknown>> = {};
+  params.payload.apis.forEach((api, index) => {
+    const method = normalizeMethod(api.method).toLowerCase();
+    const path = normalizePath(api.path);
+    const tagName = String(api.catname || '').trim() || params.defaultCatName;
+    if (tagName && !tagDescMap.has(tagName)) {
+      tagDescMap.set(tagName, '');
+    }
+
+    const operation: Record<string, unknown> = {
+      summary: String(api.title || api.path || `api-${index + 1}`),
+      description: String(api.desc || ''),
+      operationId: `${method}_${path.replace(/[^a-zA-Z0-9]/g, '_')}_${index + 1}`,
+      tags: tagName ? [tagName] : [],
+      parameters: [],
+      responses: {}
+    };
+
+    const parameters = operation.parameters as Array<Record<string, unknown>>;
+    const addParam = (inType: 'path' | 'query' | 'header', rows: LegacyImportParam[] | undefined) => {
+      if (!Array.isArray(rows)) return;
+      rows.forEach(row => {
+        const name = String(row?.name || '').trim();
+        if (!name) return;
+        const exampleValue = row.value ?? row.example;
+        parameters.push({
+          name,
+          in: inType,
+          required: inType === 'path' ? true : requiredFlag(row.required),
+          description: String(row.desc || ''),
+          schema: inferSchemaFromValue(exampleValue),
+          example: exampleValue
+        });
+      });
+    };
+    addParam('path', Array.isArray(api.req_params) ? api.req_params : []);
+    addParam('query', Array.isArray(api.req_query) ? api.req_query : []);
+    addParam('header', Array.isArray(api.req_headers) ? api.req_headers : []);
+
+    const reqBodyType = String(api.req_body_type || '').toLowerCase();
+    if (reqBodyType === 'form') {
+      const reqBodyForm = Array.isArray(api.req_body_form) ? api.req_body_form : [];
+      const properties: Record<string, unknown> = {};
+      const required: string[] = [];
+      reqBodyForm.forEach(row => {
+        const name = String(row?.name || '').trim();
+        if (!name) return;
+        const rowType = String(row?.type || 'text').toLowerCase();
+        properties[name] =
+          rowType === 'file'
+            ? { type: 'string', format: 'binary' }
+            : inferSchemaFromValue(row.value ?? row.example ?? '');
+        if (requiredFlag(row.required)) required.push(name);
+      });
+      operation.requestBody = {
+        content: {
+          'application/x-www-form-urlencoded': {
+            schema: {
+              type: 'object',
+              properties,
+              ...(required.length > 0 ? { required } : {})
+            }
+          }
+        }
+      };
+    } else if (reqBodyType === 'json') {
+      const sourceText = String(api.req_body_other || '').trim();
+      const parsed = parseMaybeJsonText(sourceText);
+      if (api.req_body_is_json_schema && parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        operation.requestBody = {
+          content: {
+            'application/json': {
+              schema: parsed as Record<string, unknown>
+            }
+          }
+        };
+      } else if (typeof parsed !== 'undefined') {
+        operation.requestBody = {
+          content: {
+            'application/json': {
+              schema: inferSchemaFromValue(parsed),
+              example: parsed
+            }
+          }
+        };
+      } else if (sourceText) {
+        operation.requestBody = {
+          content: {
+            'text/plain': {
+              schema: { type: 'string' },
+              example: sourceText
+            }
+          }
+        };
+      }
+    } else if (reqBodyType === 'raw' || reqBodyType === 'file') {
+      const sourceText = String(api.req_body_other || '');
+      if (sourceText) {
+        operation.requestBody = {
+          content: {
+            [reqBodyType === 'file' ? 'application/octet-stream' : 'text/plain']: {
+              schema: { type: 'string' },
+              example: sourceText
+            }
+          }
+        };
+      }
+    }
+
+    const responses = operation.responses as Record<string, unknown>;
+    const resBodyType = String(api.res_body_type || 'json').toLowerCase();
+    const responseText = String(api.res_body || '').trim();
+    if (!responseText) {
+      responses['200'] = { description: 'OK' };
+    } else if (resBodyType === 'json') {
+      const parsed = parseMaybeJsonText(responseText);
+      if (api.res_body_is_json_schema && parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        responses['200'] = {
+          description: 'OK',
+          content: {
+            'application/json': {
+              schema: parsed as Record<string, unknown>
+            }
+          }
+        };
+      } else if (typeof parsed !== 'undefined') {
+        responses['200'] = {
+          description: 'OK',
+          content: {
+            'application/json': {
+              schema: inferSchemaFromValue(parsed),
+              example: parsed
+            }
+          }
+        };
+      } else {
+        responses['200'] = {
+          description: 'OK',
+          content: {
+            'text/plain': {
+              schema: { type: 'string' },
+              example: responseText
+            }
+          }
+        };
+      }
+    } else {
+      responses['200'] = {
+        description: 'OK',
+        content: {
+          'text/plain': {
+            schema: { type: 'string' },
+            example: responseText
+          }
+        }
+      };
+    }
+
+    if (!paths[path]) {
+      paths[path] = {};
+    }
+    paths[path][method] = operation;
+  });
+
+  const tags = Array.from(tagDescMap.entries()).map(([name, description]) => ({
+    name,
+    ...(description ? { description } : {})
+  }));
+
+  return {
+    openapi: '3.0.3',
+    info: {
+      title: `YApi Project ${params.projectId}`,
+      version: '1.0.0'
+    },
+    paths,
+    tags
+  };
 }
 
 async function confirmImport(summary: SpecImportResult, syncMode: SyncMode): Promise<boolean> {
@@ -77,6 +371,7 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
 }`);
   const [urlText, setUrlText] = useState('');
   const [importFileName, setImportFileName] = useState('');
+  const [defaultCatId, setDefaultCatId] = useState(0);
 
   const [taskId, setTaskId] = useState('');
   const [preview, setPreview] = useState<SpecImportResult | null>(null);
@@ -86,10 +381,15 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
   const [exportStatus, setExportStatus] = useState<ExportStatus>('all');
   const [withWiki, setWithWiki] = useState(false);
   const [exportText, setExportText] = useState('');
+  const token = useMemo(() => props.token || undefined, [props.token]);
 
   const [importSpec, importState] = useImportSpecMutation();
   const [interUpload, uploadState] = useInterUploadMutation();
   const [exportSpec, exportState] = useExportSpecMutation();
+  const catMenuQuery = useGetCatMenuQuery(
+    { projectId: props.projectId, token },
+    { skip: props.projectId <= 0 }
+  );
 
   const taskQuery = useGetImportTaskQuery(
     {
@@ -118,7 +418,28 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
   }, [notifiedStatus, taskQuery.data]);
 
   const task = taskQuery.data?.data;
-  const token = useMemo(() => props.token || undefined, [props.token]);
+  const catList = useMemo(
+    () => (Array.isArray(catMenuQuery.data?.data) ? catMenuQuery.data?.data : []),
+    [catMenuQuery.data]
+  );
+  const catNameMap = useMemo(() => {
+    const map = new Map<number, string>();
+    catList.forEach(item => {
+      const id = Number((item as Record<string, unknown>)._id || 0);
+      if (id > 0) {
+        map.set(id, String((item as Record<string, unknown>).name || '默认分类'));
+      }
+    });
+    return map;
+  }, [catList]);
+
+  useEffect(() => {
+    if (defaultCatId > 0 && catNameMap.has(defaultCatId)) return;
+    const firstId = Number((catList[0] as Record<string, unknown> | undefined)?._id || 0);
+    if (firstId > 0) {
+      setDefaultCatId(firstId);
+    }
+  }, [catList, catNameMap, defaultCatId]);
   const importDataModules = useMemo<Record<string, ImportDataItem>>(() => {
     return webPlugins.collectImportDataModules({ projectId: props.projectId });
   }, [props.projectId]);
@@ -282,14 +603,30 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
       }
       return;
     }
-    if (!jsonText.trim()) {
+    let importSourceText = '';
+    if (source === 'url') {
+      if (!urlText.trim()) {
+        message.error('请输入规范 URL');
+        return;
+      }
+      try {
+        const response = await fetch(urlText.trim(), { method: 'GET' });
+        importSourceText = await response.text();
+      } catch (err) {
+        message.error((err as Error)?.message || '下载 URL 内容失败');
+        return;
+      }
+    } else {
+      importSourceText = jsonText;
+    }
+    if (!String(importSourceText || '').trim()) {
       message.error('请先输入或上传待转换的内容（JSON 文本）');
       return;
     }
 
     let converted: unknown;
     try {
-      converted = await importer.run(jsonText);
+      converted = await importer.run(importSourceText);
     } catch (err) {
       message.error((err as Error)?.message || '插件导入转换失败');
       return;
@@ -298,12 +635,48 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
       message.error('插件导入转换结果为空');
       return;
     }
-    const interfaceData = typeof converted === 'string' ? converted : JSON.stringify(converted);
+
+    let interfaceData = '';
+    let importFormat: SpecFormat = 'auto';
+    if (typeof converted === 'string') {
+      const parsed = parseMaybeJsonText(converted);
+      const legacy = normalizeLegacyImportPayload(parsed);
+      if (legacy) {
+        const defaultCatName = catNameMap.get(defaultCatId) || '默认分类';
+        interfaceData = JSON.stringify(
+          buildOpenApiFromLegacyImport({
+            projectId: props.projectId,
+            defaultCatName,
+            payload: legacy
+          })
+        );
+        importFormat = 'openapi3';
+      } else {
+        interfaceData = converted;
+      }
+    } else {
+      const objectValue = asObject(converted);
+      const legacy = normalizeLegacyImportPayload(objectValue);
+      if (legacy) {
+        const defaultCatName = catNameMap.get(defaultCatId) || '默认分类';
+        interfaceData = JSON.stringify(
+          buildOpenApiFromLegacyImport({
+            projectId: props.projectId,
+            defaultCatName,
+            payload: legacy
+          })
+        );
+        importFormat = 'openapi3';
+      } else {
+        interfaceData = JSON.stringify(converted);
+      }
+    }
+
     const response = await interUpload({
       project_id: props.projectId,
       token,
       source: 'json',
-      format: 'auto',
+      format: importFormat,
       merge: syncMode,
       interfaceData
     }).unwrap();
@@ -369,6 +742,34 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
     { value: 'openapi3', label: 'OpenAPI 3.0' },
     ...Object.keys(exportDataModules).map(key => ({ value: key, label: exportDataModules[key].name }))
   ];
+  const importMethodDesc = useMemo(() => {
+    if (importMethod === 'swagger') return '支持 Swagger/OpenAPI 文档导入';
+    if (importMethod === 'compat') return '通过旧版兼容接口导入';
+    return importDataModules[importMethod]?.desc || '';
+  }, [importDataModules, importMethod]);
+  const exportMethodDesc = useMemo(() => {
+    if (exportMethod === 'openapi3') return '导出 OpenAPI 3.0 Json';
+    if (exportMethod === 'swagger2') return '导出 Swagger 2.0 Json';
+    return exportDataModules[exportMethod]?.desc || '';
+  }, [exportDataModules, exportMethod]);
+  const supportsUrlImport = importMethod === 'swagger';
+  const wikiSupported = useMemo(() => {
+    const key = String(exportMethod || '').toLowerCase();
+    if (key === 'openapi3' || key === 'swagger2') return false;
+    return !key.includes('json');
+  }, [exportMethod]);
+
+  useEffect(() => {
+    if (!supportsUrlImport && source === 'url') {
+      setSource('json');
+    }
+  }, [source, supportsUrlImport]);
+
+  useEffect(() => {
+    if (!wikiSupported && withWiki) {
+      setWithWiki(false);
+    }
+  }, [wikiSupported, withWiki]);
 
   return (
     <div className="g-row">
@@ -394,8 +795,18 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
               />
             </div>
 
-            <div className="catidSelect" style={{ display: 'none' }}>
-              <Select style={{ width: '100%' }} placeholder="请选择数据导入的默认分类" />
+            <div className="catidSelect">
+              <Select<number>
+                style={{ width: '100%' }}
+                placeholder="请选择数据导入的默认分类"
+                value={defaultCatId > 0 ? defaultCatId : undefined}
+                onChange={value => setDefaultCatId(Number(value || 0))}
+                loading={catMenuQuery.isFetching}
+                options={catList.map(item => ({
+                  label: String((item as Record<string, unknown>).name || ''),
+                  value: Number((item as Record<string, unknown>)._id || 0)
+                }))}
+              />
             </div>
 
             <div className="dataSync">
@@ -416,13 +827,15 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
               </Select>
             </div>
 
-            <div className="dataSync">
-              <span className="label">
-                开启url导入&nbsp;
-                <Tooltip title="swagger url 导入"><Typography.Text type="secondary"><span className="anticon anticon-question-circle-o" /></Typography.Text></Tooltip>&nbsp;&nbsp;
-              </span>
-              <Switch checked={source === 'url'} onChange={(checked) => setSource(checked ? 'url' : 'json')} />
-            </div>
+            {supportsUrlImport ? (
+              <div className="dataSync">
+                <span className="label">
+                  开启url导入&nbsp;
+                  <Tooltip title="swagger url 导入"><Typography.Text type="secondary"><span className="anticon anticon-question-circle-o" /></Typography.Text></Tooltip>&nbsp;&nbsp;
+                </span>
+                <Switch checked={source === 'url'} onChange={(checked) => setSource(checked ? 'url' : 'json')} />
+              </div>
+            ) : null}
 
             {source === 'url' ? (
               <div className="import-content url-import-content">
@@ -443,6 +856,11 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
                   <p className="ant-upload-drag-icon"><span className="anticon anticon-inbox" /></p>
                   <p className="ant-upload-text">点击或者拖拽文件到上传区域</p>
                 </Upload.Dragger>
+                {importMethodDesc ? (
+                  <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+                    {importMethodDesc}
+                  </Paragraph>
+                ) : null}
                 {importFileName && <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>{importFileName}</Typography.Paragraph>}
               </div>
             )}
@@ -479,12 +897,12 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
                 </Tooltip>
                 &nbsp;&nbsp;
               </span>
-              <Switch checked={withWiki} onChange={setWithWiki} />
+              <Switch checked={withWiki} onChange={setWithWiki} disabled={!wikiSupported} />
             </div>
 
             <div className="export-content">
               <div>
-                <p className="export-desc">支持 OpenAPI3/Swagger2 导出（如果使用插件导出，可能需在新页面打开）</p>
+                <p className="export-desc">{exportMethodDesc || '支持 OpenAPI3/Swagger2 导出（如果使用插件导出，可能需在新页面打开）'}</p>
                 <Button className="export-button" type="primary" size="large" onClick={() => void handleExportByMethod()} loading={exportState.isLoading}>导出</Button>
                 &nbsp;
                 <Button className="export-button" size="large" onClick={downloadExportJson} disabled={!exportText}>下载 JSON</Button>
