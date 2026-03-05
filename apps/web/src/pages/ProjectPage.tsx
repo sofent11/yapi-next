@@ -1,17 +1,37 @@
-import { useMemo } from 'react';
+import { Suspense, lazy, useMemo, type ComponentType } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Menu, Spin } from 'antd';
 import type { MenuProps } from 'antd';
 import { useGetGroupQuery, useGetProjectQuery } from '../services/yapi-api';
 import { webPlugins, type SubNavItem } from '../plugins';
-import { ProjectInterfacePage } from './project/ProjectInterfacePage';
-import { ProjectActivityPage } from './project/ProjectActivityPage';
-import { ProjectDataPage } from './project/ProjectDataPage';
-import { ProjectMembersPage } from './project/ProjectMembersPage';
-import { ProjectSettingPage } from './project/ProjectSettingPage';
 import './ProjectPage.scss';
 
 const BUILT_IN_NAV_KEYS = new Set(['interface', 'activity', 'data', 'members', 'setting']);
+
+function createLazyProjectPage(
+  loader: () => Promise<{ default: ComponentType<any> }>
+): ComponentType<any> {
+  const LazyComponent = lazy(loader);
+  return function RouteComponentWrapper(props: Record<string, unknown>) {
+    return <LazyComponent {...props} />;
+  };
+}
+
+const ProjectInterfacePage = createLazyProjectPage(() =>
+  import('./project/ProjectInterfacePage').then(mod => ({ default: mod.ProjectInterfacePage }))
+);
+const ProjectActivityPage = createLazyProjectPage(() =>
+  import('./project/ProjectActivityPage').then(mod => ({ default: mod.ProjectActivityPage }))
+);
+const ProjectDataPage = createLazyProjectPage(() =>
+  import('./project/ProjectDataPage').then(mod => ({ default: mod.ProjectDataPage }))
+);
+const ProjectMembersPage = createLazyProjectPage(() =>
+  import('./project/ProjectMembersPage').then(mod => ({ default: mod.ProjectMembersPage }))
+);
+const ProjectSettingPage = createLazyProjectPage(() =>
+  import('./project/ProjectSettingPage').then(mod => ({ default: mod.ProjectSettingPage }))
+);
 
 function normalizeProjectPath(path: string, projectId: number): string {
   return path.replace(/:id\b/g, String(projectId));
@@ -156,37 +176,45 @@ export function ProjectPage() {
         />
       </div>
 
-      <Routes>
-        <Route index element={<Navigate to={`/project/${projectId}/interface/api`} replace />} />
-        <Route
-          path="interface/:action/:actionId?"
-          element={
-            <ProjectInterfacePage
-              projectId={projectId}
-              basepath={project?.basepath}
-              projectRole={project?.role}
-              projectGroupId={projectGroupId}
-              projectTag={Array.isArray((project as unknown as Record<string, unknown> | undefined)?.tag) ? ((project as unknown as Record<string, unknown>).tag as Array<{ name?: string; desc?: string }>) : []}
-              projectSwitchNotice={Boolean((project as unknown as Record<string, unknown> | undefined)?.switch_notice)}
-              projectIsJson5={Boolean((project as unknown as Record<string, unknown> | undefined)?.is_json5)}
-              projectIsMockOpen={Boolean((project as unknown as Record<string, unknown> | undefined)?.is_mock_open)}
-              projectStrict={Boolean((project as unknown as Record<string, unknown> | undefined)?.strice)}
-              customField={groupQuery.data?.data?.custom_field1 as { name?: string; enable?: boolean } | undefined}
-            />
-          }
-        />
-        <Route path="activity" element={<ProjectActivityPage projectId={projectId} />} />
-        <Route path="data" element={<ProjectDataPage projectId={projectId} />} />
-        {!hideMembers ? (
-          <Route path="members" element={<ProjectMembersPage projectId={projectId} />} />
-        ) : null}
-        <Route path="setting" element={<ProjectSettingPage projectId={projectId} />} />
-        {pluginRouteItems.map(item => {
-          const C = item.component;
-          return <Route key={item.key} path={item.path} element={<C />} />;
-        })}
-        <Route path="*" element={<Navigate to={`/project/${projectId}/interface/api`} replace />} />
-      </Routes>
+      <Suspense
+        fallback={
+          <div className="legacy-page-loading">
+            <Spin />
+          </div>
+        }
+      >
+        <Routes>
+          <Route index element={<Navigate to={`/project/${projectId}/interface/api`} replace />} />
+          <Route
+            path="interface/:action/:actionId?"
+            element={
+              <ProjectInterfacePage
+                projectId={projectId}
+                basepath={project?.basepath}
+                projectRole={project?.role}
+                projectGroupId={projectGroupId}
+                projectTag={Array.isArray((project as unknown as Record<string, unknown> | undefined)?.tag) ? ((project as unknown as Record<string, unknown>).tag as Array<{ name?: string; desc?: string }>) : []}
+                projectSwitchNotice={Boolean((project as unknown as Record<string, unknown> | undefined)?.switch_notice)}
+                projectIsJson5={Boolean((project as unknown as Record<string, unknown> | undefined)?.is_json5)}
+                projectIsMockOpen={Boolean((project as unknown as Record<string, unknown> | undefined)?.is_mock_open)}
+                projectStrict={Boolean((project as unknown as Record<string, unknown> | undefined)?.strice)}
+                customField={groupQuery.data?.data?.custom_field1 as { name?: string; enable?: boolean } | undefined}
+              />
+            }
+          />
+          <Route path="activity" element={<ProjectActivityPage projectId={projectId} />} />
+          <Route path="data" element={<ProjectDataPage projectId={projectId} />} />
+          {!hideMembers ? (
+            <Route path="members" element={<ProjectMembersPage projectId={projectId} />} />
+          ) : null}
+          <Route path="setting" element={<ProjectSettingPage projectId={projectId} />} />
+          {pluginRouteItems.map(item => {
+            const C = item.component;
+            return <Route key={item.key} path={item.path} element={<C />} />;
+          })}
+          <Route path="*" element={<Navigate to={`/project/${projectId}/interface/api`} replace />} />
+        </Routes>
+      </Suspense>
     </div>
   );
 }

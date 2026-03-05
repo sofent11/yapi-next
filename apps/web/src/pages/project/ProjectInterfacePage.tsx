@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   AutoComplete,
-  Avatar,
   Button,
   Card,
   Descriptions,
@@ -10,9 +9,7 @@ import {
   Input,
   Layout,
   Modal,
-  Col,
   Radio,
-  Row,
   Select,
   Space,
   Switch,
@@ -74,12 +71,15 @@ import {
 } from '../../services/yapi-api';
 import { webPlugins, type InterfaceTabItem } from '../../plugins';
 import { LegacyErrMsg } from '../../components/LegacyErrMsg';
-import { sanitizeHtml } from '../../utils/html-sanitize';
 import { legacyNameValidator } from '../../utils/legacy-validation';
 import { safeApiRequest } from '../../utils/safe-request';
 import { AutoTestResultModals } from './components/AutoTestResultModals';
+import { CaseDetailPanel } from './components/CaseDetailPanel';
+import { CollectionMenuPanel } from './components/CollectionMenuPanel';
+import { CollectionOverviewPanel } from './components/CollectionOverviewPanel';
+import { InterfaceEditTab } from './components/InterfaceEditTab';
 import { InterfaceListPanel } from './components/InterfaceListPanel';
-import { SchemaModeEditor } from './components/SchemaModeEditor';
+import { InterfaceViewTab } from './components/InterfaceViewTab';
 
 const { Sider, Content } = Layout;
 const { Text } = Typography;
@@ -88,6 +88,8 @@ const STABLE_EMPTY_ARRAY: any[] = [];
 const TREE_CATEGORY_LIMIT = 1000;
 const TREE_NODE_PAGE_LIMIT = 200;
 const INTERFACE_LIST_PAGE_LIMIT = 200;
+const CAT_PAGE_FETCH_CONCURRENCY = 3;
+const CAT_MENU_LOAD_CONCURRENCY = 4;
 
 type ProjectInterfacePageProps = {
   projectId: number;
@@ -237,20 +239,42 @@ async function fetchAllCatInterfaces(
   fetchPage: (page: number) => Promise<InterfaceNodePageResponse>,
   errorMessage: string
 ): Promise<LegacyInterfaceDTO[]> {
-  const merged: LegacyInterfaceDTO[] = [];
-  let page = 1;
-  let total = 1;
-  while (page <= total) {
-    const response = await fetchPage(page);
-    if (response.errcode !== 0) {
-      throw new Error(response.errmsg || errorMessage);
+  const firstResponse = await fetchPage(1);
+  if (firstResponse.errcode !== 0) {
+    throw new Error(firstResponse.errmsg || errorMessage);
+  }
+  const firstNodeData = (firstResponse.data || {}) as { list?: LegacyInterfaceDTO[]; total?: number };
+  const firstRows = Array.isArray(firstNodeData.list) ? firstNodeData.list : [];
+  const totalPageCount = Number(firstNodeData.total || 1);
+  const total = Number.isFinite(totalPageCount) && totalPageCount > 0 ? totalPageCount : 1;
+  if (total <= 1) {
+    return firstRows;
+  }
+
+  const pageRows = new Map<number, LegacyInterfaceDTO[]>();
+  pageRows.set(1, firstRows);
+  const pageQueue: number[] = [];
+  for (let page = 2; page <= total; page += 1) {
+    pageQueue.push(page);
+  }
+  const workers = Array.from({ length: Math.min(CAT_PAGE_FETCH_CONCURRENCY, pageQueue.length) }, async () => {
+    while (pageQueue.length > 0) {
+      const page = pageQueue.shift();
+      if (!page) return;
+      const response = await fetchPage(page);
+      if (response.errcode !== 0) {
+        throw new Error(response.errmsg || errorMessage);
+      }
+      const nodeData = (response.data || {}) as { list?: LegacyInterfaceDTO[]; total?: number };
+      const rows = Array.isArray(nodeData.list) ? nodeData.list : [];
+      pageRows.set(page, rows);
     }
-    const nodeData = (response.data || {}) as { list?: LegacyInterfaceDTO[]; total?: number };
-    const rows = Array.isArray(nodeData.list) ? nodeData.list : [];
-    merged.push(...rows);
-    const totalPageCount = Number(nodeData.total || 1);
-    total = Number.isFinite(totalPageCount) && totalPageCount > 0 ? totalPageCount : 1;
-    page += 1;
+  });
+  await Promise.all(workers);
+
+  const merged: LegacyInterfaceDTO[] = [];
+  for (let page = 1; page <= total; page += 1) {
+    merged.push(...(pageRows.get(page) || STABLE_EMPTY_ARRAY));
   }
   return merged;
 }
@@ -1442,9 +1466,20 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     expandedCatIds.forEach(id => {
       if (id > 0) targets.add(id);
     });
-    targets.forEach(id => {
-      void loadCatInterfaces(id);
+    const queue = Array.from(targets);
+    if (queue.length === 0) return;
+    let cancelled = false;
+    const workers = Array.from({ length: Math.min(CAT_MENU_LOAD_CONCURRENCY, queue.length) }, async () => {
+      while (!cancelled) {
+        const nextId = queue.shift();
+        if (!nextId) return;
+        await loadCatInterfaces(nextId);
+      }
     });
+    void Promise.all(workers);
+    return () => {
+      cancelled = true;
+    };
   }, [action, catId, expandedCatIds, loadCatInterfaces, treeRows]);
 
   useEffect(() => {
@@ -1959,6 +1994,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     const response = await callApi(
       updateInterface({
         id: Number(currentInterface._id),
+        project_id: props.projectId,
         catid: Number(values.catid || currentInterface.catid || catRows[0]?._id || 0),
         title: String(values.title || '').trim(),
         path: normalizedPath,
@@ -2072,6 +2108,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     const response = await callApi(
       updateInterfaceCat({
         catid: Number(editingCat._id),
+        project_id: props.projectId,
         name: values.name.trim(),
         desc: values.desc?.trim() || '',
         token: props.token
@@ -2110,6 +2147,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         const response = await callApi(
           delInterfaceCat({
             catid: Number(cat._id || 0),
+            project_id: props.projectId,
             token: props.token
           }).unwrap(),
           '删除分类失败'
@@ -2133,6 +2171,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         const response = await callApi(
           delInterface({
             id,
+            project_id: props.projectId,
             token: props.token
           }).unwrap(),
           '删除接口失败'
@@ -2202,11 +2241,17 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     setAddCatOpen(true);
   }, [addCatForm]);
 
+  const openTagSettingModal = useCallback(() => {
+    setTagSettingInput((props.projectTag || []).map(item => String(item.name || '')).filter(Boolean).join('\n'));
+    setTagSettingOpen(true);
+  }, [props.projectTag]);
+
   const handleInterfaceListStatusChange = useCallback(
     async (id: number, next: 'done' | 'undone') => {
       const response = await callApi(
         updateInterface({
           id,
+          project_id: props.projectId,
           status: next,
           token: props.token
         }).unwrap(),
@@ -2223,6 +2268,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       const response = await callApi(
         updateInterface({
           id,
+          project_id: props.projectId,
           catid: nextCatId,
           token: props.token
         }).unwrap(),
@@ -2233,6 +2279,27 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     },
     [callApi, props.token, refetchInterfaceListSafe, refreshInterfaceMenu, updateInterface]
   );
+
+  const toggleExpandedCol = useCallback((colId: number) => {
+    setExpandedColIds(prev => {
+      if (prev.includes(colId)) {
+        return prev.filter(item => item !== colId);
+      }
+      return [...prev, colId];
+    });
+  }, []);
+
+  const handleCollectionDragStartCol = useCallback((colId: number) => {
+    setDraggingColItem({ type: 'col', colId });
+  }, []);
+
+  const handleCollectionDragStartCase = useCallback((colId: number, nextCaseId: string) => {
+    setDraggingColItem({ type: 'case', colId, caseId: nextCaseId });
+  }, []);
+
+  const handleCollectionDragEnd = useCallback(() => {
+    setDraggingColItem(null);
+  }, []);
 
   function parseJsonText(text: string, label: string): unknown {
     if (!text.trim()) return {};
@@ -2460,6 +2527,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       const response = await callApi(
         updateInterface({
           id: drag.id,
+          project_id: props.projectId,
           catid: targetCatId,
           token: props.token
         }).unwrap(),
@@ -2481,6 +2549,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       const response = await callApi(
         updateInterface({
           id: drag.id,
+          project_id: props.projectId,
           catid: targetCatId,
           token: props.token
         }).unwrap(),
@@ -2591,6 +2660,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         const response = await callApi(
           triggerDelCol({
             col_id: colId,
+            project_id: props.projectId,
             token: props.token
           }).unwrap(),
           '删除集合失败'
@@ -2694,6 +2764,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         const response = await callApi(
           triggerDelCase({
             caseid: caseItemId,
+            col_id: selectedColId > 0 ? selectedColId : undefined,
             token: props.token
           }).unwrap(),
           '删除用例失败'
@@ -2768,6 +2839,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     const response = await callApi(
       upColCase({
         id: caseId,
+        col_id: selectedColId > 0 ? selectedColId : undefined,
         casename: values.casename.trim(),
         case_env: values.case_env?.trim() || '',
         enable_script: values.enable_script === true,
@@ -3230,7 +3302,10 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     const sourceCases = (col?.caseList || []).map((item: any) => ({ ...item, _id: String(item._id || '') }));
     if (sourceCases.length === 0) return;
     const reordered = reorderByCaseId(sourceCases, drag.caseId, targetCaseId);
-    const payload = buildCaseIndexPayload(reordered);
+    const payload = buildCaseIndexPayload(reordered).map(item => ({
+      ...item,
+      col_id: targetColId
+    }));
     if (payload.length === 0) return;
     const response = await callApi(upColCaseIndex(payload).unwrap(), '测试用例排序失败');
     if (!response) return;
@@ -3448,184 +3523,33 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   }
 
   function renderCollectionMenu() {
-    const keywordMode = colKeyword.trim().length > 0;
     return (
-      <div className="legacy-interface-menu">
-        <div className="legacy-interface-menu-actions">
-          <div className="legacy-interface-filter">
-            <Input
-              value={colKeyword}
-              onChange={event => setColKeyword(event.target.value)}
-              placeholder="搜索测试集合"
-              prefix={<SearchOutlined />}
-              size="small"
-              className="legacy-interface-filter-input"
-            />
-            {canEdit ? (
-              <Space className="legacy-interface-filter-actions" size={8}>
-                <Button
-                  size="small"
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => openColModal('add')}
-                >
-                  添加集合
-                </Button>
-              </Space>
-            ) : null}
-          </div>
-        </div>
-        <div className="legacy-interface-menu-list">
-          {colDisplayRows.map(col => {
-            const colId = Number(col._id || 0);
-            const activeCol = selectedColId === colId && (action === 'col' || action === 'case');
-            const expanded = keywordMode || expandedColIds.includes(colId);
-            const caseList = col.caseList || [];
-            return (
-              <div
-                key={`col-${colId}`}
-                className="legacy-interface-cat"
-                onDragOver={event => {
-                  if (!colDragEnabled) return;
-                  event.preventDefault();
-                }}
-                onDrop={event => {
-                  if (!colDragEnabled) return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void handleDropOnCol(colId);
-                }}
-              >
-                <button
-                  type="button"
-                  className={`legacy-interface-cat-title${activeCol ? ' active' : ''}`}
-                  draggable={colDragEnabled}
-                  onDragStart={event => {
-                    if (!colDragEnabled) return;
-                    setDraggingColItem({ type: 'col', colId });
-                    event.dataTransfer.effectAllowed = 'move';
-                  }}
-                  onDragEnd={() => setDraggingColItem(null)}
-                  onClick={() =>
-                    navigateWithGuard(`/project/${props.projectId}/interface/col/${colId}`)
-                  }
-                >
-                  <span className="legacy-interface-cat-main">
-                    <span
-                      className="legacy-interface-cat-toggle"
-                      onClick={event => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        if (keywordMode) return;
-                        setExpandedColIds(prev => {
-                          if (prev.includes(colId)) {
-                            return prev.filter(item => item !== colId);
-                          }
-                          return [...prev, colId];
-                        });
-                      }}
-                    >
-                      {expanded ? <DownOutlined /> : <RightOutlined />}
-                    </span>
-                    <FolderOpenOutlined style={{ color: '#617184' }} />
-                    <span className="legacy-interface-cat-name">{col.name}</span>
-                  </span>
-                  <Space size={4} className="legacy-interface-cat-actions">
-                    {canEdit ? (
-                      <>
-                        <DeleteOutlined
-                          onClick={event => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            confirmDeleteCol(colId);
-                          }}
-                        />
-                        <EditOutlined
-                          onClick={event => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            openColModal('edit', col);
-                          }}
-                        />
-                        <ImportOutlined
-                          onClick={event => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            openImportInterfaceModal(colId);
-                          }}
-                        />
-                        <CopyOutlined
-                          onClick={event => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            void handleCopyCol(col);
-                          }}
-                        />
-                      </>
-                    ) : null}
-                    <Tag>{caseList.length}</Tag>
-                  </Space>
-                </button>
-                {(expanded ? caseList : []).map((item: any) => {
-                  const id = String(item._id || '');
-                  return (
-                    <button
-                      key={`case-${id}`}
-                      type="button"
-                      className={`legacy-interface-item${action === 'case' && caseId === id ? ' active' : ''}`}
-                      draggable={colDragEnabled}
-                      onDragStart={event => {
-                        if (!colDragEnabled) return;
-                        setDraggingColItem({ type: 'case', colId, caseId: id });
-                        event.dataTransfer.effectAllowed = 'move';
-                      }}
-                      onDragEnd={() => setDraggingColItem(null)}
-                      onDragOver={event => {
-                        if (!colDragEnabled) return;
-                        event.preventDefault();
-                      }}
-                      onDrop={event => {
-                        if (!colDragEnabled) return;
-                        event.preventDefault();
-                        event.stopPropagation();
-                        void handleDropOnCase(colId, id);
-                      }}
-                      onClick={() =>
-                        navigateWithGuard(`/project/${props.projectId}/interface/case/${id}`)
-                      }
-                    >
-                      <Tag color="blue">CASE</Tag>
-                      <Tooltip title={item.path}>
-                        <span className="legacy-interface-item-title">
-                          {item.casename || item.title || id}
-                        </span>
-                      </Tooltip>
-                      {canEdit ? (
-                        <Space size={4} className="legacy-interface-item-actions">
-                          <DeleteOutlined
-                            onClick={event => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              confirmDeleteCase(id);
-                            }}
-                          />
-                          <CopyOutlined
-                            onClick={event => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              void handleCopyCase(id);
-                            }}
-                          />
-                        </Space>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <CollectionMenuPanel
+        colKeyword={colKeyword}
+        canEdit={canEdit}
+        colDisplayRows={colDisplayRows}
+        selectedColId={selectedColId}
+        action={action}
+        caseId={caseId}
+        expandedColIds={expandedColIds}
+        colDragEnabled={colDragEnabled}
+        onColKeywordChange={setColKeyword}
+        onOpenAddCol={() => openColModal('add')}
+        onToggleExpandCol={toggleExpandedCol}
+        onNavigateCol={colId => navigateWithGuard(`/project/${props.projectId}/interface/col/${colId}`)}
+        onNavigateCase={id => navigateWithGuard(`/project/${props.projectId}/interface/case/${id}`)}
+        onDragStartCol={handleCollectionDragStartCol}
+        onDragStartCase={handleCollectionDragStartCase}
+        onDragEnd={handleCollectionDragEnd}
+        onDropCol={colId => void handleDropOnCol(colId)}
+        onDropCase={(colId, id) => void handleDropOnCase(colId, id)}
+        onDeleteCol={confirmDeleteCol}
+        onEditCol={col => openColModal('edit', col as { _id?: number; name?: string; desc?: string })}
+        onImportCol={openImportInterfaceModal}
+        onCopyCol={col => void handleCopyCol(col as { _id?: number; name?: string; desc?: string })}
+        onDeleteCase={confirmDeleteCase}
+        onCopyCase={id => void handleCopyCase(id)}
+      />
     );
   }
 
@@ -3673,8 +3597,6 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     const method = String(currentInterface.method || 'GET').toUpperCase();
     const fullPath = `${props.basepath || ''}${currentInterface.path || ''}`;
     const editValues = (watchedValues || {}) as EditForm;
-    const editMethod = String(editValues.method || method).toUpperCase();
-    const editBodySupported = supportsRequestBody(editMethod);
     const editBodyType = editValues.req_body_type || 'form';
     const mockUrl =
       typeof window === 'undefined'
@@ -3756,242 +3678,29 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
                 key,
                 label: tabItem.name,
                 children: (
-                <div className="caseContainer">
-                  <h2 className="interface-title">基本信息</h2>
-                  <div className="panel-view">
-                    <Row className="row">
-                      <Col span={4} className="colKey">
-                        接口名称：
-                      </Col>
-                      <Col span={8} className="colName">
-                        <span title={String(currentInterface.title || '-')}>{currentInterface.title || '-'}</span>
-                      </Col>
-                      <Col span={4} className="colKey">
-                        创 建 人：
-                      </Col>
-                      <Col span={8} className="colValue">
-                        {Number((currentInterface as unknown as Record<string, unknown>).uid || 0) > 0 ? (
-                          <Link
-                            className="user-name"
-                            to={`/user/profile/${Number((currentInterface as unknown as Record<string, unknown>).uid || 0)}`}
-                          >
-                            <Avatar
-                              className="user-img"
-                              size={24}
-                              src={`/api/user/avatar?uid=${Number((currentInterface as unknown as Record<string, unknown>).uid || 0)}`}
-                            />
-                            {String((currentInterface as unknown as Record<string, unknown>).username || '-')}
-                          </Link>
-                        ) : (
-                          String((currentInterface as unknown as Record<string, unknown>).username || '-')
-                        )}
-                      </Col>
-                    </Row>
-                    <Row className="row">
-                      <Col span={4} className="colKey">
-                        状 态：
-                      </Col>
-                      <Col span={8}>
-                        <span
-                          className={`legacy-status-tag ${currentInterface.status === 'done' ? 'done' : 'undone'}`}
-                        >
-                          {statusLabel(currentInterface.status)}
-                        </span>
-                      </Col>
-                      <Col span={4} className="colKey">
-                        更新时间：
-                      </Col>
-                      <Col span={8}>{formatUnixTime((currentInterface as unknown as Record<string, unknown>).up_time)}</Col>
-                    </Row>
-                    {(currentInterface.tag || []).length > 0 ? (
-                      <Row className="row remark">
-                        <Col span={4} className="colKey">
-                          Tag：
-                        </Col>
-                        <Col span={18} className="colValue">
-                          {(currentInterface.tag || []).map(tag => (
-                            <Tag key={tag}>{tag}</Tag>
-                          ))}
-                        </Col>
-                      </Row>
-                    ) : null}
-                    <Row className="row">
-                      <Col span={4} className="colKey">
-                        接口路径：
-                      </Col>
-                      <Col span={18} className="colValue colMethod">
-                        <span className="legacy-method-pill tag-method" style={methodStyle(method)}>
-                          {method}
-                        </span>
-                        <span>{fullPath}</span>
-                        <Tooltip title="复制路径">
-                          <Button
-                            size="small"
-                            type="text"
-                            icon={<CopyOutlined />}
-                            onClick={() => void copyText(fullPath, '接口路径已复制')}
-                          />
-                        </Tooltip>
-                      </Col>
-                    </Row>
-                    <Row className="row">
-                      <Col span={4} className="colKey">
-                        Mock地址：
-                      </Col>
-                      <Col span={18} className="colValue">
-                        {mockFlagText(props.projectIsMockOpen, props.projectStrict) ? (
-                          <Text type="secondary">{mockFlagText(props.projectIsMockOpen, props.projectStrict)} </Text>
-                        ) : null}
-                        {mockUrl ? (
-                          <button
-                            type="button"
-                            className="legacy-view-link-btn"
-                            onClick={() => window.open(mockUrl, '_blank', 'noopener,noreferrer')}
-                          >
-                            {mockUrl}
-                          </button>
-                        ) : (
-                          <span className="legacy-view-link">-</span>
-                        )}
-                        {mockUrl ? (
-                          <Tooltip title="复制Mock地址">
-                            <Button
-                              size="small"
-                              type="text"
-                              icon={<CopyOutlined />}
-                              onClick={() => void copyText(mockUrl, 'Mock地址已复制')}
-                            />
-                          </Tooltip>
-                        ) : null}
-                      </Col>
-                    </Row>
-                    {props.customField?.enable && String(currentInterface.custom_field_value || '').trim() ? (
-                      <Row className="row remark">
-                        <Col span={4} className="colKey">
-                          {props.customField.name || '自定义字段'}：
-                        </Col>
-                        <Col span={18} className="colValue">
-                          {String(currentInterface.custom_field_value || '')}
-                        </Col>
-                      </Row>
-                    ) : null}
-                  </div>
-
-                  {currentInterface.desc ? (
-                    <>
-                      <h2 className="interface-title">备注</h2>
-                        <div
-                          className="legacy-view-remark"
-                          dangerouslySetInnerHTML={{
-                            __html: sanitizeHtml(String(currentInterface.desc || ''))
-                          }}
-                        />
-                      </>
-                    ) : null}
-
-                    {(reqParamsRows.length > 0 ||
-                      reqHeadersRows.length > 0 ||
-                      reqQueryRows.length > 0 ||
-                      reqBodyFormRows.length > 0 ||
-                      currentInterface.req_body_other) ? (
-                    <>
-                      <h2 className="interface-title">请求参数</h2>
-                        {reqParamsRows.length > 0 ? (
-                          <div className="legacy-view-block">
-                            <h3 className="legacy-view-subtitle">路径参数</h3>
-                            <Table
-                              bordered
-                              size="small"
-                              rowKey="key"
-                              pagination={false}
-                              columns={paramColumns}
-                              dataSource={reqParamsRows}
-                            />
-                          </div>
-                        ) : null}
-                        {reqHeadersRows.length > 0 ? (
-                          <div className="legacy-view-block">
-                            <h3 className="legacy-view-subtitle">Headers</h3>
-                            <Table
-                              bordered
-                              size="small"
-                              rowKey="key"
-                              pagination={false}
-                              columns={paramColumns}
-                              dataSource={reqHeadersRows}
-                            />
-                          </div>
-                        ) : null}
-                        {reqQueryRows.length > 0 ? (
-                          <div className="legacy-view-block">
-                            <h3 className="legacy-view-subtitle">Query</h3>
-                            <Table
-                              bordered
-                              size="small"
-                              rowKey="key"
-                              pagination={false}
-                              columns={paramColumns}
-                              dataSource={reqQueryRows}
-                            />
-                          </div>
-                        ) : null}
-                        {reqBodyFormRows.length > 0 ? (
-                          <div className="legacy-view-block">
-                            <h3 className="legacy-view-subtitle">Body(form)</h3>
-                            <Table
-                              bordered
-                              size="small"
-                              rowKey="key"
-                              pagination={false}
-                              columns={bodyParamColumns}
-                              dataSource={reqBodyFormRows}
-                            />
-                          </div>
-                        ) : null}
-                        {currentInterface.req_body_other ? (
-                          <div className="legacy-view-block">
-                            <h3 className="legacy-view-subtitle">Body({currentInterface.req_body_type || 'raw'})</h3>
-                            {schemaRowsRequest.length > 0 ? (
-                              <Table
-                                bordered
-                                size="small"
-                                rowKey="key"
-                                pagination={false}
-                                columns={schemaColumns}
-                                dataSource={schemaRowsRequest}
-                              />
-                            ) : (
-                              <Input.TextArea
-                                rows={8}
-                                value={String(currentInterface.req_body_other || '')}
-                                readOnly
-                              />
-                            )}
-                          </div>
-                        ) : null}
-                      </>
-                    ) : null}
-
-                    {currentInterface.res_body ? (
-                    <>
-                      <h2 className="interface-title">返回数据</h2>
-                        <div className="legacy-view-block">
-                          {schemaRowsResponse.length > 0 ? (
-                            <Table
-                              bordered
-                              size="small"
-                              rowKey="key"
-                              pagination={false}
-                              columns={schemaColumns}
-                              dataSource={schemaRowsResponse}
-                            />
-                          ) : (
-                            <Input.TextArea rows={12} value={String(currentInterface.res_body || '')} readOnly />
-                          )}
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
+                  <InterfaceViewTab
+                    currentInterface={currentInterface as LegacyInterfaceDTO & Record<string, unknown>}
+                    method={method}
+                    fullPath={fullPath}
+                    mockUrl={mockUrl}
+                    projectIsMockOpen={props.projectIsMockOpen}
+                    projectStrict={props.projectStrict}
+                    customField={props.customField}
+                    reqParamsRows={reqParamsRows as unknown as Array<Record<string, unknown>>}
+                    reqHeadersRows={reqHeadersRows as unknown as Array<Record<string, unknown>>}
+                    reqQueryRows={reqQueryRows as unknown as Array<Record<string, unknown>>}
+                    reqBodyFormRows={reqBodyFormRows as unknown as Array<Record<string, unknown>>}
+                    schemaRowsRequest={schemaRowsRequest as unknown as Array<Record<string, unknown>>}
+                    schemaRowsResponse={schemaRowsResponse as unknown as Array<Record<string, unknown>>}
+                    paramColumns={paramColumns}
+                    bodyParamColumns={bodyParamColumns}
+                    schemaColumns={schemaColumns}
+                    methodStyle={methodStyle}
+                    statusLabel={statusLabel}
+                    formatUnixTime={formatUnixTime}
+                    mockFlagText={mockFlagText}
+                    onCopyText={(text, successText) => void copyText(text, successText)}
+                  />
                 )
               };
             }
@@ -4000,537 +3709,39 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
                 key,
                 label: tabItem.name,
                 children: (
-                <div className="interface-edit">
-                {editConflictState.status === 'loading' ? (
-                  <Card loading />
-                ) : editConflictState.status === 'locked' ? (
-                  <Alert
-                    type="warning"
-                    showIcon
-                    message={
-                      <span>
-                        <Link to={`/user/profile/${editConflictState.uid}`}>
-                          <b>{editConflictState.username}</b>
-                        </Link>
-                        <span> 正在编辑该接口，请稍后再试...</span>
-                      </span>
-                    }
+                  <InterfaceEditTab
+                    editConflictState={editConflictState}
+                    form={form}
+                    catRows={catRows.map(item => ({ _id: Number(item._id || 0), name: String(item.name || '') }))}
+                    runMethods={RUN_METHODS}
+                    supportsRequestBody={supportsRequestBody}
+                    reqRadioType={reqRadioType}
+                    onReqRadioTypeChange={setReqRadioType}
+                    basepath={props.basepath}
+                    normalizePathInput={normalizePathInput}
+                    projectTagOptions={projectTagOptions}
+                    onOpenTagSetting={openTagSettingModal}
+                    customField={props.customField}
+                    sanitizeReqQuery={sanitizeReqQuery}
+                    sanitizeReqHeaders={sanitizeReqHeaders}
+                    sanitizeReqBodyForm={sanitizeReqBodyForm}
+                    onOpenBulkImport={openBulkImport}
+                    httpRequestHeaders={HTTP_REQUEST_HEADER}
+                    editBodyType={editBodyType}
+                    projectIsJson5={props.projectIsJson5}
+                    reqSchemaEditorMode={reqSchemaEditorMode}
+                    onReqSchemaEditorModeChange={setReqSchemaEditorMode}
+                    watchedReqBodyOther={watchedReqBodyOther}
+                    editValues={editValues as Record<string, any>}
+                    resEditorTab={resEditorTab}
+                    onResponseEditorTabChange={handleResponseEditorTabChange}
+                    resSchemaEditorMode={resSchemaEditorMode}
+                    onResSchemaEditorModeChange={setResSchemaEditorMode}
+                    watchedResBody={watchedResBody}
+                    resPreviewText={resPreviewText}
+                    onSave={() => void handleSave()}
+                    saving={updateState.isLoading}
                   />
-                ) : (
-                  <>
-                {editConflictState.status === 'error' ? (
-                  <Alert
-                    style={{ marginBottom: 16 }}
-                    type="warning"
-                    showIcon
-                    message="多人编辑冲突检测暂时不可用，请稍后重试。"
-                  />
-                ) : null}
-                <Form<EditForm> form={form} layout="vertical">
-                  <h2 className="interface-title" style={{ marginTop: 0 }}>基本设置</h2>
-                  <div className="panel-sub">
-                      <Form.Item
-                        label="接口名称"
-                        name="title"
-                        rules={[{ required: true, validator: legacyNameValidator('接口') }]}
-                      >
-                        <Input />
-                      </Form.Item>
-                      <Form.Item label="选择分类" name="catid" rules={[{ required: true, message: '请选择分类' }]}>
-                        <Select
-                          options={catRows.map(item => ({
-                            label: item.name,
-                            value: Number(item._id || 0)
-                          }))}
-                        />
-                      </Form.Item>
-                      <Form.Item
-                        label={
-                          <span>
-                            接口路径&nbsp;
-                            <Tooltip
-                              title={
-                                <div>
-                                  <p>1. 支持动态路由，例如: /api/user/{'{id}'}</p>
-                                  <p>2. 支持 ?controller=xxx 的 QueryRouter，普通 Query 参数请配置在 Query 区</p>
-                                </div>
-                              }
-                            >
-                              <span style={{ color: '#8a94a6', cursor: 'pointer' }}>?</span>
-                            </Tooltip>
-                          </span>
-                        }
-                        required
-                      >
-                        <Space.Compact style={{ width: '100%' }}>
-                          <Form.Item name="method" noStyle>
-                            <Select
-                              style={{ width: 140 }}
-                              options={RUN_METHODS.map(item => ({ label: item, value: item }))}
-                              onChange={(nextMethod: string) => {
-                                if (!supportsRequestBody(nextMethod) && reqRadioType === 'req-body') {
-                                  setReqRadioType('req-query');
-                                }
-                              }}
-                            />
-                          </Form.Item>
-                          <Tooltip title="接口基本路径，可在项目设置里修改">
-                            <Input disabled value={props.basepath || ''} style={{ width: 220 }} />
-                          </Tooltip>
-                          <Form.Item
-                            name="path"
-                            noStyle
-                            rules={[{ required: true, message: '请输入接口路径' }]}
-                          >
-                            <Input
-                              placeholder="/api/user/{id}"
-                              onBlur={event => {
-                                form.setFieldValue('path', normalizePathInput(event.target.value));
-                              }}
-                            />
-                          </Form.Item>
-                        </Space.Compact>
-                      </Form.Item>
-                      <Form.List name="req_params">
-                        {(fields) => (
-                          <Space direction="vertical" style={{ width: '100%' }}>
-                            {fields.length > 0 ? <Text strong>路径参数</Text> : null}
-                            {fields.map(field => (
-                              <Space key={field.key} align="start" wrap style={{ width: '100%' }}>
-                                <Form.Item
-                                  label={field.name === 0 ? '参数名' : ''}
-                                  name={[field.name, 'name']}
-                                  style={{ width: 220 }}
-                                >
-                                  <Input disabled />
-                                </Form.Item>
-                                <Form.Item
-                                  label={field.name === 0 ? '示例' : ''}
-                                  name={[field.name, 'example']}
-                                  style={{ minWidth: 220, flex: 1 }}
-                                >
-                                  <Input />
-                                </Form.Item>
-                                <Form.Item
-                                  label={field.name === 0 ? '备注' : ''}
-                                  name={[field.name, 'desc']}
-                                  style={{ minWidth: 260, flex: 1 }}
-                                >
-                                  <Input />
-                                </Form.Item>
-                              </Space>
-                            ))}
-                          </Space>
-                        )}
-                      </Form.List>
-                      <Space wrap style={{ width: '100%' }}>
-                        <Form.Item label="状态" name="status" style={{ minWidth: 140 }}>
-                          <Select
-                            options={[
-                              { label: '已完成', value: 'done' },
-                              { label: '未完成', value: 'undone' }
-                            ]}
-                          />
-                        </Form.Item>
-                      </Space>
-                      <Form.Item label="Tag" name="tag">
-                        <Select
-                          mode="multiple"
-                          placeholder="请选择 Tag"
-                          options={projectTagOptions}
-                          popupRender={menu => (
-                            <div>
-                              {menu}
-                              <div style={{ padding: '8px 12px' }}>
-                                <Button
-                                  type="link"
-                                  size="small"
-                                  onClick={() => {
-                                    setTagSettingInput((props.projectTag || []).map(item => String(item.name || '')).filter(Boolean).join('\n'));
-                                    setTagSettingOpen(true);
-                                  }}
-                                >
-                                  Tag 设置
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                        />
-                      </Form.Item>
-                      {props.customField?.enable ? (
-                        <Form.Item label={props.customField.name || '自定义字段'} name="custom_field_value">
-                          <Input />
-                        </Form.Item>
-                      ) : null}
-                    </div>
-
-                  <h2 className="interface-title">请求参数设置</h2>
-                  <div className="panel-sub">
-                      <Radio.Group
-                        value={reqRadioType}
-                        onChange={event => setReqRadioType(event.target.value)}
-                        style={{ marginBottom: 12 }}
-                      >
-                        {editBodySupported ? <Radio.Button value="req-body">Body</Radio.Button> : null}
-                        <Radio.Button value="req-query">Query</Radio.Button>
-                        <Radio.Button value="req-headers">Headers</Radio.Button>
-                      </Radio.Group>
-
-                      <div style={{ display: reqRadioType === 'req-query' ? 'block' : 'none' }}>
-                        <Space style={{ marginBottom: 10 }}>
-                          <Button
-                            size="small"
-                            type="primary"
-                            onClick={() => {
-                              const list = sanitizeReqQuery(form.getFieldValue('req_query'));
-                              form.setFieldValue('req_query', [...list, { name: '', required: '1', desc: '', example: '' }]);
-                            }}
-                          >
-                            添加Query参数
-                          </Button>
-                          <Button size="small" onClick={() => openBulkImport('req_query')}>
-                            批量添加
-                          </Button>
-                        </Space>
-                        <Form.List name="req_query">
-                          {(fields, { remove }) => (
-                            <Space direction="vertical" style={{ width: '100%' }}>
-                              {fields.map(field => (
-                                <Space key={field.key} align="start" wrap style={{ width: '100%' }}>
-                                  <Form.Item
-                                    label={field.name === 0 ? '参数名' : ''}
-                                    name={[field.name, 'name']}
-                                    style={{ width: 180 }}
-                                  >
-                                    <Input placeholder="name" />
-                                  </Form.Item>
-                                  <Form.Item
-                                    label={field.name === 0 ? '必需' : ''}
-                                    name={[field.name, 'required']}
-                                    initialValue="1"
-                                    style={{ width: 100 }}
-                                  >
-                                    <Select options={[{ label: '必需', value: '1' }, { label: '非必需', value: '0' }]} />
-                                  </Form.Item>
-                                  <Form.Item
-                                    label={field.name === 0 ? '示例' : ''}
-                                    name={[field.name, 'example']}
-                                    style={{ minWidth: 180, flex: 1 }}
-                                  >
-                                    <Input />
-                                  </Form.Item>
-                                  <Form.Item
-                                    label={field.name === 0 ? '备注' : ''}
-                                    name={[field.name, 'desc']}
-                                    style={{ minWidth: 220, flex: 1 }}
-                                  >
-                                    <Input />
-                                  </Form.Item>
-                                  <Button danger type="text" icon={<DeleteOutlined />} onClick={() => remove(field.name)} />
-                                </Space>
-                              ))}
-                            </Space>
-                          )}
-                        </Form.List>
-                      </div>
-
-                      <div style={{ display: reqRadioType === 'req-headers' ? 'block' : 'none' }}>
-                        <Space style={{ marginBottom: 10 }}>
-                          <Button
-                            size="small"
-                            type="primary"
-                            onClick={() => {
-                              const list = sanitizeReqHeaders(form.getFieldValue('req_headers'));
-                              form.setFieldValue('req_headers', [...list, { name: '', value: '', required: '1', desc: '', example: '' }]);
-                            }}
-                          >
-                            添加Header
-                          </Button>
-                        </Space>
-                        <Form.List name="req_headers">
-                          {(fields, { remove }) => (
-                            <Space direction="vertical" style={{ width: '100%' }}>
-                              {fields.map(field => (
-                                <Space key={field.key} align="start" wrap style={{ width: '100%' }}>
-                                  <Form.Item
-                                    label={field.name === 0 ? '参数名' : ''}
-                                    name={[field.name, 'name']}
-                                    style={{ width: 180 }}
-                                  >
-                                    <AutoComplete
-                                      options={HTTP_REQUEST_HEADER.map(item => ({ label: item, value: item }))}
-                                      filterOption={(inputValue, option) =>
-                                        String(option?.value || '')
-                                          .toUpperCase()
-                                          .includes(String(inputValue || '').toUpperCase())
-                                      }
-                                      placeholder="name"
-                                    />
-                                  </Form.Item>
-                                  <Form.Item
-                                    label={field.name === 0 ? '参数值' : ''}
-                                    name={[field.name, 'value']}
-                                    style={{ width: 200 }}
-                                  >
-                                    <Input placeholder="value" />
-                                  </Form.Item>
-                                  <Form.Item
-                                    label={field.name === 0 ? '必需' : ''}
-                                    name={[field.name, 'required']}
-                                    initialValue="1"
-                                    style={{ width: 100 }}
-                                  >
-                                    <Select options={[{ label: '必需', value: '1' }, { label: '非必需', value: '0' }]} />
-                                  </Form.Item>
-                                  <Form.Item
-                                    label={field.name === 0 ? '示例' : ''}
-                                    name={[field.name, 'example']}
-                                    style={{ minWidth: 140, flex: 1 }}
-                                  >
-                                    <Input />
-                                  </Form.Item>
-                                  <Form.Item
-                                    label={field.name === 0 ? '备注' : ''}
-                                    name={[field.name, 'desc']}
-                                    style={{ minWidth: 180, flex: 1 }}
-                                  >
-                                    <Input />
-                                  </Form.Item>
-                                  <Button danger type="text" icon={<DeleteOutlined />} onClick={() => remove(field.name)} />
-                                </Space>
-                              ))}
-                            </Space>
-                          )}
-                        </Form.List>
-                      </div>
-
-                      <div style={{ display: reqRadioType === 'req-body' ? 'block' : 'none' }}>
-                        <Form.Item label="Body 类型" name="req_body_type">
-                          <Radio.Group>
-                            <Radio value="form">form</Radio>
-                            <Radio value="json">json</Radio>
-                            <Radio value="file">file</Radio>
-                            <Radio value="raw">raw</Radio>
-                          </Radio.Group>
-                        </Form.Item>
-
-                        {editBodyType === 'form' ? (
-                          <>
-                            <Space style={{ marginBottom: 10 }}>
-                              <Button
-                                size="small"
-                                type="primary"
-                                onClick={() => {
-                                  const list = sanitizeReqBodyForm(form.getFieldValue('req_body_form'));
-                                  form.setFieldValue('req_body_form', [
-                                    ...list,
-                                    { name: '', type: 'text', required: '1', desc: '', example: '' }
-                                  ]);
-                                }}
-                              >
-                                添加form参数
-                              </Button>
-                              <Button size="small" onClick={() => openBulkImport('req_body_form')}>
-                                批量添加
-                              </Button>
-                            </Space>
-                            <Form.List name="req_body_form">
-                              {(fields, { remove }) => (
-                                <Space direction="vertical" style={{ width: '100%' }}>
-                                  {fields.map(field => (
-                                    <Space key={field.key} align="start" wrap style={{ width: '100%' }}>
-                                      <Form.Item
-                                        label={field.name === 0 ? '参数名' : ''}
-                                        name={[field.name, 'name']}
-                                        style={{ width: 180 }}
-                                      >
-                                        <Input />
-                                      </Form.Item>
-                                      <Form.Item
-                                        label={field.name === 0 ? '类型' : ''}
-                                        name={[field.name, 'type']}
-                                        initialValue="text"
-                                        style={{ width: 100 }}
-                                      >
-                                        <Select options={[{ label: 'text', value: 'text' }, { label: 'file', value: 'file' }]} />
-                                      </Form.Item>
-                                      <Form.Item
-                                        label={field.name === 0 ? '必需' : ''}
-                                        name={[field.name, 'required']}
-                                        initialValue="1"
-                                        style={{ width: 100 }}
-                                      >
-                                        <Select options={[{ label: '必需', value: '1' }, { label: '非必需', value: '0' }]} />
-                                      </Form.Item>
-                                      <Form.Item
-                                        label={field.name === 0 ? '示例' : ''}
-                                        name={[field.name, 'example']}
-                                        style={{ minWidth: 160, flex: 1 }}
-                                      >
-                                        <Input />
-                                      </Form.Item>
-                                      <Form.Item
-                                        label={field.name === 0 ? '备注' : ''}
-                                        name={[field.name, 'desc']}
-                                        style={{ minWidth: 180, flex: 1 }}
-                                      >
-                                        <Input />
-                                      </Form.Item>
-                                      <Button danger type="text" icon={<DeleteOutlined />} onClick={() => remove(field.name)} />
-                                    </Space>
-                                  ))}
-                                </Space>
-                              )}
-                            </Form.List>
-                          </>
-                        ) : editBodyType === 'json' ? (
-                          <>
-                            <Form.Item label="JSON-SCHEMA" name="req_body_is_json_schema" valuePropName="checked">
-                              <Switch checkedChildren="开" unCheckedChildren="关" disabled={!props.projectIsJson5} />
-                            </Form.Item>
-                            {editValues.req_body_is_json_schema ? (
-                              <>
-                                <SchemaModeEditor
-                                  mode={reqSchemaEditorMode}
-                                  onModeChange={setReqSchemaEditorMode}
-                                  fieldName="req_body_other"
-                                  value={String(watchedReqBodyOther || '')}
-                                  onValueChange={next => form.setFieldValue('req_body_other', next)}
-                                  textLabel="Body 内容"
-                                  textPlaceholder='{"type":"object","properties":{}}'
-                                />
-                              </>
-                            ) : (
-                              <>
-                                <Alert
-                                  type="info"
-                                  showIcon
-                                  style={{ marginBottom: 12 }}
-                                  message="基于 Json5，参数描述信息可以使用注释方式编写。"
-                                />
-                                <Form.Item label="Body 内容" name="req_body_other">
-                                  <Input.TextArea rows={10} placeholder='{"code":0}' />
-                                </Form.Item>
-                              </>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <Form.Item label="Body 内容" name="req_body_other">
-                              <Input.TextArea rows={10} placeholder={editBodyType === 'file' ? 'file body' : 'raw body'} />
-                            </Form.Item>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                  <h2 className="interface-title">返回数据设置</h2>
-                  <div className="panel-sub">
-                      <Form.Item label="返回类型" name="res_body_type">
-                        <Radio.Group>
-                          <Radio.Button value="json">JSON</Radio.Button>
-                          <Radio.Button value="raw">RAW</Radio.Button>
-                        </Radio.Group>
-                      </Form.Item>
-                      <Form.Item label="JSON-SCHEMA" name="res_body_is_json_schema" valuePropName="checked">
-                        <Switch checkedChildren="json-schema" unCheckedChildren="json" disabled={!props.projectIsJson5} />
-                      </Form.Item>
-                      {String(editValues.res_body_type || 'json') === 'json' ? (
-                        <Tabs
-                          activeKey={resEditorTab}
-                          onChange={handleResponseEditorTabChange}
-                          items={[
-                            {
-                              key: 'tpl',
-                              label: '模板',
-                              children: (
-                                <>
-                                  {editValues.res_body_is_json_schema ? (
-                                    <>
-                                      <SchemaModeEditor
-                                        mode={resSchemaEditorMode}
-                                        onModeChange={setResSchemaEditorMode}
-                                        fieldName="res_body"
-                                        value={String(watchedResBody || '')}
-                                        onValueChange={next => form.setFieldValue('res_body', next)}
-                                        textLabel="返回内容"
-                                        hiddenFormItemStyle={{ marginBottom: 0 }}
-                                        textFormItemStyle={{ marginBottom: 0 }}
-                                      />
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Alert
-                                        type="info"
-                                        showIcon
-                                        style={{ marginBottom: 12 }}
-                                        message="基于 mockjs 和 json5，参数描述信息可以使用注释方式编写。"
-                                      />
-                                      <Form.Item label="返回内容" name="res_body" style={{ marginBottom: 0 }}>
-                                        <Input.TextArea rows={12} />
-                                      </Form.Item>
-                                    </>
-                                  )}
-                                </>
-                              )
-                            },
-                            {
-                              key: 'preview',
-                              label: '预览',
-                              children: (
-                                <Input.TextArea
-                                  rows={12}
-                                  readOnly
-                                  value={resPreviewText}
-                                  placeholder="切换到预览时会自动生成 mock 预览"
-                                />
-                              )
-                            }
-                          ]}
-                        />
-                      ) : (
-                        <Form.Item label="返回内容" name="res_body">
-                          <Input.TextArea rows={12} />
-                        </Form.Item>
-                      )}
-                    </div>
-
-                  <h2 className="interface-title">备注</h2>
-                  <div className="panel-sub">
-                      <Form.Item label="描述" name="desc">
-                        <Input.TextArea rows={6} />
-                      </Form.Item>
-                    </div>
-
-                  <h2 className="interface-title">其他</h2>
-                  <div className="panel-sub">
-                      <Form.Item
-                        label="消息通知"
-                        name="switch_notice"
-                        valuePropName="checked"
-                        extra="开启消息通知，可在项目设置中统一修改"
-                      >
-                        <Switch checkedChildren="开" unCheckedChildren="关" />
-                      </Form.Item>
-                      <Form.Item
-                        label="开放接口"
-                        name="api_opened"
-                        valuePropName="checked"
-                        extra="开放接口可在导出时按公开状态筛选"
-                      >
-                        <Switch checkedChildren="开" unCheckedChildren="关" />
-                      </Form.Item>
-                    </div>
-
-                    <div style={{ textAlign: 'center', marginTop: 16 }}>
-                      <Button type="primary" onClick={() => void handleSave()} loading={updateState.isLoading}>
-                        保存
-                      </Button>
-                    </div>
-                </Form>
-                  </>
-                )}
-                </div>
                 )
               };
             }
@@ -4590,181 +3801,41 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       }
       const currentCol = colRows.find(item => Number(item._id) === selectedColId);
       return (
-        <Card>
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <div className="legacy-interface-list-toolbar">
-              <Space direction="vertical" size={2}>
-                <Text strong>{currentCol?.name || `测试集合 ${selectedColId}`}</Text>
-                <Text type="secondary">{currentCol?.desc || '暂无描述'}</Text>
-              </Space>
-              {canEdit ? (
-                <Space size={8}>
-                  <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setAddCaseOpen(true)}>
-                    添加用例
-                  </Button>
-                  <Button size="small" icon={<ImportOutlined />} onClick={() => openImportInterfaceModal(selectedColId)}>
-                    导入接口
-                  </Button>
-                  <Button size="small" icon={<EditOutlined />} onClick={() => openColModal('edit', currentCol)}>
-                    编辑集合
-                  </Button>
-                  <Button size="small" onClick={() => openCommonSettingModal(currentCol as Record<string, unknown>)}>
-                    通用规则配置
-                  </Button>
-                  <Button size="small" loading={autoTestRunning} onClick={() => void runAutoTestInPage()}>
-                    开始测试
-                  </Button>
-                  <Button size="small" onClick={() => openAutoTest('html')}>
-                    查看报告
-                  </Button>
-                  <Button size="small" onClick={() => openAutoTest('html', true)}>
-                    下载报告
-                  </Button>
-                </Space>
-              ) : null}
-            </div>
-            {caseEnvProjects.length > 0 ? (
-              <div className="legacy-interface-list-toolbar" style={{ justifyContent: 'flex-start' }}>
-                <Space size={12} wrap>
-                  <Text strong>测试环境：</Text>
-                  {caseEnvProjects.map(item => {
-                    const projectId = Number(item._id || 0);
-                    const options = (item.env || []).map(envItem => ({
-                      label: String(envItem.name || ''),
-                      value: String(envItem.name || '')
-                    }));
-                    return (
-                      <Space key={`env-${projectId}`} size={6}>
-                        <span>{item.name || `项目${projectId}`}</span>
-                        <Select<string>
-                          size="small"
-                          style={{ width: 180 }}
-                          allowClear
-                          value={selectedRunEnvByProject[projectId] || undefined}
-                          options={options}
-                          onChange={value =>
-                            setSelectedRunEnvByProject(prev => ({
-                              ...prev,
-                              [projectId]: value || ''
-                            }))
-                          }
-                        />
-                      </Space>
-                    );
-                  })}
-                </Space>
-              </div>
-            ) : null}
-            {autoTestReport ? (
-              <Alert
-                type="info"
-                showIcon
-                message={autoTestReport.message?.msg || '已生成测试报告'}
-                description={
-                  <Space size={12} wrap>
-                    <span>总数: {Number(autoTestReport.message?.len || autoTestRows.length || 0)}</span>
-                    <span>通过: {Number(autoTestReport.message?.successNum || 0)}</span>
-                    <span>失败: {Number(autoTestReport.message?.failedNum || 0)}</span>
-                    <span>耗时: {String(autoTestReport.runTime || '-')}</span>
-                    <Button size="small" onClick={() => setAutoTestModalOpen(true)}>
-                      查看详情
-                    </Button>
-                  </Space>
-                }
-              />
-            ) : null}
-            <Table
-              rowKey={row => String(row._id || '')}
-              loading={caseListQuery.isLoading}
-              dataSource={caseRows}
-              locale={{
-                emptyText: <LegacyErrMsg type="noData" title="当前集合暂无测试用例" />
-              }}
-              pagination={false}
-              columns={[
-                {
-                  title: '用例名称',
-                  dataIndex: 'casename',
-                  render: (value, row) => (
-                    <button
-                      type="button"
-                      className="legacy-interface-menu-link-btn"
-                      onClick={() => navigateWithGuard(`/project/${props.projectId}/interface/case/${row._id}`)}
-                    >
-                      {value || row._id}
-                    </button>
-                  )
-                },
-                {
-                  title: '接口',
-                  render: (_, row) => (
-                    <Space>
-                      <Tag>{row.method || '-'}</Tag>
-                      <span>{row.path || row.title || '-'}</span>
-                    </Space>
-                  )
-                },
-                {
-                  title: '更新时间',
-                  dataIndex: 'up_time',
-                  width: 180,
-                  render: value => (value ? new Date(Number(value) * 1000).toLocaleString() : '-')
-                },
-                {
-                  title: '状态',
-                  width: 100,
-                  render: (_, row) => {
-                    const report = autoTestResultMap.get(String(row._id || ''));
-                    if (!report) return <Tag>未测试</Tag>;
-                    if (report.code === 0) return <Tag color="success">通过</Tag>;
-                    if (report.code === 1) return <Tag color="warning">失败</Tag>;
-                    return <Tag color="error">异常</Tag>;
-                  }
-                },
-                {
-                  title: '测试报告',
-                  width: 110,
-                  render: (_, row) => {
-                    const report = autoTestResultMap.get(String(row._id || ''));
-                    return report ? (
-                      <Button
-                        size="small"
-                        onClick={() => {
-                          setAutoTestDetailItem(report);
-                          setAutoTestModalOpen(false);
-                        }}
-                      >
-                        查看
-                      </Button>
-                    ) : (
-                      '-'
-                    );
-                  }
-                },
-                {
-                  title: '操作',
-                  width: 180,
-                  render: (_, row) =>
-                    canEdit ? (
-                      <Space size={4}>
-                        <Button
-                          size="small"
-                          loading={autoTestRunning}
-                          onClick={() => void runAutoTestInPage(String(row._id || ''))}
-                        >
-                          测试
-                        </Button>
-                        <Button size="small" icon={<CopyOutlined />} onClick={() => void handleCopyCase(String(row._id || ''))} />
-                        <Button size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDeleteCase(String(row._id || ''))} />
-                      </Space>
-                    ) : (
-                      '-'
-                    )
-                }
-              ]}
-            />
-          </Space>
-        </Card>
+        <CollectionOverviewPanel
+          selectedColId={selectedColId}
+          currentCol={currentCol || null}
+          canEdit={canEdit}
+          autoTestRunning={autoTestRunning}
+          autoTestReport={autoTestReport}
+          autoTestRows={autoTestRows}
+          caseRows={caseRows}
+          caseListLoading={caseListQuery.isLoading}
+          caseEnvProjects={caseEnvProjects}
+          selectedRunEnvByProject={selectedRunEnvByProject}
+          autoTestResultMap={autoTestResultMap}
+          onSetRunEnv={(projectId, envName) =>
+            setSelectedRunEnvByProject(prev => ({
+              ...prev,
+              [projectId]: envName
+            }))
+          }
+          onOpenAddCase={() => setAddCaseOpen(true)}
+          onOpenImportInterface={() => openImportInterfaceModal(selectedColId)}
+          onOpenEditCollection={() => openColModal('edit', currentCol)}
+          onOpenCommonSetting={() => openCommonSettingModal(currentCol as Record<string, unknown>)}
+          onRunAutoTest={() => void runAutoTestInPage()}
+          onViewReport={() => openAutoTest('html')}
+          onDownloadReport={() => openAutoTest('html', true)}
+          onOpenReportModal={() => setAutoTestModalOpen(true)}
+          onOpenReportDetail={item => {
+            setAutoTestDetailItem(item);
+            setAutoTestModalOpen(false);
+          }}
+          onNavigateCase={nextCaseId => navigateWithGuard(`/project/${props.projectId}/interface/case/${nextCaseId}`)}
+          onRunCaseTest={nextCaseId => void runAutoTestInPage(nextCaseId)}
+          onCopyCase={nextCaseId => void handleCopyCase(nextCaseId)}
+          onDeleteCase={nextCaseId => confirmDeleteCase(nextCaseId)}
+        />
       );
     }
 
@@ -4785,168 +3856,37 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       : autoTestResultMap.get(String(caseId || '')) || null;
 
     return (
-      <Card>
-        <div className="legacy-interface-list-toolbar">
-          <Text strong>{String(detail.casename || '测试用例')}</Text>
-          <Space size={8}>
-            <Button size="small" loading={autoTestRunning} onClick={() => void runAutoTestInPage(caseId)}>
-              运行测试
-            </Button>
-            <Button size="small" onClick={() => navigateWithGuard(`/project/${props.projectId}/interface/col/${selectedColId || ''}`)}>
-              返回集合
-            </Button>
-            {Number(detail.interface_id || 0) > 0 ? (
-              <Button size="small" onClick={() => navigateWithGuard(`/project/${props.projectId}/interface/api/${Number(detail.interface_id || 0)}`)}>
-                对应接口
-              </Button>
-            ) : null}
-          </Space>
-          {canEdit ? (
-            <Space size={8}>
-              <Button size="small" icon={<CopyOutlined />} onClick={() => void handleCopyCase(caseId)}>
-                克隆用例
-              </Button>
-              <Button size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDeleteCase(caseId)}>
-                删除用例
-              </Button>
-              <Button
-                type="primary"
-                size="small"
-                loading={upColCaseState.isLoading}
-                onClick={() => void handleSaveCase()}
-              >
-                保存用例
-              </Button>
-            </Space>
-          ) : null}
-        </div>
-        <Form<CaseEditForm> form={caseForm} layout="vertical">
-          <Descriptions bordered size="small" column={1}>
-            <Descriptions.Item label="接口">
-              <Space>
-                <Tag>{String(detail.method || '-')}</Tag>
-                <span>{String(detail.path || detail.title || '-')}</span>
-                {Number(detail.interface_id || 0) > 0 ? (
-                  <Link to={`/project/${props.projectId}/interface/api/${Number(detail.interface_id || 0)}`}>查看接口</Link>
-                ) : null}
-              </Space>
-            </Descriptions.Item>
-          </Descriptions>
-
-          <div style={{ marginTop: 12 }}>
-            <Form.Item label="用例名称" name="casename" rules={[{ required: true, message: '请输入用例名称' }]}>
-              <Input disabled={!canEdit} />
-            </Form.Item>
-            <Space style={{ width: '100%' }} align="start">
-              <Form.Item label="环境" name="case_env" style={{ minWidth: 260, flex: 1 }}>
-                <AutoComplete
-                  options={caseEnvOptions}
-                  disabled={!canEdit}
-                  placeholder="如：dev / test / prod"
-                  filterOption={(inputValue, option) =>
-                    String(option?.value || '')
-                      .toLowerCase()
-                      .includes(String(inputValue || '').toLowerCase())
-                  }
-                />
-              </Form.Item>
-              <Form.Item label="启用脚本" name="enable_script" valuePropName="checked" style={{ width: 120 }}>
-                <Switch disabled={!canEdit} checkedChildren="开" unCheckedChildren="关" />
-              </Form.Item>
-              <Form.Item label="Body 类型" name="req_body_type" style={{ width: 180 }}>
-                <Select
-                  disabled={!canEdit}
-                  options={[
-                    { label: 'form', value: 'form' },
-                    { label: 'raw', value: 'raw' },
-                    { label: 'json', value: 'json' }
-                  ]}
-                />
-              </Form.Item>
-            </Space>
-            <Form.Item label="测试脚本" name="test_script">
-              <Input.TextArea rows={6} disabled={!canEdit} />
-            </Form.Item>
-            <Form.Item label="req_params(JSON Array)" name="req_params_text">
-              <Input.TextArea rows={6} disabled={!canEdit} />
-            </Form.Item>
-            <Form.Item label="req_headers(JSON Array)" name="req_headers_text">
-              <Input.TextArea rows={6} disabled={!canEdit} />
-            </Form.Item>
-            <Form.Item label="req_query(JSON Array)" name="req_query_text">
-              <Input.TextArea rows={6} disabled={!canEdit} />
-            </Form.Item>
-            <Form.Item label="req_body_form(JSON Array)" name="req_body_form_text">
-              <Input.TextArea rows={6} disabled={!canEdit} />
-            </Form.Item>
-            <Form.Item label="req_body_other" name="req_body_other">
-              <Input.TextArea rows={6} disabled={!canEdit} />
-            </Form.Item>
-          </div>
-        </Form>
-        <Card size="small" title="测试结果" style={{ marginTop: 16 }}>
-          {currentCaseReport ? (
-            <Space direction="vertical" style={{ width: '100%' }} size={10}>
-              <Space wrap>
-                <Tag color={currentCaseReport.code === 0 ? 'success' : currentCaseReport.code === 1 ? 'warning' : 'error'}>
-                  {currentCaseReport.code === 0 ? '通过' : currentCaseReport.code === 1 ? '失败' : '异常'}
-                </Tag>
-                <span>HTTP Status: {currentCaseReport.status ?? '-'}</span>
-                <span>{String(currentCaseReport.statusText || '')}</span>
-              </Space>
-              <div>
-                <Text strong>断言结果</Text>
-                <Input.TextArea
-                  rows={4}
-                  readOnly
-                  value={Array.isArray(currentCaseReport.validRes) && currentCaseReport.validRes.length > 0
-                    ? currentCaseReport.validRes.map(item => String(item.message || '')).join('\n')
-                    : '无'}
-                />
-              </div>
-              <div>
-                <Text strong>请求参数</Text>
-                <Input.TextArea rows={4} readOnly value={stringifyPretty(currentCaseReport.params)} />
-              </div>
-              <div>
-                <Text strong>响应头</Text>
-                <Input.TextArea rows={4} readOnly value={stringifyPretty(currentCaseReport.res_header)} />
-              </div>
-              <div>
-                <Text strong>响应体</Text>
-                <Input.TextArea rows={8} readOnly value={stringifyPretty(currentCaseReport.res_body)} />
-              </div>
-            </Space>
-          ) : (
-            <LegacyErrMsg title="暂无测试结果" desc="点击“运行测试”后可在此查看断言和响应详情。" />
-          )}
-        </Card>
-        <Card size="small" title="调试请求" style={{ marginTop: 16 }}>
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Space wrap>
-              <Select
-                value={caseRunMethod}
-                onChange={setCaseRunMethod}
-                style={{ width: 120 }}
-                options={RUN_METHODS.map(item => ({ label: item, value: item }))}
-              />
-              <Input value={caseRunPath} onChange={event => setCaseRunPath(event.target.value)} style={{ minWidth: 420 }} />
-              <Button type="primary" loading={caseRunLoading} onClick={() => void handleRunCaseRequest(detail)}>
-                发送请求
-              </Button>
-            </Space>
-            <Alert type="info" showIcon message="调试请求参数需使用 JSON 格式" />
-            <Text strong>Query</Text>
-            <Input.TextArea rows={4} value={caseRunQuery} onChange={event => setCaseRunQuery(event.target.value)} />
-            <Text strong>Headers</Text>
-            <Input.TextArea rows={4} value={caseRunHeaders} onChange={event => setCaseRunHeaders(event.target.value)} />
-            <Text strong>Body</Text>
-            <Input.TextArea rows={6} value={caseRunBody} onChange={event => setCaseRunBody(event.target.value)} />
-            <Text strong>响应</Text>
-            <Input.TextArea rows={10} value={caseRunResponse} readOnly placeholder="点击“发送请求”后显示结果" />
-          </Space>
-        </Card>
-      </Card>
+      <CaseDetailPanel
+        projectId={props.projectId}
+        detail={detail}
+        canEdit={canEdit}
+        autoTestRunning={autoTestRunning}
+        saveLoading={upColCaseState.isLoading}
+        caseForm={caseForm}
+        caseEnvOptions={caseEnvOptions}
+        runMethods={RUN_METHODS}
+        currentCaseReport={currentCaseReport}
+        caseRunMethod={caseRunMethod}
+        caseRunPath={caseRunPath}
+        caseRunQuery={caseRunQuery}
+        caseRunHeaders={caseRunHeaders}
+        caseRunBody={caseRunBody}
+        caseRunResponse={caseRunResponse}
+        caseRunLoading={caseRunLoading}
+        stringifyPretty={stringifyPretty}
+        onSetCaseRunMethod={setCaseRunMethod}
+        onSetCaseRunPath={setCaseRunPath}
+        onSetCaseRunQuery={setCaseRunQuery}
+        onSetCaseRunHeaders={setCaseRunHeaders}
+        onSetCaseRunBody={setCaseRunBody}
+        onRunAutoTest={() => void runAutoTestInPage(caseId)}
+        onNavigateCollection={() => navigateWithGuard(`/project/${props.projectId}/interface/col/${selectedColId || ''}`)}
+        onNavigateInterface={() => navigateWithGuard(`/project/${props.projectId}/interface/api/${Number(detail.interface_id || 0)}`)}
+        onCopyCase={() => void handleCopyCase(caseId)}
+        onDeleteCase={() => confirmDeleteCase(caseId)}
+        onSaveCase={() => void handleSaveCase()}
+        onRunCaseRequest={() => void handleRunCaseRequest(detail)}
+      />
     );
   }
 

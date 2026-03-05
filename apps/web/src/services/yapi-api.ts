@@ -122,8 +122,6 @@ function encodeQuery(params: Record<string, string | number | boolean | undefine
   return search.toString();
 }
 
-const INTERFACE_TREE_LIST_TAG = { type: 'InterfaceTree' as const, id: 'LIST' };
-const COL_CASE_LIST_TAG = { type: 'ColCase' as const, id: 'LIST' };
 const USER_LIST_TAG = { type: 'User' as const, id: 'LIST' };
 const GROUP_LIST_TAG = { type: 'Group' as const, id: 'LIST' };
 const PROJECT_LIST_TAG = { type: 'Project' as const, id: 'LIST' };
@@ -156,6 +154,40 @@ function interfaceCategoryTag(catid: number) {
 
 function interfaceEntityTag(interfaceId: number) {
   return { type: 'InterfaceTree' as const, id: `INTERFACE-${interfaceId}` };
+}
+
+function collectInterfaceEntityTags(rows: Array<Record<string, unknown>> | undefined) {
+  return (rows || [])
+    .map(item => interfaceEntityTag(toPositiveNumber(item._id)))
+    .filter(item => item.id !== 'INTERFACE-0');
+}
+
+function collectInterfaceCategoryTags(rows: Array<Record<string, unknown>> | undefined) {
+  return (rows || [])
+    .map(item => interfaceCategoryTag(toPositiveNumber(item._id)))
+    .filter(item => item.id !== 'CAT-0');
+}
+
+function collectInterfaceCategoryTagsFromList(rows: Array<Record<string, unknown>> | undefined) {
+  return (rows || [])
+    .map(item => interfaceCategoryTag(toPositiveNumber(item.catid)))
+    .filter(item => item.id !== 'CAT-0');
+}
+
+function colProjectTag(projectId: number) {
+  return { type: 'Col' as const, id: `PROJECT-${projectId}` };
+}
+
+function colEntityTag(colId: number) {
+  return { type: 'Col' as const, id: `COL-${colId}` };
+}
+
+function colCaseCollectionTag(colId: number) {
+  return { type: 'ColCase' as const, id: `COL-${colId}` };
+}
+
+function colCaseEntityTag(caseId: string) {
+  return { type: 'ColCase' as const, id: `CASE-${caseId}` };
 }
 
 export const yapiApi = createApi({
@@ -726,7 +758,14 @@ export const yapiApi = createApi({
           detail: args.detail || 'summary'
         })}`
       }),
-      providesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceProjectTag(args.projectId)]
+      providesTags: (result, _error, args) => {
+        const treeRows = ((result?.data?.list || []) as Array<Record<string, unknown>>);
+        const categoryTags = collectInterfaceCategoryTags(treeRows);
+        const interfaceTags = collectInterfaceEntityTags(
+          treeRows.flatMap(item => (Array.isArray(item.list) ? (item.list as Array<Record<string, unknown>>) : []))
+        );
+        return [interfaceProjectTag(args.projectId), ...categoryTags, ...interfaceTags];
+      }
     }),
     getInterfaceTreeNode: builder.query<
       ApiResult<InterfaceTreeNodeResult>,
@@ -747,7 +786,10 @@ export const yapiApi = createApi({
           detail: args.detail || 'summary'
         })}`
       }),
-      providesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceCategoryTag(args.catid)]
+      providesTags: (result, _error, args) => {
+        const rows = (result?.data?.list || []) as Array<Record<string, unknown>>;
+        return [interfaceCategoryTag(args.catid), ...collectInterfaceEntityTags(rows)];
+      }
     }),
     getListMenu: builder.query<
       ApiResult<InterfaceTreeNode[]>,
@@ -760,7 +802,14 @@ export const yapiApi = createApi({
           detail: args.detail || 'summary'
         })}`
       }),
-      providesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceProjectTag(args.projectId)]
+      providesTags: (result, _error, args) => {
+        const treeRows = ((result?.data || []) as Array<Record<string, unknown>>);
+        const categoryTags = collectInterfaceCategoryTags(treeRows);
+        const interfaceTags = collectInterfaceEntityTags(
+          treeRows.flatMap(item => (Array.isArray(item.list) ? (item.list as Array<Record<string, unknown>>) : []))
+        );
+        return [interfaceProjectTag(args.projectId), ...categoryTags, ...interfaceTags];
+      }
     }),
     getInterfaceList: builder.query<
       ApiResult<{ count: number; total: number; list: LegacyInterfaceDTO[] }>,
@@ -783,7 +832,14 @@ export const yapiApi = createApi({
           tag: args.tag
         })}`
       }),
-      providesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceProjectTag(args.projectId)]
+      providesTags: (result, _error, args) => {
+        const rows = (result?.data?.list || []) as Array<Record<string, unknown>>;
+        return [
+          interfaceProjectTag(args.projectId),
+          ...collectInterfaceEntityTags(rows),
+          ...collectInterfaceCategoryTagsFromList(rows)
+        ];
+      }
     }),
     getInterface: builder.query<
       ApiResult<LegacyInterfaceDTO & { username?: string }>,
@@ -796,13 +852,17 @@ export const yapiApi = createApi({
           token: args.token
         })}`
       }),
-      providesTags: (_result, _error, args) => [
-        INTERFACE_TREE_LIST_TAG,
-        args.projectId
-          ? interfaceProjectTag(args.projectId)
-          : ({ type: 'InterfaceTree' as const, id: 'PROJECT-UNKNOWN' }),
-        interfaceEntityTag(args.id)
-      ]
+      providesTags: (result, _error, args) => {
+        const tags = [interfaceEntityTag(args.id)];
+        if (args.projectId) {
+          tags.push(interfaceProjectTag(args.projectId));
+        }
+        const catid = toPositiveNumber((result?.data as Record<string, unknown> | undefined)?.catid);
+        if (catid > 0) {
+          tags.push(interfaceCategoryTag(catid));
+        }
+        return tags;
+      }
     }),
     addInterface: builder.mutation<
       ApiResult<LegacyInterfaceDTO>,
@@ -813,7 +873,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceProjectTag(args.project_id)]
+      invalidatesTags: (_result, _error, args) => [interfaceProjectTag(args.project_id), interfaceCategoryTag(args.catid)]
     }),
     saveInterface: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -824,7 +884,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceProjectTag(args.project_id)]
+      invalidatesTags: (_result, _error, args) => [interfaceProjectTag(args.project_id), interfaceCategoryTag(args.catid)]
     }),
     updateInterface: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -836,23 +896,37 @@ export const yapiApi = createApi({
         body: payload
       }),
       invalidatesTags: (_result, _error, args) => {
-        const tags = [INTERFACE_TREE_LIST_TAG, interfaceEntityTag(args.id)];
+        const tags = [interfaceEntityTag(args.id)];
         if (typeof args.project_id === 'number') {
           tags.push(interfaceProjectTag(args.project_id));
+        }
+        if (typeof args.catid === 'number') {
+          tags.push(interfaceCategoryTag(args.catid));
         }
         return tags;
       }
     }),
     delInterface: builder.mutation<
       ApiResult<Record<string, unknown>>,
-      { id: number; token?: string }
+      { id: number; token?: string; project_id?: number; catid?: number }
     >({
       query: payload => ({
         url: '/interface/del',
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceEntityTag(args.id)]
+      invalidatesTags: (_result, _error, args) => {
+        const tags = [interfaceEntityTag(args.id)];
+        const projectId = toPositiveNumber(args.project_id);
+        if (projectId > 0) {
+          tags.push(interfaceProjectTag(projectId));
+        }
+        const catid = toPositiveNumber(args.catid);
+        if (catid > 0) {
+          tags.push(interfaceCategoryTag(catid));
+        }
+        return tags;
+      }
     }),
     getCatMenu: builder.query<ApiResult<InterfaceCatItem[]>, { projectId: number; token?: string }>({
       query: args => ({
@@ -862,9 +936,8 @@ export const yapiApi = createApi({
         })}`
       }),
       providesTags: (result, _error, args) => [
-        INTERFACE_TREE_LIST_TAG,
         interfaceProjectTag(args.projectId),
-        ...((result?.data || []).map(item => interfaceCategoryTag(item._id)) || [])
+        ...collectInterfaceCategoryTags((result?.data || []) as Array<Record<string, unknown>>)
       ]
     }),
     addInterfaceCat: builder.mutation<
@@ -876,29 +949,43 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceProjectTag(args.project_id)]
+      invalidatesTags: (_result, _error, args) => [interfaceProjectTag(args.project_id)]
     }),
     updateInterfaceCat: builder.mutation<
       ApiResult<Record<string, unknown>>,
-      { catid: number; name?: string; desc?: string; token?: string }
+      { catid: number; name?: string; desc?: string; token?: string; project_id?: number }
     >({
       query: payload => ({
         url: '/interface/up_cat',
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceCategoryTag(args.catid)]
+      invalidatesTags: (_result, _error, args) => {
+        const tags = [interfaceCategoryTag(args.catid)];
+        const projectId = toPositiveNumber(args.project_id);
+        if (projectId > 0) {
+          tags.push(interfaceProjectTag(projectId));
+        }
+        return tags;
+      }
     }),
     delInterfaceCat: builder.mutation<
       ApiResult<Record<string, unknown>>,
-      { catid: number; token?: string }
+      { catid: number; token?: string; project_id?: number }
     >({
       query: payload => ({
         url: '/interface/del_cat',
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceCategoryTag(args.catid)]
+      invalidatesTags: (_result, _error, args) => {
+        const tags = [interfaceCategoryTag(args.catid)];
+        const projectId = toPositiveNumber(args.project_id);
+        if (projectId > 0) {
+          tags.push(interfaceProjectTag(projectId));
+        }
+        return tags;
+      }
     }),
     upInterfaceIndex: builder.mutation<
       ApiResult<string>,
@@ -909,7 +996,10 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: () => [INTERFACE_TREE_LIST_TAG]
+      invalidatesTags: (_result, _error, args) =>
+        args
+          .map(item => interfaceEntityTag(toPositiveNumber(item.id)))
+          .filter(item => item.id !== 'INTERFACE-0')
     }),
     upInterfaceCatIndex: builder.mutation<
       ApiResult<string>,
@@ -920,10 +1010,10 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: (_result, _error, args) => [
-        INTERFACE_TREE_LIST_TAG,
-        ...args.map(item => interfaceCategoryTag(item.id))
-      ]
+      invalidatesTags: (_result, _error, args) =>
+        args
+          .map(item => interfaceCategoryTag(toPositiveNumber(item.id)))
+          .filter(item => item.id !== 'CAT-0')
     }),
     getColList: builder.query<ApiResult<ColItem[]>, { project_id: number; token?: string }>({
       query: args => ({
@@ -932,9 +1022,11 @@ export const yapiApi = createApi({
           token: args.token
         })}`
       }),
-      providesTags: result => [
-        { type: 'Col', id: 'LIST' },
-        ...((result?.data || []).map(item => ({ type: 'Col' as const, id: item._id })) || [])
+      providesTags: (result, _error, args) => [
+        colProjectTag(args.project_id),
+        ...((result?.data || [])
+          .map(item => colEntityTag(toPositiveNumber(item._id)))
+          .filter(item => item.id !== 'COL-0'))
       ]
     }),
     addCol: builder.mutation<
@@ -946,7 +1038,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: [{ type: 'Col', id: 'LIST' }]
+      invalidatesTags: (_result, _error, args) => [colProjectTag(args.project_id)]
     }),
     upColCompat: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -957,9 +1049,12 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: (_result, _error, args) => [{ type: 'Col', id: args.col_id }]
+      invalidatesTags: (_result, _error, args) => [colEntityTag(args.col_id)]
     }),
-    delCol: builder.mutation<ApiResult<Record<string, unknown>>, { col_id: number; token?: string }>({
+    delCol: builder.mutation<
+      ApiResult<Record<string, unknown>>,
+      { col_id: number; token?: string; project_id?: number }
+    >({
       query: args => ({
         url: `/col/del_col?${encodeQuery({
           col_id: args.col_id,
@@ -967,11 +1062,14 @@ export const yapiApi = createApi({
         })}`,
         method: 'GET'
       }),
-      invalidatesTags: (_result, _error, args) => [
-        { type: 'Col', id: 'LIST' },
-        { type: 'Col', id: args.col_id },
-        { type: 'ColCase', id: `COL-${args.col_id}` }
-      ]
+      invalidatesTags: (_result, _error, args) => {
+        const tags = [colEntityTag(args.col_id), colCaseCollectionTag(args.col_id)];
+        const projectId = toPositiveNumber(args.project_id);
+        if (projectId > 0) {
+          tags.push(colProjectTag(projectId));
+        }
+        return tags;
+      }
     }),
     getColCaseList: builder.query<ApiResult<ColCaseItem[]>, { col_id: number; token?: string }>({
       query: args => ({
@@ -981,9 +1079,10 @@ export const yapiApi = createApi({
         })}`
       }),
       providesTags: (result, _error, args) => [
-        COL_CASE_LIST_TAG,
-        { type: 'ColCase', id: `COL-${args.col_id}` },
-        ...((result?.data || []).map(item => ({ type: 'ColCase' as const, id: item._id })) || [])
+        colCaseCollectionTag(args.col_id),
+        ...((result?.data || [])
+          .map(item => colCaseEntityTag(String(item._id || '')))
+          .filter(item => item.id !== 'CASE-'))
       ]
     }),
     getColCaseEnvList: builder.query<
@@ -995,7 +1094,8 @@ export const yapiApi = createApi({
           col_id: args.col_id,
           token: args.token
         })}`
-      })
+      }),
+      providesTags: (_result, _error, args) => [colCaseCollectionTag(args.col_id)]
     }),
     getColCaseListByVarParams: builder.query<
       ApiResult<Array<Record<string, unknown>>>,
@@ -1006,7 +1106,8 @@ export const yapiApi = createApi({
           col_id: args.col_id,
           token: args.token
         })}`
-      })
+      }),
+      providesTags: (_result, _error, args) => [colCaseCollectionTag(args.col_id)]
     }),
     addColCase: builder.mutation<
       ApiResult<ColCaseItem>,
@@ -1032,7 +1133,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: (_result, _error, args) => [COL_CASE_LIST_TAG, { type: 'ColCase', id: `COL-${args.col_id}` }]
+      invalidatesTags: (_result, _error, args) => [colCaseCollectionTag(args.col_id)]
     }),
     addColCaseList: builder.mutation<
       ApiResult<string>,
@@ -1043,7 +1144,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: (_result, _error, args) => [COL_CASE_LIST_TAG, { type: 'ColCase', id: `COL-${args.col_id}` }]
+      invalidatesTags: (_result, _error, args) => [colCaseCollectionTag(args.col_id)]
     }),
     cloneColCaseList: builder.mutation<
       ApiResult<string>,
@@ -1055,21 +1156,27 @@ export const yapiApi = createApi({
         body: payload
       }),
       invalidatesTags: (_result, _error, args) => [
-        COL_CASE_LIST_TAG,
-        { type: 'ColCase', id: `COL-${args.col_id}` },
-        { type: 'ColCase', id: `COL-${args.new_col_id}` }
+        colCaseCollectionTag(args.col_id),
+        colCaseCollectionTag(args.new_col_id)
       ]
     }),
     upColCase: builder.mutation<
       ApiResult<Record<string, unknown>>,
-      { id: string; token?: string; [key: string]: unknown }
+      { id: string; token?: string; col_id?: number; [key: string]: unknown }
     >({
       query: payload => ({
         url: '/col/up_case',
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: (_result, _error, args) => [COL_CASE_LIST_TAG, { type: 'ColCase', id: args.id }]
+      invalidatesTags: (_result, _error, args) => {
+        const tags = [colCaseEntityTag(args.id)];
+        const colId = toPositiveNumber(args.col_id);
+        if (colId > 0) {
+          tags.push(colCaseCollectionTag(colId));
+        }
+        return tags;
+      }
     }),
     getColCase: builder.query<ApiResult<Record<string, unknown>>, { caseid: string; token?: string }>({
       query: args => ({
@@ -1078,9 +1185,19 @@ export const yapiApi = createApi({
           token: args.token
         })}`
       }),
-      providesTags: (_result, _error, args) => [{ type: 'ColCase', id: args.caseid }]
+      providesTags: (result, _error, args) => {
+        const tags = [colCaseEntityTag(args.caseid)];
+        const colId = toPositiveNumber((result?.data as Record<string, unknown> | undefined)?.col_id);
+        if (colId > 0) {
+          tags.push(colCaseCollectionTag(colId));
+        }
+        return tags;
+      }
     }),
-    delColCase: builder.mutation<ApiResult<Record<string, unknown>>, { caseid: string; token?: string }>({
+    delColCase: builder.mutation<
+      ApiResult<Record<string, unknown>>,
+      { caseid: string; token?: string; col_id?: number }
+    >({
       query: args => ({
         url: `/col/del_case?${encodeQuery({
           caseid: args.caseid,
@@ -1088,16 +1205,38 @@ export const yapiApi = createApi({
         })}`,
         method: 'GET'
       }),
-      invalidatesTags: (_result, _error, args) => [COL_CASE_LIST_TAG, { type: 'ColCase', id: args.caseid }]
+      invalidatesTags: (_result, _error, args) => {
+        const tags = [colCaseEntityTag(args.caseid)];
+        const colId = toPositiveNumber(args.col_id);
+        if (colId > 0) {
+          tags.push(colCaseCollectionTag(colId));
+        }
+        return tags;
+      }
     }),
-    upColCaseIndex: builder.mutation<ApiResult<string>, Array<{ id: string; index?: number }>>({
+    upColCaseIndex: builder.mutation<
+      ApiResult<string>,
+      Array<{ id: string; index?: number; col_id?: number }>
+    >({
       query: payload => ({
         url: '/col/up_case_index',
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: (_result, _error, args) =>
-        [COL_CASE_LIST_TAG, ...args.map(item => ({ type: 'ColCase' as const, id: item.id }))]
+      invalidatesTags: (_result, _error, args) => {
+        const tags = args
+          .map(item => colCaseEntityTag(String(item.id || '')))
+          .filter(item => item.id !== 'CASE-');
+        const colIds = new Set(
+          args
+            .map(item => toPositiveNumber(item.col_id))
+            .filter(item => item > 0)
+        );
+        colIds.forEach(colId => {
+          tags.push(colCaseCollectionTag(colId));
+        });
+        return tags;
+      }
     }),
     upColIndex: builder.mutation<ApiResult<string>, Array<{ id: number; index?: number }>>({
       query: payload => ({
@@ -1105,10 +1244,10 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: (_result, _error, args) => [
-        { type: 'Col', id: 'LIST' },
-        ...args.map(item => ({ type: 'Col' as const, id: item.id }))
-      ]
+      invalidatesTags: (_result, _error, args) =>
+        args
+          .map(item => colEntityTag(toPositiveNumber(item.id)))
+          .filter(item => item.id !== 'COL-0')
     }),
     runColCaseScript: builder.mutation<
       ApiResult<Record<string, unknown>>,

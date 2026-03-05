@@ -555,6 +555,7 @@ export function ProjectWorkbenchPage() {
     const response = await callApi(
       updateInterfaceCat({
         catid,
+        project_id: selectedProjectId,
         name: catName.trim() || undefined,
         desc: catDesc.trim() || undefined,
         token: accessToken || undefined
@@ -576,6 +577,7 @@ export function ProjectWorkbenchPage() {
     const response = await callApi(
       delInterfaceCat({
         catid,
+        project_id: selectedProjectId,
         token: accessToken || undefined
       }).unwrap(),
       '删除分类失败'
@@ -623,6 +625,7 @@ export function ProjectWorkbenchPage() {
     }
     const payload: Record<string, unknown> = {
       id: interfaceId,
+      project_id: selectedProjectId,
       token: accessToken || undefined
     };
     if (interfaceTitle.trim()) payload.title = interfaceTitle.trim();
@@ -647,6 +650,8 @@ export function ProjectWorkbenchPage() {
     const response = await callApi(
       delInterface({
         id: interfaceId,
+        project_id: selectedProjectId,
+        catid: Number.isFinite(Number(catIdAction)) ? Number(catIdAction) : undefined,
         token: accessToken || undefined
       }).unwrap(),
       '删除接口失败'

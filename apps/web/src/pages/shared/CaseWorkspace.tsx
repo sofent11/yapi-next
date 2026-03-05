@@ -143,6 +143,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
     try {
       const response = await triggerDelCol({
         col_id: colId,
+        project_id: projectId,
         token: token || undefined
       }).unwrap();
       if (response.errcode !== 0) {
@@ -160,6 +161,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
     try {
       const response = await triggerDelCase({
         caseid: caseId,
+        col_id: selectedColId > 0 ? selectedColId : undefined,
         token: token || undefined
       }).unwrap();
       if (response.errcode !== 0) {
