@@ -1,150 +1,138 @@
-## YApi  可视化接口管理平台
+# YApi Next
 
-体验地址：
+YApi Next 是一个基于 TypeScript 的 API 管理平台，提供接口设计、导入导出、Mock、自动化测试与兼容历史 API 的能力。
 
-[http://yapi.smart-xwork.cn/](http://yapi.smart-xwork.cn/)
+当前仓库已完成全量重构，运行形态为：
+- 后端：NestJS 11 + Fastify + Mongoose（TypeScript）
+- 前端：React 18 + Vite + Ant Design 5（TypeScript）
+- 数据库：MongoDB
 
-文档：
-<p><a target="_blank" href="https://hellosean1025.github.io/yapi">hellosean1025.github.io/yapi</a></p>
+## 目录结构
 
-### 平台介绍
-![avatar](yapi-base-flow.jpg)
+```text
+.
+├── apps/
+│   ├── api/                 # NestJS API 服务
+│   └── web/                 # React + Vite 前端
+├── packages/
+│   └── shared-types/        # 前后端共享类型
+├── scripts/                 # 启动、冒烟、自评与压测脚本
+├── static/                  # 运行时静态资源（头像默认图等）
+├── docs/                    # 项目文档
+└── test/                    # OpenAPI 样例文件
+```
 
-YApi 是<strong>高效</strong>、<strong>易用</strong>、<strong>功能强大</strong>的 api 管理平台，旨在为开发、产品、测试人员提供更优雅的接口管理服务。可以帮助开发者轻松创建、发布、维护 API，YApi 还为用户提供了优秀的交互体验，开发人员只需利用平台提供的接口数据写入工具以及简单的点击操作就可以实现接口的管理。
+## 环境要求
 
-**QQ交流群**:
+- Node.js >= 22
+- npm >= 10
+- MongoDB >= 7
 
-644642474 **主群可能已满**
+## 快速开始
 
-941802405 **群2欢迎加入**
-
-### 特性
-*  基于 Json5 和 Mockjs 定义接口返回数据的结构和文档，效率提升多倍
-*  扁平化权限设计，即保证了大型企业级项目的管理，又保证了易用性
-*  类似 postman 的接口调试
-*  自动化测试, 支持对 Response 断言
-*  MockServer 除支持普通的随机 mock 外，还增加了 Mock 期望功能，根据设置的请求过滤规则，返回期望数据
-*  支持 postman, har, swagger 数据导入
-*  免费开源，内网部署，信息再也不怕泄露了
-
-### 快速开始（Next 重构版）
-#### 环境要求
-* Node.js 22 LTS+
-* MongoDB 7+
-
-#### 本地启动
 ```bash
 npm install
 npm start
 ```
 
-默认会启动：
-* API: `http://127.0.0.1:3300`
-* Web: `http://127.0.0.1:5173`
+默认端口：
+- API: `http://127.0.0.1:3300`
+- Web: `http://127.0.0.1:5173`
 
-#### 构建与验证
+`npm start` 会同时启动 API 与 Web，Web 默认代理 `/api` 到 API 服务。
+
+## 常用脚本
+
+### 构建与运行
+
 ```bash
-# 构建 shared-types + api + web
+# 全量构建（shared-types + api + web）
 npm run next:build
 
-# 冒烟回归（临时 Mongo + API）
+# 仅后端开发
+npm run next:api:dev
+
+# 仅前端开发
+npm run next:web:dev
+
+# 启动（同 npm start）
+npm run next:start
+```
+
+### 质量校验
+
+```bash
+# 默认测试（当前等价于 next:build）
+npm test
+
+# API 兼容冒烟（临时 Mongo + API）
 npm run next:smoke:api
 
 # 全量自评（索引/查询计划/性能/round-trip）
 npm run next:self-assess:api
 ```
 
-> 说明：仓库已默认切换到 Next 架构（`apps/api` + `apps/web`）。历史 Koa/ykit 代码与脚本已移除。
+### 索引与性能
 
-### 内网部署
-#### 环境要求
-* Node.js 22 LTS+
-* MongoDB 7+
-#### 安装
 ```bash
-npm install
+# 创建/校验数据库索引（幂等）
+npm run db:create-indexes
+
+# 性能脚本
+npm run perf:menu
+npm run perf:import
+npm run perf:export
+npm run perf:roundtrip
+```
+
+## 关键环境变量
+
+### 启动相关
+- `PORT`：API 端口（默认 `3300`）
+- `MONGO_URL`：MongoDB 连接串
+- `API_BODY_LIMIT_MB`：请求体上限（默认 `20`）
+
+### Web 开发相关
+- `VITE_PORT`：Web 端口（默认 `5173`）
+- `VITE_HOST`：Web 监听地址（默认 `0.0.0.0`）
+- `API_PORT`：用于 Vite 代理目标端口（默认 `3300`）
+- `API_PROXY_TARGET`：直接指定代理地址，优先于 `API_PORT`
+
+## API 约定
+
+- 全局前缀：`/api`
+- 健康检查：`GET /api/health`
+- Mock 路由（不走 `/api` 前缀）：`/mock/:projectId/*`
+- 兼容响应包裹：`{ errcode, errmsg, data }`
+
+## OpenAPI 支持
+
+- 导入：Swagger 2.0 / OpenAPI 3.x（自动识别）
+- 导出：OpenAPI 3（主路径）+ Swagger 2（兼容）
+- round-trip 自评：基于 `test/swagger.v3.json`
+
+## 部署建议
+
+生产部署建议最小流程：
+
+```bash
+npm ci
 npm run next:build
+npm run next:self-assess:api
 npm run next:start
 ```
 
-#### 服务管理（pm2）
+可选使用 PM2：
+
 ```bash
-npm install pm2 -g
-cd {项目目录}
 pm2 start "npm run next:start" --name yapi-next
-pm2 info yapi-next
-pm2 stop yapi-next
-pm2 restart yapi-next
 ```
-    
-### 教程
-* [使用 YApi 管理 API 文档，测试， mock](https://juejin.im/post/5acc879f6fb9a028c42e8822)
-* [自动更新 Swagger 接口数据到 YApi 平台](https://juejin.im/post/5af500e251882567096140dd)
-* [自动化测试](https://juejin.im/post/5a388892f265da430e4f4681)
-* [GTest(基于YApi)接口研发效能提升10倍 实战](https://mp.weixin.qq.com/s/z66f7bRX8aAOppAtBIB7Uw)
 
-### YApi 插件
-* [yapi sso 登录插件](https://github.com/YMFE/yapi-plugin-qsso)
-* [yapi cas 登录插件](https://github.com/wsfe/yapi-plugin-cas) By wsfe
-* [yapi gitlab集成插件](https://github.com/cyj0122/yapi-plugin-gitlab)
-* [oauth2.0登录](https://github.com/xwxsee2014/yapi-plugin-oauth2)
-* [rap平台数据导入](https://github.com/wxxcarl/yapi-plugin-import-rap)
-* [dingding](https://github.com/zgs225/yapi-plugin-dding) 钉钉机器人推送插件
-* [export-docx-data](https://github.com/inceptiongt/Yapi-plugin-export-docx-data) 数据导出docx文档
-* [interface-oauth-token](https://github.com/shouldnotappearcalm/yapi-plugin-interface-oauth2-token) 定时自动获取鉴权token的插件
-* [import-swagger-customize](https://github.com/follow-my-heart/yapi-plugin-import-swagger-customize) 导入指定swagger接口
+## 参考文档
 
-### 代码生成
-* [yapi-to-typescript：根据 YApi 的接口定义生成 TypeScript 的请求函数](https://github.com/fjc0k/yapi-to-typescript)
-* [yapi-gen-js-code: 根据 YApi 的接口定义生成 javascript 的请求函数](https://github.com/hellosean1025/yapi-gen-js-code)
-* [SwiftJSONModeler:根据 YApi 的接口生成 Swift 模型代码](https://github.com/CodeOcenS/SwiftJSONModeler)
+- 性能压测说明：`docs/performance-benchmark.md`
+- OpenAPI 兼容说明：`docs/openapi-doc.html`
 
-### YApi docker部署（非官方）
-* [使用 alpine 版 docker 镜像快速部署 yapi](https://www.jianshu.com/p/a97d2efb23c5)
-* [docker-yapi: 基于官方yapi-cli的docker-compose方案](https://github.com/Ryan-Miao/docker-yapi)
-* [docker-compose一键部署yapi](https://github.com/jinfeijie/yapi)
-* [docker-YApi: 更易用的 YApi 镜像](https://github.com/fjc0k/docker-YApi)
-* [使用DockerCompose构建部署Yapi](https://github.com/MyHerux/daily-code/blob/master/Program/%E5%B7%A5%E5%85%B7%E7%AF%87/Yapi/%E4%BD%BF%E7%94%A8DockerCompose%E6%9E%84%E5%BB%BA%E9%83%A8%E7%BD%B2Yapi.md)
-* [yapi-docker: dockerized yapi deployment all in one](https://github.com/williamlsh/yapi-docker)
+## 许可证
 
-### YApi 一些工具
-* [Api Generator](https://github.com/Forgus/api-generator) 接口文档自动生成插件（零入侵）
-* [mysql服务http工具,可配合做自动化测试](https://github.com/hellosean1025/http-mysql-server)
-* [idea 一键上传接口到yapi插件](https://github.com/diwand/YapiIdeaUploadPlugin)
-* [idea 接口上传调试插件 easy-yapi](https://easyyapi.com/)
-* [执行 postgres sql 的服务](https://github.com/shouldnotappearcalm/http-postgres-server)
-* [SpringBoot依赖自动生成YApi](https://github.com/NoBugBoy/YDoc)
-* [Yapi X 一键生成接口文档, 上传到yapi, rap2, eolinker等（IDEA插件）](https://github.com/jetplugins/yapix)
-
-### YApi 的一些客户
-* 去哪儿
-* 携程
-* 艺龙 
-* 美团
-* 百度
-* 腾讯
-* 阿里巴巴
-* 京东
-* 今日头条
-* 唯品支付 
-* 链家网
-* 快手
-* 便利蜂
-* 中商惠民
-* 新浪
-* VIPKID
-* 马蜂窝
-* 伴鱼
-* 旷视科技
-
-### Authors
-* [hellosean1025](https://github.com/hellosean1025)
-* [gaoxiaomumu](https://github.com/gaoxiaomumu)
-* [zwjamnsss](https://github.com/amnsss)
-* [dwb1994](https://github.com/dwb1994)
-* [fungezi](https://github.com/fungezi)
-* [ariesly15](https://github.com/ariesly15)
-
-
-### License
 Apache License 2.0
