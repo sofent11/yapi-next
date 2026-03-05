@@ -7,52 +7,18 @@ import {
 
 const year = new Date().getFullYear();
 
-const footerSections = [
-  {
-    title: 'GitHub',
-    icon: <GithubOutlined />,
-    links: [{ label: 'YApi 源码仓库', href: 'https://github.com/YMFE/yapi' }]
-  },
-  {
-    title: '团队',
-    icon: <TeamOutlined />,
-    links: [{ label: 'YMFE', href: 'https://ymfe.org' }]
-  },
-  {
-    title: '反馈',
-    icon: <MessageOutlined />,
-    links: [
-      { label: 'Github Issues', href: 'https://github.com/YMFE/yapi/issues' },
-      { label: 'Github Pull Requests', href: 'https://github.com/YMFE/yapi/pulls' }
-    ]
-  },
-  {
-    title: `Copyright © 2018-${year} YMFE`,
-    icon: <FileTextOutlined />,
-    links: [
-      { label: '版本说明', href: 'https://github.com/YMFE/yapi/blob/master/CHANGELOG.md' },
-      { label: '使用文档', href: 'https://hellosean1025.github.io/yapi/' }
-    ]
-  }
-];
-
 export function LegacyFooter() {
+  const currentYear = new Date().getFullYear();
+  const yearText = currentYear > 2026 ? `2018-${currentYear}` : '2018-2026';
+
   return (
     <footer className="legacy-footer">
-      <div className="legacy-footer-content">
-        {footerSections.map(section => (
-          <div key={section.title} className="legacy-footer-col">
-            <div className="legacy-footer-title">
-              {section.icon}
-              <span>{section.title}</span>
-            </div>
-            {section.links.map(link => (
-              <a key={link.href} href={link.href} target="_blank" rel="noreferrer">
-                {link.label}
-              </a>
-            ))}
+      <div className="legacy-footer-content" style={{ justifyContent: 'center' }}>
+        <div className="legacy-footer-col" style={{ alignItems: 'center' }}>
+          <div className="legacy-footer-title">
+            <span>Copyright © {yearText} YMFE</span>
           </div>
-        ))}
+        </div>
       </div>
     </footer>
   );

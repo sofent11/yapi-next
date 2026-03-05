@@ -646,7 +646,7 @@ export function ProjectConsolePage() {
 
       <div className="projectGround">
         <Layout className="legacy-project-console-layout">
-          <Sider className="legacy-project-console-sider" width={300}>
+          <Sider className="legacy-project-console-sider" width={200}>
             <ProjectConsoleSidebar
               guideVisible={guideVisible}
               guideStep={guide.step}

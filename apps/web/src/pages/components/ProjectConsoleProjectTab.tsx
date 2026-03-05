@@ -138,7 +138,7 @@ export function ProjectConsoleProjectTab(props: ProjectConsoleProjectTabProps) {
               </Col>
               {props.normalProjects.length > 0 ? (
                 props.normalProjects.map(project => (
-                  <Col xs={24} sm={12} md={8} lg={6} xxl={4} key={project._id}>{renderProjectCard(project)}</Col>
+                  <Col xs={24} sm={12} md={8} lg={6} xl={4} key={project._id}>{renderProjectCard(project)}</Col>
                 ))
               ) : (
                 <Col span={24}>
@@ -155,7 +155,7 @@ export function ProjectConsoleProjectTab(props: ProjectConsoleProjectTabProps) {
               </Col>
               {props.followedProjects.length > 0 ? (
                 props.followedProjects.map(project => (
-                  <Col xs={24} sm={12} md={8} lg={6} xxl={4} key={`follow-${project._id}`}>{renderProjectCard(project)}</Col>
+                  <Col xs={24} sm={12} md={8} lg={6} xl={4} key={`follow-${project._id}`}>{renderProjectCard(project)}</Col>
                 ))
               ) : (
                 <Col span={24}>
@@ -167,7 +167,7 @@ export function ProjectConsoleProjectTab(props: ProjectConsoleProjectTabProps) {
         ) : (
           <Row gutter={[16, 16]}>
             {props.mixedPublicProjects.map(project => (
-              <Col xs={24} sm={12} md={8} lg={6} xxl={4} key={project._id}>{renderProjectCard(project)}</Col>
+              <Col xs={24} sm={12} md={8} lg={6} xl={4} key={project._id}>{renderProjectCard(project)}</Col>
             ))}
           </Row>
         )}

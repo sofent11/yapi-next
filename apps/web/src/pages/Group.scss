@@ -210,11 +210,14 @@ $color-blue: #2395f1;
         }
 
         .ui-title {
-            font-size: 19px;
-            font-weight: normal;
+            font-size: 14px;
+            font-weight: 500;
             overflow: hidden;
             text-overflow: ellipsis;
-            white-space: nowrap;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            word-break: break-word;
             margin: 0;
         }
 

@@ -19,6 +19,7 @@ import { webPlugins, type HeaderMenuItem } from '../plugins';
 import { LegacyBreadcrumb } from './LegacyBreadcrumb';
 import { LegacyGuideActions } from './LegacyGuideActions';
 import { useLegacyGuide } from '../context/LegacyGuideContext';
+import LogoSVG from './LogoSVG';
 
 type LegacyHeaderProps = {
   uid: number;
@@ -117,10 +118,10 @@ export function LegacyHeader(props: LegacyHeaderProps) {
   const autoOptions = useMemo<Array<{ value: string; label: string }>>(() => {
     const data = searchState.data?.data as
       | {
-          group?: Array<{ _id: number; groupName?: string }>;
-          project?: Array<{ _id: number } & Record<string, unknown>>;
-          interface?: Array<{ _id: number } & Record<string, unknown>>;
-        }
+        group?: Array<{ _id: number; groupName?: string }>;
+        project?: Array<{ _id: number } & Record<string, unknown>>;
+        interface?: Array<{ _id: number } & Record<string, unknown>>;
+      }
       | undefined;
     const items: Array<{ value: string; label: string }> = [];
 
@@ -137,9 +138,9 @@ export function LegacyHeader(props: LegacyHeaderProps) {
     data?.project?.forEach(item => {
       const projectId = Number(
         (item as Record<string, unknown>)._id ||
-          (item as Record<string, unknown>).id ||
-          (item as Record<string, unknown>).project_id ||
-          0
+        (item as Record<string, unknown>).id ||
+        (item as Record<string, unknown>).project_id ||
+        0
       );
       if (projectId <= 0) return;
       const name = String((item as Record<string, unknown>).name || item._id);
@@ -154,9 +155,9 @@ export function LegacyHeader(props: LegacyHeaderProps) {
       const title = String((item as Record<string, unknown>).title || item._id);
       const projectId = Number(
         (item as Record<string, unknown>).projectId ||
-          (item as Record<string, unknown>).project_id ||
-          (item as Record<string, unknown>).projectid ||
-          0
+        (item as Record<string, unknown>).project_id ||
+        (item as Record<string, unknown>).projectid ||
+        0
       );
       if (projectId <= 0) return;
       items.push({
@@ -229,7 +230,7 @@ export function LegacyHeader(props: LegacyHeaderProps) {
     <header className="legacy-header">
       <Link to="/group" className="legacy-logo-link">
         <div className="legacy-logo-dot">
-          <img src="/static/image/favicon.png" alt="YApi" />
+          <LogoSVG length={28} />
         </div>
       </Link>
 
@@ -303,7 +304,7 @@ export function LegacyHeader(props: LegacyHeaderProps) {
           trigger={['click']}
         >
           <button type="button" className="legacy-user-btn" disabled={logoutState.isLoading}>
-            <Avatar src={avatarUrl} size={30}>
+            <Avatar src={avatarUrl} size={30} style={{ backgroundColor: '#1677ff', color: '#fff' }}>
               {(props.username || props.email || 'U').slice(0, 1).toUpperCase()}
             </Avatar>
             <DownOutlined />

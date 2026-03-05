@@ -33,7 +33,7 @@ export class UserCompatController {
     private readonly counterService: CounterService,
     private readonly cryptoService: LegacyCryptoService,
     private readonly sessionService: SessionAuthService
-  ) {}
+  ) { }
 
   @Post('login')
   async login(@Body() body: InputMap, @Res({ passthrough: true }) reply: FastifyReply) {
@@ -438,13 +438,8 @@ export class UserCompatController {
       return reply.send(fs.readFileSync(fallbackPath));
     }
 
-    // 1x1 transparent png
-    const pixel = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO8KXx4AAAAASUVORK5CYII=',
-      'base64'
-    );
-    reply.header('Content-type', 'image/png');
-    return reply.send(pixel);
+    reply.status(404);
+    return reply.send('Not found');
   }
 
   @Post('upload_avatar')
