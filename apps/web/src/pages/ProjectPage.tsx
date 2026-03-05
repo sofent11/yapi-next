@@ -4,6 +4,7 @@ import { Menu, Spin } from 'antd';
 import type { MenuProps } from 'antd';
 import { useGetGroupQuery, useGetProjectQuery } from '../services/yapi-api';
 import { webPlugins, type SubNavItem } from '../plugins';
+import { AppShell } from '../components/layout/AppShell';
 import './ProjectPage.scss';
 
 const BUILT_IN_NAV_KEYS = new Set(['interface', 'activity', 'data', 'members', 'setting']);
@@ -155,12 +156,12 @@ export function ProjectPage() {
   }
 
   return (
-    <div>
+    <AppShell>
       <div className="m-subnav">
         <Menu
           mode="horizontal"
           selectedKeys={[activeKey]}
-          className="g-row m-subnav-menu"
+          className="g-row m-subnav-menu legacy-project-subnav"
           items={Object.keys(subNavMap).map(key => {
             const item = subNavMap[key];
             let name = item.name;
@@ -215,6 +216,6 @@ export function ProjectPage() {
           <Route path="*" element={<Navigate to={`/project/${projectId}/interface/api`} replace />} />
         </Routes>
       </Suspense>
-    </div>
+    </AppShell>
   );
 }

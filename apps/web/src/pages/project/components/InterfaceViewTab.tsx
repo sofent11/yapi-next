@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import { CopyOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import { SectionCard } from '../../../components/layout/SectionCard';
 import { sanitizeHtml } from '../../../utils/html-sanitize';
 
 const { Text } = Typography;
@@ -35,19 +36,18 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
   const uid = Number((props.currentInterface as Record<string, unknown>).uid || 0);
   return (
     <div className="caseContainer">
-      <h2 className="interface-title">基本信息</h2>
-      <div className="panel-view">
-        <Row className="row">
-          <Col span={4} className="colKey">
+      <SectionCard title="基本信息" className="panel-view legacy-view-panel">
+        <Row className="row" gutter={[8, 8]}>
+          <Col xs={24} md={5} lg={4} className="colKey">
             接口名称：
           </Col>
-          <Col span={8} className="colName">
+          <Col xs={24} md={7} lg={8} className="colName">
             <span title={String(props.currentInterface.title || '-')}>{props.currentInterface.title || '-'}</span>
           </Col>
-          <Col span={4} className="colKey">
+          <Col xs={24} md={5} lg={4} className="colKey">
             创 建 人：
           </Col>
-          <Col span={8} className="colValue">
+          <Col xs={24} md={7} lg={8} className="colValue">
             {uid > 0 ? (
               <Link className="user-name" to={`/user/profile/${uid}`}>
                 <Avatar className="user-img" size={24} src={`/api/user/avatar?uid=${uid}`} />
@@ -58,37 +58,39 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
             )}
           </Col>
         </Row>
-        <Row className="row">
-          <Col span={4} className="colKey">
+        <Row className="row" gutter={[8, 8]}>
+          <Col xs={24} md={5} lg={4} className="colKey">
             状 态：
           </Col>
-          <Col span={8}>
+          <Col xs={24} md={7} lg={8}>
             <span className={`legacy-status-tag ${props.currentInterface.status === 'done' ? 'done' : 'undone'}`}>
               {props.statusLabel(props.currentInterface.status)}
             </span>
           </Col>
-          <Col span={4} className="colKey">
+          <Col xs={24} md={5} lg={4} className="colKey">
             更新时间：
           </Col>
-          <Col span={8}>{props.formatUnixTime((props.currentInterface as Record<string, unknown>).up_time)}</Col>
+          <Col xs={24} md={7} lg={8}>
+            {props.formatUnixTime((props.currentInterface as Record<string, unknown>).up_time)}
+          </Col>
         </Row>
         {(props.currentInterface.tag || []).length > 0 ? (
-          <Row className="row remark">
-            <Col span={4} className="colKey">
+          <Row className="row remark" gutter={[8, 8]}>
+            <Col xs={24} md={5} lg={4} className="colKey">
               Tag：
             </Col>
-            <Col span={18} className="colValue">
+            <Col xs={24} md={19} lg={20} className="colValue">
               {(props.currentInterface.tag || []).map(tag => (
                 <Tag key={tag}>{tag}</Tag>
               ))}
             </Col>
           </Row>
         ) : null}
-        <Row className="row">
-          <Col span={4} className="colKey">
+        <Row className="row" gutter={[8, 8]}>
+          <Col xs={24} md={5} lg={4} className="colKey">
             接口路径：
           </Col>
-          <Col span={18} className="colValue colMethod">
+          <Col xs={24} md={19} lg={20} className="colValue colMethod">
             <span className="legacy-method-pill tag-method" style={props.methodStyle(props.method)}>
               {props.method}
             </span>
@@ -103,11 +105,11 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
             </Tooltip>
           </Col>
         </Row>
-        <Row className="row">
-          <Col span={4} className="colKey">
+        <Row className="row" gutter={[8, 8]}>
+          <Col xs={24} md={5} lg={4} className="colKey">
             Mock地址：
           </Col>
-          <Col span={18} className="colValue">
+          <Col xs={24} md={19} lg={20} className="colValue">
             {props.mockFlagText(props.projectIsMockOpen, props.projectStrict) ? (
               <Text type="secondary">{props.mockFlagText(props.projectIsMockOpen, props.projectStrict)} </Text>
             ) : null}
@@ -135,27 +137,26 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
           </Col>
         </Row>
         {props.customField?.enable && String(props.currentInterface.custom_field_value || '').trim() ? (
-          <Row className="row remark">
-            <Col span={4} className="colKey">
+          <Row className="row remark" gutter={[8, 8]}>
+            <Col xs={24} md={5} lg={4} className="colKey">
               {props.customField.name || '自定义字段'}：
             </Col>
-            <Col span={18} className="colValue">
+            <Col xs={24} md={19} lg={20} className="colValue">
               {String(props.currentInterface.custom_field_value || '')}
             </Col>
           </Row>
         ) : null}
-      </div>
+      </SectionCard>
 
       {props.currentInterface.desc ? (
-        <>
-          <h2 className="interface-title">备注</h2>
+        <SectionCard title="备注" className="legacy-view-section">
           <div
             className="legacy-view-remark"
             dangerouslySetInnerHTML={{
               __html: sanitizeHtml(String(props.currentInterface.desc || ''))
             }}
           />
-        </>
+        </SectionCard>
       ) : null}
 
       {(props.reqParamsRows.length > 0 ||
@@ -163,8 +164,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
         props.reqQueryRows.length > 0 ||
         props.reqBodyFormRows.length > 0 ||
         props.currentInterface.req_body_other) ? (
-        <>
-          <h2 className="interface-title">请求参数</h2>
+        <SectionCard title="请求参数" className="legacy-view-section">
           {props.reqParamsRows.length > 0 ? (
             <div className="legacy-view-block">
               <h3 className="legacy-view-subtitle">路径参数</h3>
@@ -213,12 +213,11 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
               )}
             </div>
           ) : null}
-        </>
+        </SectionCard>
       ) : null}
 
       {props.currentInterface.res_body ? (
-        <>
-          <h2 className="interface-title">返回数据</h2>
+        <SectionCard title="返回数据" className="legacy-view-section">
           <div className="legacy-view-block">
             {props.schemaRowsResponse.length > 0 ? (
               <Table
@@ -233,7 +232,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
               <Input.TextArea rows={12} value={String(props.currentInterface.res_body || '')} readOnly />
             )}
           </div>
-        </>
+        </SectionCard>
       ) : null}
     </div>
   );

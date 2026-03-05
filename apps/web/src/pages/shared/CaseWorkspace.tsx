@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Button,
-  Card,
   Col,
   Input,
   InputNumber,
@@ -24,9 +23,10 @@ import {
   useGetColListQuery,
   useRunColCaseScriptMutation
 } from '../../services/yapi-api';
+import { PageHeader, SectionCard } from '../../components/layout';
 import { getRequestErrorMessage } from '../../utils/request-error';
 
-const { Paragraph, Text } = Typography;
+const { Text } = Typography;
 
 type CaseWorkspaceProps = {
   title?: string;
@@ -252,16 +252,12 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
   }
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <Card title={props.title}>
-        <Paragraph type={props.descriptionType} style={{ marginBottom: props.descriptionType ? 0 : 8 }}>
-          {props.description}
-        </Paragraph>
-      </Card>
+    <div className="legacy-workspace-page legacy-case-workspace">
+      <PageHeader title={props.title || 'Case Console'} subtitle={props.description} />
 
-      <Card title="连接参数">
+      <SectionCard title="连接参数" className="legacy-workspace-card">
         <Row gutter={12}>
-          <Col span={8}>
+          <Col xs={24} md={8}>
             <Text>Project ID</Text>
             <InputNumber
               style={{ width: '100%', marginTop: 8 }}
@@ -270,7 +266,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
               onChange={value => setProjectId(Number(value || 0))}
             />
           </Col>
-          <Col span={16}>
+          <Col xs={24} md={16}>
             <Text>Token (私有项目建议填写)</Text>
             <Input
               style={{ marginTop: 8 }}
@@ -280,11 +276,11 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
             />
           </Col>
         </Row>
-      </Card>
+      </SectionCard>
 
-      <Row gutter={16}>
-        <Col span={12}>
-          <Card title="测试集合">
+      <Row gutter={16} className="legacy-workspace-row">
+        <Col xs={24} xl={12}>
+          <SectionCard title="测试集合" className="legacy-workspace-card">
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
               <Input value={colName} onChange={event => setColName(event.target.value)} placeholder="测试集名称" />
               <Input value={colDesc} onChange={event => setColDesc(event.target.value)} placeholder="测试集描述" />
@@ -321,13 +317,13 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
                 ]}
               />
             </Space>
-          </Card>
+          </SectionCard>
         </Col>
-        <Col span={12}>
-          <Card title={`测试用例 ${selectedColId > 0 ? `(col_id=${selectedColId})` : ''}`}>
+        <Col xs={24} xl={12}>
+          <SectionCard title={`测试用例 ${selectedColId > 0 ? `(col_id=${selectedColId})` : ''}`} className="legacy-workspace-card">
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
               <Row gutter={8}>
-                <Col span={10}>
+                <Col xs={24} md={10}>
                   <InputNumber
                     style={{ width: '100%' }}
                     min={1}
@@ -336,7 +332,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
                     placeholder="interface_id"
                   />
                 </Col>
-                <Col span={14}>
+                <Col xs={24} md={14}>
                   <Input value={caseName} onChange={event => setCaseName(event.target.value)} placeholder="case 名称" />
                 </Col>
               </Row>
@@ -385,13 +381,13 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
                 ]}
               />
             </Space>
-          </Card>
+          </SectionCard>
         </Col>
       </Row>
 
-      <Row gutter={16}>
-        <Col span={12}>
-          <Card title="run_script 验证">
+      <Row gutter={16} className="legacy-workspace-row">
+        <Col xs={24} xl={12}>
+          <SectionCard title="run_script 验证" className="legacy-workspace-card">
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
               <Alert
                 showIcon
@@ -423,19 +419,19 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
               </Button>
               <Input.TextArea rows={10} readOnly value={runResultText} placeholder="run_script 响应" />
             </Space>
-          </Card>
+          </SectionCard>
         </Col>
-        <Col span={12}>
-          <Card title="Case 变量与环境视图">
+        <Col xs={24} xl={12}>
+          <SectionCard title="Case 变量与环境视图" className="legacy-workspace-card">
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
               <Text strong>case_env_list</Text>
               <Input.TextArea rows={7} readOnly value={envListText} placeholder="环境列表响应" />
               <Text strong>case_list_by_var_params</Text>
               <Input.TextArea rows={7} readOnly value={varCaseText} placeholder="变量参数视图响应" />
             </Space>
-          </Card>
+          </SectionCard>
         </Col>
       </Row>
-    </Space>
+    </div>
   );
 }

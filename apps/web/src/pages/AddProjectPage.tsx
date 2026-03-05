@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
-import { Button, Form, Input, Radio, Select, Space, Tooltip, Row, Col, message } from 'antd';
-import { LockOutlined, QuestionCircleOutlined, PlusOutlined } from '@ant-design/icons';
+import { Button, Col, Divider, Form, Input, Radio, Row, Select, Space, Tooltip, message } from 'antd';
+import { ArrowLeftOutlined, LockOutlined, PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   useAddProjectMutation,
@@ -8,8 +8,8 @@ import {
   useGetMyGroupQuery
 } from '../services/yapi-api';
 import { randomProjectColorKey, randomProjectIconKey } from '../utils/project-visual';
+import { AppShell, PageHeader, SectionCard } from '../components/layout';
 import { legacyNameValidator } from '../utils/legacy-validation';
-import './Addproject.scss';
 
 type CreateProjectForm = {
   name: string;
@@ -17,20 +17,6 @@ type CreateProjectForm = {
   basepath?: string;
   desc?: string;
   project_type: 'private' | 'public';
-};
-
-const formItemLayout = {
-  labelCol: {
-    lg: { span: 3 },
-    xs: { span: 24 },
-    sm: { span: 6 }
-  },
-  wrapperCol: {
-    lg: { span: 21 },
-    xs: { span: 24 },
-    sm: { span: 14 }
-  },
-  className: 'form-item'
 };
 
 function normalizeBasepath(input: string | undefined): string {
@@ -111,100 +97,104 @@ export function AddProjectPage() {
   }
 
   return (
-    <div className="g-row">
-      <div className="g-row m-container">
+    <AppShell className="legacy-add-project-page">
+      <PageHeader
+        title="新建项目"
+        subtitle="填写基础信息后立即进入接口工作区，后续可在项目设置中继续完善。"
+        actions={(
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/group')}>
+            返回分组
+          </Button>
+        )}
+      />
+
+      <SectionCard className="legacy-add-project-card">
         <Form<CreateProjectForm>
           form={form}
-          layout="horizontal"
+          layout="vertical"
+          className="legacy-add-project-form"
           onFinish={handleSubmit}
           initialValues={{
             project_type: 'private',
             basepath: ''
           }}
         >
-          <Form.Item
-            {...formItemLayout}
-            label="项目名称"
-            name="name"
-            rules={[{ required: true, validator: legacyNameValidator('项目') }]}
-          >
-            <Input />
-          </Form.Item>
-
-          <Form.Item
-            {...formItemLayout}
-            label="所属分组"
-            name="group_id"
-            rules={[{ required: true, message: '请选择项目所属的分组!' }]}
-          >
-            <Select options={groupOptions} loading={groupListQuery.isLoading} />
-          </Form.Item>
-
-          <hr className="breakline" />
-
-          <Form.Item
-            {...formItemLayout}
-            label={
-              <span>
-                基本路径&nbsp;
-                <Tooltip title="接口基本路径，为空是根路径">
-                  <QuestionCircleOutlined />
-                </Tooltip>
-              </span>
-            }
-            name="basepath"
-            rules={[{ required: false, message: '请输入项目基本路径' }]}
-          >
-            <Input
-              onBlur={event => {
-                form.setFieldValue('basepath', normalizeBasepath(event.target.value));
-              }}
-            />
-          </Form.Item>
-
-          <Form.Item
-            {...formItemLayout}
-            label="描述"
-            name="desc"
-            rules={[{ required: false, message: '描述不超过144字!', max: 144 }]}
-          >
-            <Input.TextArea rows={4} />
-          </Form.Item>
-
-          <Form.Item
-            {...formItemLayout}
-            label="权限"
-            name="project_type"
-            rules={[{ required: true }]}
-          >
-            <Radio.Group>
-              <Radio value="private" className="radio">
-                <LockOutlined />私有<br />
-                <span className="radio-desc">只有组长和项目开发者可以索引并查看项目信息</span>
-              </Radio>
-              <br />
-              {/* <Radio value="public" className="radio">
-                <Icon type="unlock" />公开<br />
-                <span className="radio-desc">任何人都可以索引并查看项目信息</span>
-              </Radio> */}
-            </Radio.Group>
-          </Form.Item>
-
-          <Row>
-            <Col sm={{ offset: 6 }} lg={{ offset: 3 }}>
-              <Button
-                className="m-btn"
-                icon={<PlusOutlined />}
-                type="primary"
-                htmlType="submit"
-                loading={addState.isLoading}
+          <Row gutter={16}>
+            <Col xs={24} md={14}>
+              <Form.Item
+                label="项目名称"
+                name="name"
+                rules={[{ required: true, validator: legacyNameValidator('项目') }]}
               >
-                创建项目
-              </Button>
+                <Input placeholder="例如：支付中心 API" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={10}>
+              <Form.Item
+                label="所属分组"
+                name="group_id"
+                rules={[{ required: true, message: '请选择项目所属分组' }]}
+              >
+                <Select options={groupOptions} loading={groupListQuery.isLoading} placeholder="选择分组" />
+              </Form.Item>
             </Col>
           </Row>
+
+          <Row gutter={16}>
+            <Col xs={24} md={12}>
+              <Form.Item
+                label={(
+                  <Space size={4}>
+                    基本路径
+                    <Tooltip title="接口基本路径，为空时默认根路径 /">
+                      <QuestionCircleOutlined />
+                    </Tooltip>
+                  </Space>
+                )}
+                name="basepath"
+              >
+                <Input
+                  placeholder="/api/v1"
+                  onBlur={event => {
+                    form.setFieldValue('basepath', normalizeBasepath(event.target.value));
+                  }}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item label="权限" name="project_type" rules={[{ required: true }]}>
+                <Radio.Group className="legacy-add-project-permission-group">
+                  <Radio.Button value="private">
+                    <LockOutlined />
+                    <span>私有项目</span>
+                  </Radio.Button>
+                </Radio.Group>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item
+            label="描述"
+            name="desc"
+            rules={[{ required: false, message: '描述不超过 144 字', max: 144 }]}
+          >
+            <Input.TextArea rows={5} placeholder="简要说明项目职责、接口范围或协作约定。" />
+          </Form.Item>
+
+          <Divider className="legacy-add-project-divider" />
+
+          <div className="legacy-add-project-submit">
+            <Button
+              icon={<PlusOutlined />}
+              type="primary"
+              htmlType="submit"
+              loading={addState.isLoading}
+            >
+              创建并进入项目
+            </Button>
+          </div>
         </Form>
-      </div>
-    </div>
+      </SectionCard>
+    </AppShell>
   );
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, App as AntdApp, Button, Card, Col, Input, Modal, Progress, Row, Select, Space, Switch, Tabs, Typography, Upload, Tooltip, Radio } from 'antd';
+import { Alert, App as AntdApp, Button, Input, Modal, Progress, Radio, Select, Space, Switch, Tooltip, Typography, Upload } from 'antd';
 import json5 from 'json5';
 import type { SpecImportResult } from '@yapi-next/shared-types';
 import {
@@ -11,6 +11,7 @@ import {
 } from '../../services/yapi-api';
 import { webPlugins, type ExportDataItem, type ImportDataItem } from '../../plugins';
 import { safeApiRequest } from '../../utils/safe-request';
+import { PageHeader, SectionCard } from '../../components/layout';
 import './ProjectData.scss';
 
 const { Text, Paragraph } = Typography;
@@ -769,6 +770,7 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
     if (exportMethod === 'swagger2') return '导出 Swagger 2.0 Json';
     return exportDataModules[exportMethod]?.desc || '';
   }, [exportDataModules, exportMethod]);
+  const previewSupported = importMethod === 'swagger';
   const supportsUrlImport = importMethod === 'swagger';
   const wikiSupported = useMemo(() => {
     const key = String(exportMethod || '').toLowerCase();
@@ -788,149 +790,247 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
     }
   }, [wikiSupported, withWiki]);
 
+  useEffect(() => {
+    setPreview(null);
+  }, [importMethod, source]);
+
   return (
-    <div className="g-row">
-      <div className="m-panel">
-        <div className="postman-dataImport">
-          <div className="dataImportCon">
-            <div>
-              <h3>
-                数据导入&nbsp;
-                <a target="_blank" rel="noopener noreferrer" href="https://hellosean1025.github.io/yapi/documents/data.html">
-                  <Tooltip title="点击查看文档"><Typography.Text type="secondary" ><span className="anticon anticon-question-circle-o" /></Typography.Text></Tooltip>
-                </a>
-              </h3>
-            </div>
+    <div className="legacy-page-shell legacy-data-page">
+      <PageHeader
+        title="数据管理"
+        subtitle="管理 OpenAPI/Swagger 导入导出流程，并跟踪导入任务执行状态。"
+      />
 
-            <div className="dataImportTile">
-              <Select
-                placeholder="请选择导入数据的方式"
-                value={importMethod}
-                onChange={setImportMethod}
-                style={{ width: '100%' }}
-                options={mergedImportOptions}
-              />
-            </div>
-
-            <div className="catidSelect">
-              <Select<number>
-                style={{ width: '100%' }}
-                placeholder="请选择数据导入的默认分类"
-                value={defaultCatId > 0 ? defaultCatId : undefined}
-                onChange={value => setDefaultCatId(Number(value || 0))}
-                loading={catMenuQuery.isFetching}
-                options={catList.map(item => ({
-                  label: String((item as Record<string, unknown>).name || ''),
-                  value: Number((item as Record<string, unknown>)._id || 0)
-                }))}
-              />
-            </div>
-
-            <div className="dataSync">
-              <span className="label">
-                数据同步&nbsp;
-                <Tooltip title={
-                  <div>
-                    <h3 style={{ color: 'white' }}>普通模式</h3><p>不导入已存在的接口</p><br />
-                    <h3 style={{ color: 'white' }}>智能合并</h3><p>已存在的接口，将合并返回数据的 response，适用于导入了 swagger 数据，保留对数据结构的改动</p><br />
-                    <h3 style={{ color: 'white' }}>完全覆盖</h3><p>不保留旧数据，完全使用新数据，适用于接口定义完全交给后端定义</p>
-                  </div>
-                }><Typography.Text type="secondary"><span className="anticon anticon-question-circle-o" /></Typography.Text></Tooltip>{' '}
-              </span>
-              <Select<SyncMode> value={syncMode} onChange={setSyncMode} style={{ width: '100%' }}>
-                <Select.Option value="normal">普通模式</Select.Option>
-                <Select.Option value="good">智能合并</Select.Option>
-                <Select.Option value="merge">完全覆盖</Select.Option>
-              </Select>
-            </div>
-
-            {supportsUrlImport ? (
-              <div className="dataSync">
-                <span className="label">
-                  开启url导入&nbsp;
-                  <Tooltip title="swagger url 导入"><Typography.Text type="secondary"><span className="anticon anticon-question-circle-o" /></Typography.Text></Tooltip>&nbsp;&nbsp;
-                </span>
-                <Switch checked={source === 'url'} onChange={(checked) => setSource(checked ? 'url' : 'json')} />
-              </div>
-            ) : null}
-
-            {source === 'url' ? (
-              <div className="import-content url-import-content">
-                <Input placeholder="http://demo.swagger.io/v2/swagger.json" value={urlText} onChange={e => setUrlText(e.target.value)} />
-                <Button type="primary" className="url-btn" onClick={() => void handleImportByMethod()} loading={importState.isLoading}>上传</Button>
-              </div>
-            ) : (
-              <div className="import-content">
-                <Upload.Dragger
-                  maxCount={1}
-                  showUploadList={false}
-                  beforeUpload={async file => {
-                    try {
-                      const loadedText = await readTextFile(file as File);
-                      await handleImportByMethod({ jsonText: loadedText });
-                    } catch (error) {
-                      messageApi.error((error as Error)?.message || '读取文件失败');
-                    }
-                    return false;
-                  }}
-                >
-                  <p className="ant-upload-drag-icon"><span className="anticon anticon-inbox" /></p>
-                  <p className="ant-upload-text">点击或者拖拽文件到上传区域</p>
-                </Upload.Dragger>
-                {importMethodDesc ? (
-                  <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
-                    {importMethodDesc}
-                  </Paragraph>
-                ) : null}
-                {importFileName && <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>{importFileName}</Typography.Paragraph>}
-              </div>
-            )}
+      <div className="legacy-data-grid">
+        <SectionCard
+          title="数据导入"
+          className="legacy-data-card"
+          extra={
+            <a
+              target="_blank"
+              rel="noopener noreferrer"
+              href="https://hellosean1025.github.io/yapi/documents/data.html"
+            >
+              导入文档
+            </a>
+          }
+        >
+          <div className="dataImportTile">
+            <Select
+              placeholder="请选择导入数据的方式"
+              value={importMethod}
+              onChange={setImportMethod}
+              style={{ width: '100%' }}
+              options={mergedImportOptions}
+            />
           </div>
 
-          <div className="dataImportCon" style={{ marginLeft: '20px' }}>
-            <div>
-              <h3>数据导出</h3>
-            </div>
-            <div className="dataImportTile">
-              <Select<string>
-                placeholder="请选择导出数据的方式"
-                value={exportMethod}
-                onChange={setExportMethod}
-                style={{ width: '100%' }}
-                options={mergedExportOptions}
-              />
-            </div>
+          <div className="catidSelect">
+            <Select<number>
+              style={{ width: '100%' }}
+              placeholder="请选择数据导入的默认分类"
+              value={defaultCatId > 0 ? defaultCatId : undefined}
+              onChange={value => setDefaultCatId(Number(value || 0))}
+              loading={catMenuQuery.isFetching}
+              options={catList.map(item => ({
+                label: String((item as Record<string, unknown>).name || ''),
+                value: Number((item as Record<string, unknown>)._id || 0)
+              }))}
+            />
+          </div>
 
-            <div className="dataExport">
-              <Radio.Group value={exportStatus} onChange={e => setExportStatus(e.target.value as ExportStatus)}>
-                <Radio value="all">全部接口</Radio>
-                <Radio value="open">公开接口</Radio>
-              </Radio.Group>
-            </div>
+          <div className="dataSync">
+            <span className="label">
+              数据同步
+              <Tooltip
+                title={
+                  <div>
+                    <h3 style={{ color: 'white' }}>普通模式</h3>
+                    <p>不导入已存在的接口</p>
+                    <br />
+                    <h3 style={{ color: 'white' }}>智能合并</h3>
+                    <p>合并已存在接口的返回结构，适合保留手工维护内容。</p>
+                    <br />
+                    <h3 style={{ color: 'white' }}>完全覆盖</h3>
+                    <p>使用新文档覆盖旧定义，适合后端主导接口结构的场景。</p>
+                  </div>
+                }
+              >
+                <Typography.Text type="secondary" className="legacy-inline-help">
+                  <span className="anticon anticon-question-circle-o" />
+                </Typography.Text>
+              </Tooltip>
+            </span>
+            <Select<SyncMode>
+              value={syncMode}
+              onChange={setSyncMode}
+              style={{ width: '100%' }}
+              options={[
+                { value: 'normal', label: '普通模式' },
+                { value: 'good', label: '智能合并' },
+                { value: 'merge', label: '完全覆盖' }
+              ]}
+            />
+          </div>
 
+          {supportsUrlImport ? (
             <div className="dataSync">
               <span className="label">
-                包含 Wiki&nbsp;
-                <Tooltip title="开启后导出时会附带项目 Wiki 内容">
-                  <Typography.Text type="secondary">
+                开启 URL 导入
+                <Tooltip title="使用 swagger/openapi 链接地址导入">
+                  <Typography.Text type="secondary" className="legacy-inline-help">
                     <span className="anticon anticon-question-circle-o" />
                   </Typography.Text>
                 </Tooltip>
-                &nbsp;&nbsp;
               </span>
-              <Switch checked={withWiki} onChange={setWithWiki} disabled={!wikiSupported} />
+              <Switch checked={source === 'url'} onChange={checked => setSource(checked ? 'url' : 'json')} />
             </div>
+          ) : null}
 
-            <div className="export-content">
-              <div>
-                <p className="export-desc">{exportMethodDesc || '支持 OpenAPI3/Swagger2 导出（如果使用插件导出，可能需在新页面打开）'}</p>
-                <Button className="export-button" type="primary" size="large" onClick={() => void handleExportByMethod()} loading={exportState.isLoading}>导出</Button>
-                &nbsp;
-                <Button className="export-button" size="large" onClick={downloadExportJson} disabled={!exportText}>下载 JSON</Button>
-              </div>
+          {source === 'url' ? (
+            <div className="import-content url-import-content">
+              <Input
+                placeholder="http://demo.swagger.io/v2/swagger.json"
+                value={urlText}
+                onChange={e => setUrlText(e.target.value)}
+              />
+              <Space className="url-btn" wrap>
+                <Button
+                  onClick={() => void handlePreview()}
+                  disabled={!previewSupported}
+                  loading={importState.isLoading}
+                >
+                  预检
+                </Button>
+                <Button
+                  type="primary"
+                  onClick={() => void handleImportByMethod()}
+                  loading={importState.isLoading || uploadState.isLoading}
+                >
+                  执行导入
+                </Button>
+              </Space>
             </div>
+          ) : (
+            <div className="import-content">
+              <Upload.Dragger
+                maxCount={1}
+                showUploadList={false}
+                beforeUpload={async file => {
+                  try {
+                    await readTextFile(file as File);
+                  } catch (error) {
+                    messageApi.error((error as Error)?.message || '读取文件失败');
+                  }
+                  return false;
+                }}
+              >
+                <p className="ant-upload-drag-icon">
+                  <span className="anticon anticon-inbox" />
+                </p>
+                <p className="ant-upload-text">点击或者拖拽文件到上传区域</p>
+              </Upload.Dragger>
+              <Input.TextArea
+                rows={10}
+                value={jsonText}
+                onChange={event => setJsonText(event.target.value)}
+                placeholder='粘贴 OpenAPI/Swagger JSON，例如：{"openapi":"3.0.0","paths":{}}'
+              />
+              <Space wrap>
+                <Button
+                  onClick={() => void handlePreview()}
+                  disabled={!previewSupported}
+                  loading={importState.isLoading}
+                >
+                  预检
+                </Button>
+                <Button
+                  type="primary"
+                  onClick={() => void handleImportByMethod()}
+                  loading={importState.isLoading || uploadState.isLoading}
+                >
+                  执行导入
+                </Button>
+              </Space>
+              {importMethodDesc ? (
+                <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+                  {importMethodDesc}
+                </Paragraph>
+              ) : null}
+              {importFileName ? (
+                <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>
+                  {importFileName}
+                </Typography.Paragraph>
+              ) : null}
+            </div>
+          )}
+          {preview ? (
+            <Alert
+              showIcon
+              type="info"
+              message={`预检结果：${preview.detectedFormat || 'unknown'}`}
+              description={
+                <Space direction="vertical" size={2}>
+                  <span>分类数量：{preview.categories || 0}</span>
+                  <span>接口数量：{preview.interfaces || 0}</span>
+                  <span>BasePath：{preview.basePath || '/'}</span>
+                  <span>同步模式：{syncModeLabel(syncMode)}</span>
+                </Space>
+              }
+            />
+          ) : null}
+        </SectionCard>
+
+        <SectionCard title="数据导出" className="legacy-data-card">
+          <div className="dataImportTile">
+            <Select<string>
+              placeholder="请选择导出数据的方式"
+              value={exportMethod}
+              onChange={setExportMethod}
+              style={{ width: '100%' }}
+              options={mergedExportOptions}
+            />
           </div>
-        </div>
+
+          <div className="dataExport">
+            <Radio.Group value={exportStatus} onChange={e => setExportStatus(e.target.value as ExportStatus)}>
+              <Radio value="all">全部接口</Radio>
+              <Radio value="open">公开接口</Radio>
+            </Radio.Group>
+          </div>
+
+          <div className="dataSync">
+            <span className="label">
+              包含 Wiki
+              <Tooltip title="开启后导出时附带项目 Wiki 内容">
+                <Typography.Text type="secondary" className="legacy-inline-help">
+                  <span className="anticon anticon-question-circle-o" />
+                </Typography.Text>
+              </Tooltip>
+            </span>
+            <Switch checked={withWiki} onChange={setWithWiki} disabled={!wikiSupported} />
+          </div>
+
+          <div className="export-content">
+            <p className="export-desc">
+              {exportMethodDesc || '支持 OpenAPI3/Swagger2 导出（插件导出可能在新页面打开）'}
+            </p>
+            <Space wrap>
+              <Button
+                className="export-button"
+                type="primary"
+                size="large"
+                onClick={() => void handleExportByMethod()}
+                loading={exportState.isLoading}
+              >
+                导出
+              </Button>
+              <Button className="export-button" size="large" onClick={downloadExportJson} disabled={!exportText}>
+                下载 JSON
+              </Button>
+            </Space>
+          </div>
+        </SectionCard>
       </div>
 
       <Modal

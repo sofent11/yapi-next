@@ -1,76 +1,120 @@
-// .login-body {
-//   background-color: #fff;
-// }
+.login-body {
+  min-height: calc(100vh - 240px);
+  padding: 24px 0;
+}
+
 .login-container {
-    padding-bottom: .6rem;
+  padding-bottom: 48px;
 }
 
-.login-form-button {
-    background-image: linear-gradient(to right, #6d69fe 0%, #48a0fa 100%) !important;
-    border: none !important;
-    margin-top: .2rem;
-    width: 100%;
-}
-
-.ant-form-item {
-    margin-bottom: .1rem;
-}
-
-.qsso-breakline {
-    display: flex;
-    align-items: center;
-    color: #6d7c90;
-    margin: .2rem auto;
-
-    &:before,
-    &:after {
-        content: "";
-        display: inline-block;
-        height: .02rem;
-        flex: 1;
-        border-top: .01rem solid #6d7c90;
-    }
-
-    .qsso-breakword {
-        padding: 0 .1rem;
-    }
+.container-login {
+  min-width: min(540px, 100%);
 }
 
 .card-login {
-    margin-top: 1.6rem;
-    margin-bottom: 1.6rem;
-    border-radius: .04rem;
-    position: relative;
+  margin-top: 72px;
+  margin-bottom: 72px;
+  border-radius: 16px;
+  border: 1px solid #dce6f4;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.1);
+  position: relative;
+  overflow: visible;
+  background: rgba(255, 255, 255, 0.94);
+}
 
-    .login-logo {
-        font-size: 0;
-        position: absolute;
-        left: 50%;
-        top: 0;
-        background-image: linear-gradient(-20deg, #21d4fd 0%, #b721ff 100%);
-        transform: translate(-50%, -50%);
-        padding: .16rem;
-        border-radius: 50%;
-        box-shadow: 0 4px 6px rgba(50, 50, 93, .11), 0 1px 3px rgba(0, 0, 0, .08);
-    }
+.card-login .login-logo {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translate(-50%, -50%);
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(140deg, #1677ff 0%, #3b82ff 100%);
+  box-shadow: 0 8px 18px rgba(22, 119, 255, 0.35);
+}
 
-    .login-title {
-        text-align: center;
-        padding-top: .5rem;
-        font-size: .4rem;
-        font-weight: 200;
-        color: #2e2e5a;
-    }
+.card-login .login-title {
+  text-align: center;
+  padding-top: 52px;
+  margin-bottom: 6px;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #142138;
+}
 
-    .svg {
-        animation: spin 5s linear infinite;
-    }
+.login-form .ant-tabs-nav {
+  margin-bottom: 20px;
+}
+
+.login-form .ant-tabs-tab {
+  font-weight: 600;
+}
+
+.login-form .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.login-form .ant-input,
+.login-form .ant-input-affix-wrapper {
+  border-radius: 10px;
+}
+
+.login-form-button {
+  width: 100%;
+  border: none !important;
+  border-radius: 10px;
+  box-shadow: 0 8px 16px rgba(22, 119, 255, 0.25);
+  background: linear-gradient(130deg, #1677ff 0%, #3b82ff 100%) !important;
 }
 
 .login-third-party {
-    margin-top: .04rem;
+  margin-top: 8px;
+}
 
-    .ant-btn {
-        width: 100%;
-    }
+.login-third-party .ant-btn {
+  width: 100%;
+}
+
+.qsso-breakline {
+  display: flex;
+  align-items: center;
+  color: #6b7a93;
+  margin: 20px 0;
+}
+
+.qsso-breakline::before,
+.qsso-breakline::after {
+  content: '';
+  display: inline-block;
+  height: 1px;
+  flex: 1;
+  background: #d5deec;
+}
+
+.qsso-breakline .qsso-breakword {
+  padding: 0 12px;
+}
+
+@media (max-width: 768px) {
+  .login-body {
+    padding: 12px 0;
+  }
+
+  .container-login {
+    min-width: 0;
+  }
+
+  .card-login {
+    margin-top: 48px;
+    margin-bottom: 28px;
+  }
+
+  .card-login .login-title {
+    font-size: 28px;
+  }
 }

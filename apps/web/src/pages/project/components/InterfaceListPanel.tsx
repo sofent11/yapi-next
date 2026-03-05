@@ -3,6 +3,7 @@ import { CopyOutlined, DeleteOutlined, EyeOutlined, SearchOutlined } from '@ant-
 import type { CSSProperties } from 'react';
 import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
 import { LegacyErrMsg } from '../../../components/LegacyErrMsg';
+import { FilterBar } from '../../../components/layout/FilterBar';
 
 const { Text } = Typography;
 
@@ -61,41 +62,42 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
           }
         />
       ) : null}
-      <div className="legacy-interface-list-toolbar">
-        <Text strong>{props.currentCatName} 共 ({props.filteredList.length}) 个接口</Text>
-        <Space size={8}>
-          <Input
-            value={props.listKeyword}
-            onChange={event => props.onListKeywordChange(event.target.value)}
-            placeholder="搜索接口"
-            prefix={<SearchOutlined />}
-            allowClear
-            size="small"
-            style={{ width: 220 }}
-          />
-          <Select<'all' | 'done' | 'undone'>
-            value={props.statusFilter}
-            onChange={props.onStatusFilterChange}
-            size="small"
-            style={{ width: 124 }}
-            options={[
-              { value: 'all', label: '全部状态' },
-              { value: 'done', label: '已完成' },
-              { value: 'undone', label: '未完成' }
-            ]}
-          />
-          {props.canEdit ? (
-            <>
-              <Button size="small" onClick={props.onOpenAddInterface} disabled={!props.hasCategories}>
-                添加接口
-              </Button>
-              <Button size="small" onClick={props.onOpenAddCat}>
-                添加分类
-              </Button>
-            </>
-          ) : null}
-        </Space>
-      </div>
+      <FilterBar
+        className="legacy-interface-list-toolbar"
+        left={<Text strong>{props.currentCatName} 共 ({props.filteredList.length}) 个接口</Text>}
+        right={
+          <Space size={8}>
+            <Input
+              value={props.listKeyword}
+              onChange={event => props.onListKeywordChange(event.target.value)}
+              placeholder="搜索接口"
+              prefix={<SearchOutlined />}
+              allowClear
+              style={{ width: 260 }}
+            />
+            <Select<'all' | 'done' | 'undone'>
+              value={props.statusFilter}
+              onChange={props.onStatusFilterChange}
+              style={{ width: 124 }}
+              options={[
+                { value: 'all', label: '全部状态' },
+                { value: 'done', label: '已完成' },
+                { value: 'undone', label: '未完成' }
+              ]}
+            />
+            {props.canEdit ? (
+              <>
+                <Button onClick={props.onOpenAddInterface} disabled={!props.hasCategories}>
+                  添加接口
+                </Button>
+                <Button onClick={props.onOpenAddCat}>
+                  添加分类
+                </Button>
+              </>
+            ) : null}
+          </Space>
+        }
+      />
 
       <Table<LegacyInterfaceDTO>
         rowKey={row => Number(row._id || 0)}
@@ -183,9 +185,8 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
             render: (_, row) =>
               props.canEdit ? (
                 <Space size={4}>
-                  <Button size="small" icon={<CopyOutlined />} onClick={() => props.onCopyInterface(row)} />
+                  <Button icon={<CopyOutlined />} onClick={() => props.onCopyInterface(row)} />
                   <Button
-                    size="small"
                     danger
                     icon={<DeleteOutlined />}
                     onClick={() => props.onDeleteInterface(Number(row._id || 0))}

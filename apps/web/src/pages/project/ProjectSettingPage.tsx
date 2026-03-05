@@ -15,8 +15,6 @@ import {
   Tooltip,
   Typography,
   message,
-  Row,
-  Col
 } from 'antd';
 import { LockOutlined, QuestionCircleOutlined, UnlockOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -40,6 +38,7 @@ import {
   resolveProjectColor
 } from '../../utils/project-visual';
 import { legacyNameValidator } from '../../utils/legacy-validation';
+import { PageHeader, SectionCard } from '../../components/layout';
 
 import './ProjectSetting.scss';
 
@@ -366,10 +365,14 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
   }
 
   return (
-    <div className="g-row">
+    <div className="legacy-page-shell legacy-project-setting-page">
+      <PageHeader
+        title="项目设置"
+        subtitle={`管理项目基础信息、环境变量、请求脚本、Token 与全局 Mock 配置。`}
+      />
       <Tabs
         type="card"
-        className="has-affix-footer tabs-large"
+        className="has-affix-footer tabs-large legacy-setting-tabs"
         activeKey={activeTab}
         onChange={setActiveTab}
         items={[
@@ -377,62 +380,64 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
             key: 'message',
             label: '项目配置',
             children: (
-              <div className="m-panel">
-                <Row className="project-setting">
-                  <Col xs={6} lg={{ offset: 1, span: 3 }} className="setting-logo">
-                    <Popover
-                      trigger="click"
-                      placement="bottom"
-                      overlayClassName="change-project-container"
-                      title={
-                        <Radio.Group
-                          className="color"
-                          value={projectColorKey}
-                          onChange={event => void handleChangeProjectColor(String(event.target.value || ''))}
-                          disabled={upsetState.isLoading}
-                        >
-                          {PROJECT_COLOR_OPTIONS.map(item => (
-                            <Radio.Button
-                              key={item}
-                              value={item}
-                              style={{ backgroundColor: PROJECT_COLOR_MAP[item], color: '#fff', fontWeight: 'bold' }}
-                            >
-                              {projectColorKey === item ? '✓' : null}
-                            </Radio.Button>
-                          ))}
-                        </Radio.Group>
-                      }
-                      content={
-                        <Radio.Group
-                          className="icon"
-                          value={projectIconKey}
-                          onChange={event => void handleChangeProjectIcon(String(event.target.value || ''))}
-                          disabled={upsetState.isLoading}
-                        >
-                          {PROJECT_ICON_OPTIONS.map(item => (
-                            <Radio.Button key={item} value={item} style={{ fontWeight: 'bold' }}>
-                              {renderProjectIcon(item)}
-                            </Radio.Button>
-                          ))}
-                        </Radio.Group>
-                      }
-                    >
+              <SectionCard className="m-panel legacy-project-setting-card">
+                <div className="legacy-project-setting-head legacy-project-setting-head-card">
+                  <Popover
+                    trigger="click"
+                    placement="bottom"
+                    overlayClassName="legacy-project-visual-popover"
+                    title={
+                      <Radio.Group
+                        className="legacy-project-color-group"
+                        value={projectColorKey}
+                        onChange={event => void handleChangeProjectColor(String(event.target.value || ''))}
+                        disabled={upsetState.isLoading}
+                      >
+                        {PROJECT_COLOR_OPTIONS.map(item => (
+                          <Radio.Button
+                            key={item}
+                            value={item}
+                            style={{ backgroundColor: PROJECT_COLOR_MAP[item], color: '#fff', fontWeight: 'bold' }}
+                          >
+                            {projectColorKey === item ? '✓' : null}
+                          </Radio.Button>
+                        ))}
+                      </Radio.Group>
+                    }
+                    content={
+                      <Radio.Group
+                        className="legacy-project-icon-group"
+                        value={projectIconKey}
+                        onChange={event => void handleChangeProjectIcon(String(event.target.value || ''))}
+                        disabled={upsetState.isLoading}
+                      >
+                        {PROJECT_ICON_OPTIONS.map(item => (
+                          <Radio.Button key={item} value={item} style={{ fontWeight: 'bold' }}>
+                            {renderProjectIcon(item)}
+                          </Radio.Button>
+                        ))}
+                      </Radio.Group>
+                    }
+                  >
+                    <button type="button" className="legacy-project-setting-logo-btn">
                       <span
-                        className="ui-logo"
+                        className="legacy-project-setting-logo"
                         title="点击修改项目图标和颜色"
                         style={{ backgroundColor: projectVisualColor }}
                       >
                         {renderProjectIcon(projectIconKey)}
                       </span>
-                    </Popover>
-                  </Col>
-                  <Col xs={18} sm={15} lg={19} className="setting-intro">
-                    <h2 className="ui-title">
+                      <span className="legacy-project-setting-logo-mask">点击修改</span>
+                    </button>
+                  </Popover>
+
+                  <div className="legacy-project-setting-head-info">
+                    <h2 className="legacy-project-setting-head-title">
                       {(currentGroupName ? `${currentGroupName} / ` : '') + (project?.name || '')}
                     </h2>
-                  </Col>
-                </Row>
-                <hr className="breakline" />
+                  </div>
+                </div>
+                <hr className="legacy-breakline" />
 
                 <Form<ProjectForm> form={projectForm} onFinish={handleSubmit} labelCol={{ lg: { offset: 1, span: 3 }, xs: { span: 24 }, sm: { span: 6 } }} wrapperCol={{ lg: { span: 19 }, xs: { span: 24 }, sm: { span: 14 } }}>
                   <Form.Item label="项目ID" className="form-item">
@@ -524,34 +529,43 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
                   </Form.Item>
                   <Form.Item label="权限" name="project_type" className="form-item">
                     <Radio.Group
+                      className="legacy-project-permission-group"
                       value={projectType}
                       onChange={event => setProjectType(event.target.value)}
                     >
-                      <Radio value="private" className="radio"><LockOutlined /> 私有<br /><span className="radio-desc" style={{ color: 'rgba(0,0,0,0.45)' }}>只有组长和项目开发者可以索引并查看项目信息</span></Radio>
-                      <br />
+                      <Radio value="private">
+                        <LockOutlined /> 私有
+                        <div className="legacy-radio-desc">只有组长和项目开发者可以索引并查看项目信息</div>
+                      </Radio>
                       {canPublicProject ? (
-                        <Radio value="public" className="radio"><UnlockOutlined /> 公开<br /><span className="radio-desc" style={{ color: 'rgba(0,0,0,0.45)' }}>任何人都可以索引并查看项目信息</span></Radio>
+                        <Radio value="public">
+                          <UnlockOutlined /> 公开
+                          <div className="legacy-radio-desc">任何人都可以索引并查看项目信息</div>
+                        </Radio>
                       ) : null}
                     </Radio.Group>
                   </Form.Item>
                 </Form>
 
-                <div className="btnwrap-changeproject">
-                  <Button className="m-btn btn-save" type="primary" size="large" onClick={() => void projectForm.submit()} loading={updateState.isLoading}>
+                <div className="legacy-setting-actions">
+                  <Button className="btn-save" type="primary" size="large" onClick={() => void projectForm.submit()} loading={updateState.isLoading}>
                     保 存
                   </Button>
                 </div>
 
                 {canDeleteProject ? (
-                  <div className="danger-container">
-                    <div className="title">
-                      <h2 className="content"><QuestionCircleOutlined /> 危险操作</h2>
+                  <div className="legacy-danger-zone">
+                    <div className="legacy-group-danger-header">
+                      <div className="legacy-group-danger-title">
+                        <QuestionCircleOutlined />
+                        危险操作
+                      </div>
                     </div>
-                    <Card hoverable={true} className="card-danger">
+                    <Card className="card-danger">
                       <div className="card-danger-content">
                         <h3>删除项目</h3>
-                        <p>项目一旦删除，将无法恢复数据，请慎重操作！</p>
-                        <p>只有组长和管理员有权限删除项目。</p>
+                        <p className="legacy-group-danger-desc">项目一旦删除，将无法恢复数据，请慎重操作。</p>
+                        <p className="legacy-group-danger-desc">只有组长和管理员有权限删除项目。</p>
                       </div>
                       <Button type="primary" danger ghost className="card-danger-btn" onClick={() => setDeleteModalOpen(true)}>
                         删除
@@ -559,14 +573,14 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
                     </Card>
                   </div>
                 ) : null}
-              </div>
+              </SectionCard>
             )
           },
           {
             key: 'env',
             label: '环境配置',
             children: (
-              <div className="m-panel">
+              <SectionCard className="m-panel legacy-project-setting-card">
                 <Space direction="vertical" style={{ width: '100%' }}>
                   <Space>
                     <Button
@@ -597,12 +611,10 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
                   {envEditors.map((item, index) => (
                     <Card
                       key={item.key}
-                      size="small"
                       title={`环境 ${index + 1}`}
                       extra={
                         <Button
                           danger
-                          size="small"
                           onClick={() => setEnvEditors(prev => prev.filter((_, i) => i !== index))}
                         >
                           删除
@@ -656,14 +668,14 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
                     </Card>
                   ))}
                 </Space>
-              </div>
+              </SectionCard>
             )
           },
           {
             key: 'request',
             label: '请求配置',
             children: (
-              <div className="m-panel">
+              <SectionCard className="m-panel legacy-project-setting-card">
                 <Form<RequestForm> form={requestForm} layout="vertical">
                   <Form.Item label="Pre-request Script(请求参数处理脚本)" name="pre_script">
                     <Input.TextArea rows={10} />
@@ -671,22 +683,22 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
                   <Form.Item label="Pre-response Script(响应数据处理脚本)" name="after_script">
                     <Input.TextArea rows={10} />
                   </Form.Item>
-                  <div className="btnwrap-changeproject">
-                    <Button className="m-btn btn-save" type="primary" size="large" onClick={() => void handleSaveRequest()} loading={updateState.isLoading}>
+                  <div className="legacy-setting-actions">
+                    <Button className="btn-save" type="primary" size="large" onClick={() => void handleSaveRequest()} loading={updateState.isLoading}>
                       保 存
                     </Button>
                   </div>
                 </Form>
-              </div>
+              </SectionCard>
             )
           },
           ...(project?.role !== 'guest'
             ? [
               {
                 key: 'token',
-                label: 'token配置',
+                label: 'Token 配置',
                 children: (
-                  <div className="m-panel">
+                  <SectionCard className="m-panel legacy-project-setting-card">
                     <Space direction="vertical" style={{ width: '100%' }}>
                       <Text strong>工具标识</Text>
                       <Text type="secondary">
@@ -728,7 +740,7 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
                         <li>/api/spec/export</li>
                       </ul>
                     </Space>
-                  </div>
+                  </SectionCard>
                 )
               }
             ]
@@ -737,7 +749,7 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
             key: 'mock',
             label: '全局mock脚本',
             children: (
-              <div className="m-panel">
+              <SectionCard className="m-panel legacy-project-setting-card">
                 <Form<MockForm> form={mockForm} layout="vertical">
                   <Form.Item label="是否开启" name="is_mock_open" valuePropName="checked">
                     <Switch checkedChildren="开" unCheckedChildren="关" />
@@ -745,13 +757,13 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
                   <Form.Item label="Mock脚本" name="project_mock_script">
                     <Input.TextArea rows={16} />
                   </Form.Item>
-                  <div className="btnwrap-changeproject">
-                    <Button className="m-btn btn-save" type="primary" size="large" onClick={() => void handleSaveMock()} loading={updateState.isLoading}>
+                  <div className="legacy-setting-actions">
+                    <Button className="btn-save" type="primary" size="large" onClick={() => void handleSaveMock()} loading={updateState.isLoading}>
                       保 存
                     </Button>
                   </div>
                 </Form>
-              </div>
+              </SectionCard>
             )
           },
           ...Object.keys(pluginSettingTabs).map(key => {
@@ -761,9 +773,9 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
               key: `plugin_${key}`,
               label: tab.name,
               children: (
-                <Card className="legacy-project-setting-card">
+                <SectionCard className="legacy-project-setting-card">
                   <C projectId={props.projectId} />
-                </Card>
+                </SectionCard>
               )
             };
           })

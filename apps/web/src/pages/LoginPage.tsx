@@ -106,34 +106,34 @@ export function LoginPage() {
                             rules={[
                               { required: true, message: '请输入正确的email!', pattern: /^\\w+([\\.-]?\\w+)*@\\w+([\\.-]?\\w+)*(\\.\\w{1,})+$/ }
                             ]}
-                            style={{ marginBottom: '.16rem' }}
+                            style={{ marginBottom: '16px' }}
                           >
                             <Input
                               prefix={<MailOutlined style={{ fontSize: 13 }} />}
                               placeholder="Email"
                               autoComplete="email"
-                              style={{ height: '.42rem' }}
+                              style={{ height: '42px' }}
                             />
                           </Form.Item>
                           <Form.Item
                             name="password"
                             rules={[{ required: true, message: '请输入密码!' }]}
-                            style={{ marginBottom: '.16rem' }}
+                            style={{ marginBottom: '16px' }}
                           >
                             <Input.Password
                               prefix={<LockOutlined style={{ fontSize: 13 }} />}
                               placeholder="Password"
                               autoComplete="current-password"
-                              style={{ height: '.42rem' }}
+                              style={{ height: '42px' }}
                             />
                           </Form.Item>
-                          <Form.Item style={{ marginBottom: '.16rem' }}>
+                          <Form.Item style={{ marginBottom: '16px' }}>
                             <Button
                               type="primary"
                               htmlType="submit"
                               className="login-form-button"
                               loading={loginState.isLoading}
-                              style={{ height: '.42rem' }}
+                              style={{ height: '42px' }}
                             >
                               登录
                             </Button>
@@ -160,12 +160,12 @@ export function LoginPage() {
                           <Form.Item
                             name="username"
                             rules={[{ required: true, message: '请输入用户名!' }]}
-                            style={{ marginBottom: '.16rem' }}
+                            style={{ marginBottom: '16px' }}
                           >
                             <Input
                               prefix={<UserOutlined style={{ fontSize: 13 }} />}
                               placeholder="Username"
-                              style={{ height: '.42rem' }}
+                              style={{ height: '42px' }}
                             />
                           </Form.Item>
                           <Form.Item
@@ -173,34 +173,34 @@ export function LoginPage() {
                             rules={[
                               { required: true, message: '请输入email!', pattern: /^\\w+([\\.-]?\\w+)*@\\w+([\\.-]?\\w+)*(\\.\\w{1,})+$/ }
                             ]}
-                            style={{ marginBottom: '.16rem' }}
+                            style={{ marginBottom: '16px' }}
                           >
                             <Input
                               prefix={<MailOutlined style={{ fontSize: 13 }} />}
                               placeholder="Email"
                               autoComplete="email"
-                              style={{ height: '.42rem' }}
+                              style={{ height: '42px' }}
                             />
                           </Form.Item>
                           <Form.Item
                             name="password"
                             rules={[{ required: true, message: '请输入密码!' }]}
-                            style={{ marginBottom: '.16rem' }}
+                            style={{ marginBottom: '16px' }}
                           >
                             <Input.Password
                               prefix={<LockOutlined style={{ fontSize: 13 }} />}
                               placeholder="Password"
                               autoComplete="new-password"
-                              style={{ height: '.42rem' }}
+                              style={{ height: '42px' }}
                             />
                           </Form.Item>
-                          <Form.Item style={{ marginBottom: '.16rem' }}>
+                          <Form.Item style={{ marginBottom: '16px' }}>
                             <Button
                               type="primary"
                               htmlType="submit"
                               className="login-form-button"
                               loading={registerState.isLoading}
-                              style={{ height: '.42rem' }}
+                              style={{ height: '42px' }}
                             >
                               注册
                             </Button>

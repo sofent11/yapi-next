@@ -1,6 +1,7 @@
 import { Alert, AutoComplete, Button, Card, Form, Input, Radio, Select, Space, Switch, Tabs, Tooltip, Typography } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
+import { SectionCard } from '../../../components/layout';
 import { legacyNameValidator } from '../../../utils/legacy-validation';
 import { SchemaModeEditor } from './SchemaModeEditor';
 
@@ -69,10 +70,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
             />
           ) : null}
           <Form<any> form={props.form} layout="vertical">
-            <h2 className="interface-title" style={{ marginTop: 0 }}>
-              基本设置
-            </h2>
-            <div className="panel-sub">
+            <SectionCard title="基本设置" className="panel-sub legacy-edit-section">
               <Form.Item label="接口名称" name="title" rules={[{ required: true, validator: legacyNameValidator('接口') }]}>
                 <Input />
               </Form.Item>
@@ -187,10 +185,9 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                   <Input />
                 </Form.Item>
               ) : null}
-            </div>
+            </SectionCard>
 
-            <h2 className="interface-title">请求参数设置</h2>
-            <div className="panel-sub">
+            <SectionCard title="请求参数设置" className="panel-sub legacy-edit-section">
               <Radio.Group
                 value={props.reqRadioType}
                 onChange={event => props.onReqRadioTypeChange(event.target.value)}
@@ -431,10 +428,9 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                   </>
                 )}
               </div>
-            </div>
+            </SectionCard>
 
-            <h2 className="interface-title">返回数据设置</h2>
-            <div className="panel-sub">
+            <SectionCard title="返回数据设置" className="panel-sub legacy-edit-section">
               <Form.Item label="返回类型" name="res_body_type">
                 <Radio.Group>
                   <Radio.Button value="json">JSON</Radio.Button>
@@ -502,17 +498,15 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                   <Input.TextArea rows={12} />
                 </Form.Item>
               )}
-            </div>
+            </SectionCard>
 
-            <h2 className="interface-title">备注</h2>
-            <div className="panel-sub">
+            <SectionCard title="备注" className="panel-sub legacy-edit-section">
               <Form.Item label="描述" name="desc">
                 <Input.TextArea rows={6} />
               </Form.Item>
-            </div>
+            </SectionCard>
 
-            <h2 className="interface-title">其他</h2>
-            <div className="panel-sub">
+            <SectionCard title="其他" className="panel-sub legacy-edit-section">
               <Form.Item
                 label="消息通知"
                 name="switch_notice"
@@ -529,9 +523,9 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
               >
                 <Switch checkedChildren="开" unCheckedChildren="关" />
               </Form.Item>
-            </div>
+            </SectionCard>
 
-            <div style={{ textAlign: 'center', marginTop: 16 }}>
+            <div className="legacy-edit-footer">
               <Button type="primary" onClick={props.onSave} loading={props.saving}>
                 保存
               </Button>

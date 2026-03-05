@@ -1,13 +1,11 @@
 import { useMemo } from 'react';
-import { StarOutlined } from '@ant-design/icons';
-import { Card, Row, Col, Spin, Tooltip, message } from 'antd';
+import { StarFilled } from '@ant-design/icons';
+import { Button, Card, Spin, Tooltip, message } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useDelFollowMutation, useGetFollowListQuery } from '../services/yapi-api';
 import { renderProjectIcon, resolveProjectColor } from '../utils/project-visual';
+import { AppShell, PageHeader, SectionCard } from '../components/layout';
 import { LegacyErrMsg } from '../components/LegacyErrMsg';
-
-import './FollowPage.scss';
-import './Group.scss';
 
 export function FollowPage() {
   const followQuery = useGetFollowListQuery();
@@ -40,57 +38,75 @@ export function FollowPage() {
 
   const renderProjectCard = (project: Record<string, any>) => {
     const pid = Number(project.projectid);
+    const projectName = String(project.projectname || pid);
+    if (pid <= 0) return null;
     const visual = getProjectVisual(project);
-    const color = resolveProjectColor(visual.color, project.projectname || String(pid));
+    const color = resolveProjectColor(visual.color, projectName);
+    const lastUpdate = Number(project.up_time || 0);
+    const updatedAt = lastUpdate
+      ? new Date(lastUpdate * 1000).toLocaleString('zh-CN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      : '未知';
+
     return (
-      <div className="card-container" key={pid}>
-        <Card
-          bordered={false}
-          className="m-card"
-          onClick={() => navigate(`/project/${pid}`)}
-        >
-          <div
-            className="ui-logo"
-            style={{ backgroundColor: color }}
-          >
+      <Card
+        key={pid}
+        hoverable
+        className="legacy-follow-project-card"
+        onClick={() => navigate(`/project/${pid}`)}
+        extra={
+          <Tooltip placement="left" title="取消关注">
+            <Button
+              type="text"
+              className="legacy-follow-star-btn"
+              icon={<StarFilled />}
+              onClick={event => {
+                event.stopPropagation();
+                void handleDel(pid);
+              }}
+            />
+          </Tooltip>
+        }
+      >
+        <div className="legacy-follow-project-head">
+          <div className="legacy-follow-project-logo" style={{ backgroundColor: color }}>
             {renderProjectIcon(visual.icon)}
           </div>
-          <h4 className="ui-title">{project.projectname}</h4>
-        </Card>
-        <div
-          className="card-btns"
-          onClick={(e) => {
-            e.stopPropagation();
-            void handleDel(pid);
-          }}
-        >
-          <Tooltip placement="rightTop" title="取消关注">
-            <StarOutlined className="icon active" />
-          </Tooltip>
         </div>
-      </div>
+        <div className="legacy-follow-project-title">{projectName}</div>
+        <div className="legacy-follow-project-meta">
+          <span>BasePath: {project.basepath ? String(project.basepath) : '/'}</span>
+          <span>更新于 {updatedAt}</span>
+        </div>
+      </Card>
     );
   };
 
   return (
-    <div>
-      <div className="g-row" style={{ paddingLeft: '32px', paddingRight: '32px' }}>
-        <Row gutter={16} className="follow-box pannel-without-tab">
-          {followQuery.isLoading ? (
-            <div style={{ textAlign: 'center', width: '100%', padding: 40 }}>
-              <Spin />
-            </div>
-          ) : rows.length === 0 ? (
-            <LegacyErrMsg type="noFollow" />
-          ) : (
-            rows.map((item, index) => (
-              <Col xs={6} md={4} xl={3} key={index}>
-                {renderProjectCard(item)}
-              </Col>
-            ))
-          )}
-        </Row>
-      </div>
-    </div>
+    <AppShell className="legacy-follow-page">
+      <PageHeader
+        title="我的关注"
+        subtitle="集中管理你已关注的项目，支持快速进入和取消关注。"
+      />
+      <SectionCard
+        title={`关注项目 (${rows.length})`}
+        className="legacy-follow-card"
+      >
+        {followQuery.isLoading ? (
+          <div className="legacy-page-loading">
+            <Spin />
+          </div>
+        ) : rows.length === 0 ? (
+          <LegacyErrMsg type="noFollow" />
+        ) : (
+          <div className="legacy-follow-grid">{rows.map(item => renderProjectCard(item))}</div>
+        )}
+      </SectionCard>
+    </AppShell>
   );
 }

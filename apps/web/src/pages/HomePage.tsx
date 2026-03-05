@@ -1,19 +1,61 @@
-import { Row, Col, Button, Card } from 'antd';
-import { Link, useNavigate } from 'react-router-dom';
-import { AppstoreOutlined, ApiOutlined, DatabaseOutlined, TeamOutlined } from '@ant-design/icons';
 import { useEffect, useMemo } from 'react';
+import { Button, Card, Col, Row, Space, Tag, Typography } from 'antd';
+import {
+  ApiOutlined,
+  AppstoreOutlined,
+  DatabaseOutlined,
+  RocketOutlined,
+  SafetyCertificateOutlined,
+  TeamOutlined
+} from '@ant-design/icons';
 import type { ComponentType } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import LogoSVG from '../components/LogoSVG';
 import { webPlugins } from '../plugins';
 import { useGetUserStatusQuery } from '../services/yapi-api';
 import './HomePage.scss';
 
+const { Title, Paragraph, Text } = Typography;
+
+const featureCards = [
+  {
+    icon: <AppstoreOutlined />,
+    title: '项目协作',
+    desc: '按分组管理项目、成员和权限，保证多人协作边界清晰。'
+  },
+  {
+    icon: <ApiOutlined />,
+    title: '接口生命周期',
+    desc: '统一管理接口设计、编辑、测试、变更和状态追踪。'
+  },
+  {
+    icon: <DatabaseOutlined />,
+    title: '规范导入导出',
+    desc: '支持 OpenAPI/Swagger 导入导出，适配存量系统迁移。'
+  },
+  {
+    icon: <TeamOutlined />,
+    title: '团队效率',
+    desc: '分类、标签、测试集合和日志让跨角色协作更高效。'
+  }
+];
+
+const valueHighlights = [
+  {
+    title: '规范驱动',
+    content: '通过统一的接口规范和结构化文档，降低沟通与交接成本。',
+    icon: <SafetyCertificateOutlined />
+  },
+  {
+    title: '快速交付',
+    content: '从定义到调试到回归测试形成闭环，减少重复劳动。',
+    icon: <RocketOutlined />
+  }
+];
+
 export function HomePage() {
   const navigate = useNavigate();
-  const ThirdLogin = useMemo(
-    () => webPlugins.getThirdLoginComponent() as ComponentType | null,
-    []
-  );
+  const ThirdLogin = useMemo(() => webPlugins.getThirdLoginComponent() as ComponentType | null, []);
   const { data: statusData } = useGetUserStatusQuery();
   const user = statusData?.data;
   const isLogin = statusData?.errcode === 0 && !!user;
@@ -25,335 +67,92 @@ export function HomePage() {
   }, [isLogin, navigate]);
 
   return (
-    <div className="home-main">
-      <div className="g-body">
-        <div className="m-bg">
-          <div className="m-bg-mask m-bg-mask0" />
-          <div className="m-bg-mask m-bg-mask1" />
-          <div className="m-bg-mask m-bg-mask2" />
-          <div className="m-bg-mask m-bg-mask3" />
-        </div>
-        <div className="main-one">
-          <div className="container">
-            <Row>
-              <Col span={24}>
-                <div className="home-header">
-                  <a href="#" className="item">
-                    YAPI
-                  </a>
-                  <a
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    href="https://hellosean1025.github.io/yapi"
-                    className="item"
-                  >
-                    使用文档
-                  </a>
-                </div>
-              </Col>
-            </Row>
-            <Row>
-              <Col lg={9} xs={24}>
-                <div className="home-des">
-                  <div className="logo">
-                    <LogoSVG length="72px" />
-                    <span className="name">YAPI</span>
-                  </div>
-                  <div className="detail">
-                    高效、易用、功能强大的API管理平台<br />
-                    <span className="desc">旨在为开发、产品、测试人员提供更优雅的接口管理服务</span>
-                  </div>
-                  <div className="btn-group">
-                    <Link to="/login">
-                      <Button type="primary" className="btn-home btn-login">
-                        登录 / 注册
-                      </Button>
-                    </Link>
-                    {ThirdLogin != null ? <ThirdLogin /> : null}
-                  </div>
-                </div>
-              </Col>
-              <Col lg={15} xs={0} className="col-img">
-                <div className="img-container">
-                  {/* Empty just like original */}
-                </div>
-              </Col>
-            </Row>
-          </div>
-        </div>
-        <div className="feat-part section-feature">
-          <div className="container home-section">
-            <h3 className="title">为API开发者设计的管理平台</h3>
-            <span className="desc">
-              YApi让接口开发更简单高效，让接口的管理更具可读性、可维护性，让团队协作更合理。
-            </span>
-            <Row key="feat-motion-row">
-              <Col span={8} className="section-item" key="feat-wrapper-1">
-                <AppstoreOutlined className="img" />
-                <h4 className="title">项目管理</h4>
-                <span className="desc">提供基本的项目分组，项目管理，接口管理功能</span>
-              </Col>
-              <Col span={8} className="section-item" key="feat-wrapper-2">
-                <ApiOutlined className="img" />
-                <h4 className="title">接口管理</h4>
-                <span className="desc">
-                  友好的接口文档，基于websocket的多人协作接口编辑功能和类postman测试工具，让多人协作成倍提升开发效率
-                </span>
-              </Col>
-              <Col span={8} className="section-item" key="feat-wrapper-3">
-                <DatabaseOutlined className="img" />
-                <h4 className="title">MockServer</h4>
-                <span className="desc">基于Mockjs，使用简单功能强大</span>
-              </Col>
-            </Row>
-          </div>
-        </div>
-        <div className="feat-part m-mock m-skew home-section">
-          <div className="m-skew-bg">
-            <div className="m-bg-mask m-bg-mask0" />
-            <div className="m-bg-mask m-bg-mask1" />
-            <div className="m-bg-mask m-bg-mask2" />
-          </div>
-          <div className="container skew-container">
-            <h3 className="title">功能强大的 Mock 服务</h3>
-            <span className="desc">你想要的 Mock 服务都在这里</span>
-            <Row className="row-card">
-              <Col lg={12} xs={24} className="section-card">
-                <Card title="Mock 规则">
-                  <p className="mock-desc">
-                    通过学习一些简单的 Mock
-                    模板规则即可轻松编写接口，这将大大提高定义接口的效率，并且无需为编写 Mock 数据烦恼:
-                    所有的数据都可以实时随机生成。
-                  </p>
-                  <div className="code">
-                    <ol start={1}>
-                      <li className="item">
-                        <span className="orderNum orderNum-first">1</span>
-                        <span>
-                          <span>&#123;&ensp;&ensp;</span>
-                        </span>
-                      </li>
-                      <li className="item">
-                        <span className="orderNum">2</span>
-                        <span>
-                          &ensp;&ensp;&ensp;&ensp;<span className="string">
-                            &quot;errcode|200-500&quot;
-                          </span>
-                          <span>
-                            :&ensp;<span className="number">200</span>,&ensp;&ensp;
-                          </span>
-                        </span>
-                      </li>
-                      <li className="item">
-                        <span className="orderNum">3</span>
-                        <span>
-                          &ensp;&ensp;&ensp;&ensp;<span className="string">&quot;errmsg|4-8&quot;</span>
-                          <span>:&ensp;</span>
-                          <span className="string">&quot;@string&quot;</span>
-                          <span>,&ensp;&ensp;</span>
-                        </span>
-                      </li>
-                      <li className="item">
-                        <span className="orderNum">4</span>
-                        <span>
-                          &ensp;&ensp;&ensp;&ensp;<span className="string">&quot;data&quot;</span>
-                          <span>:&ensp;&#123;&ensp;&ensp;</span>
-                        </span>
-                      </li>
-                      <li className="item">
-                        <span className="orderNum">5</span>
-                        <span>
-                          &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;<span className="string">
-                            &quot;boolean|1&quot;
-                          </span>
-                          <span>:&ensp;</span>
-                          <span className="keyword">true</span>
-                          <span>,&ensp;&ensp;</span>
-                        </span>
-                      </li>
-                      <li className="item">
-                        <span className="orderNum">6</span>
-                        <span>
-                          &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;<span className="string">
-                            &quot;array|2&quot;
-                          </span>
-                          <span>
-                            :&ensp;&#91;<span className="string">&quot;Bob&quot;</span>,&ensp;<span className="string">
-                              &quot;Jim&quot;
-                            </span>&#93;,&ensp;&ensp;
-                          </span>
-                        </span>
-                      </li>
-                      <li className="item">
-                        <span className="orderNum">7</span>
-                        <span>
-                          &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;<span className="string">
-                            &quot;combine&quot;
-                          </span>
-                          <span>:&ensp;</span>
-                          <span className="string">&quot;@boolean&ensp;&amp;&ensp;@array&quot;</span>
-                          <span>&ensp;&ensp;</span>
-                        </span>
-                      </li>
-                      <li className="item">
-                        <span className="orderNum">8</span>
-                        <span>&ensp;&ensp;&ensp;&ensp;&#125;&ensp;&ensp;</span>
-                      </li>
-                      <li className="item">
-                        <span className="orderNum orderNum-last">9</span>
-                        <span>&#125;&ensp;&ensp;</span>
-                      </li>
-                    </ol>
-                  </div>
-                </Card>
-              </Col>
-              <Col lg={12} xs={24} className="section-card mock-after">
-                <Card title="生成的 Mock 数据">
-                  <p className="mock-desc">
-                    生成的 Mock 数据可以直接用 ajax
-                    请求使用，也可以通过服务器代理使用（不需要修改项目一行代码）
-                  </p>
-                  <div className="code">
-                    <ol start={1}>
-                      <li className="alt">
-                        <span className="orderNum orderNum-first">1</span>
-                        <span>
-                          <span>&#123;&ensp;&ensp;</span>
-                        </span>
-                      </li>
-                      <li className="">
-                        <span className="orderNum">2</span>
-                        <span>
-                          &ensp;&ensp;<span className="string">&quot;errcode&quot;</span>
-                          <span>:&ensp;</span>
-                          <span className="number">304</span>
-                          <span>,&ensp;&ensp;</span>
-                        </span>
-                      </li>
-                      <li className="alt">
-                        <span className="orderNum">3</span>
-                        <span>
-                          &ensp;&ensp;<span className="string">&quot;errmsg&quot;</span>
-                          <span>:&ensp;</span>
-                          <span className="string">&quot;JtkMIoRu)N#ie^h%Z77[F)&quot;</span>
-                          <span>,&ensp;&ensp;</span>
-                        </span>
-                      </li>
-                      <li className="">
-                        <span className="orderNum">4</span>
-                        <span>
-                          &ensp;&ensp;<span className="string">&quot;data&quot;</span>
-                          <span>:&ensp;&#123;&ensp;&ensp;</span>
-                        </span>
-                      </li>
-                      <li className="alt">
-                        <span className="orderNum">5</span>
-                        <span>
-                          &ensp;&ensp;&ensp;&ensp;<span className="string">&quot;boolean&quot;</span>
-                          <span>:&ensp;</span>
-                          <span className="keyword">true</span>
-                          <span>,&ensp;&ensp;</span>
-                        </span>
-                      </li>
-                      <li className="">
-                        <span className="orderNum">6</span>
-                        <span>
-                          &ensp;&ensp;&ensp;&ensp;<span className="string">&quot;array&quot;</span>
-                          <span>
-                            :&ensp;
-                          </span>&#91;<span className="string">&quot;Bob&quot;</span>,&ensp;<span className="string">
-                            &quot;Jim&quot;
-                          </span>,&ensp;<span className="string">&quot;Bob&quot;</span>,&ensp;<span className="string">
-                            &quot;Jim&quot;
-                          </span>&#93;<span>,&ensp;&ensp;</span>
-                        </span>
-                      </li>
-                      <li className="alt">
-                        <span className="orderNum">7</span>
-                        <span>
-                          &ensp;&ensp;&ensp;&ensp;<span className="string">&quot;combine&quot;</span>
-                          <span>:&ensp;</span>
-                          <span className="string">
-                            &quot;true & Bob,&ensp;Jim,&ensp;Bob,&ensp;Jim&quot;
-                          </span>
-                          <span>&ensp;&ensp;</span>
-                        </span>
-                      </li>
-                      <li className="">
-                        <span className="orderNum">8</span>
-                        <span>&ensp;&ensp;&#125;&ensp;&ensp;</span>
-                      </li>
-                      <li className="alt">
-                        <span className="orderNum orderNum-last">9</span>
-                        <span>&#125;&ensp;&ensp;</span>
-                      </li>
-                    </ol>
-                  </div>
-                </Card>
-              </Col>
-            </Row>
-          </div>
-        </div>
-        <div className="home-section section-manage">
-          <div className="container">
-            <Row className="row-card" style={{ marginBottom: '.48rem' }}>
-              <Col lg={7} xs={10} className="section-card">
-                <Card>
-                  <div className="section-block block-first">
-                    <h4>超级管理员(* N)</h4>
-                    <p className="item"> - 创建分组</p>
-                    <p className="item"> - 分配组长</p>
-                    <p className="item"> - 管理所有成员信息</p>
-                  </div>
-                  <div className="section-block block-second">
-                    <h4>组长(* N)</h4>
-                    <p className="item"> - 创建项目</p>
-                    <p className="item"> - 管理分组或项目的信息</p>
-                    <p className="item"> - 管理开发者与成员</p>
-                  </div>
-                  <div className="section-block block-third">
-                    <h4>开发者(* N) / 成员(* N)</h4>
-                    <p className="item"> - 不允许创建分组</p>
-                    <p className="item"> - 不允许修改分组或项目信息</p>
-                  </div>
-                </Card>
-              </Col>
-              <Col lg={17} xs={14} className="section-card manage-word">
-                <TeamOutlined className="icon" />
-                <h3 className="title">扁平化管理模式</h3>
-                <p className="desc">
-                  接口管理的逻辑较为复杂，操作频率高，层层审批将严重拖慢生产效率，因此传统的金字塔管理模式并不适用。
-                </p>
-                <p className="desc">
-                  YAPI
-                  将扁平化管理模式的思想引入到产品的权限管理中，超级管理员拥有最高的权限，并将权限分配给若干组长，超级管理员只需管理组长即可，实际上管理YAPI各大分组与项目的是“组长”。组长对分组或项目负责，一般由BU负责人/项目负责人担任。
-                </p>
-              </Col>
-            </Row>
-          </div>
-        </div>
-      </div>
-      <div className="row-tip">
-        <div className="container">
-          <div className="tip-title">
-            <h3 className="title">准备好使用了吗？</h3>
-            <p className="desc">注册账号尽请使用吧，查看使用文档了解更多信息</p>
-          </div>
-          <div className="tip-btns">
-            <div className="btn-group">
+    <div className="home-main home-v2">
+      <div className="home-v2-bg" />
+      <div className="home-v2-container">
+        <header className="home-v2-header">
+          <Space size={12} align="center">
+            <LogoSVG length="40px" />
+            <Text className="home-v2-brand">YApi</Text>
+            <Tag color="blue">Next</Tag>
+          </Space>
+          <Space size={12}>
+            <a
+              href="https://hellosean1025.github.io/yapi"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="home-v2-doc-link"
+            >
+              使用文档
+            </a>
+            <Link to="/login">
+              <Button type="primary">登录</Button>
+            </Link>
+          </Space>
+        </header>
+
+        <section className="home-v2-hero">
+          <div className="home-v2-hero-content">
+            <Tag color="processing">API Governance Platform</Tag>
+            <Title level={1}>清晰、现代、面向协作的 API 管理体验</Title>
+            <Paragraph>
+              YApi Next 将接口设计、调试、测试、导入导出和团队协作统一在一个工作流中，
+              让研发、测试、产品都可以在同一语义下高效协同。
+            </Paragraph>
+            <Space size={12} wrap>
               <Link to="/login">
-                <Button type="primary" className="btn-home btn-login">
-                  登录 / 注册
+                <Button size="large" type="primary">
+                  开始使用
                 </Button>
               </Link>
-              <Button className="btn-home btn-home-normal">
-                <a target="_blank" rel="noopener noreferrer" href="https://hellosean1025.github.io/yapi">
-                  使用文档
-                </a>
-              </Button>
-            </div>
+              <a href="https://hellosean1025.github.io/yapi" target="_blank" rel="noopener noreferrer">
+                <Button size="large">查看文档</Button>
+              </a>
+              {ThirdLogin ? <ThirdLogin /> : null}
+            </Space>
           </div>
-        </div>
+          <div className="home-v2-hero-panel">
+            <Card bordered={false}>
+              <Title level={4}>核心能力</Title>
+              <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                <Text>1. 项目与分组权限管理</Text>
+                <Text>2. 接口预览 / 编辑 / 运行三态工作流</Text>
+                <Text>3. 测试集合、自动测试和报告查看</Text>
+                <Text>4. OpenAPI 导入导出与回归支持</Text>
+              </Space>
+            </Card>
+          </div>
+        </section>
+
+        <section className="home-v2-features">
+          <Row gutter={[16, 16]}>
+            {featureCards.map(item => (
+              <Col key={item.title} xs={24} sm={12} lg={6}>
+                <Card className="home-v2-feature-card">
+                  <div className="home-v2-feature-icon">{item.icon}</div>
+                  <Title level={4}>{item.title}</Title>
+                  <Paragraph>{item.desc}</Paragraph>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+        </section>
+
+        <section className="home-v2-values">
+          <Row gutter={[16, 16]}>
+            {valueHighlights.map(item => (
+              <Col key={item.title} xs={24} md={12}>
+                <Card className="home-v2-value-card">
+                  <div className="home-v2-value-head">
+                    <span className="home-v2-value-icon">{item.icon}</span>
+                    <Title level={4}>{item.title}</Title>
+                  </div>
+                  <Paragraph>{item.content}</Paragraph>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+        </section>
       </div>
     </div>
   );

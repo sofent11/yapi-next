@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   Alert,
   Button,
-  Card,
   Col,
   Input,
   InputNumber,
@@ -23,9 +22,10 @@ import {
   useTestPostCompatMutation,
   useTestPutCompatMutation
 } from '../../services/yapi-api';
+import { PageHeader, SectionCard } from '../../components/layout';
 import { getRequestErrorMessage } from '../../utils/request-error';
 
-const { Paragraph, Text } = Typography;
+const { Text } = Typography;
 
 type CompatWorkspaceProps = {
   title?: string;
@@ -184,16 +184,12 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
     testDeleteState.isLoading;
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <Card title={props.title}>
-        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          {props.description}
-        </Paragraph>
-      </Card>
+    <div className="legacy-workspace-page legacy-compat-workspace">
+      <PageHeader title={props.title || 'Compat Console'} subtitle={props.description} />
 
-      <Card title="参数设置">
+      <SectionCard title="参数设置" className="legacy-workspace-card">
         <Row gutter={12}>
-          <Col span={6}>
+          <Col xs={24} md={6}>
             <Text>Project ID</Text>
             <InputNumber
               style={{ width: '100%', marginTop: 8 }}
@@ -202,7 +198,7 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
               onChange={value => setProjectId(Number(value || 0))}
             />
           </Col>
-          <Col span={6}>
+          <Col xs={24} md={6}>
             <Text>Col ID</Text>
             <InputNumber
               style={{ width: '100%', marginTop: 8 }}
@@ -211,7 +207,7 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
               onChange={value => setColId(Number(value || 0))}
             />
           </Col>
-          <Col span={12}>
+          <Col xs={24} md={12}>
             <Text>Project Token</Text>
             <Input
               style={{ marginTop: 8 }}
@@ -221,11 +217,11 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
             />
           </Col>
         </Row>
-      </Card>
+      </SectionCard>
 
-      <Row gutter={16}>
-        <Col span={12}>
-          <Card title="Open 兼容接口">
+      <Row gutter={16} className="legacy-workspace-row">
+        <Col xs={24} xl={12}>
+          <SectionCard title="Open 兼容接口" className="legacy-workspace-card">
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
               <Alert
                 showIcon
@@ -238,20 +234,18 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
               </Button>
               <Input.TextArea rows={10} readOnly value={openResultText} placeholder="run_auto_test 响应" />
             </Space>
-          </Card>
+          </SectionCard>
         </Col>
-        <Col span={12}>
-          <Card title="Log 兼容接口">
+        <Col xs={24} xl={12}>
+          <SectionCard title="Log 兼容接口" className="legacy-workspace-card">
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
-              <Space>
-                <Button onClick={handleLoadLogList} loading={logListState.isFetching}>
-                  查询 /log/list
-                </Button>
-              </Space>
+              <Button onClick={handleLoadLogList} loading={logListState.isFetching}>
+                查询 /log/list
+              </Button>
               <Input.TextArea rows={6} readOnly value={logListText} placeholder="log/list 响应" />
 
               <Row gutter={8}>
-                <Col span={8}>
+                <Col xs={24} md={8}>
                   <Select<'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'>
                     style={{ width: '100%' }}
                     value={apiMethod}
@@ -265,7 +259,7 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
                     ]}
                   />
                 </Col>
-                <Col span={16}>
+                <Col xs={24} md={16}>
                   <Input value={apiPath} onChange={event => setApiPath(event.target.value)} />
                 </Col>
               </Row>
@@ -275,13 +269,13 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
               </Button>
               <Input.TextArea rows={6} readOnly value={logByUpdateText} placeholder="log/list_by_update 响应" />
             </Space>
-          </Card>
+          </SectionCard>
         </Col>
       </Row>
 
-      <Row gutter={16}>
-        <Col span={12}>
-          <Card title="Test 兼容接口">
+      <Row gutter={16} className="legacy-workspace-row">
+        <Col xs={24} xl={12}>
+          <SectionCard title="Test 兼容接口" className="legacy-workspace-card">
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
               <Space>
                 <Button onClick={handleTestPost} loading={testLoading}>
@@ -299,10 +293,10 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
               </Space>
               <Input.TextArea rows={10} readOnly value={testResultText} placeholder="test/* 响应" />
             </Space>
-          </Card>
+          </SectionCard>
         </Col>
-        <Col span={12}>
-          <Card title="Interface 兼容补口">
+        <Col xs={24} xl={12}>
+          <SectionCard title="Interface 兼容补口" className="legacy-workspace-card">
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
               <Select<'normal' | 'good' | 'merge'>
                 value={interUploadMode}
@@ -325,9 +319,9 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
               </Button>
               <Input.TextArea rows={8} readOnly value={interUploadText} placeholder="interUpload 响应" />
             </Space>
-          </Card>
+          </SectionCard>
         </Col>
       </Row>
-    </Space>
+    </div>
   );
 }

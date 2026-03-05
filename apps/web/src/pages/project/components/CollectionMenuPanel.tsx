@@ -1,4 +1,5 @@
 import { Button, Input, Space, Tag, Tooltip } from 'antd';
+import type { KeyboardEvent } from 'react';
 import {
   CopyOutlined,
   DeleteOutlined,
@@ -10,6 +11,7 @@ import {
   RightOutlined,
   SearchOutlined
 } from '@ant-design/icons';
+import { FilterBar } from '../../../components/layout';
 
 type CollectionCaseRow = {
   _id?: string | number;
@@ -55,26 +57,41 @@ type CollectionMenuPanelProps = {
 
 export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
   const keywordMode = props.colKeyword.trim().length > 0;
+  const triggerWithKeyboard = (
+    event: KeyboardEvent<HTMLSpanElement>,
+    handler: () => void
+  ) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      event.stopPropagation();
+      handler();
+    }
+  };
   return (
     <div className="legacy-interface-menu">
       <div className="legacy-interface-menu-actions">
-        <div className="legacy-interface-filter">
-          <Input
-            value={props.colKeyword}
-            onChange={event => props.onColKeywordChange(event.target.value)}
-            placeholder="搜索测试集合"
-            prefix={<SearchOutlined />}
-            size="small"
-            className="legacy-interface-filter-input"
-          />
-          {props.canEdit ? (
-            <Space className="legacy-interface-filter-actions" size={8}>
-              <Button size="small" type="primary" icon={<PlusOutlined />} onClick={props.onOpenAddCol}>
-                添加集合
-              </Button>
-            </Space>
-          ) : null}
-        </div>
+        <FilterBar
+          className="legacy-interface-filter"
+          left={
+            <Input
+              value={props.colKeyword}
+              onChange={event => props.onColKeywordChange(event.target.value)}
+              placeholder="搜索测试集合"
+              prefix={<SearchOutlined />}
+              allowClear
+              className="legacy-interface-filter-input"
+            />
+          }
+          right={
+            props.canEdit ? (
+              <Space className="legacy-interface-filter-actions" size={8}>
+                <Button type="primary" icon={<PlusOutlined />} onClick={props.onOpenAddCol}>
+                  添加集合
+                </Button>
+              </Space>
+            ) : null
+          }
+        />
       </div>
       <div className="legacy-interface-menu-list">
         {props.colDisplayRows.map(col => {
@@ -127,34 +144,66 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                 <Space size={4} className="legacy-interface-cat-actions">
                   {props.canEdit ? (
                     <>
-                      <DeleteOutlined
+                      <span
+                        className="legacy-interface-icon-btn"
+                        role="button"
+                        tabIndex={0}
                         onClick={event => {
                           event.preventDefault();
                           event.stopPropagation();
                           props.onDeleteCol(colId);
                         }}
-                      />
-                      <EditOutlined
+                        onKeyDown={event =>
+                          triggerWithKeyboard(event, () => props.onDeleteCol(colId))
+                        }
+                      >
+                        <DeleteOutlined />
+                      </span>
+                      <span
+                        className="legacy-interface-icon-btn"
+                        role="button"
+                        tabIndex={0}
                         onClick={event => {
                           event.preventDefault();
                           event.stopPropagation();
                           props.onEditCol(col);
                         }}
-                      />
-                      <ImportOutlined
+                        onKeyDown={event =>
+                          triggerWithKeyboard(event, () => props.onEditCol(col))
+                        }
+                      >
+                        <EditOutlined />
+                      </span>
+                      <span
+                        className="legacy-interface-icon-btn"
+                        role="button"
+                        tabIndex={0}
                         onClick={event => {
                           event.preventDefault();
                           event.stopPropagation();
                           props.onImportCol(colId);
                         }}
-                      />
-                      <CopyOutlined
+                        onKeyDown={event =>
+                          triggerWithKeyboard(event, () => props.onImportCol(colId))
+                        }
+                      >
+                        <ImportOutlined />
+                      </span>
+                      <span
+                        className="legacy-interface-icon-btn"
+                        role="button"
+                        tabIndex={0}
                         onClick={event => {
                           event.preventDefault();
                           event.stopPropagation();
                           props.onCopyCol(col);
                         }}
-                      />
+                        onKeyDown={event =>
+                          triggerWithKeyboard(event, () => props.onCopyCol(col))
+                        }
+                      >
+                        <CopyOutlined />
+                      </span>
                     </>
                   ) : null}
                   <Tag>{caseList.length}</Tag>
@@ -192,20 +241,36 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                     </Tooltip>
                     {props.canEdit ? (
                       <Space size={4} className="legacy-interface-item-actions">
-                        <DeleteOutlined
+                        <span
+                          className="legacy-interface-icon-btn"
+                          role="button"
+                          tabIndex={0}
                           onClick={event => {
                             event.preventDefault();
                             event.stopPropagation();
                             props.onDeleteCase(id);
                           }}
-                        />
-                        <CopyOutlined
+                          onKeyDown={event =>
+                            triggerWithKeyboard(event, () => props.onDeleteCase(id))
+                          }
+                        >
+                          <DeleteOutlined />
+                        </span>
+                        <span
+                          className="legacy-interface-icon-btn"
+                          role="button"
+                          tabIndex={0}
                           onClick={event => {
                             event.preventDefault();
                             event.stopPropagation();
                             props.onCopyCase(id);
                           }}
-                        />
+                          onKeyDown={event =>
+                            triggerWithKeyboard(event, () => props.onCopyCase(id))
+                          }
+                        >
+                          <CopyOutlined />
+                        </span>
                       </Space>
                     ) : null}
                   </button>

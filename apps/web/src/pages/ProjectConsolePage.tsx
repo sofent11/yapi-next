@@ -61,6 +61,7 @@ import { renderProjectIcon, resolveProjectColor } from '../utils/project-visual'
 import { LegacyGuideActions } from '../components/LegacyGuideActions';
 import { LegacyErrMsg } from '../components/LegacyErrMsg';
 import { LegacyTimeline } from '../components/LegacyTimeline';
+import { AppShell, PageHeader } from '../components/layout';
 import { useLegacyGuide } from '../context/LegacyGuideContext';
 import { safeApiRequest } from '../utils/safe-request';
 import './Group.scss';
@@ -785,9 +786,15 @@ export function ProjectConsolePage() {
   }
 
   return (
-    <div className="projectGround">
-      <Layout style={{ minHeight: 'calc(100vh - 100px)', marginLeft: '24px', marginTop: '24px' }}>
-        <Sider style={{ height: '100%', backgroundColor: '#fff' }} width={300}>
+    <AppShell className="legacy-project-console-page">
+      <PageHeader
+        title="项目控制台"
+        subtitle="统一管理分组、项目、成员与分组设置。"
+      />
+
+      <div className="projectGround">
+        <Layout className="legacy-project-console-layout">
+          <Sider className="legacy-project-console-sider" width={300}>
           <div className="m-group">
             {guideVisible && guide.step === 0 ? <div className="legacy-study-mask" /> : null}
             <div className="group-bar">
@@ -854,21 +861,22 @@ export function ProjectConsolePage() {
               />
             </div>
           </div>
-        </Sider>
+          </Sider>
 
-        <Layout>
-          <Content style={{ height: '100%', margin: '0 24px 0 16px', overflow: 'initial', backgroundColor: '#fff', borderTop: '1px solid transparent' }}>
-            <Tabs
-              type="card"
-              className="m-tab tabs-large"
-              style={{ height: '100%' }}
-              activeKey={activeTab}
-              onChange={key => setActiveTab(key as any)}
-              items={tabItems}
-            />
-          </Content>
+          <Layout>
+            <Content className="legacy-project-console-content">
+              <Tabs
+                type="card"
+                className="m-tab tabs-large"
+                style={{ height: '100%' }}
+                activeKey={activeTab}
+                onChange={key => setActiveTab(key as any)}
+                items={tabItems}
+              />
+            </Content>
+          </Layout>
         </Layout>
-      </Layout>
+      </div>
 
       <Modal
         title="添加分组"
@@ -975,6 +983,6 @@ export function ProjectConsolePage() {
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </AppShell>
   );
 }

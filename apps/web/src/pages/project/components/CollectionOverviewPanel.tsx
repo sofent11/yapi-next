@@ -1,5 +1,6 @@
 import { Alert, Button, Card, Select, Space, Table, Tag, Typography } from 'antd';
 import { CopyOutlined, DeleteOutlined, EditOutlined, ImportOutlined, PlusOutlined } from '@ant-design/icons';
+import { FilterBar } from '../../../components/layout';
 
 const { Text } = Typography;
 
@@ -67,63 +68,70 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
   return (
     <Card>
       <Space direction="vertical" style={{ width: '100%' }}>
-        <div className="legacy-interface-list-toolbar">
-          <Space direction="vertical" size={2}>
-            <Text strong>{props.currentCol?.name || `测试集合 ${props.selectedColId}`}</Text>
-            <Text type="secondary">{props.currentCol?.desc || '暂无描述'}</Text>
-          </Space>
-          {props.canEdit ? (
-            <Space size={8}>
-              <Button size="small" type="primary" icon={<PlusOutlined />} onClick={props.onOpenAddCase}>
-                添加用例
-              </Button>
-              <Button size="small" icon={<ImportOutlined />} onClick={props.onOpenImportInterface}>
-                导入接口
-              </Button>
-              <Button size="small" icon={<EditOutlined />} onClick={props.onOpenEditCollection}>
-                编辑集合
-              </Button>
-              <Button size="small" onClick={props.onOpenCommonSetting}>
-                通用规则配置
-              </Button>
-              <Button size="small" loading={props.autoTestRunning} onClick={props.onRunAutoTest}>
-                开始测试
-              </Button>
-              <Button size="small" onClick={props.onViewReport}>
-                查看报告
-              </Button>
-              <Button size="small" onClick={props.onDownloadReport}>
-                下载报告
-              </Button>
+        <FilterBar
+          className="legacy-interface-list-toolbar"
+          left={
+            <Space direction="vertical" size={2}>
+              <Text strong>{props.currentCol?.name || `测试集合 ${props.selectedColId}`}</Text>
+              <Text type="secondary">{props.currentCol?.desc || '暂无描述'}</Text>
             </Space>
-          ) : null}
-        </div>
+          }
+          right={
+            props.canEdit ? (
+              <Space size={8} wrap>
+                <Button type="primary" icon={<PlusOutlined />} onClick={props.onOpenAddCase}>
+                  添加用例
+                </Button>
+                <Button icon={<ImportOutlined />} onClick={props.onOpenImportInterface}>
+                  导入接口
+                </Button>
+                <Button icon={<EditOutlined />} onClick={props.onOpenEditCollection}>
+                  编辑集合
+                </Button>
+                <Button onClick={props.onOpenCommonSetting}>
+                  通用规则配置
+                </Button>
+                <Button loading={props.autoTestRunning} onClick={props.onRunAutoTest}>
+                  开始测试
+                </Button>
+                <Button onClick={props.onViewReport}>
+                  查看报告
+                </Button>
+                <Button onClick={props.onDownloadReport}>
+                  下载报告
+                </Button>
+              </Space>
+            ) : null
+          }
+        />
         {props.caseEnvProjects.length > 0 ? (
-          <div className="legacy-interface-list-toolbar" style={{ justifyContent: 'flex-start' }}>
-            <Space size={12} wrap>
-              <Text strong>测试环境：</Text>
-              {props.caseEnvProjects.map(item => {
-                const projectId = Number(item._id || 0);
-                const options = (item.env || []).map(envItem => ({
-                  label: String(envItem.name || ''),
-                  value: String(envItem.name || '')
-                }));
-                return (
-                  <Space key={`env-${projectId}`} size={6}>
-                    <span>{item.name || `项目${projectId}`}</span>
-                    <Select<string>
-                      size="small"
-                      style={{ width: 180 }}
-                      allowClear
-                      value={props.selectedRunEnvByProject[projectId] || undefined}
-                      options={options}
-                      onChange={value => props.onSetRunEnv(projectId, value || '')}
-                    />
-                  </Space>
-                );
-              })}
-            </Space>
-          </div>
+          <FilterBar
+            className="legacy-interface-list-toolbar"
+            left={
+              <Space size={12} wrap>
+                <Text strong>测试环境：</Text>
+                {props.caseEnvProjects.map(item => {
+                  const projectId = Number(item._id || 0);
+                  const options = (item.env || []).map(envItem => ({
+                    label: String(envItem.name || ''),
+                    value: String(envItem.name || '')
+                  }));
+                  return (
+                    <Space key={`env-${projectId}`} size={6}>
+                      <span>{item.name || `项目${projectId}`}</span>
+                      <Select<string>
+                        style={{ width: 180 }}
+                        allowClear
+                        value={props.selectedRunEnvByProject[projectId] || undefined}
+                        options={options}
+                        onChange={value => props.onSetRunEnv(projectId, value || '')}
+                      />
+                    </Space>
+                  );
+                })}
+              </Space>
+            }
+          />
         ) : null}
         {props.autoTestReport ? (
           <Alert
@@ -136,7 +144,7 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
                 <span>通过: {Number(props.autoTestReport.message?.successNum || 0)}</span>
                 <span>失败: {Number(props.autoTestReport.message?.failedNum || 0)}</span>
                 <span>耗时: {String(props.autoTestReport.runTime || '-')}</span>
-                <Button size="small" onClick={props.onOpenReportModal}>
+                <Button onClick={props.onOpenReportModal}>
                   查看详情
                 </Button>
               </Space>
@@ -198,7 +206,7 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
               render: (_, row) => {
                 const report = props.autoTestResultMap.get(String(row._id || ''));
                 return report ? (
-                  <Button size="small" onClick={() => props.onOpenReportDetail(report)}>
+                  <Button onClick={() => props.onOpenReportDetail(report)}>
                     查看
                   </Button>
                 ) : (
@@ -212,15 +220,11 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
               render: (_, row) =>
                 props.canEdit ? (
                   <Space size={4}>
-                    <Button
-                      size="small"
-                      loading={props.autoTestRunning}
-                      onClick={() => props.onRunCaseTest(String(row._id || ''))}
-                    >
+                    <Button loading={props.autoTestRunning} onClick={() => props.onRunCaseTest(String(row._id || ''))}>
                       测试
                     </Button>
-                    <Button size="small" icon={<CopyOutlined />} onClick={() => props.onCopyCase(String(row._id || ''))} />
-                    <Button size="small" danger icon={<DeleteOutlined />} onClick={() => props.onDeleteCase(String(row._id || ''))} />
+                    <Button icon={<CopyOutlined />} onClick={() => props.onCopyCase(String(row._id || ''))} />
+                    <Button danger icon={<DeleteOutlined />} onClick={() => props.onDeleteCase(String(row._id || ''))} />
                   </Space>
                 ) : (
                   '-'

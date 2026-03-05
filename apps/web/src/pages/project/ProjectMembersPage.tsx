@@ -1,9 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Avatar,
-  Badge,
   Button,
-  Card,
   Input,
   Modal,
   Popconfirm,
@@ -30,6 +28,7 @@ import {
   useLazyGetProjectMemberListQuery
 } from '../../services/yapi-api';
 import { LegacyErrMsg } from '../../components/LegacyErrMsg';
+import { PageHeader, SectionCard } from '../../components/layout';
 
 import './ProjectSetting.scss';
 
@@ -204,50 +203,23 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
   }
 
   return (
-    <div className="g-row">
-      <div className="m-panel">
-        <Modal
-          title="添加成员"
-          open={addMemberModalOpen}
-          onCancel={() => setAddMemberModalOpen(false)}
-          onOk={() => void handleAdd()}
-          okButtonProps={{ loading: addState.isLoading }}
-        >
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Select
-              mode="multiple"
-              allowClear
-              showSearch
-              value={selectedMemberUids}
-              onChange={value => {
-                const next = (value as Array<number | string>)
-                  .map(item => Number(item))
-                  .filter(item => Number.isFinite(item) && item > 0);
-                setSelectedMemberUids(next);
-              }}
-              placeholder="从分组成员中选择"
-              options={groupMemberOptions}
-              optionFilterProp="label"
-              style={{ width: '100%' }}
-            />
-            <Input
-              value={memberUid}
-              onChange={event => setMemberUid(event.target.value)}
-              placeholder="手动补充 UID（多个请用逗号分隔）"
-            />
-            <Select<MemberRole>
-              value={memberRole}
-              onChange={setMemberRole}
-              options={[
-                { value: 'owner', label: '组长' },
-                { value: 'dev', label: '开发者' },
-                { value: 'guest', label: '访客' }
-              ]}
-              style={{ width: '100%' }}
-            />
-          </Space>
-        </Modal>
+    <div className="legacy-page-shell legacy-members-page">
+      <PageHeader
+        title="成员管理"
+        subtitle={`项目 ${project?.name || props.projectId} · 当前成员 ${rows.length} 人${canManage ? '' : '（只读）'}`}
+        actions={
+          canManage ? (
+            <Space size={8}>
+              <Button type="primary" onClick={openAddMemberModal}>
+                添加成员
+              </Button>
+              <Button onClick={() => setImportModalOpen(true)}>批量导入成员</Button>
+            </Space>
+          ) : null
+        }
+      />
 
+      <SectionCard title="项目成员" className="legacy-members-main-card">
         <Table
           className="setting-project-member"
           rowKey={(item: { uid?: number }) => Number(item.uid || 0)}
@@ -264,19 +236,20 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
           }}
           columns={[
             {
-              title: `${project?.name || '项目'} 项目成员 (${rows.length}) 人`,
+              title: '成员',
               dataIndex: 'username',
               render: (value, row: Record<string, unknown>) => {
                 const uid = Number(row.uid || 0);
                 const canSwitchNotice = canManage || uid === currentUid;
+                const displayName = String(value || row.email || uid);
                 return (
-                  <div className="m-user" style={{ display: 'flex', alignItems: 'center' }}>
-                    <img src={`/api/user/avatar?uid=${uid}`} className="m-user-img" style={{ width: 32, height: 32, borderRadius: '50%', marginRight: 8 }} alt="avatar" />
-                    <p className="m-user-name" style={{ margin: 0, paddingRight: 16 }}>{String(value || row.email || uid)}</p>
+                  <div className="legacy-member-cell">
+                    <Avatar src={`/api/user/avatar?uid=${uid}`} size={32} />
+                    <span>{displayName}</span>
+                    {uid === currentUid ? <Tag color="blue">我</Tag> : null}
                     <Tooltip placement="top" title="消息通知">
                       <span>
                         <Switch
-                          size="small"
                           checkedChildren="开"
                           unCheckedChildren="关"
                           checked={Boolean(row.email_notice)}
@@ -301,139 +274,169 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
               }
             },
             {
-              title: canManage ? (
-                <div className="btn-container">
-                  <Button className="btn" type="primary" onClick={openAddMemberModal}>
-                    添加成员
-                  </Button>
-                  <Button className="btn" style={{ marginLeft: 8 }} onClick={() => setImportModalOpen(true)}>
-                    批量导入成员
-                  </Button>
-                </div>
-              ) : (
-                ''
-              ),
-              key: 'action',
-              className: 'member-opration',
+              title: '角色',
+              width: 200,
               render: (_, row: Record<string, unknown>) => {
                 const uid = Number(row.uid || 0);
                 const role = String(row.role || '');
                 if (canManage) {
                   return (
-                    <div>
-                      <Select<MemberRole>
-                        value={(role as MemberRole) || 'dev'}
-                        className="select"
-                        onChange={async newRole => {
-                          const response = await changeRole({
-                            id: props.projectId,
-                            member_uid: uid,
-                            role: newRole
-                          }).unwrap();
-                          if (response.errcode !== 0) {
-                            message.error(response.errmsg || '修改角色失败');
-                            return;
-                          }
-                          message.success('成员角色已更新');
-                          await listQuery.refetch();
-                        }}
-                        options={[
-                          { value: 'owner', label: '组长' },
-                          { value: 'dev', label: '开发者' },
-                          { value: 'guest', label: '访客' }
-                        ]}
-                        style={{ width: 100, marginRight: 8 }}
-                      />
-                      <Popconfirm
-                        placement="topRight"
-                        title="你确定要删除吗?"
-                        okText="确定"
-                        cancelText="取消"
-                        onConfirm={async () => {
-                          const response = await delMember({
-                            id: props.projectId,
-                            member_uid: uid
-                          }).unwrap();
-                          if (response.errcode !== 0) {
-                            message.error(response.errmsg || '删除成员失败');
-                            return;
-                          }
-                          message.success('成员已移除');
-                          await listQuery.refetch();
-                        }}
-                      >
-                        <Button danger size="small" className="btn-danger">
-                          删除
-                        </Button>
-                      </Popconfirm>
-                    </div>
+                    <Select<MemberRole>
+                      value={(role as MemberRole) || 'dev'}
+                      className="select"
+                      onChange={async newRole => {
+                        const response = await changeRole({
+                          id: props.projectId,
+                          member_uid: uid,
+                          role: newRole
+                        }).unwrap();
+                        if (response.errcode !== 0) {
+                          message.error(response.errmsg || '修改角色失败');
+                          return;
+                        }
+                        message.success('成员角色已更新');
+                        await listQuery.refetch();
+                      }}
+                      options={[
+                        { value: 'owner', label: '组长' },
+                        { value: 'dev', label: '开发者' },
+                        { value: 'guest', label: '访客' }
+                      ]}
+                      style={{ width: 148 }}
+                    />
                   );
-                } else {
-                  return normalizeRole(role);
                 }
+                return <Tag>{normalizeRole(role)}</Tag>;
+              }
+            },
+            {
+              title: '操作',
+              width: 96,
+              align: 'right',
+              render: (_, row: Record<string, unknown>) => {
+                const uid = Number(row.uid || 0);
+                if (!canManage) {
+                  return '-';
+                }
+                return (
+                  <Popconfirm
+                    placement="topRight"
+                    title="你确定要删除吗?"
+                    okText="确定"
+                    cancelText="取消"
+                    onConfirm={async () => {
+                      const response = await delMember({
+                        id: props.projectId,
+                        member_uid: uid
+                      }).unwrap();
+                      if (response.errcode !== 0) {
+                        message.error(response.errmsg || '删除成员失败');
+                        return;
+                      }
+                      message.success('成员已移除');
+                      await listQuery.refetch();
+                    }}
+                  >
+                    <Button danger className="btn-danger">
+                      删除
+                    </Button>
+                  </Popconfirm>
+                );
               }
             }
           ]}
         />
+      </SectionCard>
 
-        <Card
-          bordered={false}
-          title={`${groupQuery.data?.data?.group_name || '分组'} 分组成员 (${groupMembers.length}) 人`}
-          className="setting-group"
-        >
-          {groupMembers.length === 0 ? (
-            <LegacyErrMsg type="noMemberInGroup" />
-          ) : (
-            <div>
-              {groupMembers.map((item, index) => (
-                <div key={index} className="card-item">
-                  <img src={`/api/user/avatar?uid=${item.uid}`} className="item-img" alt="avatar" />
-                  <p className="item-name">
-                    {item.username}
-                    {Number(item.uid || 0) === currentUid ? (
-                      <Badge
-                        count="我"
-                        style={{
-                          backgroundColor: '#689bd0',
-                          fontSize: 13,
-                          marginLeft: 8,
-                          borderRadius: 4
-                        }}
-                      />
-                    ) : null}
-                  </p>
-                  <p className="item-role">{normalizeRole(item.role)}</p>
+      <SectionCard
+        title={`${groupQuery.data?.data?.group_name || '分组'} 成员池`}
+        extra={<Text type="secondary">{groupMembers.length} 人</Text>}
+        className="legacy-group-members-card"
+      >
+        {groupMembers.length === 0 ? (
+          <LegacyErrMsg type="noMemberInGroup" />
+        ) : (
+          <div className="legacy-group-members-grid">
+            {groupMembers.map(item => (
+              <div key={Number(item.uid || 0)} className="legacy-group-member-item">
+                <Avatar size={40} src={`/api/user/avatar?uid=${item.uid}`} />
+                <div className="legacy-group-member-name">
+                  {String(item.username || item.uid || '-')}
+                  {Number(item.uid || 0) === currentUid ? <Tag color="blue">我</Tag> : null}
                 </div>
-              ))}
-            </div>
-          )}
-        </Card>
+                <div className="legacy-group-member-role">{normalizeRole(item.role)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
 
-        <Modal
-          title="批量导入成员"
-          open={importModalOpen}
-          onCancel={() => {
-            setImportModalOpen(false);
-            setSelectedImportProjectId(null);
-          }}
-          onOk={() => void handleBatchImportMembers()}
-          okText="导入"
-        >
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Text type="secondary">从同分组项目导入成员到当前项目。</Text>
-            <Select<number>
-              showSearch
-              placeholder="请选择项目名称"
-              value={selectedImportProjectId ?? undefined}
-              loading={groupProjectListQuery.isFetching}
-              onChange={value => setSelectedImportProjectId(value)}
-              options={importProjectOptions}
-              style={{ width: '100%' }}
-              optionFilterProp="label"
-            />
-          </Space>
-        </Modal>
-      </div>
+      <Modal
+        title="添加成员"
+        open={addMemberModalOpen}
+        onCancel={() => setAddMemberModalOpen(false)}
+        onOk={() => void handleAdd()}
+        okButtonProps={{ loading: addState.isLoading }}
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Select
+            mode="multiple"
+            allowClear
+            showSearch
+            value={selectedMemberUids}
+            onChange={value => {
+              const next = (value as Array<number | string>)
+                .map(item => Number(item))
+                .filter(item => Number.isFinite(item) && item > 0);
+              setSelectedMemberUids(next);
+            }}
+            placeholder="从分组成员中选择"
+            options={groupMemberOptions}
+            optionFilterProp="label"
+            style={{ width: '100%' }}
+          />
+          <Input
+            value={memberUid}
+            onChange={event => setMemberUid(event.target.value)}
+            placeholder="手动补充 UID（多个请用逗号分隔）"
+          />
+          <Select<MemberRole>
+            value={memberRole}
+            onChange={setMemberRole}
+            options={[
+              { value: 'owner', label: '组长' },
+              { value: 'dev', label: '开发者' },
+              { value: 'guest', label: '访客' }
+            ]}
+            style={{ width: '100%' }}
+          />
+        </Space>
+      </Modal>
+
+      <Modal
+        title="批量导入成员"
+        open={importModalOpen}
+        onCancel={() => {
+          setImportModalOpen(false);
+          setSelectedImportProjectId(null);
+        }}
+        onOk={() => void handleBatchImportMembers()}
+        okText="导入"
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Text type="secondary">从同分组项目导入成员到当前项目。</Text>
+          <Select<number>
+            showSearch
+            placeholder="请选择项目名称"
+            value={selectedImportProjectId ?? undefined}
+            loading={groupProjectListQuery.isFetching}
+            onChange={value => setSelectedImportProjectId(value)}
+            options={importProjectOptions}
+            style={{ width: '100%' }}
+            optionFilterProp="label"
+          />
+        </Space>
+      </Modal>
     </div>
   );
 }

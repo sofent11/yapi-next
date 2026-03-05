@@ -11,7 +11,6 @@ import type {
 import {
   Alert,
   Button,
-  Card,
   Col,
   Input,
   InputNumber,
@@ -32,9 +31,10 @@ import {
   useImportSpecMutation,
   useListImportTasksQuery
 } from '../../services/yapi-api';
+import { PageHeader, SectionCard } from '../../components/layout';
 import { safeApiRequest } from '../../utils/safe-request';
 
-const { Title, Paragraph, Text } = Typography;
+const { Text } = Typography;
 
 type SpecWorkspaceMode = 'console' | 'workbench';
 
@@ -190,24 +190,19 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
   }
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <Card title={isWorkbench ? undefined : undefined}>
-        {isWorkbench ? (
-          <>
-            <Title level={3} style={{ marginTop: 0 }}>
-              YApi Next Workbench
-            </Title>
-            <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              React 18 + Vite + RTK Query + AntD 5。当前页面已接入规范导入任务、导出和接口树浏览。
-            </Paragraph>
-          </>
-        ) : (
-          <Paragraph style={{ marginBottom: 8 }}>
-            Spec Console：OpenAPI/Swagger 导入任务化 + 导出 + 分类统计视图。
-          </Paragraph>
-        )}
+    <div className={`legacy-workspace-page legacy-spec-workspace ${isWorkbench ? 'is-workbench' : 'is-console'}`}>
+      <PageHeader
+        title={isWorkbench ? '规范迁移工作台' : 'Spec Console'}
+        subtitle={
+          isWorkbench
+            ? '覆盖 OpenAPI/Swagger 导入任务化、规范导出与接口分类浏览。'
+            : 'OpenAPI/Swagger 导入任务化 + 导出 + 分类统计视图。'
+        }
+      />
+
+      <SectionCard title="连接参数" className="legacy-workspace-card">
         <Row gutter={12}>
-          <Col span={8}>
+          <Col xs={24} md={8}>
             <Text>Project ID</Text>
             <InputNumber
               style={{ width: '100%', marginTop: 8 }}
@@ -216,7 +211,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
               onChange={value => setProjectId(typeof value === 'number' ? value : 0)}
             />
           </Col>
-          <Col span={16}>
+          <Col xs={24} md={16}>
             <Text>{isWorkbench ? 'Token (可选，私有项目必填)' : 'Token (私有项目必填)'}</Text>
             <Input
               style={{ marginTop: 8 }}
@@ -226,14 +221,14 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
             />
           </Col>
         </Row>
-      </Card>
+      </SectionCard>
 
-      <Row gutter={16}>
-        <Col span={12}>
-          <Card title={isWorkbench ? 'OpenAPI 导入任务' : '规范导入'}>
+      <Row gutter={16} className="legacy-workspace-row">
+        <Col xs={24} xl={12}>
+          <SectionCard title={isWorkbench ? 'OpenAPI 导入任务' : '规范导入'} className="legacy-workspace-card">
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
               <Row gutter={8}>
-                <Col span={8}>
+                <Col xs={24} md={8}>
                   <Text>{isWorkbench ? '来源' : 'Source'}</Text>
                   <Select<SpecSource>
                     style={{ width: '100%', marginTop: 8 }}
@@ -245,7 +240,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                     ]}
                   />
                 </Col>
-                <Col span={8}>
+                <Col xs={24} md={8}>
                   <Text>{isWorkbench ? '格式' : 'Format'}</Text>
                   <Select<'auto' | 'swagger2' | 'openapi3'>
                     style={{ width: '100%', marginTop: 8 }}
@@ -258,7 +253,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                     ]}
                   />
                 </Col>
-                <Col span={8}>
+                <Col xs={24} md={8}>
                   <Text>{isWorkbench ? '同步模式' : 'Sync Mode'}</Text>
                   <Select<SyncMode>
                     style={{ width: '100%', marginTop: 8 }}
@@ -318,14 +313,14 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 />
               ) : null}
             </Space>
-          </Card>
+          </SectionCard>
         </Col>
 
-        <Col span={12}>
-          <Card title="规范导出">
+        <Col xs={24} xl={12}>
+          <SectionCard title="规范导出" className="legacy-workspace-card">
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
               <Row gutter={8}>
-                <Col span={12}>
+                <Col xs={24} md={12}>
                   <Text>{isWorkbench ? '导出格式' : 'Format'}</Text>
                   <Select<SpecExportFormat>
                     style={{ width: '100%', marginTop: 8 }}
@@ -337,7 +332,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                     ]}
                   />
                 </Col>
-                <Col span={12}>
+                <Col xs={24} md={12}>
                   <Text>{isWorkbench ? '可见性' : 'Status'}</Text>
                   <Select<'all' | 'open'>
                     style={{ width: '100%', marginTop: 8 }}
@@ -377,12 +372,12 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 placeholder={isWorkbench ? '导出结果将展示在这里' : '导出结果'}
               />
             </Space>
-          </Card>
+          </SectionCard>
         </Col>
       </Row>
 
       {isWorkbench ? (
-        <Card title="导入任务历史">
+        <SectionCard title="导入任务历史" className="legacy-workspace-card">
           <Table
             size="small"
             pagination={false}
@@ -422,13 +417,13 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
               }
             ]}
           />
-        </Card>
+        </SectionCard>
       ) : null}
 
       {isWorkbench ? (
-        <Row gutter={16}>
-          <Col span={12}>
-            <Card title="分类树">
+        <Row gutter={16} className="legacy-workspace-row">
+          <Col xs={24} xl={12}>
+            <SectionCard title="分类树" className="legacy-workspace-card">
               <Table
                 size="small"
                 pagination={false}
@@ -450,10 +445,10 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                   }
                 ]}
               />
-            </Card>
+            </SectionCard>
           </Col>
-          <Col span={12}>
-            <Card title={`分类接口列表 ${selectedCatid > 0 ? `(catid=${selectedCatid})` : ''}`}>
+          <Col xs={24} xl={12}>
+            <SectionCard title={`分类接口列表 ${selectedCatid > 0 ? `(catid=${selectedCatid})` : ''}`} className="legacy-workspace-card">
               <Table
                 size="small"
                 pagination={false}
@@ -466,13 +461,13 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                   { title: 'Status', dataIndex: 'status', key: 'status', width: 100 }
                 ]}
               />
-            </Card>
+            </SectionCard>
           </Col>
         </Row>
       ) : (
-        <Row gutter={16}>
-          <Col span={12}>
-            <Card title="导入任务历史">
+        <Row gutter={16} className="legacy-workspace-row">
+          <Col xs={24} xl={12}>
+            <SectionCard title="导入任务历史" className="legacy-workspace-card">
               <Table
                 size="small"
                 rowKey="task_id"
@@ -508,10 +503,10 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                   }
                 ]}
               />
-            </Card>
+            </SectionCard>
           </Col>
-          <Col span={12}>
-            <Card title="接口分类统计">
+          <Col xs={24} xl={12}>
+            <SectionCard title="接口分类统计" className="legacy-workspace-card">
               <Table
                 size="small"
                 rowKey="key"
@@ -524,10 +519,10 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                   { title: '接口数', dataIndex: 'interface_count', width: 100 }
                 ]}
               />
-            </Card>
+            </SectionCard>
           </Col>
         </Row>
       )}
-    </Space>
+    </div>
   );
 }

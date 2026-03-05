@@ -5,8 +5,10 @@ import { Provider } from 'react-redux';
 import { App as AntdApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { App } from './App';
+import { antdTheme } from './styles/antd-theme';
 import { bootstrapWebPlugins, webPlugins } from './plugins';
 import { registerDynamicReducers, store } from './store';
+import './styles/tokens.css';
 
 bootstrapWebPlugins();
 registerDynamicReducers(webPlugins.getDynamicReducers());
@@ -15,12 +17,7 @@ createRoot(document.getElementById('root') as HTMLElement).render(
   <Provider store={store}>
     <ConfigProvider
       locale={zhCN}
-      theme={{
-        token: {
-          colorPrimary: '#2395f1',
-          borderRadius: 4
-        }
-      }}
+      theme={antdTheme}
     >
       <AntdApp>
         <BrowserRouter

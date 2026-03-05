@@ -1,21 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  Avatar,
   Button,
-  Card,
   Descriptions,
-  Empty,
   Input,
   Popconfirm,
   Select,
   Space,
   Table,
-  Tag,
   Typography,
   message,
-  Row,
-  Col,
   Tooltip
 } from 'antd';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -29,6 +23,7 @@ import {
   useUpdateUserMutation,
   useUploadAvatarMutation
 } from '../services/yapi-api';
+import { FilterBar, PageHeader, SectionCard } from '../components/layout';
 
 import './User.scss';
 
@@ -79,7 +74,7 @@ export function UserPage() {
   const [updateUser, updateUserState] = useUpdateUserMutation();
   const [deleteUser, deleteUserState] = useDeleteUserMutation();
   const [changePassword, changePasswordState] = useChangePasswordMutation();
-  const [uploadAvatar, uploadAvatarState] = useUploadAvatarMutation();
+  const [uploadAvatar] = useUploadAvatarMutation();
 
   useEffect(() => {
     if (location.pathname === '/user' || location.pathname === '/user/') {
@@ -222,260 +217,273 @@ export function UserPage() {
   }
 
   if (!inProfile) {
+    const totalUsers = Number(userListQuery.data?.data?.count || tableRows.length || 0);
     return (
-      <div>
-        <div className="g-doc">
-          <Row className="user-box">
-            <section className="user-table">
-              <div className="user-search-wrapper">
-                <h2 style={{ marginBottom: '10px' }}>用户总数：{userListQuery.data?.data?.count || 0}位</h2>
-                <Input.Search
-                  className="legacy-search-input"
-                  value={keyword}
-                  onChange={event => setKeyword(event.target.value)}
-                  onSearch={() => void handleSearch()}
-                  placeholder="请输入用户名"
-                />
-              </div>
+      <div className="legacy-page-shell legacy-user-page">
+        <PageHeader
+          title="用户管理"
+          subtitle={isAdmin ? `当前共有 ${totalUsers} 位用户` : '当前账号权限受限，仅可查看个人中心。'}
+          actions={
+            currentUid > 0 ? (
+              <Button onClick={() => navigate(`/user/profile/${currentUid}`)}>个人中心</Button>
+            ) : null
+          }
+        />
 
-              {!isAdmin ? (
-                <Alert
-                  type="warning"
-                  showIcon
-                  message="仅管理员可查看完整用户列表"
-                  description={<Link to={`/user/profile/${currentUid}`}>进入个人中心</Link>}
-                  style={{ marginBottom: 16 }}
-                />
-              ) : null}
+        <SectionCard title={`用户列表 (${totalUsers})`} className="legacy-user-list-card">
+          <FilterBar
+            className="legacy-user-search-bar"
+            left={
+              <Input.Search
+                className="legacy-user-search-input"
+                value={keyword}
+                onChange={event => setKeyword(event.target.value)}
+                onSearch={() => void handleSearch()}
+                placeholder="请输入用户名或邮箱"
+                enterButton
+              />
+            }
+            right={
+              isSearching ? (
+                <Button
+                  onClick={() => {
+                    setKeyword('');
+                    setIsSearching(false);
+                    setSearchRows([]);
+                  }}
+                >
+                  清空搜索
+                </Button>
+              ) : null
+            }
+          />
 
-              <Table
-                bordered={true}
-                rowKey="key"
-                loading={userListQuery.isLoading || deleteUserState.isLoading}
-                dataSource={tableRows}
-                pagination={
-                  isSearching
-                    ? { total: tableRows.length, pageSize: limit, current: 1 }
-                    : {
-                      total: userListQuery.data?.data?.count || 0,
-                      pageSize: limit,
-                      current: page,
-                      onChange: (next, nextSize) => {
-                        setPage(next);
-                        if (nextSize && nextSize !== limit) {
-                          setLimit(nextSize);
-                        }
+          {!isAdmin ? (
+            <Alert
+              type="warning"
+              showIcon
+              message="仅管理员可查看完整用户列表"
+              description={<Link to={`/user/profile/${currentUid}`}>进入个人中心</Link>}
+              style={{ marginBottom: 16 }}
+            />
+          ) : null}
+
+          <Table
+            bordered
+            rowKey="key"
+            loading={userListQuery.isLoading || deleteUserState.isLoading || searchUsersState.isFetching}
+            dataSource={tableRows}
+            pagination={
+              isSearching
+                ? { total: tableRows.length, pageSize: limit, current: 1 }
+                : {
+                    total: userListQuery.data?.data?.count || 0,
+                    pageSize: limit,
+                    current: page,
+                    onChange: (next, nextSize) => {
+                      setPage(next);
+                      if (nextSize && nextSize !== limit) {
+                        setLimit(nextSize);
                       }
                     }
-                }
-                columns={[
-                  {
-                    title: '用户名',
-                    dataIndex: 'username',
-                    width: 180,
-                    render: (value, row) => <Link to={`/user/profile/${Number(row._id || row.uid || 0)}`}>{String(value)}</Link>
-                  },
-                  { title: 'Email', dataIndex: 'email' },
-                  {
-                    title: '用户角色',
-                    dataIndex: 'role',
-                    width: 150
-                  },
-                  {
-                    title: '更新日期',
-                    dataIndex: 'up_time',
-                    width: 160,
-                    render: value => (value ? new Date(Number(value) * 1000).toLocaleString() : '-')
-                  },
-                  ...(isAdmin
-                    ? [
-                      {
-                        title: '功能',
-                        width: '90px',
-                        render: (_: unknown, row: Record<string, unknown>) => (
-                          <Popconfirm
-                            title="确认删除此用户?"
-                            okText="确定"
-                            cancelText="取消"
-                            onConfirm={() => void handleDelete(Number(row._id || row.uid || 0))}
-                          >
-                            <a style={{ display: 'block', textAlign: 'center' }}>删除</a>
-                          </Popconfirm>
-                        )
-                      }
-                    ]
-                    : [])
-                ]}
-              />
-            </section>
-          </Row>
-        </div>
+                  }
+            }
+            columns={[
+              {
+                title: '用户名',
+                dataIndex: 'username',
+                width: 200,
+                render: (value, row) => (
+                  <Link to={`/user/profile/${Number(row._id || row.uid || 0)}`}>{String(value || '-')}</Link>
+                )
+              },
+              { title: 'Email', dataIndex: 'email' },
+              {
+                title: '角色',
+                dataIndex: 'role',
+                width: 120
+              },
+              {
+                title: '更新时间',
+                dataIndex: 'up_time',
+                width: 180,
+                render: value => (value ? new Date(Number(value) * 1000).toLocaleString() : '-')
+              },
+              ...(isAdmin
+                ? [
+                    {
+                      title: '操作',
+                      width: 90,
+                      align: 'center' as const,
+                      render: (_: unknown, row: Record<string, unknown>) => (
+                        <Popconfirm
+                          title="确认删除此用户?"
+                          okText="确定"
+                          cancelText="取消"
+                          onConfirm={() => void handleDelete(Number(row._id || row.uid || 0))}
+                        >
+                          <Button type="link" danger size="small">
+                            删除
+                          </Button>
+                        </Popconfirm>
+                      )
+                    }
+                  ]
+                : [])
+            ]}
+          />
+        </SectionCard>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="g-doc">
-        <Row className="user-box">
-          <div className="user-profile">
-            <div className="user-item-body">
+    <div className="legacy-page-shell legacy-user-page">
+      <PageHeader
+        title={targetUid === currentUid ? '个人设置' : `${profileData?.username || targetUid} 资料设置`}
+        subtitle={findUserState.isFetching ? '正在加载用户信息...' : '可在此更新基础资料、头像和密码。'}
+        actions={<Button onClick={() => navigate('/user/list')}>返回用户列表</Button>}
+      />
+
+      <SectionCard className="legacy-user-profile-card">
+        <div className="legacy-user-profile-grid">
+          <div className="legacy-user-avatar-panel">
+            <div className="legacy-user-avatar-wrap">
               {targetUid === currentUid ? (
-                <h3>个人设置</h3>
+                <Tooltip placement="right" title={<div>点击头像更换，仅支持 jpg/png 且大小不超过 200kb。</div>}>
+                  <label htmlFor="avatar-upload-input" className="legacy-avatar-uploader">
+                    <img className="legacy-avatar-image" src={`/api/user/avatar?uid=${targetUid}`} alt="avatar" />
+                  </label>
+                </Tooltip>
               ) : (
-                <h3>{(profileData?.username || targetUid)} 资料设置</h3>
+                <div className="legacy-avatar-static">
+                  <img className="legacy-avatar-image" src={`/api/user/avatar?uid=${targetUid}`} alt="avatar" />
+                </div>
               )}
-
-              <Button className="bacToPer" onClick={() => navigate('/user/list')}>返回用户列表</Button>
-
-              <Row className="avatarCon" justify="start">
-                <Col span={24}>
-                  {targetUid === currentUid ? (
-                    <div className="avatar-box">
-                      <Tooltip placement="right" title={<div>点击头像更换 (只支持jpg、png格式且大小不超过200kb的图片)</div>}>
-                        <div style={{ width: 100, height: 100, position: 'relative' }}>
-                          <label htmlFor="avatar-upload-input" className="avatar-uploader" style={{ display: 'block', cursor: 'pointer', height: 100 }}>
-                            <img className="avatar" src={`/api/user/avatar?uid=${targetUid}`} alt="avatar" />
-                          </label>
-                          <input
-                            id="avatar-upload-input"
-                            type="file"
-                            accept="image/png,image/jpeg"
-                            style={{ display: 'none' }}
-                            onChange={event => {
-                              const file = event.target.files?.[0];
-                              void handleAvatarUpload(file);
-                              event.currentTarget.value = '';
-                            }}
-                          />
-                        </div>
-                      </Tooltip>
-                      <span className="avatarChange"></span>
-                    </div>
-                  ) : (
-                    <div className="avatarImg">
-                      <img src={`/api/user/avatar?uid=${targetUid}`} alt="avatar" />
-                    </div>
-                  )}
-                </Col>
-              </Row>
-
-              <Row className="user-item" justify="start">
-                <div className="maoboli" />
-                <Col span={4}>用户id</Col>
-                <Col span={12}>{targetUid}</Col>
-              </Row>
-
-              <Row className="user-item" justify="start">
-                <div className="maoboli" />
-                <Col span={4}>用户名</Col>
-                <Col span={12}>
-                  <Space>
-                    <Input value={usernameInput} onChange={e => setUsernameInput(e.target.value)} disabled={!canEditBasic} placeholder="用户名" />
-                    {canEditBasic ? (
-                      <Button type="primary" onClick={() => void handleSaveProfile()} loading={updateUserState.isLoading}>
-                        更新
-                      </Button>
-                    ) : null}
-                  </Space>
-                </Col>
-              </Row>
-
-              <Row className="user-item" justify="start">
-                <div className="maoboli" />
-                <Col span={4}>Email</Col>
-                <Col span={12}>
-                  <Space>
-                    <Input value={emailInput} onChange={e => setEmailInput(e.target.value)} disabled={!canEditBasic} placeholder="Email" />
-                    {canEditBasic ? (
-                      <Button type="primary" onClick={() => void handleSaveProfile()} loading={updateUserState.isLoading}>
-                        更新
-                      </Button>
-                    ) : null}
-                  </Space>
-                </Col>
-              </Row>
-
-              <Row className="user-item" justify="start" style={{ display: isAdmin ? '' : 'none' }}>
-                <div className="maoboli" />
-                <Col span={4}>角色</Col>
-                <Col span={12}>
-                  <Space>
-                    <Select<'admin' | 'member'>
-                      value={roleInput}
-                      onChange={setRoleInput}
-                      disabled={!canEditRole}
-                      options={[
-                        { value: 'admin', label: '管理员' },
-                        { value: 'member', label: '会员' }
-                      ]}
-                      style={{ width: 150 }}
-                    />
-                    {canEditRole ? (
-                      <Button type="primary" onClick={() => void handleSaveProfile()} loading={updateUserState.isLoading}>
-                        更新
-                      </Button>
-                    ) : null}
-                  </Space>
-                </Col>
-              </Row>
-
-              <Row className="user-item" justify="start" style={{ display: isAdmin ? '' : 'none' }}>
-                <div className="maoboli" />
-                <Col span={4}>登陆方式</Col>
-                <Col span={12}>{profileData?.type === 'site' ? '站点登陆' : '第三方登陆'}</Col>
-              </Row>
-
-              <Row className="user-item" justify="start">
-                <div className="maoboli" />
-                <Col span={4}>创建账号时间</Col>
-                <Col span={12}>{profileData?.add_time ? new Date(Number(profileData.add_time) * 1000).toLocaleString() : '-'}</Col>
-              </Row>
-
-              <Row className="user-item" justify="start">
-                <div className="maoboli" />
-                <Col span={4}>更新账号时间</Col>
-                <Col span={12}>{profileData?.up_time ? new Date(Number(profileData.up_time) * 1000).toLocaleString() : '-'}</Col>
-              </Row>
-
-              {(profileData?.type || 'site') === 'site' ? (
-                <Row className="user-item" justify="start">
-                  <div className="maoboli" />
-                  <Col span={4}>密码</Col>
-                  <Col span={12}>
-                    <div>
-                      {isAdmin && profileData?.role !== 'admin' ? null : (
-                        <Input.Password
-                          id="old_password"
-                          value={oldPassword}
-                          onChange={event => setOldPassword(event.target.value)}
-                          placeholder="旧的密码"
-                        />
-                      )}
-                      <Input.Password
-                        id="password"
-                        value={newPassword}
-                        onChange={event => setNewPassword(event.target.value)}
-                        placeholder="新的密码"
-                      />
-                      <Input.Password
-                        id="verify_pass"
-                        value={confirmPassword}
-                        onChange={event => setConfirmPassword(event.target.value)}
-                        placeholder="确认密码"
-                      />
-                      <Button style={{ marginTop: 20 }} type="primary" onClick={() => void handleChangePassword()} loading={changePasswordState.isLoading}>
-                        确定修改
-                      </Button>
-                    </div>
-                  </Col>
-                </Row>
-              ) : null}
-
+              <input
+                id="avatar-upload-input"
+                type="file"
+                accept="image/png,image/jpeg"
+                style={{ display: 'none' }}
+                onChange={event => {
+                  const file = event.target.files?.[0];
+                  void handleAvatarUpload(file);
+                  event.currentTarget.value = '';
+                }}
+              />
+              {targetUid === currentUid ? <Text type="secondary">点击头像更换</Text> : null}
             </div>
+
+            <Descriptions column={1} size="small" bordered className="legacy-user-meta">
+              <Descriptions.Item label="用户ID">{targetUid || '-'}</Descriptions.Item>
+              <Descriptions.Item label="登陆方式">
+                {profileData?.type === 'site' ? '站点登陆' : '第三方登陆'}
+              </Descriptions.Item>
+              <Descriptions.Item label="创建时间">
+                {profileData?.add_time ? new Date(Number(profileData.add_time) * 1000).toLocaleString() : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="更新时间">
+                {profileData?.up_time ? new Date(Number(profileData.up_time) * 1000).toLocaleString() : '-'}
+              </Descriptions.Item>
+            </Descriptions>
           </div>
-        </Row>
-      </div>
+
+          <div className="legacy-user-edit-panel">
+            <div className="legacy-user-edit-row">
+              <div className="legacy-user-edit-label">用户名</div>
+              <Space.Compact className="legacy-user-edit-control">
+                <Input
+                  value={usernameInput}
+                  onChange={e => setUsernameInput(e.target.value)}
+                  disabled={!canEditBasic}
+                  placeholder="用户名"
+                />
+                {canEditBasic ? (
+                  <Button type="primary" onClick={() => void handleSaveProfile()} loading={updateUserState.isLoading}>
+                    更新
+                  </Button>
+                ) : null}
+              </Space.Compact>
+            </div>
+
+            <div className="legacy-user-edit-row">
+              <div className="legacy-user-edit-label">Email</div>
+              <Space.Compact className="legacy-user-edit-control">
+                <Input
+                  value={emailInput}
+                  onChange={e => setEmailInput(e.target.value)}
+                  disabled={!canEditBasic}
+                  placeholder="Email"
+                />
+                {canEditBasic ? (
+                  <Button type="primary" onClick={() => void handleSaveProfile()} loading={updateUserState.isLoading}>
+                    更新
+                  </Button>
+                ) : null}
+              </Space.Compact>
+            </div>
+
+            {isAdmin ? (
+              <div className="legacy-user-edit-row">
+                <div className="legacy-user-edit-label">角色</div>
+                <Space.Compact className="legacy-user-edit-control">
+                  <Select<'admin' | 'member'>
+                    value={roleInput}
+                    onChange={setRoleInput}
+                    disabled={!canEditRole}
+                    options={[
+                      { value: 'admin', label: '管理员' },
+                      { value: 'member', label: '会员' }
+                    ]}
+                    style={{ width: 180 }}
+                  />
+                  {canEditRole ? (
+                    <Button type="primary" onClick={() => void handleSaveProfile()} loading={updateUserState.isLoading}>
+                      更新
+                    </Button>
+                  ) : null}
+                </Space.Compact>
+              </div>
+            ) : null}
+
+            {canChangePassword ? (
+              <div className="legacy-user-password-panel">
+                <Text strong>修改密码</Text>
+                {isAdmin && profileData?.role !== 'admin' ? null : (
+                  <Input.Password
+                    id="old_password"
+                    value={oldPassword}
+                    onChange={event => setOldPassword(event.target.value)}
+                    placeholder="旧密码"
+                  />
+                )}
+                <Input.Password
+                  id="password"
+                  value={newPassword}
+                  onChange={event => setNewPassword(event.target.value)}
+                  placeholder="新密码"
+                />
+                <Input.Password
+                  id="verify_pass"
+                  value={confirmPassword}
+                  onChange={event => setConfirmPassword(event.target.value)}
+                  placeholder="确认密码"
+                />
+                <Button
+                  type="primary"
+                  onClick={() => void handleChangePassword()}
+                  loading={changePasswordState.isLoading}
+                  disabled={!canChangePassword}
+                >
+                  确定修改
+                </Button>
+              </div>
+            ) : (
+              <Alert type="info" showIcon message="当前账号为第三方登陆，不支持站内密码修改。" />
+            )}
+          </div>
+        </div>
+      </SectionCard>
     </div>
   );
 }

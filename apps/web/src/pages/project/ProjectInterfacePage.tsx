@@ -1,37 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  AutoComplete,
-  Button,
-  Card,
-  Descriptions,
-  Form,
-  Input,
-  Layout,
-  Modal,
-  Radio,
-  Select,
-  Space,
-  Switch,
-  Table,
-  Tabs,
-  Tag,
-  Tooltip,
-  Typography,
-  message
-} from 'antd';
-import {
-  DeleteOutlined,
-  EditOutlined,
-  PlusOutlined,
-  SearchOutlined,
-  CopyOutlined,
-  EyeOutlined,
-  DownOutlined,
-  RightOutlined,
-  FolderOpenOutlined,
-  ImportOutlined
-} from '@ant-design/icons';
+import { Card, Form, Modal, Tabs, message } from 'antd';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import json5 from 'json5';
 import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
@@ -75,14 +43,16 @@ import { legacyNameValidator } from '../../utils/legacy-validation';
 import { safeApiRequest } from '../../utils/safe-request';
 import { AutoTestResultModals } from './components/AutoTestResultModals';
 import { CaseDetailPanel } from './components/CaseDetailPanel';
+import { CollectionModals } from './components/CollectionModals';
 import { CollectionMenuPanel } from './components/CollectionMenuPanel';
 import { CollectionOverviewPanel } from './components/CollectionOverviewPanel';
+import { InterfaceCoreModals } from './components/InterfaceCoreModals';
 import { InterfaceEditTab } from './components/InterfaceEditTab';
 import { InterfaceListPanel } from './components/InterfaceListPanel';
+import { InterfaceMenuPanel } from './components/InterfaceMenuPanel';
+import { InterfaceRunTab } from './components/InterfaceRunTab';
 import { InterfaceViewTab } from './components/InterfaceViewTab';
-
-const { Sider, Content } = Layout;
-const { Text } = Typography;
+import { InterfaceWorkspaceLayout } from './components/InterfaceWorkspaceLayout';
 
 const STABLE_EMPTY_ARRAY: any[] = [];
 const TREE_CATEGORY_LIMIT = 1000;
@@ -3313,212 +3283,49 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   }
 
   function renderApiMenu() {
-    const keywordMode = menuKeyword.trim().length > 0;
     return (
-      <div className="legacy-interface-menu">
-        <div className="legacy-interface-menu-actions">
-          <div className="legacy-interface-filter">
-            <Input
-              value={menuKeyword}
-              onChange={event => setMenuKeyword(event.target.value)}
-              placeholder="搜索接口"
-              prefix={<SearchOutlined />}
-              size="small"
-              className="legacy-interface-filter-input"
-            />
-            <Space className="legacy-interface-filter-actions" size={8}>
-              <button
-                type="button"
-                className="legacy-interface-menu-link-btn"
-                onClick={() => navigateWithGuard(`/project/${props.projectId}/interface/api`)}
-              >
-                全部接口
-              </button>
-              {canEdit ? (
-                <>
-                  <Button
-                    size="small"
-                    icon={<PlusOutlined />}
-                    onClick={() => openAddInterfaceModal()}
-                    disabled={catRows.length === 0}
-                  >
-                    接口
-                  </Button>
-                  <Button
-                    size="small"
-                    icon={<PlusOutlined />}
-                    onClick={() => {
-                      addCatForm.resetFields();
-                      setAddCatOpen(true);
-                    }}
-                  >
-                    分类
-                  </Button>
-                </>
-              ) : null}
-            </Space>
-          </div>
-        </div>
-        <div className="legacy-interface-menu-list">
-          {menuDisplayRows.map(cat => (
-            <div
-              key={`cat-${cat._id}`}
-              className="legacy-interface-cat"
-              onDragOver={event => {
-                if (!menuDragEnabled) return;
-                event.preventDefault();
-              }}
-              onDrop={event => {
-                if (!menuDragEnabled) return;
-                event.preventDefault();
-                event.stopPropagation();
-                void handleDropOnCat(Number(cat._id || 0));
-              }}
-            >
-              {(() => {
-                const catIdNum = Number(cat._id || 0);
-                const expanded = keywordMode || expandedCatIds.includes(catIdNum);
-                const shouldShowInterfaces =
-                  menuKeyword.trim().length > 0 || expandedCatIds.includes(Number(cat._id || 0));
-                const catLoading = catLoadingMap[catIdNum] === true;
-                const visibleInterfaces = shouldShowInterfaces ? cat.list || [] : [];
-                return (
-                  <>
-                    <button
-                      type="button"
-                      className={`legacy-interface-cat-title${catId === Number(cat._id) ? ' active' : ''}`}
-                      draggable={menuDragEnabled}
-                      onDragStart={event => {
-                        if (!menuDragEnabled) return;
-                        setDraggingMenuItem({ type: 'cat', id: Number(cat._id || 0) });
-                        event.dataTransfer.effectAllowed = 'move';
-                      }}
-                      onDragEnd={() => setDraggingMenuItem(null)}
-                      onClick={() =>
-                        navigateWithGuard(`/project/${props.projectId}/interface/api/cat_${cat._id}`)
-                      }
-                    >
-                      <span className="legacy-interface-cat-main">
-                        <span
-                          className="legacy-interface-cat-toggle"
-                          onClick={event => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            if (keywordMode) return;
-                            const opened = expandedCatIds.includes(catIdNum);
-                            if (!opened) {
-                              void loadCatInterfaces(catIdNum);
-                            }
-                            setExpandedCatIds(prev => {
-                              if (prev.includes(catIdNum)) {
-                                return prev.filter(item => item !== catIdNum);
-                              }
-                              return [...prev, catIdNum];
-                            });
-                          }}
-                        >
-                          {expanded ? <DownOutlined /> : <RightOutlined />}
-                        </span>
-                        <span className="legacy-interface-cat-name">{cat.name}</span>
-                      </span>
-                      <Space size={4} className="legacy-interface-cat-actions">
-                        {canEdit ? (
-                          <>
-                            <PlusOutlined
-                              onClick={event => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                openAddInterfaceModal(Number(cat._id || 0));
-                              }}
-                            />
-                            <EditOutlined
-                              onClick={event => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                openEditCatModal(cat);
-                              }}
-                            />
-                            <DeleteOutlined
-                              onClick={event => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                confirmDeleteCat(cat);
-                              }}
-                            />
-                          </>
-                        ) : null}
-                        <Tag>{cat.interface_count || cat.list?.length || 0}</Tag>
-                      </Space>
-                    </button>
-                    {shouldShowInterfaces && visibleInterfaces.length === 0 && catLoading ? (
-                      <div style={{ padding: '6px 12px', color: '#8c8c8c', fontSize: 12 }}>加载接口中...</div>
-                    ) : null}
-                    {shouldShowInterfaces && visibleInterfaces.length === 0 && !catLoading ? (
-                      <div style={{ padding: '6px 12px', color: '#8c8c8c', fontSize: 12 }}>暂无接口</div>
-                    ) : null}
-                    {visibleInterfaces.map(item => (
-                      <button
-                        key={`iface-${item._id}`}
-                        type="button"
-                        className={`legacy-interface-item${interfaceId === Number(item._id) ? ' active' : ''}`}
-                        draggable={menuDragEnabled}
-                        onDragStart={event => {
-                          if (!menuDragEnabled) return;
-                          setDraggingMenuItem({
-                            type: 'interface',
-                            id: Number(item._id || 0),
-                            catid: Number(cat._id || 0)
-                          });
-                          event.dataTransfer.effectAllowed = 'move';
-                        }}
-                        onDragEnd={() => setDraggingMenuItem(null)}
-                        onDragOver={event => {
-                          if (!menuDragEnabled) return;
-                          event.preventDefault();
-                        }}
-                        onDrop={event => {
-                          if (!menuDragEnabled) return;
-                          event.preventDefault();
-                          event.stopPropagation();
-                          void handleDropOnInterface(Number(cat._id || 0), Number(item._id || 0));
-                        }}
-                        onClick={() =>
-                          navigateWithGuard(`/project/${props.projectId}/interface/api/${item._id}`)
-                        }
-                      >
-                        <span className="legacy-method-pill" style={methodStyle(item.method)}>
-                          {String(item.method || 'GET').toUpperCase()}
-                        </span>
-                        <Tooltip title={item.path}>
-                          <span className="legacy-interface-item-title">{item.title || item.path}</span>
-                        </Tooltip>
-                        {canEdit ? (
-                          <Space size={4} className="legacy-interface-item-actions">
-                            <CopyOutlined
-                              onClick={event => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                void copyInterfaceRow(item as LegacyInterfaceDTO);
-                              }}
-                            />
-                            <DeleteOutlined
-                              onClick={event => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                confirmDeleteInterface(Number(item._id || 0));
-                              }}
-                            />
-                          </Space>
-                        ) : null}
-                      </button>
-                    ))}
-                  </>
-                );
-              })()}
-            </div>
-          ))}
-        </div>
-      </div>
+      <InterfaceMenuPanel
+        menuKeyword={menuKeyword}
+        canEdit={canEdit}
+        hasCategories={catRows.length > 0}
+        menuDisplayRows={menuDisplayRows}
+        catId={catId}
+        interfaceId={interfaceId}
+        expandedCatIds={expandedCatIds}
+        menuDragEnabled={menuDragEnabled}
+        catLoadingMap={catLoadingMap}
+        onMenuKeywordChange={setMenuKeyword}
+        onNavigateAll={() => navigateWithGuard(`/project/${props.projectId}/interface/api`)}
+        onOpenAddInterface={() => openAddInterfaceModal()}
+        onOpenAddCat={() => {
+          addCatForm.resetFields();
+          setAddCatOpen(true);
+        }}
+        onDropCat={catIdNum => void handleDropOnCat(catIdNum)}
+        onToggleExpandCat={catIdNum =>
+          setExpandedCatIds(prev => {
+            if (prev.includes(catIdNum)) {
+              return prev.filter(item => item !== catIdNum);
+            }
+            return [...prev, catIdNum];
+          })
+        }
+        onEnsureCatLoaded={catIdNum => void loadCatInterfaces(catIdNum)}
+        onNavigateCat={catIdNum => navigateWithGuard(`/project/${props.projectId}/interface/api/cat_${catIdNum}`)}
+        onDragStartCat={catIdNum => setDraggingMenuItem({ type: 'cat', id: catIdNum })}
+        onDragStartInterface={(catIdNum, ifaceId) =>
+          setDraggingMenuItem({ type: 'interface', id: ifaceId, catid: catIdNum })
+        }
+        onDragEnd={() => setDraggingMenuItem(null)}
+        onDropInterface={(catIdNum, ifaceId) => void handleDropOnInterface(catIdNum, ifaceId)}
+        onOpenAddInterfaceInCat={openAddInterfaceModal}
+        onEditCat={openEditCatModal}
+        onDeleteCat={confirmDeleteCat}
+        onNavigateInterface={ifaceId => navigateWithGuard(`/project/${props.projectId}/interface/api/${ifaceId}`)}
+        onCopyInterface={item => void copyInterfaceRow(item)}
+        onDeleteInterface={confirmDeleteInterface}
+        methodStyle={methodStyle}
+      />
     );
   }
 
@@ -3750,29 +3557,23 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
                 key,
                 label: tabItem.name,
                 children: (
-                  <Space direction="vertical" style={{ width: '100%' }}>
-                    <Space wrap>
-                      <Select
-                        value={runMethod}
-                        onChange={setRunMethod}
-                        style={{ width: 120 }}
-                        options={RUN_METHODS.map(item => ({ label: item, value: item }))}
-                      />
-                      <Input value={runPath} onChange={event => setRunPath(event.target.value)} style={{ minWidth: 420 }} />
-                      <Button type="primary" loading={runLoading} onClick={() => void handleRun()}>
-                        发送请求
-                      </Button>
-                    </Space>
-                    <Alert type="info" showIcon message="调试请求参数需使用 JSON 格式" />
-                    <Text strong>Query</Text>
-                    <Input.TextArea rows={4} value={runQuery} onChange={event => setRunQuery(event.target.value)} />
-                    <Text strong>Headers</Text>
-                    <Input.TextArea rows={4} value={runHeaders} onChange={event => setRunHeaders(event.target.value)} />
-                    <Text strong>Body</Text>
-                    <Input.TextArea rows={6} value={runBody} onChange={event => setRunBody(event.target.value)} />
-                    <Text strong>响应</Text>
-                    <Input.TextArea rows={10} value={runResponse} readOnly placeholder="点击“发送请求”后显示结果" />
-                  </Space>
+                  <InterfaceRunTab
+                    runMethod={runMethod}
+                    runPath={runPath}
+                    runQuery={runQuery}
+                    runHeaders={runHeaders}
+                    runBody={runBody}
+                    runResponse={runResponse}
+                    runLoading={runLoading}
+                    runMethods={RUN_METHODS}
+                    onSetRunMethod={setRunMethod}
+                    onSetRunPath={setRunPath}
+                    onSetRunQuery={setRunQuery}
+                    onSetRunHeaders={setRunHeaders}
+                    onSetRunBody={setRunBody}
+                    onRun={() => void handleRun()}
+                    onClearResponse={() => setRunResponse('')}
+                  />
                 )
               };
             }
@@ -3892,47 +3693,23 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
 
   return (
     <>
-      <Layout className="legacy-project-interface-layout">
-        <Sider width={300} theme="light">
-          <Tabs
-            type="card"
-            className="legacy-interface-side-tabs"
-            activeKey={action === 'api' ? 'api' : 'col'}
-            onChange={key => {
-              if (key === 'api') {
-                navigateWithGuard(`/project/${props.projectId}/interface/api`);
-              }
-              if (key === 'col') {
-                navigateWithGuard(`/project/${props.projectId}/interface/col`);
-              }
-            }}
-            items={[
-              { key: 'api', label: '接口列表' },
-              { key: 'col', label: '测试集合' }
-            ]}
-          />
-          {action === 'api' ? renderApiMenu() : renderCollectionMenu()}
-        </Sider>
-        <Layout>
-          <Content className="legacy-project-interface-content">
-            <div className="legacy-interface-right-pane">
-              <div className="legacy-interface-content-card">
-                {action === 'api' ? renderApiContent() : renderCollectionContent()}
-              </div>
-            </div>
-          </Content>
-        </Layout>
-      </Layout>
+      <InterfaceWorkspaceLayout
+        action={action}
+        apiMenu={renderApiMenu()}
+        collectionMenu={renderCollectionMenu()}
+        apiContent={renderApiContent()}
+        collectionContent={renderCollectionContent()}
+        onSwitchAction={next => navigateWithGuard(`/project/${props.projectId}/interface/${next}`)}
+      />
 
-      <Modal
-        title="你即将离开编辑页面"
-        open={confirmOpen}
-        onCancel={() => {
+      <InterfaceCoreModals
+        confirmOpen={confirmOpen}
+        onCancelConfirm={() => {
           setConfirmOpen(false);
           setNextTab(null);
           setPendingPath(null);
         }}
-        onOk={() => {
+        onConfirmLeave={() => {
           if (nextTab) setTab(nextTab);
           if (pendingPath) {
             navigate(pendingPath);
@@ -3941,363 +3718,106 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
           setNextTab(null);
           setPendingPath(null);
         }}
-      >
-        <p>离开页面会丢失当前编辑的内容，确定要离开吗？</p>
-      </Modal>
-
-      <Modal
-        title="新增接口"
-        open={addInterfaceOpen}
-        onCancel={() => {
+        addInterfaceOpen={addInterfaceOpen}
+        addInterfaceForm={addInterfaceForm}
+        addInterfaceLoading={addInterfaceState.isLoading}
+        runMethods={RUN_METHODS}
+        catRows={catRows}
+        onCancelAddInterface={() => {
           setAddInterfaceOpen(false);
           addInterfaceForm.resetFields();
         }}
-        onOk={() => {
-          void addInterfaceForm.submit();
-        }}
-        confirmLoading={addInterfaceState.isLoading}
-        okText="确认"
-        cancelText="取消"
-      >
-        <Form<AddInterfaceForm>
-          form={addInterfaceForm}
-          layout="vertical"
-          onFinish={values => void handleAddNewInterface(values)}
-        >
-          <Form.Item
-            label="接口名称"
-            name="title"
-            rules={[{ required: true, validator: legacyNameValidator('接口') }]}
-          >
-            <Input />
-          </Form.Item>
-          <Form.Item label="路径" name="path" rules={[{ required: true, message: '请输入接口路径' }]}>
-            <Input placeholder="/api/example" />
-          </Form.Item>
-          <Form.Item label="Method" name="method" rules={[{ required: true, message: '请选择 Method' }]}>
-            <Select options={RUN_METHODS.map(item => ({ label: item, value: item }))} />
-          </Form.Item>
-          <Form.Item label="分类" name="catid" rules={[{ required: true, message: '请选择分类' }]}>
-            <Select
-              options={catRows.map(item => ({
-                label: item.name,
-                value: Number(item._id || 0)
-              }))}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal
-        title="Tag 设置"
-        open={tagSettingOpen}
-        onCancel={() => setTagSettingOpen(false)}
-        onOk={() => void handleSaveProjectTag()}
-        confirmLoading={updateProjectTagState.isLoading}
-        okText="保存"
-      >
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Text type="secondary">每行一个 Tag 名称，保存后会更新当前项目 Tag 列表。</Text>
-          <Input.TextArea
-            rows={8}
-            value={tagSettingInput}
-            onChange={event => setTagSettingInput(event.target.value)}
-            placeholder={'example-tag\nbeta\ninternal'}
-          />
-        </Space>
-      </Modal>
-
-      <Modal
-        title="批量添加参数"
-        open={bulkOpen}
-        onCancel={() => {
+        onSubmitAddInterface={values => void handleAddNewInterface(values)}
+        tagSettingOpen={tagSettingOpen}
+        tagSettingInput={tagSettingInput}
+        tagSettingLoading={updateProjectTagState.isLoading}
+        onTagSettingInputChange={setTagSettingInput}
+        onCancelTagSetting={() => setTagSettingOpen(false)}
+        onSaveTagSetting={() => void handleSaveProjectTag()}
+        bulkOpen={bulkOpen}
+        bulkValue={bulkValue}
+        onBulkValueChange={setBulkValue}
+        onCancelBulk={() => {
           setBulkOpen(false);
           setBulkFieldName(null);
           setBulkValue('');
         }}
-        onOk={applyBulkImport}
-        okText="导入"
-        cancelText="取消"
-      >
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Text type="secondary">每行一个 `name:example`，例如 `id:1`。</Text>
-          <Input.TextArea
-            rows={10}
-            value={bulkValue}
-            onChange={event => setBulkValue(event.target.value)}
-            placeholder="name:example"
-          />
-        </Space>
-      </Modal>
-
-      <Modal
-        title="新增分类"
-        open={addCatOpen}
-        onCancel={() => {
+        onConfirmBulk={applyBulkImport}
+        addCatOpen={addCatOpen}
+        addCatForm={addCatForm}
+        addCatLoading={addInterfaceCatState.isLoading}
+        onCancelAddCat={() => {
           setAddCatOpen(false);
           addCatForm.resetFields();
         }}
-        onOk={() => {
-          void addCatForm.submit();
-        }}
-        confirmLoading={addInterfaceCatState.isLoading}
-        okText="确认"
-        cancelText="取消"
-      >
-        <Form<AddCatForm> form={addCatForm} layout="vertical" onFinish={values => void handleAddNewCat(values)}>
-          <Form.Item label="分类名称" name="name" rules={[{ required: true, message: '请输入分类名称' }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item label="描述" name="desc">
-            <Input.TextArea rows={3} />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal
-        title="编辑分类"
-        open={editCatOpen}
-        onCancel={() => {
+        onSubmitAddCat={values => void handleAddNewCat(values)}
+        editCatOpen={editCatOpen}
+        editCatForm={editCatForm}
+        editCatLoading={updateInterfaceCatState.isLoading}
+        onCancelEditCat={() => {
           setEditCatOpen(false);
           setEditingCat(null);
           editCatForm.resetFields();
         }}
-        onOk={() => {
-          void editCatForm.submit();
-        }}
-        confirmLoading={updateInterfaceCatState.isLoading}
-        okText="确认"
-        cancelText="取消"
-      >
-        <Form<EditCatForm>
-          form={editCatForm}
-          layout="vertical"
-          onFinish={values => void handleUpdateCat(values)}
-        >
-          <Form.Item label="分类名称" name="name" rules={[{ required: true, message: '请输入分类名称' }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item label="描述" name="desc">
-            <Input.TextArea rows={3} />
-          </Form.Item>
-        </Form>
-      </Modal>
+        onSubmitEditCat={values => void handleUpdateCat(values)}
+      />
 
-      <Modal
-        title={colModalType === 'add' ? '添加测试集合' : '编辑测试集合'}
-        open={colModalOpen}
-        onCancel={() => {
+      <CollectionModals
+        colModalType={colModalType}
+        colModalOpen={colModalOpen}
+        colForm={colForm}
+        colModalLoading={addColState.isLoading || updateColState.isLoading}
+        onCancelColModal={() => {
           setColModalOpen(false);
           setEditingCol(null);
           colForm.resetFields();
         }}
-        onOk={() => {
-          void colForm.submit();
+        onSubmitCol={values => void handleSubmitCol(values)}
+        importModalOpen={importModalOpen}
+        importModalLoading={addColCaseListState.isLoading}
+        importProjectId={importProjectId}
+        currentProjectId={props.projectId}
+        importProjectOptions={importProjectOptions}
+        selectedImportInterfaceCount={selectedImportInterfaceIds.length}
+        importTableRows={importTableRows}
+        importTableLoading={
+          importTreeQuery.isLoading ||
+          importTreeQuery.isFetching ||
+          importLoading ||
+          projectListQuery.isFetching
+        }
+        importSelectedRowKeys={importSelectedRowKeys}
+        onImportProjectChange={value => {
+          setImportProjectId(value);
+          setImportSelectedRowKeys([]);
         }}
-        confirmLoading={addColState.isLoading || updateColState.isLoading}
-        okText="确认"
-        cancelText="取消"
-      >
-        <Form<ColForm> form={colForm} layout="vertical" onFinish={values => void handleSubmitCol(values)}>
-          <Form.Item label="集合名" name="name" rules={[{ required: true, message: '请输入集合命名！' }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item label="简介" name="desc">
-            <Input.TextArea rows={3} />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal
-        title="导入接口到集合"
-        open={importModalOpen}
-        width={900}
-        onCancel={() => {
+        onImportSelectedRowKeysChange={setImportSelectedRowKeys}
+        onCancelImportModal={() => {
           setImportModalOpen(false);
           setImportSelectedRowKeys([]);
         }}
-        onOk={() => {
+        onConfirmImportInterfaces={() => {
           void handleImportInterfaces();
         }}
-        okText="确认"
-        cancelText="取消"
-        confirmLoading={addColCaseListState.isLoading}
-      >
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          <Space>
-            <Text>选择要导入的项目：</Text>
-            <Select<number>
-              value={importProjectId > 0 ? importProjectId : props.projectId}
-              style={{ width: 260 }}
-              options={importProjectOptions}
-              onChange={value => {
-                setImportProjectId(value);
-                setImportSelectedRowKeys([]);
-              }}
-            />
-          </Space>
-          <Alert
-            type="info"
-            showIcon
-            message={`已选择 ${selectedImportInterfaceIds.length} 个接口`}
-          />
-          <Table<ImportInterfaceRow>
-            rowKey="key"
-            size="small"
-            pagination={false}
-            loading={importTreeQuery.isLoading || importTreeQuery.isFetching || importLoading || projectListQuery.isFetching}
-            dataSource={importTableRows}
-            defaultExpandAllRows
-            rowSelection={{
-              selectedRowKeys: importSelectedRowKeys,
-              checkStrictly: false,
-              onChange: selectedKeys => {
-                setImportSelectedRowKeys(selectedKeys as Array<string | number>);
-              }
-            }}
-            columns={[
-              {
-                title: '接口名称',
-                dataIndex: 'title',
-                render: (value: string, row) =>
-                  row.isCategory ? <Text strong>{value}</Text> : <span>{value}</span>
-              },
-              {
-                title: '接口路径',
-                dataIndex: 'path',
-                render: value => (value || '-')
-              },
-              {
-                title: '请求方法',
-                dataIndex: 'method',
-                width: 120,
-                render: (value: string, row) =>
-                  row.isCategory ? '-' : (
-                    <span className="legacy-method-pill" style={methodStyle(value || 'GET')}>
-                      {value || 'GET'}
-                    </span>
-                  )
-              },
-              {
-                title: '状态',
-                dataIndex: 'status',
-                width: 120,
-                render: (value: string, row) => {
-                  if (row.isCategory) return '-';
-                  return value === 'done' ? (
-                    <span className="legacy-status-tag done">已完成</span>
-                  ) : (
-                    <span className="legacy-status-tag undone">未完成</span>
-                  );
-                }
-              }
-            ]}
-          />
-        </Space>
-      </Modal>
-
-      <Modal
-        title="添加测试用例"
-        open={addCaseOpen}
-        onCancel={() => {
+        methodStyle={methodStyle}
+        addCaseOpen={addCaseOpen}
+        addCaseForm={addCaseForm}
+        addCaseLoading={addColCaseState.isLoading}
+        caseInterfaceTruncated={caseInterfaceTruncated}
+        caseInterfaceOptions={caseInterfaceOptions}
+        onCancelAddCase={() => {
           setAddCaseOpen(false);
           addCaseForm.resetFields();
         }}
-        onOk={() => {
-          void addCaseForm.submit();
-        }}
-        okText="确认"
-        cancelText="取消"
-        confirmLoading={addColCaseState.isLoading}
-      >
-        <Form<AddCaseForm> form={addCaseForm} layout="vertical" onFinish={values => void handleAddCase(values)}>
-          {caseInterfaceTruncated ? (
-            <Alert
-              type="warning"
-              showIcon
-              style={{ marginBottom: 12 }}
-              message={`接口选项仅展示前 ${caseInterfaceOptions.length} 条，请通过左侧筛选或搜索后再添加。`}
-            />
-          ) : null}
-          <Form.Item label="接口" name="interface_id" rules={[{ required: true, message: '请选择接口' }]}>
-            <Select
-              showSearch
-              optionFilterProp="label"
-              options={caseInterfaceOptions}
-            />
-          </Form.Item>
-          <Form.Item label="用例名称" name="casename" rules={[{ required: true, message: '请输入用例名称' }]}>
-            <Input placeholder="例如：登录成功用例" />
-          </Form.Item>
-          <Form.Item label="测试环境" name="case_env">
-            <Input placeholder="例如：dev" />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal
-        title="通用规则配置"
-        open={commonSettingOpen}
-        width={900}
-        onCancel={() => setCommonSettingOpen(false)}
-        onOk={() => {
+        onSubmitAddCase={values => void handleAddCase(values)}
+        commonSettingOpen={commonSettingOpen}
+        commonSettingForm={commonSettingForm}
+        commonSettingLoading={updateColState.isLoading}
+        onCancelCommonSetting={() => setCommonSettingOpen(false)}
+        onSaveCommonSetting={() => {
           void handleSaveCommonSetting();
         }}
-        okText="保存"
-        cancelText="取消"
-        confirmLoading={updateColState.isLoading}
-      >
-        <Form<CommonSettingForm> form={commonSettingForm} layout="vertical">
-          <Form.Item
-            label="检查 Http Code = 200"
-            name="checkHttpCodeIs200"
-            valuePropName="checked"
-            tooltip="启用后，非 200 状态码将直接判定失败"
-          >
-            <Switch checkedChildren="开" unCheckedChildren="关" />
-          </Form.Item>
-          <Form.Item
-            label="检查返回 JSON 字段"
-            tooltip="例如检查 code 是否等于 0"
-            style={{ marginBottom: 8 }}
-          >
-            <Space wrap>
-              <Form.Item name="checkResponseFieldEnable" valuePropName="checked" noStyle>
-                <Switch checkedChildren="开" unCheckedChildren="关" />
-              </Form.Item>
-              <Form.Item name="checkResponseFieldName" noStyle>
-                <Input style={{ width: 180 }} placeholder="字段名，如 code" />
-              </Form.Item>
-              <Form.Item name="checkResponseFieldValue" noStyle>
-                <Input style={{ width: 180 }} placeholder="期望值，如 0" />
-              </Form.Item>
-            </Space>
-          </Form.Item>
-          <Form.Item
-            label="检查返回数据结构(response schema)"
-            name="checkResponseSchema"
-            valuePropName="checked"
-            tooltip="仅在接口 response 定义为 JSON Schema 时生效"
-          >
-            <Switch checkedChildren="开" unCheckedChildren="关" />
-          </Form.Item>
-          <Form.Item
-            label="全局测试脚本"
-            tooltip="启用后每个 case 会先执行全局脚本，再执行 case 脚本"
-            style={{ marginBottom: 8 }}
-          >
-            <Space wrap style={{ marginBottom: 8 }}>
-              <Form.Item name="checkScriptEnable" valuePropName="checked" noStyle>
-                <Switch checkedChildren="开" unCheckedChildren="关" />
-              </Form.Item>
-              <span>启用脚本</span>
-            </Space>
-            <Form.Item name="checkScriptContent" noStyle>
-              <Input.TextArea rows={10} placeholder="输入全局测试脚本" />
-            </Form.Item>
-          </Form.Item>
-        </Form>
-      </Modal>
+      />
 
       <AutoTestResultModals
         reportOpen={autoTestModalOpen}

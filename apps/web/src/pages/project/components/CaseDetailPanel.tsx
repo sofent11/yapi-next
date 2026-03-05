@@ -1,6 +1,7 @@
 import { Alert, AutoComplete, Button, Card, Descriptions, Form, Input, Select, Space, Switch, Tag, Typography } from 'antd';
 import { CopyOutlined, DeleteOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
+import { FilterBar, SectionCard } from '../../../components/layout';
 
 const { Text } = Typography;
 
@@ -53,35 +54,38 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
   const interfaceId = Number(props.detail.interface_id || 0);
   return (
     <Card>
-      <div className="legacy-interface-list-toolbar">
-        <Text strong>{String(props.detail.casename || '测试用例')}</Text>
-        <Space size={8}>
-          <Button size="small" loading={props.autoTestRunning} onClick={props.onRunAutoTest}>
-            运行测试
-          </Button>
-          <Button size="small" onClick={props.onNavigateCollection}>
-            返回集合
-          </Button>
-          {interfaceId > 0 ? (
-            <Button size="small" onClick={props.onNavigateInterface}>
-              对应接口
+      <FilterBar
+        className="legacy-interface-list-toolbar"
+        left={<Text strong>{String(props.detail.casename || '测试用例')}</Text>}
+        right={
+          <Space size={8} wrap>
+            <Button loading={props.autoTestRunning} onClick={props.onRunAutoTest}>
+              运行测试
             </Button>
-          ) : null}
-        </Space>
-        {props.canEdit ? (
-          <Space size={8}>
-            <Button size="small" icon={<CopyOutlined />} onClick={props.onCopyCase}>
-              克隆用例
+            <Button onClick={props.onNavigateCollection}>
+              返回集合
             </Button>
-            <Button size="small" danger icon={<DeleteOutlined />} onClick={props.onDeleteCase}>
-              删除用例
-            </Button>
-            <Button type="primary" size="small" loading={props.saveLoading} onClick={props.onSaveCase}>
-              保存用例
-            </Button>
+            {interfaceId > 0 ? (
+              <Button onClick={props.onNavigateInterface}>
+                对应接口
+              </Button>
+            ) : null}
+            {props.canEdit ? (
+              <>
+                <Button icon={<CopyOutlined />} onClick={props.onCopyCase}>
+                  克隆用例
+                </Button>
+                <Button danger icon={<DeleteOutlined />} onClick={props.onDeleteCase}>
+                  删除用例
+                </Button>
+                <Button type="primary" loading={props.saveLoading} onClick={props.onSaveCase}>
+                  保存用例
+                </Button>
+              </>
+            ) : null}
           </Space>
-        ) : null}
-      </div>
+        }
+      />
       <Form<any> form={props.caseForm} layout="vertical">
         <Descriptions bordered size="small" column={1}>
           <Descriptions.Item label="接口">
@@ -144,7 +148,7 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
           </Form.Item>
         </div>
       </Form>
-      <Card size="small" title="测试结果" style={{ marginTop: 16 }}>
+      <SectionCard title="测试结果" className="legacy-case-section">
         {props.currentCaseReport ? (
           <Space direction="vertical" style={{ width: '100%' }} size={10}>
             <Space wrap>
@@ -196,17 +200,21 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
             <Alert type="info" showIcon message="暂无测试结果" description="点击“运行测试”后可在此查看断言和响应详情。" />
           </div>
         )}
-      </Card>
-      <Card size="small" title="调试请求" style={{ marginTop: 16 }}>
+      </SectionCard>
+      <SectionCard title="调试请求" className="legacy-case-section">
         <Space direction="vertical" style={{ width: '100%' }}>
-          <Space wrap>
+          <Space wrap style={{ width: '100%' }}>
             <Select
               value={props.caseRunMethod}
               onChange={props.onSetCaseRunMethod}
               style={{ width: 120 }}
               options={props.runMethods.map(item => ({ label: item, value: item }))}
             />
-            <Input value={props.caseRunPath} onChange={event => props.onSetCaseRunPath(event.target.value)} style={{ minWidth: 420 }} />
+            <Input
+              value={props.caseRunPath}
+              onChange={event => props.onSetCaseRunPath(event.target.value)}
+              style={{ minWidth: 260, flex: 1 }}
+            />
             <Button type="primary" loading={props.caseRunLoading} onClick={props.onRunCaseRequest}>
               发送请求
             </Button>
@@ -221,7 +229,7 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
           <Text strong>响应</Text>
           <Input.TextArea rows={10} value={props.caseRunResponse} readOnly placeholder="点击“发送请求”后显示结果" />
         </Space>
-      </Card>
+      </SectionCard>
     </Card>
   );
 }
