@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Alert, Button, Card, Col, Form, Input, Row, Tabs, message } from 'antd';
 import { LockOutlined, MailOutlined, UserOutlined } from '@ant-design/icons';
 import { useGetUserStatusQuery, useLoginMutation, useRegisterUserMutation } from '../services/yapi-api';
 import LogoSVG from '../components/LogoSVG';
 import { webPlugins } from '../plugins';
+import { safeApiRequest } from '../utils/safe-request';
 import './HomePage.scss';
 import './LoginPage.scss';
 
@@ -37,30 +38,35 @@ export function LoginPage() {
   const [registerUser, registerState] = useRegisterUserMutation();
   const [activeKey, setActiveKey] = useState<string>('login');
   const ThirdLogin = webPlugins.getThirdLoginComponent() as React.ComponentType | null;
+  const callApi = useCallback(
+    <T extends { errcode?: number; errmsg?: string }>(request: Promise<T>, fallback: string) =>
+      safeApiRequest(request, { fallback, onError: msg => message.error(msg) }),
+    []
+  );
 
   async function handleLogin(values: LoginFormValues) {
-    const response = await login({
-      email: values.email.trim(),
-      password: values.password
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '登录失败');
-      return;
-    }
+    const response = await callApi(
+      login({
+        email: values.email.trim(),
+        password: values.password
+      }).unwrap(),
+      '登录失败'
+    );
+    if (!response) return;
     message.success('登录成功');
     navigate(redirectTarget, { replace: true });
   }
 
   async function handleRegister(values: RegisterFormValues) {
-    const response = await registerUser({
-      email: values.email.trim(),
-      password: values.password,
-      username: values.username?.trim() || undefined
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '注册失败');
-      return;
-    }
+    const response = await callApi(
+      registerUser({
+        email: values.email.trim(),
+        password: values.password,
+        username: values.username?.trim() || undefined
+      }).unwrap(),
+      '注册失败'
+    );
+    if (!response) return;
     message.success('注册成功');
     navigate(redirectTarget, { replace: true });
   }

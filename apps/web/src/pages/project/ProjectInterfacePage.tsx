@@ -57,8 +57,8 @@ import {
   useGetInterfaceTreeQuery,
   useGetInterfaceQuery,
   useGetProjectTokenQuery,
-  useLazyDelColCaseQuery,
-  useLazyDelColQuery,
+  useDelColCaseMutation,
+  useDelColMutation,
   useLazyGetColCaseQuery,
   useLazyGetInterfaceQuery,
   useLazyGetInterfaceTreeNodeQuery,
@@ -74,8 +74,12 @@ import {
 } from '../../services/yapi-api';
 import { webPlugins, type InterfaceTabItem } from '../../plugins';
 import { LegacyErrMsg } from '../../components/LegacyErrMsg';
-import { LegacySchemaEditor } from '../../components/LegacySchemaEditor';
+import { sanitizeHtml } from '../../utils/html-sanitize';
 import { legacyNameValidator } from '../../utils/legacy-validation';
+import { safeApiRequest } from '../../utils/safe-request';
+import { AutoTestResultModals } from './components/AutoTestResultModals';
+import { InterfaceListPanel } from './components/InterfaceListPanel';
+import { SchemaModeEditor } from './components/SchemaModeEditor';
 
 const { Sider, Content } = Layout;
 const { Text } = Typography;
@@ -83,6 +87,7 @@ const { Text } = Typography;
 const STABLE_EMPTY_ARRAY: any[] = [];
 const TREE_CATEGORY_LIMIT = 1000;
 const TREE_NODE_PAGE_LIMIT = 200;
+const INTERFACE_LIST_PAGE_LIMIT = 200;
 
 type ProjectInterfacePageProps = {
   projectId: number;
@@ -221,6 +226,34 @@ type CommonSettingForm = {
   checkScriptEnable: boolean;
   checkScriptContent: string;
 };
+
+type InterfaceNodePageResponse = {
+  errcode: number;
+  errmsg?: string;
+  data?: { list?: LegacyInterfaceDTO[]; total?: number };
+};
+
+async function fetchAllCatInterfaces(
+  fetchPage: (page: number) => Promise<InterfaceNodePageResponse>,
+  errorMessage: string
+): Promise<LegacyInterfaceDTO[]> {
+  const merged: LegacyInterfaceDTO[] = [];
+  let page = 1;
+  let total = 1;
+  while (page <= total) {
+    const response = await fetchPage(page);
+    if (response.errcode !== 0) {
+      throw new Error(response.errmsg || errorMessage);
+    }
+    const nodeData = (response.data || {}) as { list?: LegacyInterfaceDTO[]; total?: number };
+    const rows = Array.isArray(nodeData.list) ? nodeData.list : [];
+    merged.push(...rows);
+    const totalPageCount = Number(nodeData.total || 1);
+    total = Number.isFinite(totalPageCount) && totalPageCount > 0 ? totalPageCount : 1;
+    page += 1;
+  }
+  return merged;
+}
 
 const RUN_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'] as const;
 const REQUEST_BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -868,7 +901,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       projectId: props.projectId,
       token: props.token,
       page: 1,
-      limit: 'all'
+      limit: INTERFACE_LIST_PAGE_LIMIT
     },
     { skip: props.projectId <= 0 || (!addCaseOpen && !shouldFetchGlobalInterfaceList) }
   );
@@ -898,8 +931,8 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   const [delInterfaceCat, delInterfaceCatState] = useDelInterfaceCatMutation();
   const [addCol, addColState] = useAddColMutation();
   const [updateCol, updateColState] = useUpColCompatMutation();
-  const [triggerDelCol] = useLazyDelColQuery();
-  const [triggerDelCase] = useLazyDelColCaseQuery();
+  const [triggerDelCol] = useDelColMutation();
+  const [triggerDelCase] = useDelColCaseMutation();
   const [addColCaseList, addColCaseListState] = useAddColCaseListMutation();
   const [cloneColCaseList] = useCloneColCaseListMutation();
   const [addColCase, addColCaseState] = useAddColCaseMutation();
@@ -986,6 +1019,11 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   const colRows = (colListQuery.data?.data || STABLE_EMPTY_ARRAY) as any[];
   const caseRows = (caseListQuery.data?.data || STABLE_EMPTY_ARRAY) as any[];
   const canEdit = /(admin|owner|dev)/.test(String(props.projectRole || ''));
+  const callApi = useCallback(
+    <T extends { errcode?: number; errmsg?: string }>(request: Promise<T>, fallback: string) =>
+      safeApiRequest(request, { fallback, onError: msg => message.error(msg) }),
+    []
+  );
 
   const loadCatInterfaces = useCallback(
     async (catid: number, force = false) => {
@@ -995,30 +1033,20 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       catLoadingRef.current[catIdNum] = true;
       setCatLoadingMap(prev => ({ ...prev, [catIdNum]: true }));
       try {
-        const merged: LegacyInterfaceDTO[] = [];
-        let page = 1;
-        let total = 1;
-        while (page <= total) {
-          const response = await fetchInterfaceTreeNode(
-            {
-              catid: catIdNum,
-              token: props.token,
-              page,
-              limit: TREE_NODE_PAGE_LIMIT,
-              detail: 'full'
-            },
-            true
-          ).unwrap();
-          if (response.errcode !== 0) {
-            throw new Error(response.errmsg || '加载分类接口失败');
-          }
-          const nodeData = (response.data || {}) as { list?: LegacyInterfaceDTO[]; total?: number };
-          const rows = Array.isArray(nodeData.list) ? nodeData.list : [];
-          merged.push(...rows);
-          const totalPageCount = Number(nodeData.total || 1);
-          total = Number.isFinite(totalPageCount) && totalPageCount > 0 ? totalPageCount : 1;
-          page += 1;
-        }
+        const merged = await fetchAllCatInterfaces(
+          page =>
+            fetchInterfaceTreeNode(
+              {
+                catid: catIdNum,
+                token: props.token,
+                page,
+                limit: TREE_NODE_PAGE_LIMIT,
+                detail: 'full'
+              },
+              true
+            ).unwrap(),
+          '加载分类接口失败'
+        );
         setCatInterfaceMap(prev => ({ ...prev, [catIdNum]: merged }));
         catLoadedRef.current[catIdNum] = true;
         setCatLoadedMap(prev => ({ ...prev, [catIdNum]: true }));
@@ -1058,30 +1086,20 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       importCatLoadingRef.current[catIdNum] = true;
       setImportCatLoadingMap(prev => ({ ...prev, [catIdNum]: true }));
       try {
-        const merged: LegacyInterfaceDTO[] = [];
-        let page = 1;
-        let total = 1;
-        while (page <= total) {
-          const response = await fetchImportTreeNode(
-            {
-              catid: catIdNum,
-              token: props.token,
-              page,
-              limit: TREE_NODE_PAGE_LIMIT,
-              detail: 'full'
-            },
-            true
-          ).unwrap();
-          if (response.errcode !== 0) {
-            throw new Error(response.errmsg || '加载导入接口失败');
-          }
-          const nodeData = (response.data || {}) as { list?: LegacyInterfaceDTO[]; total?: number };
-          const rows = Array.isArray(nodeData.list) ? nodeData.list : [];
-          merged.push(...rows);
-          const totalPageCount = Number(nodeData.total || 1);
-          total = Number.isFinite(totalPageCount) && totalPageCount > 0 ? totalPageCount : 1;
-          page += 1;
-        }
+        const merged = await fetchAllCatInterfaces(
+          page =>
+            fetchImportTreeNode(
+              {
+                catid: catIdNum,
+                token: props.token,
+                page,
+                limit: TREE_NODE_PAGE_LIMIT,
+                detail: 'full'
+              },
+              true
+            ).unwrap(),
+          '加载导入接口失败'
+        );
         setImportCatInterfaceMap(prev => ({ ...prev, [catIdNum]: merged }));
         importCatLoadedRef.current[catIdNum] = true;
         setImportCatLoadedMap(prev => ({ ...prev, [catIdNum]: true }));
@@ -1243,6 +1261,14 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     () => catRows.find(item => Number(item._id || 0) === catId) || null,
     [catId, catRows]
   );
+  const catSelectOptions = useMemo(
+    () =>
+      catRows.map(item => ({
+        label: item.name,
+        value: Number(item._id || 0)
+      })),
+    [catRows]
+  );
 
   const filteredMenuRows = useMemo(() => {
     const keyword = menuKeyword.trim().toLowerCase();
@@ -1363,6 +1389,10 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       })),
     [allInterfaces]
   );
+  const caseInterfaceTruncated = useMemo(() => {
+    const total = Number(listQuery.data?.data?.total || 0);
+    return total > 0 && caseInterfaceOptions.length > 0 && total > caseInterfaceOptions.length;
+  }, [caseInterfaceOptions.length, listQuery.data]);
   const projectTokenValue = String(projectTokenQuery.data?.data || '');
   const autoTestRows = (autoTestReport?.list || STABLE_EMPTY_ARRAY) as AutoTestResultItem[];
   const autoTestResultMap = useMemo(() => {
@@ -1472,12 +1502,19 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     if (!importModalOpen || importProjectId <= 0 || importTreeRows.length === 0) return;
     let cancelled = false;
     const run = async () => {
-      for (const cat of importTreeRows) {
-        if (cancelled) return;
-        const catIdNum = Number(cat._id || 0);
-        if (catIdNum <= 0) continue;
-        await loadImportCatInterfaces(catIdNum, { notifyError: false });
-      }
+      const catIds = importTreeRows
+        .map(cat => Number(cat._id || 0))
+        .filter(catIdNum => catIdNum > 0);
+      const queue = [...catIds];
+      const concurrency = Math.min(4, queue.length);
+      const workers = Array.from({ length: concurrency }, async () => {
+        while (!cancelled) {
+          const nextCatId = queue.shift();
+          if (!nextCatId) return;
+          await loadImportCatInterfaces(nextCatId, { notifyError: false });
+        }
+      });
+      await Promise.all(workers);
     };
     void run();
     return () => {
@@ -1919,35 +1956,35 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       normalizedReqBodyOther = '';
     }
 
-    const response = await updateInterface({
-      id: Number(currentInterface._id),
-      catid: Number(values.catid || currentInterface.catid || catRows[0]?._id || 0),
-      title: String(values.title || '').trim(),
-      path: normalizedPath,
-      method,
-      status: values.status,
-      desc: String(values.desc || '').trim(),
-      tag: tags,
-      req_params: reqParams,
-      req_query: reqQuery,
-      req_headers: normalizedHeaders,
-      req_body_type: reqBodyType,
-      req_body_form: reqBodyType === 'form' ? reqBodyForm : [],
-      req_body_other: reqBodyType === 'form' || !supportsRequestBody(method) ? '' : normalizedReqBodyOther,
-      req_body_is_json_schema: reqBodyType === 'json' ? values.req_body_is_json_schema === true : false,
-      res_body_type: values.res_body_type || 'json',
-      res_body: normalizedResBody,
-      res_body_is_json_schema:
-        (values.res_body_type || 'json') === 'json' ? values.res_body_is_json_schema === true : false,
-      custom_field_value: String(values.custom_field_value || ''),
-      switch_notice: values.switch_notice === true,
-      api_opened: values.api_opened === true,
-      token: props.token
-    } as any).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '保存失败');
-      return;
-    }
+    const response = await callApi(
+      updateInterface({
+        id: Number(currentInterface._id),
+        catid: Number(values.catid || currentInterface.catid || catRows[0]?._id || 0),
+        title: String(values.title || '').trim(),
+        path: normalizedPath,
+        method,
+        status: values.status,
+        desc: String(values.desc || '').trim(),
+        tag: tags,
+        req_params: reqParams,
+        req_query: reqQuery,
+        req_headers: normalizedHeaders,
+        req_body_type: reqBodyType,
+        req_body_form: reqBodyType === 'form' ? reqBodyForm : [],
+        req_body_other: reqBodyType === 'form' || !supportsRequestBody(method) ? '' : normalizedReqBodyOther,
+        req_body_is_json_schema: reqBodyType === 'json' ? values.req_body_is_json_schema === true : false,
+        res_body_type: values.res_body_type || 'json',
+        res_body: normalizedResBody,
+        res_body_is_json_schema:
+          (values.res_body_type || 'json') === 'json' ? values.res_body_is_json_schema === true : false,
+        custom_field_value: String(values.custom_field_value || ''),
+        switch_notice: values.switch_notice === true,
+        api_opened: values.api_opened === true,
+        token: props.token
+      } as any).unwrap(),
+      '保存失败'
+    );
+    if (!response) return;
     message.success('接口已更新');
     await Promise.all([detailQuery.refetch(), refetchInterfaceListSafe(), refreshInterfaceMenu()]);
     setEditBaseline(serializeEditValues(values));
@@ -1961,14 +1998,14 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       .filter(Boolean);
     const unique = Array.from(new Set(lines));
     const payload = unique.map(name => ({ name, desc: '' }));
-    const response = await updateProjectTag({
-      id: props.projectId,
-      tag: payload
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || 'Tag 设置保存失败');
-      return;
-    }
+    const response = await callApi(
+      updateProjectTag({
+        id: props.projectId,
+        tag: payload
+      }).unwrap(),
+      'Tag 设置保存失败'
+    );
+    if (!response) return;
     message.success('Tag 设置已保存');
     setTagSettingOpen(false);
   }
@@ -1979,19 +2016,19 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       message.error('请先选择接口分类');
       return;
     }
-    const response = await addInterface({
-      project_id: props.projectId,
-      catid,
-      title: values.title.trim(),
-      path: values.path.trim(),
-      method: values.method,
-      status: 'undone',
-      token: props.token
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '添加接口失败');
-      return;
-    }
+    const response = await callApi(
+      addInterface({
+        project_id: props.projectId,
+        catid,
+        title: values.title.trim(),
+        path: values.path.trim(),
+        method: values.method,
+        status: 'undone',
+        token: props.token
+      }).unwrap(),
+      '添加接口失败'
+    );
+    if (!response) return;
     message.success('接口添加成功');
     setAddInterfaceOpen(false);
     addInterfaceForm.resetFields();
@@ -2011,16 +2048,16 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   }
 
   async function handleAddNewCat(values: AddCatForm) {
-    const response = await addInterfaceCat({
-      project_id: props.projectId,
-      name: values.name.trim(),
-      desc: values.desc?.trim() || '',
-      token: props.token
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '添加分类失败');
-      return;
-    }
+    const response = await callApi(
+      addInterfaceCat({
+        project_id: props.projectId,
+        name: values.name.trim(),
+        desc: values.desc?.trim() || '',
+        token: props.token
+      }).unwrap(),
+      '添加分类失败'
+    );
+    if (!response) return;
     message.success('接口分类添加成功');
     setAddCatOpen(false);
     addCatForm.resetFields();
@@ -2032,16 +2069,16 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       message.error('分类不存在');
       return;
     }
-    const response = await updateInterfaceCat({
-      catid: Number(editingCat._id),
-      name: values.name.trim(),
-      desc: values.desc?.trim() || '',
-      token: props.token
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '修改分类失败');
-      return;
-    }
+    const response = await callApi(
+      updateInterfaceCat({
+        catid: Number(editingCat._id),
+        name: values.name.trim(),
+        desc: values.desc?.trim() || '',
+        token: props.token
+      }).unwrap(),
+      '修改分类失败'
+    );
+    if (!response) return;
     message.success('分类已更新');
     setEditCatOpen(false);
     setEditingCat(null);
@@ -2070,14 +2107,14 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       cancelText: '取消',
       okButtonProps: { danger: true, loading: delInterfaceCatState.isLoading },
       onOk: async () => {
-        const response = await delInterfaceCat({
-          catid: Number(cat._id || 0),
-          token: props.token
-        }).unwrap();
-        if (response.errcode !== 0) {
-          message.error(response.errmsg || '删除分类失败');
-          return;
-        }
+        const response = await callApi(
+          delInterfaceCat({
+            catid: Number(cat._id || 0),
+            token: props.token
+          }).unwrap(),
+          '删除分类失败'
+        );
+        if (!response) return;
         message.success('分类已删除');
         await Promise.all([refreshInterfaceMenu(), refetchInterfaceListSafe()]);
         navigate(`/project/${props.projectId}/interface/api`);
@@ -2093,14 +2130,14 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       cancelText: '取消',
       okButtonProps: { danger: true, loading: delInterfaceState.isLoading },
       onOk: async () => {
-        const response = await delInterface({
-          id,
-          token: props.token
-        }).unwrap();
-        if (response.errcode !== 0) {
-          message.error(response.errmsg || '删除接口失败');
-          return;
-        }
+        const response = await callApi(
+          delInterface({
+            id,
+            token: props.token
+          }).unwrap(),
+          '删除接口失败'
+        );
+        if (!response) return;
         message.success('接口已删除');
         await Promise.all([refetchInterfaceListSafe(), refreshInterfaceMenu()]);
         if (interfaceId === id) {
@@ -2116,15 +2153,15 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       message.error('接口数据不完整，无法复制');
       return;
     }
-    const detailRes = await fetchInterfaceDetail({
-      id: sourceId,
-      projectId: props.projectId,
-      token: props.token
-    }).unwrap();
-    if (detailRes.errcode !== 0 || !detailRes.data) {
-      message.error(detailRes.errmsg || '获取接口详情失败');
-      return;
-    }
+    const detailRes = await callApi(
+      fetchInterfaceDetail({
+        id: sourceId,
+        projectId: props.projectId,
+        token: props.token
+      }).unwrap(),
+      '获取接口详情失败'
+    );
+    if (!detailRes?.data) return;
     const source = detailRes.data as LegacyInterfaceDTO & Record<string, unknown>;
     const pathBase = String(source.path || '/copy').replace(/\/+$/, '') || '/copy';
     const copyPayload = {
@@ -2150,11 +2187,8 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       tag: Array.isArray(source.tag) ? source.tag : [],
       token: props.token
     };
-    const response = await addInterface(copyPayload).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '复制接口失败');
-      return;
-    }
+    const response = await callApi(addInterface(copyPayload).unwrap(), '复制接口失败');
+    if (!response) return;
     message.success('接口已复制');
     await Promise.all([refetchInterfaceListSafe(), refreshInterfaceMenu()]);
     const id = Number(response.data?._id || 0);
@@ -2162,6 +2196,43 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       navigate(`/project/${props.projectId}/interface/api/${id}`);
     }
   }
+
+  const openAddCatModal = useCallback(() => {
+    addCatForm.resetFields();
+    setAddCatOpen(true);
+  }, [addCatForm]);
+
+  const handleInterfaceListStatusChange = useCallback(
+    async (id: number, next: 'done' | 'undone') => {
+      const response = await callApi(
+        updateInterface({
+          id,
+          status: next,
+          token: props.token
+        }).unwrap(),
+        '更新状态失败'
+      );
+      if (!response) return;
+      await Promise.all([refetchInterfaceListSafe(), refreshInterfaceMenu()]);
+    },
+    [callApi, props.token, refetchInterfaceListSafe, refreshInterfaceMenu, updateInterface]
+  );
+
+  const handleInterfaceListCatChange = useCallback(
+    async (id: number, nextCatId: number) => {
+      const response = await callApi(
+        updateInterface({
+          id,
+          catid: nextCatId,
+          token: props.token
+        }).unwrap(),
+        '更新分类失败'
+      );
+      if (!response) return;
+      await Promise.all([refetchInterfaceListSafe(), refreshInterfaceMenu()]);
+    },
+    [callApi, props.token, refetchInterfaceListSafe, refreshInterfaceMenu, updateInterface]
+  );
 
   function parseJsonText(text: string, label: string): unknown {
     if (!text.trim()) return {};
@@ -2379,25 +2450,22 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       const reordered = reorderById(menuRows, drag.id, targetCatId);
       const payload = buildIndexPayload(reordered);
       if (payload.length === 0) return;
-      const response = await upInterfaceCatIndex(payload).unwrap();
-      if (response.errcode !== 0) {
-        message.error(response.errmsg || '分类排序失败');
-        return;
-      }
+      const response = await callApi(upInterfaceCatIndex(payload).unwrap(), '分类排序失败');
+      if (!response) return;
       await refreshInterfaceMenu();
       return;
     }
 
     if (drag.type === 'interface' && drag.catid !== targetCatId) {
-      const response = await updateInterface({
-        id: drag.id,
-        catid: targetCatId,
-        token: props.token
-      }).unwrap();
-      if (response.errcode !== 0) {
-        message.error(response.errmsg || '移动接口失败');
-        return;
-      }
+      const response = await callApi(
+        updateInterface({
+          id: drag.id,
+          catid: targetCatId,
+          token: props.token
+        }).unwrap(),
+        '移动接口失败'
+      );
+      if (!response) return;
       await Promise.all([refreshInterfaceMenu(), refetchInterfaceListSafe()]);
     }
   }
@@ -2410,15 +2478,15 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     if (drag.id === targetInterfaceId) return;
 
     if (drag.catid !== targetCatId) {
-      const response = await updateInterface({
-        id: drag.id,
-        catid: targetCatId,
-        token: props.token
-      }).unwrap();
-      if (response.errcode !== 0) {
-        message.error(response.errmsg || '移动接口失败');
-        return;
-      }
+      const response = await callApi(
+        updateInterface({
+          id: drag.id,
+          catid: targetCatId,
+          token: props.token
+        }).unwrap(),
+        '移动接口失败'
+      );
+      if (!response) return;
       await Promise.all([refreshInterfaceMenu(), refetchInterfaceListSafe()]);
       return;
     }
@@ -2429,11 +2497,8 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     const reordered = reorderById(list, drag.id, targetInterfaceId);
     const payload = buildIndexPayload(reordered);
     if (payload.length === 0) return;
-    const response = await upInterfaceIndex(payload).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '接口排序失败');
-      return;
-    }
+    const response = await callApi(upInterfaceIndex(payload).unwrap(), '接口排序失败');
+    if (!response) return;
     await Promise.all([refreshInterfaceMenu(), refetchInterfaceListSafe()]);
   }
 
@@ -2464,16 +2529,16 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       return;
     }
     if (colModalType === 'add') {
-      const response = await addCol({
-        project_id: props.projectId,
-        name,
-        desc,
-        token: props.token
-      }).unwrap();
-      if (response.errcode !== 0) {
-        message.error(response.errmsg || '添加集合失败');
-        return;
-      }
+      const response = await callApi(
+        addCol({
+          project_id: props.projectId,
+          name,
+          desc,
+          token: props.token
+        }).unwrap(),
+        '添加集合失败'
+      );
+      if (!response) return;
       message.success('添加集合成功');
       const newColId = Number(response.data?._id || 0);
       setColModalOpen(false);
@@ -2489,16 +2554,16 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       message.error('集合不存在');
       return;
     }
-    const response = await updateCol({
-      col_id: Number(editingCol._id),
-      name,
-      desc,
-      token: props.token
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '修改集合失败');
-      return;
-    }
+    const response = await callApi(
+      updateCol({
+        col_id: Number(editingCol._id),
+        name,
+        desc,
+        token: props.token
+      }).unwrap(),
+      '修改集合失败'
+    );
+    if (!response) return;
     message.success('修改集合成功');
     setColModalOpen(false);
     setEditingCol(null);
@@ -2523,14 +2588,14 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       cancelText: '取消',
       okButtonProps: { danger: true },
       onOk: async () => {
-        const response = await triggerDelCol({
-          col_id: colId,
-          token: props.token
-        }).unwrap();
-        if (response.errcode !== 0) {
-          message.error(response.errmsg || '删除集合失败');
-          return;
-        }
+        const response = await callApi(
+          triggerDelCol({
+            col_id: colId,
+            token: props.token
+          }).unwrap(),
+          '删除集合失败'
+        );
+        if (!response) return;
         message.success('删除集合成功');
         const refreshed = await colListQuery.refetch();
         const nextRows = refreshed.data?.data || [];
@@ -2552,31 +2617,31 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       message.error('集合数据不完整');
       return;
     }
-    const addResponse = await addCol({
-      project_id: props.projectId,
-      name: `${String(col.name || 'collection')} copy`,
-      desc: String(col.desc || ''),
-      token: props.token
-    }).unwrap();
-    if (addResponse.errcode !== 0) {
-      message.error(addResponse.errmsg || '克隆集合失败');
-      return;
-    }
+    const addResponse = await callApi(
+      addCol({
+        project_id: props.projectId,
+        name: `${String(col.name || 'collection')} copy`,
+        desc: String(col.desc || ''),
+        token: props.token
+      }).unwrap(),
+      '克隆集合失败'
+    );
+    if (!addResponse) return;
     const newColId = Number(addResponse.data?._id || 0);
     if (newColId <= 0) {
       message.error('克隆集合失败');
       return;
     }
-    const cloneResponse = await cloneColCaseList({
-      project_id: props.projectId,
-      col_id: sourceColId,
-      new_col_id: newColId,
-      token: props.token
-    }).unwrap();
-    if (cloneResponse.errcode !== 0) {
-      message.error(cloneResponse.errmsg || '克隆集合失败');
-      return;
-    }
+    const cloneResponse = await callApi(
+      cloneColCaseList({
+        project_id: props.projectId,
+        col_id: sourceColId,
+        new_col_id: newColId,
+        token: props.token
+      }).unwrap(),
+      '克隆集合失败'
+    );
+    if (!cloneResponse) return;
     message.success('克隆测试集成功');
     await Promise.all([colListQuery.refetch(), caseListQuery.refetch()]);
     navigate(`/project/${props.projectId}/interface/col/${newColId}`);
@@ -2602,16 +2667,16 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       message.error('请选择项目');
       return;
     }
-    const response = await addColCaseList({
-      project_id: importProjectId,
-      col_id: importColId,
-      interface_list: selectedImportInterfaceIds,
-      token: props.token
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '导入集合失败');
-      return;
-    }
+    const response = await callApi(
+      addColCaseList({
+        project_id: importProjectId,
+        col_id: importColId,
+        interface_list: selectedImportInterfaceIds,
+        token: props.token
+      }).unwrap(),
+      '导入集合失败'
+    );
+    if (!response) return;
     message.success('导入集合成功');
     setImportModalOpen(false);
     setImportSelectedRowKeys([]);
@@ -2626,14 +2691,14 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       cancelText: '取消',
       okButtonProps: { danger: true },
       onOk: async () => {
-        const response = await triggerDelCase({
-          caseid: caseItemId,
-          token: props.token
-        }).unwrap();
-        if (response.errcode !== 0) {
-          message.error(response.errmsg || '删除用例失败');
-          return;
-        }
+        const response = await callApi(
+          triggerDelCase({
+            caseid: caseItemId,
+            token: props.token
+          }).unwrap(),
+          '删除用例失败'
+        );
+        if (!response) return;
         message.success('删除用例成功');
         await Promise.all([colListQuery.refetch(), caseListQuery.refetch()]);
         if (action === 'case' && caseId === caseItemId) {
@@ -2644,35 +2709,35 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   }
 
   async function handleCopyCase(caseItemId: string) {
-    const detailResponse = await fetchColCaseDetail({
-      caseid: caseItemId,
-      token: props.token
-    }).unwrap();
-    if (detailResponse.errcode !== 0 || !detailResponse.data) {
-      message.error(detailResponse.errmsg || '获取用例详情失败');
-      return;
-    }
+    const detailResponse = await callApi(
+      fetchColCaseDetail({
+        caseid: caseItemId,
+        token: props.token
+      }).unwrap(),
+      '获取用例详情失败'
+    );
+    if (!detailResponse?.data) return;
     const data = detailResponse.data as Record<string, unknown>;
-    const addResponse = await addColCase({
-      casename: `${String(data.casename || 'case')}_copy`,
-      project_id: Number(data.project_id || props.projectId),
-      col_id: Number(data.col_id || selectedColId || 0),
-      interface_id: Number(data.interface_id || 0),
-      case_env: String(data.case_env || ''),
-      req_params: Array.isArray(data.req_params) ? data.req_params : [],
-      req_headers: Array.isArray(data.req_headers) ? data.req_headers : [],
-      req_query: Array.isArray(data.req_query) ? data.req_query : [],
-      req_body_form: Array.isArray(data.req_body_form) ? data.req_body_form : [],
-      req_body_other: String(data.req_body_other || ''),
-      req_body_type: String(data.req_body_type || ''),
-      test_script: String(data.test_script || ''),
-      enable_script: data.enable_script === true,
-      token: props.token
-    }).unwrap();
-    if (addResponse.errcode !== 0) {
-      message.error(addResponse.errmsg || '克隆用例失败');
-      return;
-    }
+    const addResponse = await callApi(
+      addColCase({
+        casename: `${String(data.casename || 'case')}_copy`,
+        project_id: Number(data.project_id || props.projectId),
+        col_id: Number(data.col_id || selectedColId || 0),
+        interface_id: Number(data.interface_id || 0),
+        case_env: String(data.case_env || ''),
+        req_params: Array.isArray(data.req_params) ? data.req_params : [],
+        req_headers: Array.isArray(data.req_headers) ? data.req_headers : [],
+        req_query: Array.isArray(data.req_query) ? data.req_query : [],
+        req_body_form: Array.isArray(data.req_body_form) ? data.req_body_form : [],
+        req_body_other: String(data.req_body_other || ''),
+        req_body_type: String(data.req_body_type || ''),
+        test_script: String(data.test_script || ''),
+        enable_script: data.enable_script === true,
+        token: props.token
+      }).unwrap(),
+      '克隆用例失败'
+    );
+    if (!addResponse) return;
     message.success('克隆用例成功');
     const nextColId = Number(addResponse.data?.col_id || data.col_id || selectedColId || 0);
     await Promise.all([colListQuery.refetch(), caseListQuery.refetch()]);
@@ -2700,24 +2765,24 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       message.error((err as Error).message || '请求参数 JSON 格式错误');
       return;
     }
-    const response = await upColCase({
-      id: caseId,
-      casename: values.casename.trim(),
-      case_env: values.case_env?.trim() || '',
-      enable_script: values.enable_script === true,
-      test_script: values.test_script || '',
-      req_params: Array.isArray(reqParams) ? reqParams : [],
-      req_headers: Array.isArray(reqHeaders) ? reqHeaders : [],
-      req_query: Array.isArray(reqQuery) ? reqQuery : [],
-      req_body_form: Array.isArray(reqBodyForm) ? reqBodyForm : [],
-      req_body_type: values.req_body_type || 'form',
-      req_body_other: values.req_body_other || '',
-      token: props.token
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '保存用例失败');
-      return;
-    }
+    const response = await callApi(
+      upColCase({
+        id: caseId,
+        casename: values.casename.trim(),
+        case_env: values.case_env?.trim() || '',
+        enable_script: values.enable_script === true,
+        test_script: values.test_script || '',
+        req_params: Array.isArray(reqParams) ? reqParams : [],
+        req_headers: Array.isArray(reqHeaders) ? reqHeaders : [],
+        req_query: Array.isArray(reqQuery) ? reqQuery : [],
+        req_body_form: Array.isArray(reqBodyForm) ? reqBodyForm : [],
+        req_body_type: values.req_body_type || 'form',
+        req_body_other: values.req_body_other || '',
+        token: props.token
+      }).unwrap(),
+      '保存用例失败'
+    );
+    if (!response) return;
     message.success('用例已保存');
     await Promise.all([caseDetailQuery.refetch(), caseListQuery.refetch(), colListQuery.refetch()]);
   }
@@ -3041,25 +3106,25 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       return;
     }
     const values = await commonSettingForm.validateFields();
-    const response = await updateCol({
-      col_id: selectedColId,
-      checkHttpCodeIs200: values.checkHttpCodeIs200 === true,
-      checkResponseSchema: values.checkResponseSchema === true,
-      checkResponseField: {
-        enable: values.checkResponseFieldEnable === true,
-        name: values.checkResponseFieldName || 'code',
-        value: values.checkResponseFieldValue ?? '0'
-      },
-      checkScript: {
-        enable: values.checkScriptEnable === true,
-        content: values.checkScriptContent || ''
-      },
-      token: props.token
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '保存通用规则失败');
-      return;
-    }
+    const response = await callApi(
+      updateCol({
+        col_id: selectedColId,
+        checkHttpCodeIs200: values.checkHttpCodeIs200 === true,
+        checkResponseSchema: values.checkResponseSchema === true,
+        checkResponseField: {
+          enable: values.checkResponseFieldEnable === true,
+          name: values.checkResponseFieldName || 'code',
+          value: values.checkResponseFieldValue ?? '0'
+        },
+        checkScript: {
+          enable: values.checkScriptEnable === true,
+          content: values.checkScriptContent || ''
+        },
+        token: props.token
+      }).unwrap(),
+      '保存通用规则失败'
+    );
+    if (!response) return;
     message.success('通用规则已保存');
     setCommonSettingOpen(false);
     await colListQuery.refetch();
@@ -3075,34 +3140,34 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       message.error('请选择接口');
       return;
     }
-    const detailRes = await fetchInterfaceDetail({
-      id: interfaceId,
-      projectId: props.projectId,
-      token: props.token
-    }).unwrap();
-    if (detailRes.errcode !== 0 || !detailRes.data) {
-      message.error(detailRes.errmsg || '获取接口详情失败');
-      return;
-    }
+    const detailRes = await callApi(
+      fetchInterfaceDetail({
+        id: interfaceId,
+        projectId: props.projectId,
+        token: props.token
+      }).unwrap(),
+      '获取接口详情失败'
+    );
+    if (!detailRes?.data) return;
     const detail = detailRes.data as LegacyInterfaceDTO & Record<string, unknown>;
-    const response = await addColCase({
-      casename: values.casename.trim() || String(detail.title || `case-${interfaceId}`),
-      project_id: props.projectId,
-      col_id: selectedColId,
-      interface_id: interfaceId,
-      case_env: values.case_env?.trim() || '',
-      req_params: Array.isArray(detail.req_params) ? detail.req_params : [],
-      req_headers: Array.isArray(detail.req_headers) ? detail.req_headers : [],
-      req_query: Array.isArray(detail.req_query) ? detail.req_query : [],
-      req_body_form: Array.isArray(detail.req_body_form) ? detail.req_body_form : [],
-      req_body_other: String(detail.req_body_other || ''),
-      req_body_type: String(detail.req_body_type || 'raw'),
-      token: props.token
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '添加用例失败');
-      return;
-    }
+    const response = await callApi(
+      addColCase({
+        casename: values.casename.trim() || String(detail.title || `case-${interfaceId}`),
+        project_id: props.projectId,
+        col_id: selectedColId,
+        interface_id: interfaceId,
+        case_env: values.case_env?.trim() || '',
+        req_params: Array.isArray(detail.req_params) ? detail.req_params : [],
+        req_headers: Array.isArray(detail.req_headers) ? detail.req_headers : [],
+        req_query: Array.isArray(detail.req_query) ? detail.req_query : [],
+        req_body_form: Array.isArray(detail.req_body_form) ? detail.req_body_form : [],
+        req_body_other: String(detail.req_body_other || ''),
+        req_body_type: String(detail.req_body_type || 'raw'),
+        token: props.token
+      }).unwrap(),
+      '添加用例失败'
+    );
+    if (!response) return;
     message.success('测试用例添加成功');
     setAddCaseOpen(false);
     addCaseForm.resetFields();
@@ -3122,24 +3187,21 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       const reordered = reorderById(colRows, drag.colId, targetColId);
       const payload = buildIndexPayload(reordered);
       if (payload.length === 0) return;
-      const response = await upColIndex(payload).unwrap();
-      if (response.errcode !== 0) {
-        message.error(response.errmsg || '测试集合排序失败');
-        return;
-      }
+      const response = await callApi(upColIndex(payload).unwrap(), '测试集合排序失败');
+      if (!response) return;
       await colListQuery.refetch();
       return;
     }
     if (drag.type === 'case' && drag.colId !== targetColId) {
-      const response = await upColCase({
-        id: drag.caseId,
-        col_id: targetColId,
-        token: props.token
-      }).unwrap();
-      if (response.errcode !== 0) {
-        message.error(response.errmsg || '移动测试用例失败');
-        return;
-      }
+      const response = await callApi(
+        upColCase({
+          id: drag.caseId,
+          col_id: targetColId,
+          token: props.token
+        }).unwrap(),
+        '移动测试用例失败'
+      );
+      if (!response) return;
       await Promise.all([colListQuery.refetch(), caseListQuery.refetch()]);
     }
   }
@@ -3151,15 +3213,15 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     if (!targetCaseId || drag.caseId === targetCaseId) return;
 
     if (drag.colId !== targetColId) {
-      const moveResponse = await upColCase({
-        id: drag.caseId,
-        col_id: targetColId,
-        token: props.token
-      }).unwrap();
-      if (moveResponse.errcode !== 0) {
-        message.error(moveResponse.errmsg || '移动测试用例失败');
-        return;
-      }
+      const moveResponse = await callApi(
+        upColCase({
+          id: drag.caseId,
+          col_id: targetColId,
+          token: props.token
+        }).unwrap(),
+        '移动测试用例失败'
+      );
+      if (!moveResponse) return;
       await Promise.all([colListQuery.refetch(), caseListQuery.refetch()]);
       return;
     }
@@ -3170,11 +3232,8 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     const reordered = reorderByCaseId(sourceCases, drag.caseId, targetCaseId);
     const payload = buildCaseIndexPayload(reordered);
     if (payload.length === 0) return;
-    const response = await upColCaseIndex(payload).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '测试用例排序失败');
-      return;
-    }
+    const response = await callApi(upColCaseIndex(payload).unwrap(), '测试用例排序失败');
+    if (!response) return;
     await Promise.all([colListQuery.refetch(), caseListQuery.refetch()]);
   }
 
@@ -3571,211 +3630,34 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   }
 
   function renderApiContent() {
-    const tablePageSize = 20;
-    const pagedFilteredList = filteredList.slice((listPage - 1) * tablePageSize, listPage * tablePageSize);
     if (interfaceId <= 0) {
       return (
         <Card>
-          <Space direction="vertical" style={{ width: '100%' }}>
-            {currentCat ? (
-              <Alert
-                type="info"
-                showIcon
-                message={`接口分类：${currentCat.name}`}
-                description={
-                  <Space size={8}>
-                    <span>{currentCat.desc?.trim() || '暂无分类简介'}</span>
-                    {canEdit ? (
-                      <Button
-                        size="small"
-                        type="link"
-                        onClick={() =>
-                          openEditCatModal({
-                            _id: currentCat._id,
-                            name: currentCat.name,
-                            desc: currentCat.desc
-                          })
-                        }
-                      >
-                        编辑分类
-                      </Button>
-                    ) : null}
-                  </Space>
-                }
-              />
-            ) : null}
-            <div className="legacy-interface-list-toolbar">
-              <Text strong>{currentCatName} 共 ({filteredList.length}) 个接口</Text>
-              <Space size={8}>
-                <Input
-                  value={listKeyword}
-                  onChange={event => setListKeyword(event.target.value)}
-                  placeholder="搜索接口"
-                  prefix={<SearchOutlined />}
-                  allowClear
-                  size="small"
-                  style={{ width: 220 }}
-                />
-                <Select<'all' | 'done' | 'undone'>
-                  value={statusFilter}
-                  onChange={setStatusFilter}
-                  size="small"
-                  style={{ width: 124 }}
-                  options={[
-                    { value: 'all', label: '全部状态' },
-                    { value: 'done', label: '已完成' },
-                    { value: 'undone', label: '未完成' }
-                  ]}
-                />
-                {canEdit ? (
-                  <>
-                    <Button size="small" onClick={() => openAddInterfaceModal()} disabled={catRows.length === 0}>
-                      添加接口
-                    </Button>
-                    <Button
-                      size="small"
-                      onClick={() => {
-                        addCatForm.resetFields();
-                        setAddCatOpen(true);
-                      }}
-                    >
-                      添加分类
-                    </Button>
-                  </>
-                ) : null}
-              </Space>
-            </div>
-
-            <Table
-              rowKey={row => Number(row._id || 0)}
-              loading={currentListLoading}
-              dataSource={pagedFilteredList}
-              locale={{
-                emptyText:
-                  filteredList.length === 0 && !listKeyword.trim() && statusFilter === 'all' ? (
-                    <LegacyErrMsg type="noInterface" />
-                  ) : (
-                    <LegacyErrMsg type="noData" />
-                  )
-              }}
-              pagination={{
-                current: listPage,
-                pageSize: tablePageSize,
-                total: filteredList.length,
-                showSizeChanger: false,
-                onChange: page => setListPage(page)
-              }}
-              columns={[
-                {
-                  title: '接口名称',
-                  dataIndex: 'title',
-                  render: (value, row) => (
-                    <button
-                      type="button"
-                      className="legacy-interface-menu-link-btn"
-                      onClick={() => navigateWithGuard(`/project/${props.projectId}/interface/api/${row._id}`)}
-                    >
-                      {value}
-                    </button>
-                  )
-                },
-                {
-                  title: '接口路径',
-                  dataIndex: 'path',
-                  render: (value, row) => (
-                    <Space>
-                      <span className="legacy-method-pill" style={methodStyle(String(row.method || 'GET'))}>
-                        {String(row.method || 'GET').toUpperCase()}
-                      </span>
-                      {row.api_opened ? (
-                        <Tooltip title="开放接口">
-                          <EyeOutlined className="legacy-opened-icon" />
-                        </Tooltip>
-                      ) : null}
-                      <span>{`${props.basepath || ''}${value || ''}`}</span>
-                    </Space>
-                  )
-                },
-                {
-                  title: '状态',
-                  dataIndex: 'status',
-                  width: 140,
-                  render: (value, row) => (
-                    <Select<'done' | 'undone'>
-                      value={String(value || 'undone') as 'done' | 'undone'}
-                      style={{ width: 120 }}
-                      disabled={!canEdit}
-                      onChange={async next => {
-                        const response = await updateInterface({
-                          id: Number(row._id || 0),
-                          status: next,
-                          token: props.token
-                        }).unwrap();
-                        if (response.errcode !== 0) {
-                          message.error(response.errmsg || '更新状态失败');
-                          return;
-                        }
-                        await Promise.all([refetchInterfaceListSafe(), refreshInterfaceMenu()]);
-                      }}
-                      options={[
-                        { label: '已完成', value: 'done' },
-                        { label: '未完成', value: 'undone' }
-                      ]}
-                    />
-                  )
-                },
-                {
-                  title: '分类',
-                  width: 220,
-                  render: (_, row) => (
-                    <Select<number>
-                      value={Number(row.catid || 0)}
-                      style={{ width: 200 }}
-                      disabled={!canEdit}
-                      onChange={async nextCatId => {
-                        const response = await updateInterface({
-                          id: Number(row._id || 0),
-                          catid: nextCatId,
-                          token: props.token
-                        }).unwrap();
-                        if (response.errcode !== 0) {
-                          message.error(response.errmsg || '更新分类失败');
-                          return;
-                        }
-                        await Promise.all([refetchInterfaceListSafe(), refreshInterfaceMenu()]);
-                      }}
-                      options={catRows.map(item => ({
-                        label: item.name,
-                        value: Number(item._id || 0)
-                      }))}
-                    />
-                  )
-                },
-                {
-                  title: '操作',
-                  width: 130,
-                  render: (_, row) =>
-                    canEdit ? (
-                      <Space size={4}>
-                        <Button
-                          size="small"
-                          icon={<CopyOutlined />}
-                          onClick={() => void copyInterfaceRow(row as LegacyInterfaceDTO)}
-                        />
-                        <Button
-                          size="small"
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={() => confirmDeleteInterface(Number(row._id || 0))}
-                        />
-                      </Space>
-                    ) : (
-                      '-'
-                    )
-                }
-              ]}
-            />
-          </Space>
+          <InterfaceListPanel
+            basepath={props.basepath}
+            canEdit={canEdit}
+            currentCat={currentCat}
+            currentCatName={currentCatName}
+            filteredList={filteredList}
+            currentListLoading={currentListLoading}
+            listKeyword={listKeyword}
+            statusFilter={statusFilter}
+            listPage={listPage}
+            catOptions={catSelectOptions}
+            hasCategories={catRows.length > 0}
+            onListKeywordChange={setListKeyword}
+            onStatusFilterChange={setStatusFilter}
+            onListPageChange={setListPage}
+            onOpenAddInterface={() => openAddInterfaceModal()}
+            onOpenAddCat={openAddCatModal}
+            onOpenEditCat={openEditCatModal}
+            onNavigateInterface={id => navigateWithGuard(`/project/${props.projectId}/interface/api/${id}`)}
+            onUpdateStatus={handleInterfaceListStatusChange}
+            onUpdateCategory={handleInterfaceListCatChange}
+            onCopyInterface={copyInterfaceRow}
+            onDeleteInterface={confirmDeleteInterface}
+            methodStyle={methodStyle}
+          />
         </Card>
       );
     }
@@ -4000,7 +3882,9 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
                       <h2 className="interface-title">备注</h2>
                         <div
                           className="legacy-view-remark"
-                          dangerouslySetInnerHTML={{ __html: String(currentInterface.desc || '') }}
+                          dangerouslySetInnerHTML={{
+                            __html: sanitizeHtml(String(currentInterface.desc || ''))
+                          }}
                         />
                       </>
                     ) : null}
@@ -4506,32 +4390,15 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
                             </Form.Item>
                             {editValues.req_body_is_json_schema ? (
                               <>
-                                <Space style={{ marginBottom: 12 }}>
-                                  <Text strong>编辑模式</Text>
-                                  <Radio.Group
-                                    size="small"
-                                    value={reqSchemaEditorMode}
-                                    onChange={event => setReqSchemaEditorMode(event.target.value)}
-                                  >
-                                    <Radio.Button value="visual">可视化</Radio.Button>
-                                    <Radio.Button value="text">文本</Radio.Button>
-                                  </Radio.Group>
-                                </Space>
-                                      {reqSchemaEditorMode === 'visual' ? (
-                                <>
-                                  <Form.Item name="req_body_other" hidden>
-                                    <Input.TextArea />
-                                  </Form.Item>
-                                  <LegacySchemaEditor
-                                    value={String(watchedReqBodyOther || '')}
-                                    onChange={next => form.setFieldValue('req_body_other', next)}
-                                  />
-                                </>
-                                ) : (
-                                  <Form.Item label="Body 内容" name="req_body_other">
-                                    <Input.TextArea rows={12} placeholder='{"type":"object","properties":{}}' />
-                                  </Form.Item>
-                                )}
+                                <SchemaModeEditor
+                                  mode={reqSchemaEditorMode}
+                                  onModeChange={setReqSchemaEditorMode}
+                                  fieldName="req_body_other"
+                                  value={String(watchedReqBodyOther || '')}
+                                  onValueChange={next => form.setFieldValue('req_body_other', next)}
+                                  textLabel="Body 内容"
+                                  textPlaceholder='{"type":"object","properties":{}}'
+                                />
                               </>
                             ) : (
                               <>
@@ -4580,32 +4447,16 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
                                 <>
                                   {editValues.res_body_is_json_schema ? (
                                     <>
-                                      <Space style={{ marginBottom: 12 }}>
-                                        <Text strong>编辑模式</Text>
-                                        <Radio.Group
-                                          size="small"
-                                          value={resSchemaEditorMode}
-                                          onChange={event => setResSchemaEditorMode(event.target.value)}
-                                        >
-                                          <Radio.Button value="visual">可视化</Radio.Button>
-                                          <Radio.Button value="text">文本</Radio.Button>
-                                        </Radio.Group>
-                                      </Space>
-                                      {resSchemaEditorMode === 'visual' ? (
-                                        <>
-                                          <Form.Item name="res_body" hidden style={{ marginBottom: 0 }}>
-                                            <Input.TextArea />
-                                          </Form.Item>
-                                          <LegacySchemaEditor
-                                            value={String(watchedResBody || '')}
-                                            onChange={next => form.setFieldValue('res_body', next)}
-                                          />
-                                        </>
-                                      ) : (
-                                        <Form.Item label="返回内容" name="res_body" style={{ marginBottom: 0 }}>
-                                          <Input.TextArea rows={12} />
-                                        </Form.Item>
-                                      )}
+                                      <SchemaModeEditor
+                                        mode={resSchemaEditorMode}
+                                        onModeChange={setResSchemaEditorMode}
+                                        fieldName="res_body"
+                                        value={String(watchedResBody || '')}
+                                        onValueChange={next => form.setFieldValue('res_body', next)}
+                                        textLabel="返回内容"
+                                        hiddenFormItemStyle={{ marginBottom: 0 }}
+                                        textFormItemStyle={{ marginBottom: 0 }}
+                                      />
                                     </>
                                   ) : (
                                     <>
@@ -5420,6 +5271,14 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         confirmLoading={addColCaseState.isLoading}
       >
         <Form<AddCaseForm> form={addCaseForm} layout="vertical" onFinish={values => void handleAddCase(values)}>
+          {caseInterfaceTruncated ? (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 12 }}
+              message={`接口选项仅展示前 ${caseInterfaceOptions.length} 条，请通过左侧筛选或搜索后再添加。`}
+            />
+          ) : null}
           <Form.Item label="接口" name="interface_id" rules={[{ required: true, message: '请选择接口' }]}>
             <Select
               showSearch
@@ -5500,132 +5359,16 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         </Form>
       </Modal>
 
-      <Modal
-        title="服务端测试结果"
-        open={autoTestModalOpen}
-        width={1080}
-        footer={[
-          <Button key="close" onClick={() => setAutoTestModalOpen(false)}>
-            关闭
-          </Button>
-        ]}
-        onCancel={() => setAutoTestModalOpen(false)}
-      >
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          <Alert
-            type="info"
-            showIcon
-            message={autoTestReport?.message?.msg || '暂无测试结果'}
-            description={
-              <Space size={12} wrap>
-                <span>总数: {Number(autoTestReport?.message?.len || autoTestRows.length || 0)}</span>
-                <span>通过: {Number(autoTestReport?.message?.successNum || 0)}</span>
-                <span>失败: {Number(autoTestReport?.message?.failedNum || 0)}</span>
-                <span>耗时: {String(autoTestReport?.runTime || '-')}</span>
-              </Space>
-            }
-          />
-          <Table<AutoTestResultItem>
-            rowKey={row => String(row.id || `${row.method || 'GET'}:${row.path || ''}`)}
-            size="small"
-            pagination={{ pageSize: 10 }}
-            dataSource={autoTestRows}
-            columns={[
-              {
-                title: '用例',
-                width: 240,
-                render: (_, row) => <span>{row.name || row.id}</span>
-              },
-              {
-                title: '接口',
-                render: (_, row) => (
-                  <Space size={8}>
-                    <span className="legacy-method-pill" style={methodStyle(row.method || 'GET')}>
-                      {String(row.method || 'GET').toUpperCase()}
-                    </span>
-                    <span>{row.path || '-'}</span>
-                  </Space>
-                )
-              },
-              {
-                title: 'HTTP',
-                width: 90,
-                render: (_, row) => (row.status == null ? '-' : String(row.status))
-              },
-              {
-                title: '结果',
-                width: 90,
-                render: (_, row) =>
-                  row.code === 0 ? (
-                    <Tag color="success">通过</Tag>
-                  ) : (
-                    <Tag color={row.code === 1 ? 'warning' : 'error'}>
-                      {row.code === 1 ? '失败' : '异常'}
-                    </Tag>
-                  )
-              },
-              {
-                title: '信息',
-                render: (_, row) => (
-                  <span>
-                    {(row.validRes || [])
-                      .map(item => String(item?.message || ''))
-                      .filter(Boolean)
-                      .join(' | ') || row.statusText || '-'}
-                  </span>
-                )
-              },
-              {
-                title: '操作',
-                width: 90,
-                render: (_, row) => (
-                  <Button size="small" onClick={() => setAutoTestDetailItem(row)}>
-                    详情
-                  </Button>
-                )
-              }
-            ]}
-          />
-        </Space>
-      </Modal>
-
-      <Modal
-        title={`测试详情 ${autoTestDetailItem?.name || ''}`}
-        open={!!autoTestDetailItem}
-        width={980}
-        onCancel={() => setAutoTestDetailItem(null)}
-        footer={[
-          <Button key="close" onClick={() => setAutoTestDetailItem(null)}>
-            关闭
-          </Button>
-        ]}
-      >
-        {autoTestDetailItem ? (
-          <Space direction="vertical" style={{ width: '100%' }} size={12}>
-            <Descriptions bordered size="small" column={1}>
-              <Descriptions.Item label="用例ID">{autoTestDetailItem.id || '-'}</Descriptions.Item>
-              <Descriptions.Item label="接口地址">{autoTestDetailItem.url || autoTestDetailItem.path || '-'}</Descriptions.Item>
-              <Descriptions.Item label="方法">{String(autoTestDetailItem.method || '-')}</Descriptions.Item>
-              <Descriptions.Item label="HTTP 状态">{autoTestDetailItem.status == null ? '-' : String(autoTestDetailItem.status)}</Descriptions.Item>
-              <Descriptions.Item label="执行结果">
-                {autoTestDetailItem.code === 0 ? '通过' : autoTestDetailItem.code === 1 ? '失败' : '异常'}
-              </Descriptions.Item>
-            </Descriptions>
-            <Text strong>校验信息</Text>
-            <Input.TextArea
-              rows={5}
-              readOnly
-              value={(autoTestDetailItem.validRes || []).map(item => item?.message || '').join('\n') || '-'}
-            />
-            <Text strong>请求参数</Text>
-            <Input.TextArea rows={6} readOnly value={stringifyPretty(autoTestDetailItem.params)} />
-            <Text strong>响应头</Text>
-            <Input.TextArea rows={6} readOnly value={stringifyPretty(autoTestDetailItem.res_header)} />
-            <Text strong>响应体</Text>
-            <Input.TextArea rows={10} readOnly value={stringifyPretty(autoTestDetailItem.res_body)} />
-          </Space>
-        ) : null}
-      </Modal>
+      <AutoTestResultModals
+        reportOpen={autoTestModalOpen}
+        onCloseReport={() => setAutoTestModalOpen(false)}
+        detailItem={autoTestDetailItem}
+        onCloseDetail={() => setAutoTestDetailItem(null)}
+        report={autoTestReport}
+        rows={autoTestRows}
+        onOpenDetail={item => setAutoTestDetailItem(item)}
+        methodStyle={methodStyle}
+      />
     </>
   );
 }

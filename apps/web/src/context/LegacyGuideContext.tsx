@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useUpdateStudyMutation } from '../services/yapi-api';
 
 type LegacyGuideContextValue = {
   active: boolean;
@@ -53,6 +54,22 @@ type LegacyGuideProviderProps = {
 
 export function LegacyGuideProvider(props: LegacyGuideProviderProps) {
   const [step, setStep] = useState<number>(() => readGuideStep(props.uid, props.study));
+  const [updateStudy] = useUpdateStudyMutation();
+
+  const syncStudy = useCallback(() => {
+    void updateStudy()
+      .unwrap()
+      .then(response => {
+        if (response.errcode === 0) return;
+        // eslint-disable-next-line no-console
+        console.error('[guide] sync study rejected by server', response.errmsg || response.errcode);
+      })
+      .catch(error => {
+        // Keep guide flow non-blocking while avoiding unhandled promise rejection.
+        // eslint-disable-next-line no-console
+        console.error('[guide] sync study failed', error);
+      });
+  }, [updateStudy]);
 
   useEffect(() => {
     setStep(readGuideStep(props.uid, props.study));
@@ -61,11 +78,8 @@ export function LegacyGuideProvider(props: LegacyGuideProviderProps) {
   const finish = useCallback(() => {
     persistGuideStep(props.uid, -1);
     setStep(-1);
-    void fetch('/api/user/up_study', {
-      method: 'GET',
-      credentials: 'include'
-    });
-  }, [props.uid]);
+    syncStudy();
+  }, [props.uid, syncStudy]);
 
   const next = useCallback(() => {
     setStep(prev => {
@@ -73,16 +87,13 @@ export function LegacyGuideProvider(props: LegacyGuideProviderProps) {
       const nextStep = prev + 1;
       if (nextStep > LEGACY_GUIDE_MAX_STEP) {
         persistGuideStep(props.uid, -1);
-        void fetch('/api/user/up_study', {
-          method: 'GET',
-          credentials: 'include'
-        });
+        syncStudy();
         return -1;
       }
       persistGuideStep(props.uid, nextStep);
       return nextStep;
     });
-  }, [props.uid]);
+  }, [props.uid, syncStudy]);
 
   const value = useMemo<LegacyGuideContextValue>(
     () => ({
@@ -100,4 +111,3 @@ export function LegacyGuideProvider(props: LegacyGuideProviderProps) {
 export function useLegacyGuide() {
   return useContext(LegacyGuideContext);
 }
-

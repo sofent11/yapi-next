@@ -122,13 +122,58 @@ function encodeQuery(params: Record<string, string | number | boolean | undefine
   return search.toString();
 }
 
+const INTERFACE_TREE_LIST_TAG = { type: 'InterfaceTree' as const, id: 'LIST' };
+const COL_CASE_LIST_TAG = { type: 'ColCase' as const, id: 'LIST' };
+const USER_LIST_TAG = { type: 'User' as const, id: 'LIST' };
+const GROUP_LIST_TAG = { type: 'Group' as const, id: 'LIST' };
+const PROJECT_LIST_TAG = { type: 'Project' as const, id: 'LIST' };
+const FOLLOW_LIST_TAG = { type: 'Project' as const, id: 'FOLLOW-LIST' };
+
+function toPositiveNumber(value: unknown): number {
+  const numeric = Number(value || 0);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
+function userTag(uid: number) {
+  return { type: 'User' as const, id: uid };
+}
+
+function groupTag(groupId: number) {
+  return { type: 'Group' as const, id: groupId };
+}
+
+function projectTag(projectId: number) {
+  return { type: 'Project' as const, id: projectId };
+}
+
+function interfaceProjectTag(projectId: number) {
+  return { type: 'InterfaceTree' as const, id: `PROJECT-${projectId}` };
+}
+
+function interfaceCategoryTag(catid: number) {
+  return { type: 'InterfaceTree' as const, id: `CAT-${catid}` };
+}
+
+function interfaceEntityTag(interfaceId: number) {
+  return { type: 'InterfaceTree' as const, id: `INTERFACE-${interfaceId}` };
+}
+
 export const yapiApi = createApi({
   reducerPath: 'yapiApi',
   baseQuery: fetchBaseQuery({
     baseUrl: '/api',
     credentials: 'include'
   }),
-  tagTypes: ['ImportTask', 'ImportTaskList', 'InterfaceTree', 'ProjectInfo'],
+  tagTypes: [
+    'ImportTask',
+    'ImportTaskList',
+    'InterfaceTree',
+    'User',
+    'Group',
+    'Project',
+    'Col',
+    'ColCase'
+  ],
   endpoints: builder => ({
     login: builder.mutation<ApiResult<UserProfile>, UserLoginRequest>({
       query: payload => ({
@@ -136,7 +181,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: [USER_LIST_TAG, GROUP_LIST_TAG, PROJECT_LIST_TAG, FOLLOW_LIST_TAG]
     }),
     registerUser: builder.mutation<ApiResult<UserProfile>, UserRegisterRequest>({
       query: payload => ({
@@ -144,7 +189,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: [USER_LIST_TAG, GROUP_LIST_TAG, PROJECT_LIST_TAG, FOLLOW_LIST_TAG]
     }),
     loginByToken: builder.mutation<ApiResult<UserProfile>, UserLoginByTokenRequest>({
       query: payload => ({
@@ -152,11 +197,14 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: [USER_LIST_TAG, GROUP_LIST_TAG, PROJECT_LIST_TAG, FOLLOW_LIST_TAG]
     }),
     getUserStatus: builder.query<UserStatusResponse, void>({
       query: () => ({ url: '/user/status' }),
-      providesTags: ['ProjectInfo']
+      providesTags: result => {
+        const uid = toPositiveNumber(result?.data?._id || result?.data?.uid);
+        return uid > 0 ? [USER_LIST_TAG, userTag(uid)] : [USER_LIST_TAG];
+      }
     }),
     getUserList: builder.query<ApiResult<UserListResult>, UserListQuery | void>({
       query: args => ({
@@ -165,13 +213,18 @@ export const yapiApi = createApi({
           limit: args?.limit || 20
         })}`
       }),
-      providesTags: ['ProjectInfo']
+      providesTags: result => [
+        USER_LIST_TAG,
+        ...((result?.data?.list || [])
+          .map(item => userTag(toPositiveNumber(item._id || item.uid)))
+          .filter(item => typeof item.id === 'number' && item.id > 0))
+      ]
     }),
     findUser: builder.query<ApiResult<UserProfile>, UserFindQuery>({
       query: args => ({
         url: `/user/find?${encodeQuery({ id: args.id })}`
       }),
-      providesTags: ['ProjectInfo']
+      providesTags: (_result, _error, args) => [USER_LIST_TAG, userTag(args.id)]
     }),
     updateUser: builder.mutation<
       ApiResult<{ acknowledged?: boolean; matchedCount?: number; modifiedCount?: number }>,
@@ -182,7 +235,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [USER_LIST_TAG, userTag(args.uid)]
     }),
     deleteUser: builder.mutation<
       ApiResult<{ acknowledged?: boolean; deletedCount?: number }>,
@@ -193,16 +246,17 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [USER_LIST_TAG, userTag(args.id)]
     }),
-    updateStudy: builder.query<
+    updateStudy: builder.mutation<
       ApiResult<{ acknowledged?: boolean; matchedCount?: number; modifiedCount?: number }>,
       void
     >({
       query: () => ({
-        url: '/user/up_study'
+        url: '/user/up_study',
+        method: 'GET'
       }),
-      providesTags: ['ProjectInfo']
+      invalidatesTags: [USER_LIST_TAG]
     }),
     changePassword: builder.mutation<
       ApiResult<{ acknowledged?: boolean; matchedCount?: number; modifiedCount?: number }>,
@@ -213,19 +267,19 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: [USER_LIST_TAG]
     }),
     searchUsers: builder.query<ApiResult<UserSearchItem[]>, { q: string }>({
       query: args => ({
         url: `/user/search?${encodeQuery({ q: args.q })}`
       }),
-      providesTags: ['ProjectInfo']
+      providesTags: [USER_LIST_TAG]
     }),
     getUserProjectContext: builder.query<ApiResult<UserProjectContextResult>, UserProjectContextQuery>({
       query: args => ({
         url: `/user/project?${encodeQuery({ type: args.type, id: args.id })}`
       }),
-      providesTags: ['ProjectInfo']
+      providesTags: [USER_LIST_TAG]
     }),
     uploadAvatar: builder.mutation<
       ApiResult<{ acknowledged?: boolean; matchedCount?: number; modifiedCount?: number; upsertedId?: unknown }>,
@@ -236,28 +290,36 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: [USER_LIST_TAG]
     }),
     logout: builder.mutation<ApiResult<string>, void>({
       query: () => ({
         url: '/user/logout',
         method: 'GET'
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: [USER_LIST_TAG, GROUP_LIST_TAG, PROJECT_LIST_TAG, FOLLOW_LIST_TAG]
     }),
     getGroupList: builder.query<ApiResult<GroupListItem[]>, void>({
       query: () => ({ url: '/group/list' }),
-      providesTags: ['ProjectInfo']
+      providesTags: result => [
+        GROUP_LIST_TAG,
+        ...((result?.data || [])
+          .map(item => groupTag(toPositiveNumber(item._id)))
+          .filter(item => typeof item.id === 'number' && item.id > 0))
+      ]
     }),
     getMyGroup: builder.query<ApiResult<GroupListItem>, void>({
       query: () => ({ url: '/group/get_mygroup' }),
-      providesTags: ['ProjectInfo']
+      providesTags: result => {
+        const id = toPositiveNumber(result?.data?._id);
+        return id > 0 ? [GROUP_LIST_TAG, groupTag(id)] : [GROUP_LIST_TAG];
+      }
     }),
     getGroup: builder.query<ApiResult<GroupListItem>, { id: number }>({
       query: args => ({
         url: `/group/get?${encodeQuery({ id: args.id })}`
       }),
-      providesTags: ['ProjectInfo']
+      providesTags: (_result, _error, args) => [GROUP_LIST_TAG, groupTag(args.id)]
     }),
     addGroup: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -268,7 +330,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: [GROUP_LIST_TAG, PROJECT_LIST_TAG]
     }),
     updateGroup: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -287,7 +349,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [GROUP_LIST_TAG, groupTag(args.id), PROJECT_LIST_TAG]
     }),
     delGroup: builder.mutation<ApiResult<Record<string, unknown>>, { id: number }>({
       query: payload => ({
@@ -295,7 +357,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [GROUP_LIST_TAG, groupTag(args.id), PROJECT_LIST_TAG]
     }),
     getGroupMemberList: builder.query<
       ApiResult<Array<{ uid: number; role?: string; username?: string; email?: string }>>,
@@ -304,7 +366,7 @@ export const yapiApi = createApi({
       query: args => ({
         url: `/group/get_member_list?${encodeQuery({ id: args.id })}`
       }),
-      providesTags: ['ProjectInfo']
+      providesTags: (_result, _error, args) => [GROUP_LIST_TAG, groupTag(args.id)]
     }),
     addGroupMember: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -315,7 +377,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [GROUP_LIST_TAG, groupTag(args.id)]
     }),
     delGroupMember: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -326,7 +388,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [GROUP_LIST_TAG, groupTag(args.id)]
     }),
     changeGroupMemberRole: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -337,7 +399,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [GROUP_LIST_TAG, groupTag(args.id)]
     }),
     getProjectList: builder.query<ApiResult<ProjectListResult>, { groupId: number }>({
       query: args => ({
@@ -345,7 +407,12 @@ export const yapiApi = createApi({
           group_id: args.groupId
         })}`
       }),
-      providesTags: ['ProjectInfo']
+      providesTags: result => [
+        PROJECT_LIST_TAG,
+        ...((result?.data?.list || [])
+          .map(item => projectTag(toPositiveNumber(item._id)))
+          .filter(item => typeof item.id === 'number' && item.id > 0))
+      ]
     }),
     checkProjectName: builder.query<ApiResult<Record<string, unknown>>, { name: string; groupId: number }>({
       query: args => ({
@@ -372,7 +439,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [PROJECT_LIST_TAG, GROUP_LIST_TAG, groupTag(args.group_id)]
     }),
     copyProject: builder.mutation<ApiResult<ProjectListItem>, ProjectCopyRequest>({
       query: payload => ({
@@ -380,7 +447,11 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo', 'InterfaceTree']
+      invalidatesTags: (_result, _error, args) => [
+        PROJECT_LIST_TAG,
+        projectTag(args._id),
+        { type: 'InterfaceTree', id: `PROJECT-${args._id}` }
+      ]
     }),
     delProject: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -391,13 +462,23 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo', 'InterfaceTree']
+      invalidatesTags: (_result, _error, args) => [
+        PROJECT_LIST_TAG,
+        FOLLOW_LIST_TAG,
+        projectTag(args.id),
+        { type: 'InterfaceTree', id: `PROJECT-${args.id}` }
+      ]
     }),
     getFollowList: builder.query<ApiResult<FollowListResult>, void>({
       query: () => ({
         url: '/follow/list'
       }),
-      providesTags: ['ProjectInfo']
+      providesTags: result => [
+        FOLLOW_LIST_TAG,
+        ...((result?.data?.list || [])
+          .map(item => projectTag(toPositiveNumber(item.projectid || item._id)))
+          .filter(item => typeof item.id === 'number' && item.id > 0))
+      ]
     }),
     addFollow: builder.mutation<ApiResult<FollowItem>, { projectid: number }>({
       query: payload => ({
@@ -405,7 +486,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [FOLLOW_LIST_TAG, projectTag(args.projectid)]
     }),
     delFollow: builder.mutation<
       ApiResult<{ acknowledged?: boolean; deletedCount?: number }>,
@@ -416,7 +497,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [FOLLOW_LIST_TAG, projectTag(args.projectid)]
     }),
     updateProject: builder.mutation<
       ApiResult<{ acknowledged?: boolean; matchedCount?: number; modifiedCount?: number }>,
@@ -427,7 +508,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.id)]
     }),
     getProjectEnv: builder.query<ApiResult<{ _id?: number; env?: ProjectEnvItem[] }>, { projectId: number }>({
       query: args => ({
@@ -435,7 +516,7 @@ export const yapiApi = createApi({
           project_id: args.projectId
         })}`
       }),
-      providesTags: ['ProjectInfo']
+      providesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.projectId)]
     }),
     updateProjectEnv: builder.mutation<
       ApiResult<{ acknowledged?: boolean; matchedCount?: number; modifiedCount?: number }>,
@@ -446,7 +527,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.id)]
     }),
     updateProjectTag: builder.mutation<
       ApiResult<{ acknowledged?: boolean; matchedCount?: number; modifiedCount?: number }>,
@@ -457,7 +538,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.id)]
     }),
     addProjectMember: builder.mutation<
       ApiResult<{
@@ -473,13 +554,13 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.id)]
     }),
     getProjectMemberList: builder.query<ApiResult<MemberItem[]>, { id: number }>({
       query: args => ({
         url: `/project/get_member_list?${encodeQuery({ id: args.id })}`
       }),
-      providesTags: ['ProjectInfo']
+      providesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.id)]
     }),
     delProjectMember: builder.mutation<
       ApiResult<{ acknowledged?: boolean; matchedCount?: number; modifiedCount?: number }>,
@@ -490,7 +571,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.id)]
     }),
     changeProjectMemberRole: builder.mutation<
       ApiResult<{ acknowledged?: boolean; matchedCount?: number; modifiedCount?: number }>,
@@ -501,7 +582,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.id)]
     }),
     changeProjectMemberEmailNotice: builder.mutation<
       ApiResult<{ acknowledged?: boolean; matchedCount?: number; modifiedCount?: number }>,
@@ -512,7 +593,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.id)]
     }),
     upsetProject: builder.mutation<
       ApiResult<{ acknowledged?: boolean; matchedCount?: number; modifiedCount?: number }>,
@@ -523,7 +604,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.id)]
     }),
     getProject: builder.query<
       ApiResult<ProjectListItem & { cat?: InterfaceTreeNode[] }>,
@@ -535,7 +616,7 @@ export const yapiApi = createApi({
           token: args.token
         })}`
       }),
-      providesTags: ['ProjectInfo']
+      providesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.projectId)]
     }),
     getProjectToken: builder.query<ApiResult<string>, { projectId: number }>({
       query: args => ({
@@ -543,7 +624,7 @@ export const yapiApi = createApi({
           project_id: args.projectId
         })}`
       }),
-      providesTags: ['ProjectInfo']
+      providesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.projectId)]
     }),
     updateProjectToken: builder.mutation<
       ApiResult<{ token: string; matchedCount?: number; modifiedCount?: number; acknowledged?: boolean }>,
@@ -555,7 +636,7 @@ export const yapiApi = createApi({
         })}`,
         method: 'GET'
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.projectId)]
     }),
     searchProject: builder.query<
       ApiResult<{
@@ -567,7 +648,8 @@ export const yapiApi = createApi({
     >({
       query: args => ({
         url: `/project/search?${encodeQuery({ q: args.q })}`
-      })
+      }),
+      providesTags: [PROJECT_LIST_TAG, GROUP_LIST_TAG]
     }),
     fetchSwaggerByUrl: builder.query<ApiResult<Record<string, unknown>>, { url: string }>({
       query: args => ({
@@ -580,7 +662,10 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ImportTaskList', 'InterfaceTree']
+      invalidatesTags: (_result, _error, args) => [
+        { type: 'ImportTaskList', id: `PROJECT-${args.project_id}` },
+        { type: 'InterfaceTree', id: `PROJECT-${args.project_id}` }
+      ]
     }),
     getImportTask: builder.query<
       ApiResult<SpecImportTaskDTO>,
@@ -606,7 +691,7 @@ export const yapiApi = createApi({
           limit: args.limit || 20
         })}`
       }),
-      providesTags: ['ImportTaskList']
+      providesTags: (_result, _error, args) => [{ type: 'ImportTaskList', id: `PROJECT-${args.projectId}` }]
     }),
     exportSpec: builder.mutation<ApiResult<Record<string, unknown>>, SpecExportQuery>({
       query: payload => ({
@@ -641,7 +726,7 @@ export const yapiApi = createApi({
           detail: args.detail || 'summary'
         })}`
       }),
-      providesTags: ['InterfaceTree']
+      providesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceProjectTag(args.projectId)]
     }),
     getInterfaceTreeNode: builder.query<
       ApiResult<InterfaceTreeNodeResult>,
@@ -661,7 +746,8 @@ export const yapiApi = createApi({
           limit: args.limit || 50,
           detail: args.detail || 'summary'
         })}`
-      })
+      }),
+      providesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceCategoryTag(args.catid)]
     }),
     getListMenu: builder.query<
       ApiResult<InterfaceTreeNode[]>,
@@ -674,7 +760,7 @@ export const yapiApi = createApi({
           detail: args.detail || 'summary'
         })}`
       }),
-      providesTags: ['InterfaceTree']
+      providesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceProjectTag(args.projectId)]
     }),
     getInterfaceList: builder.query<
       ApiResult<{ count: number; total: number; list: LegacyInterfaceDTO[] }>,
@@ -697,7 +783,7 @@ export const yapiApi = createApi({
           tag: args.tag
         })}`
       }),
-      providesTags: ['InterfaceTree']
+      providesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceProjectTag(args.projectId)]
     }),
     getInterface: builder.query<
       ApiResult<LegacyInterfaceDTO & { username?: string }>,
@@ -710,7 +796,13 @@ export const yapiApi = createApi({
           token: args.token
         })}`
       }),
-      providesTags: ['InterfaceTree']
+      providesTags: (_result, _error, args) => [
+        INTERFACE_TREE_LIST_TAG,
+        args.projectId
+          ? interfaceProjectTag(args.projectId)
+          : ({ type: 'InterfaceTree' as const, id: 'PROJECT-UNKNOWN' }),
+        interfaceEntityTag(args.id)
+      ]
     }),
     addInterface: builder.mutation<
       ApiResult<LegacyInterfaceDTO>,
@@ -721,7 +813,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['InterfaceTree']
+      invalidatesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceProjectTag(args.project_id)]
     }),
     saveInterface: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -732,7 +824,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['InterfaceTree']
+      invalidatesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceProjectTag(args.project_id)]
     }),
     updateInterface: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -743,7 +835,13 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['InterfaceTree']
+      invalidatesTags: (_result, _error, args) => {
+        const tags = [INTERFACE_TREE_LIST_TAG, interfaceEntityTag(args.id)];
+        if (typeof args.project_id === 'number') {
+          tags.push(interfaceProjectTag(args.project_id));
+        }
+        return tags;
+      }
     }),
     delInterface: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -754,7 +852,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['InterfaceTree']
+      invalidatesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceEntityTag(args.id)]
     }),
     getCatMenu: builder.query<ApiResult<InterfaceCatItem[]>, { projectId: number; token?: string }>({
       query: args => ({
@@ -763,7 +861,11 @@ export const yapiApi = createApi({
           token: args.token
         })}`
       }),
-      providesTags: ['InterfaceTree']
+      providesTags: (result, _error, args) => [
+        INTERFACE_TREE_LIST_TAG,
+        interfaceProjectTag(args.projectId),
+        ...((result?.data || []).map(item => interfaceCategoryTag(item._id)) || [])
+      ]
     }),
     addInterfaceCat: builder.mutation<
       ApiResult<InterfaceCatItem>,
@@ -774,7 +876,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['InterfaceTree']
+      invalidatesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceProjectTag(args.project_id)]
     }),
     updateInterfaceCat: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -785,7 +887,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['InterfaceTree']
+      invalidatesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceCategoryTag(args.catid)]
     }),
     delInterfaceCat: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -796,7 +898,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['InterfaceTree']
+      invalidatesTags: (_result, _error, args) => [INTERFACE_TREE_LIST_TAG, interfaceCategoryTag(args.catid)]
     }),
     upInterfaceIndex: builder.mutation<
       ApiResult<string>,
@@ -807,7 +909,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['InterfaceTree']
+      invalidatesTags: () => [INTERFACE_TREE_LIST_TAG]
     }),
     upInterfaceCatIndex: builder.mutation<
       ApiResult<string>,
@@ -818,7 +920,10 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['InterfaceTree']
+      invalidatesTags: (_result, _error, args) => [
+        INTERFACE_TREE_LIST_TAG,
+        ...args.map(item => interfaceCategoryTag(item.id))
+      ]
     }),
     getColList: builder.query<ApiResult<ColItem[]>, { project_id: number; token?: string }>({
       query: args => ({
@@ -827,7 +932,10 @@ export const yapiApi = createApi({
           token: args.token
         })}`
       }),
-      providesTags: ['ProjectInfo']
+      providesTags: result => [
+        { type: 'Col', id: 'LIST' },
+        ...((result?.data || []).map(item => ({ type: 'Col' as const, id: item._id })) || [])
+      ]
     }),
     addCol: builder.mutation<
       ApiResult<ColItem>,
@@ -838,7 +946,7 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: [{ type: 'Col', id: 'LIST' }]
     }),
     upColCompat: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -849,16 +957,21 @@ export const yapiApi = createApi({
         method: 'POST',
         body: payload
       }),
-      invalidatesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [{ type: 'Col', id: args.col_id }]
     }),
-    delCol: builder.query<ApiResult<Record<string, unknown>>, { col_id: number; token?: string }>({
+    delCol: builder.mutation<ApiResult<Record<string, unknown>>, { col_id: number; token?: string }>({
       query: args => ({
         url: `/col/del_col?${encodeQuery({
           col_id: args.col_id,
           token: args.token
-        })}`
+        })}`,
+        method: 'GET'
       }),
-      providesTags: ['ProjectInfo']
+      invalidatesTags: (_result, _error, args) => [
+        { type: 'Col', id: 'LIST' },
+        { type: 'Col', id: args.col_id },
+        { type: 'ColCase', id: `COL-${args.col_id}` }
+      ]
     }),
     getColCaseList: builder.query<ApiResult<ColCaseItem[]>, { col_id: number; token?: string }>({
       query: args => ({
@@ -866,7 +979,12 @@ export const yapiApi = createApi({
           col_id: args.col_id,
           token: args.token
         })}`
-      })
+      }),
+      providesTags: (result, _error, args) => [
+        COL_CASE_LIST_TAG,
+        { type: 'ColCase', id: `COL-${args.col_id}` },
+        ...((result?.data || []).map(item => ({ type: 'ColCase' as const, id: item._id })) || [])
+      ]
     }),
     getColCaseEnvList: builder.query<
       ApiResult<Array<Record<string, unknown>>>,
@@ -913,7 +1031,8 @@ export const yapiApi = createApi({
         url: '/col/add_case',
         method: 'POST',
         body: payload
-      })
+      }),
+      invalidatesTags: (_result, _error, args) => [COL_CASE_LIST_TAG, { type: 'ColCase', id: `COL-${args.col_id}` }]
     }),
     addColCaseList: builder.mutation<
       ApiResult<string>,
@@ -923,7 +1042,8 @@ export const yapiApi = createApi({
         url: '/col/add_case_list',
         method: 'POST',
         body: payload
-      })
+      }),
+      invalidatesTags: (_result, _error, args) => [COL_CASE_LIST_TAG, { type: 'ColCase', id: `COL-${args.col_id}` }]
     }),
     cloneColCaseList: builder.mutation<
       ApiResult<string>,
@@ -933,7 +1053,12 @@ export const yapiApi = createApi({
         url: '/col/clone_case_list',
         method: 'POST',
         body: payload
-      })
+      }),
+      invalidatesTags: (_result, _error, args) => [
+        COL_CASE_LIST_TAG,
+        { type: 'ColCase', id: `COL-${args.col_id}` },
+        { type: 'ColCase', id: `COL-${args.new_col_id}` }
+      ]
     }),
     upColCase: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -943,7 +1068,8 @@ export const yapiApi = createApi({
         url: '/col/up_case',
         method: 'POST',
         body: payload
-      })
+      }),
+      invalidatesTags: (_result, _error, args) => [COL_CASE_LIST_TAG, { type: 'ColCase', id: args.id }]
     }),
     getColCase: builder.query<ApiResult<Record<string, unknown>>, { caseid: string; token?: string }>({
       query: args => ({
@@ -951,29 +1077,38 @@ export const yapiApi = createApi({
           caseid: args.caseid,
           token: args.token
         })}`
-      })
+      }),
+      providesTags: (_result, _error, args) => [{ type: 'ColCase', id: args.caseid }]
     }),
-    delColCase: builder.query<ApiResult<Record<string, unknown>>, { caseid: string; token?: string }>({
+    delColCase: builder.mutation<ApiResult<Record<string, unknown>>, { caseid: string; token?: string }>({
       query: args => ({
         url: `/col/del_case?${encodeQuery({
           caseid: args.caseid,
           token: args.token
-        })}`
-      })
+        })}`,
+        method: 'GET'
+      }),
+      invalidatesTags: (_result, _error, args) => [COL_CASE_LIST_TAG, { type: 'ColCase', id: args.caseid }]
     }),
     upColCaseIndex: builder.mutation<ApiResult<string>, Array<{ id: string; index?: number }>>({
       query: payload => ({
         url: '/col/up_case_index',
         method: 'POST',
         body: payload
-      })
+      }),
+      invalidatesTags: (_result, _error, args) =>
+        [COL_CASE_LIST_TAG, ...args.map(item => ({ type: 'ColCase' as const, id: item.id }))]
     }),
     upColIndex: builder.mutation<ApiResult<string>, Array<{ id: number; index?: number }>>({
       query: payload => ({
         url: '/col/up_col_index',
         method: 'POST',
         body: payload
-      })
+      }),
+      invalidatesTags: (_result, _error, args) => [
+        { type: 'Col', id: 'LIST' },
+        ...args.map(item => ({ type: 'Col' as const, id: item.id }))
+      ]
     }),
     runColCaseScript: builder.mutation<
       ApiResult<Record<string, unknown>>,
@@ -1009,7 +1144,7 @@ export const yapiApi = createApi({
         })}`
       })
     }),
-    runOpenAutoTest: builder.query<
+    runOpenAutoTest: builder.mutation<
       Record<string, unknown>,
       { id: number; token: string; mode?: 'json' | 'html'; projectId?: number; download?: boolean }
     >({
@@ -1020,7 +1155,8 @@ export const yapiApi = createApi({
           mode: args.mode || 'json',
           project_id: args.projectId,
           download: args.download
-        })}`
+        })}`,
+        method: 'GET'
       })
     }),
     getLogList: builder.query<
@@ -1110,8 +1246,7 @@ export const {
   useLazyFindUserQuery,
   useUpdateUserMutation,
   useDeleteUserMutation,
-  useUpdateStudyQuery,
-  useLazyUpdateStudyQuery,
+  useUpdateStudyMutation,
   useChangePasswordMutation,
   useSearchUsersQuery,
   useLazySearchUsersQuery,
@@ -1181,8 +1316,7 @@ export const {
   useGetColListQuery,
   useAddColMutation,
   useUpColCompatMutation,
-  useDelColQuery,
-  useLazyDelColQuery,
+  useDelColMutation,
   useGetColCaseListQuery,
   useGetColCaseEnvListQuery,
   useGetColCaseListByVarParamsQuery,
@@ -1192,14 +1326,12 @@ export const {
   useUpColCaseMutation,
   useGetColCaseQuery,
   useLazyGetColCaseQuery,
-  useDelColCaseQuery,
-  useLazyDelColCaseQuery,
+  useDelColCaseMutation,
   useUpColCaseIndexMutation,
   useUpColIndexMutation,
   useRunColCaseScriptMutation,
   useGetOpenProjectInterfaceDataQuery,
-  useRunOpenAutoTestQuery,
-  useLazyRunOpenAutoTestQuery,
+  useRunOpenAutoTestMutation,
   useGetLogListQuery,
   useLazyGetLogListQuery,
   useGetLogListByUpdateMutation,

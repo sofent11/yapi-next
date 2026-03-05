@@ -5,7 +5,11 @@ import { Provider } from 'react-redux';
 import { App as AntdApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { App } from './App';
-import { store } from './store';
+import { bootstrapWebPlugins, webPlugins } from './plugins';
+import { registerDynamicReducers, store } from './store';
+
+bootstrapWebPlugins();
+registerDynamicReducers(webPlugins.getDynamicReducers());
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <Provider store={store}>

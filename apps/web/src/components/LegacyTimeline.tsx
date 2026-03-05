@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
 import { useGetInterfaceListQuery, useGetLogListQuery } from '../services/yapi-api';
 import { buildLegacyLogDiff, type LegacyLogDiffItem } from '../utils/legacy-log-diff';
+import { sanitizeHtml } from '../utils/html-sanitize';
 
 const { Text } = Typography;
 
@@ -32,6 +33,8 @@ type ApiFilterOption = {
   value: string;
   searchText: string;
 };
+
+const API_FILTER_INTERFACE_LIMIT = 200;
 
 function formatTime(sec?: number): string {
   if (!sec) return '-';
@@ -99,7 +102,7 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
     {
       projectId: Number(props.projectIdForApiFilter || props.typeid),
       page: 1,
-      limit: 'all'
+      limit: API_FILTER_INTERFACE_LIMIT
     },
     {
       skip: !(props.showApiFilter && props.type === 'project' && props.typeid > 0)
@@ -197,7 +200,7 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
                   </div>
                   <span
                     className="legacy-log-content"
-                    dangerouslySetInnerHTML={{ __html: String(item.content || '-') }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(String(item.content || '-')) }}
                   />
                   {interfaceDiff ? (
                     <div className="legacy-timeline-item-actions">
@@ -243,7 +246,7 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
             diffItems.map(item => (
               <div key={item.title} className="legacy-diff-item">
                 <h3 className="legacy-diff-item-title">{item.title}</h3>
-                <div dangerouslySetInnerHTML={{ __html: item.content }} />
+                <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.content) }} />
               </div>
             ))
           ) : (

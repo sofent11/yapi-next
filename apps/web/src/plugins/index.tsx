@@ -167,6 +167,14 @@ function parseMaybeJson(text: string): unknown {
   }
 }
 
+function isValidRouteContract(route: LegacyRouteContract | undefined): route is LegacyRouteContract {
+  if (!route) return false;
+  if (typeof route.path !== 'string' || !route.path.startsWith('/')) return false;
+  if (typeof route.component !== 'function') return false;
+  if (route.protected !== undefined && typeof route.protected !== 'boolean') return false;
+  return true;
+}
+
 function toObject(input: unknown): Record<string, unknown> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
   return input as Record<string, unknown>;
@@ -361,7 +369,13 @@ class WebPluginRuntime {
       },
       registerReducer: (key, reducer) => {
         if (!key || typeof reducer !== 'function') return;
-        this.reducers[key] = reducer;
+        const namespacedKey = key.includes('/') ? key : `${plugin.id}/${key}`;
+        if (this.reducers[namespacedKey]) {
+          // eslint-disable-next-line no-console
+          console.error(`[plugin:${plugin.id}] reducer key already registered: ${namespacedKey}`);
+          return;
+        }
+        this.reducers[namespacedKey] = reducer;
       },
       onBeforeRequest: hook => {
         this.hooks.beforeRequestHooks.push({ pluginId: plugin.id, fn: hook });
@@ -387,6 +401,13 @@ class WebPluginRuntime {
   applyAppRoutes(routes: Record<string, LegacyRouteContract>, context?: PluginContext) {
     this.hooks.appRouteExtenders.forEach(item => {
       safeExecute(item.pluginId, 'extendAppRoutes', () => item.fn(routes, context));
+      Object.keys(routes).forEach(routeKey => {
+        const route = routes[routeKey];
+        if (isValidRouteContract(route)) return;
+        delete routes[routeKey];
+        // eslint-disable-next-line no-console
+        console.error(`[plugin:${item.pluginId}] invalid app route dropped: ${routeKey}`);
+      });
     });
   }
 
@@ -2001,8 +2022,7 @@ const testPlugin: ModernWebPlugin = {
   }
 };
 
-const runtime = new WebPluginRuntime();
-[
+const builtinPlugins: ModernWebPlugin[] = [
   statisticsPlugin,
   advancedMockPlugin,
   wikiPlugin,
@@ -2012,6 +2032,14 @@ const runtime = new WebPluginRuntime();
   genServicesPlugin,
   autoSyncPlugin,
   testPlugin
-].forEach(plugin => runtime.use(plugin));
+];
 
-export const webPlugins = runtime;
+let bootstrapped = false;
+export const webPlugins = new WebPluginRuntime();
+
+export function bootstrapWebPlugins() {
+  if (bootstrapped) return webPlugins;
+  builtinPlugins.forEach(plugin => webPlugins.use(plugin));
+  bootstrapped = true;
+  return webPlugins;
+}

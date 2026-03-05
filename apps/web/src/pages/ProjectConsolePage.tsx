@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { GroupListItem, ProjectListItem } from '@yapi-next/shared-types';
 import {
@@ -62,6 +62,7 @@ import { LegacyGuideActions } from '../components/LegacyGuideActions';
 import { LegacyErrMsg } from '../components/LegacyErrMsg';
 import { LegacyTimeline } from '../components/LegacyTimeline';
 import { useLegacyGuide } from '../context/LegacyGuideContext';
+import { safeApiRequest } from '../utils/safe-request';
 import './Group.scss';
 
 const { Text, Title } = Typography;
@@ -152,6 +153,11 @@ export function ProjectConsolePage() {
   const [searchUsers] = useLazySearchUsersQuery();
   const [ownerUserOptions, setOwnerUserOptions] = useState<Array<{ label: string; value: number }>>([]);
   const guide = useLegacyGuide();
+  const callApi = useCallback(
+    <T extends { errcode?: number; errmsg?: string }>(request: Promise<T>, fallback: string) =>
+      safeApiRequest(request, { fallback, onError: msg => message.error(msg) }),
+    []
+  );
 
   const groups = useMemo(() => {
     const rows = (groupListQuery.data?.data || []) as GroupListItem[];
@@ -258,15 +264,15 @@ export function ProjectConsolePage() {
       .map(item => Number(item.trim()))
       .filter(item => Number.isFinite(item) && item > 0);
     const uniqOwnerUids = Array.from(new Set([...selectedOwnerUids, ...ownerUids]));
-    const response = await addGroup({
-      group_name: values.group_name.trim(),
-      group_desc: values.group_desc?.trim() || '',
-      owner_uids: uniqOwnerUids.length > 0 ? uniqOwnerUids : undefined
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '创建分组失败');
-      return;
-    }
+    const response = await callApi(
+      addGroup({
+        group_name: values.group_name.trim(),
+        group_desc: values.group_desc?.trim() || '',
+        owner_uids: uniqOwnerUids.length > 0 ? uniqOwnerUids : undefined
+      }).unwrap(),
+      '创建分组失败'
+    );
+    if (!response) return;
     message.success('分组创建成功');
     setCreateGroupOpen(false);
     createGroupForm.resetFields();
@@ -279,8 +285,8 @@ export function ProjectConsolePage() {
       setOwnerUserOptions([]);
       return;
     }
-    const response = await searchUsers({ q }).unwrap();
-    if (response.errcode !== 0) return;
+    const response = await callApi(searchUsers({ q }).unwrap(), '搜索用户失败');
+    if (!response) return;
     const options = (response.data || [])
       .map(item => {
         const row = item as unknown as Record<string, unknown>;
@@ -303,8 +309,8 @@ export function ProjectConsolePage() {
       setMemberUserOptions([]);
       return;
     }
-    const response = await searchUsers({ q }).unwrap();
-    if (response.errcode !== 0) return;
+    const response = await callApi(searchUsers({ q }).unwrap(), '搜索用户失败');
+    if (!response) return;
     const options = (response.data || [])
       .map(item => {
         const row = item as unknown as Record<string, unknown>;
@@ -350,9 +356,8 @@ export function ProjectConsolePage() {
           message.error('分组名称有误');
           throw new Error('group_name_not_match');
         }
-        const response = await delGroup({ id: groupId }).unwrap();
-        if (response.errcode !== 0) {
-          message.error(response.errmsg || '删除分组失败');
+        const response = await callApi(delGroup({ id: groupId }).unwrap(), '删除分组失败');
+        if (!response) {
           throw new Error('delete_group_failed');
         }
         message.success('删除分组成功');
@@ -389,21 +394,20 @@ export function ProjectConsolePage() {
       return;
     }
 
-    const response = await copyProject({
-      _id: sourceId,
-      name: projectName,
-      group_id: groupId,
-      project_type: copyProjectTarget.project_type || 'private',
-      basepath: copyProjectTarget.basepath || '',
-      desc: copyProjectTarget.desc || '',
-      icon: copyProjectTarget.icon || '',
-      color: copyProjectTarget.color || ''
-    }).unwrap();
-
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '复制项目失败');
-      return;
-    }
+    const response = await callApi(
+      copyProject({
+        _id: sourceId,
+        name: projectName,
+        group_id: groupId,
+        project_type: copyProjectTarget.project_type || 'private',
+        basepath: copyProjectTarget.basepath || '',
+        desc: copyProjectTarget.desc || '',
+        icon: copyProjectTarget.icon || '',
+        color: copyProjectTarget.color || ''
+      }).unwrap(),
+      '复制项目失败'
+    );
+    if (!response) return;
 
     message.success('项目复制成功');
     setCopyModalOpen(false);
@@ -418,17 +422,11 @@ export function ProjectConsolePage() {
     if (pid <= 0) return;
 
     if (project.follow) {
-      const response = await delFollow({ projectid: pid }).unwrap();
-      if (response.errcode !== 0) {
-        message.error(response.errmsg || '取消关注失败');
-        return;
-      }
+      const response = await callApi(delFollow({ projectid: pid }).unwrap(), '取消关注失败');
+      if (!response) return;
     } else {
-      const response = await addFollow({ projectid: pid }).unwrap();
-      if (response.errcode !== 0) {
-        message.error(response.errmsg || '关注失败');
-        return;
-      }
+      const response = await callApi(addFollow({ projectid: pid }).unwrap(), '关注失败');
+      if (!response) return;
     }
 
     await projectListQuery.refetch();
@@ -448,15 +446,15 @@ export function ProjectConsolePage() {
       return;
     }
 
-    const response = await addGroupMember({
-      id: groupId,
-      member_uids: memberUids,
-      role: memberRoleInput
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '添加成员失败');
-      return;
-    }
+    const response = await callApi(
+      addGroupMember({
+        id: groupId,
+        member_uids: memberUids,
+        role: memberRoleInput
+      }).unwrap(),
+      '添加成员失败'
+    );
+    if (!response) return;
 
     const payload = (response.data || {}) as Record<string, unknown>;
     const addMembers = Array.isArray(payload.add_members) ? payload.add_members.length : 0;
@@ -480,19 +478,19 @@ export function ProjectConsolePage() {
       message.error('开启接口自定义字段时，字段名不能为空');
       return;
     }
-    const response = await updateGroup({
-      id: groupId,
-      group_name: values.group_name.trim(),
-      group_desc: values.group_desc?.trim() || '',
-      custom_field1: {
-        name: customFieldName,
-        enable: customFieldEnable
-      }
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '保存分组设置失败');
-      return;
-    }
+    const response = await callApi(
+      updateGroup({
+        id: groupId,
+        group_name: values.group_name.trim(),
+        group_desc: values.group_desc?.trim() || '',
+        custom_field1: {
+          name: customFieldName,
+          enable: customFieldEnable
+        }
+      }).unwrap(),
+      '保存分组设置失败'
+    );
+    if (!response) return;
 
     message.success('分组设置已保存');
     await Promise.all([groupDetailQuery.refetch(), groupListQuery.refetch()]);
@@ -691,15 +689,25 @@ export function ProjectConsolePage() {
                       <Select<GroupMemberRole>
                         value={value}
                         onChange={async (role) => {
-                          const response = await changeGroupMemberRole({ id: groupId, member_uid: uid, role }).unwrap();
-                          if (response.errcode === 0) { message.success('更新成功'); await groupMemberQuery.refetch(); }
+                          const response = await callApi(
+                            changeGroupMemberRole({ id: groupId, member_uid: uid, role }).unwrap(),
+                            '更新成员角色失败'
+                          );
+                          if (!response) return;
+                          message.success('更新成功');
+                          await groupMemberQuery.refetch();
                         }}
                         options={[{ value: 'owner', label: '组长' }, { value: 'dev', label: '开发者' }, { value: 'guest', label: '访客' }]}
                         style={{ width: 120 }}
                       />
                       <Popconfirm title="确认删除该成员？" onConfirm={async () => {
-                        const response = await delGroupMember({ id: groupId, member_uid: uid }).unwrap();
-                        if (response.errcode === 0) { message.success('删除成功'); await groupMemberQuery.refetch(); }
+                        const response = await callApi(
+                          delGroupMember({ id: groupId, member_uid: uid }).unwrap(),
+                          '删除成员失败'
+                        );
+                        if (!response) return;
+                        message.success('删除成功');
+                        await groupMemberQuery.refetch();
                       }}>
                         <Button danger size="small">删除</Button>
                       </Popconfirm>

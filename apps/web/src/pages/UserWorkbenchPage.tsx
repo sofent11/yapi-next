@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { UserProfile } from '@yapi-next/shared-types';
 import {
   Alert,
@@ -24,14 +24,15 @@ import {
   useLazyFindUserQuery,
   useLazyGetUserProjectContextQuery,
   useLazySearchUsersQuery,
-  useLazyUpdateStudyQuery,
   useLoginByTokenMutation,
   useLoginMutation,
   useLogoutMutation,
   useRegisterUserMutation,
+  useUpdateStudyMutation,
   useUpdateUserMutation,
   useUploadAvatarMutation
 } from '../services/yapi-api';
+import { safeApiRequest } from '../utils/safe-request';
 
 const { Paragraph } = Typography;
 
@@ -82,7 +83,12 @@ export function UserWorkbenchPage() {
   const [triggerFindUser, findUserQuery] = useLazyFindUserQuery();
   const [triggerSearchUsers, searchUsersQuery] = useLazySearchUsersQuery();
   const [triggerProjectContext, projectContextQuery] = useLazyGetUserProjectContextQuery();
-  const [triggerUpdateStudy, updateStudyQuery] = useLazyUpdateStudyQuery();
+  const [triggerUpdateStudy, updateStudyQuery] = useUpdateStudyMutation();
+  const callApi = useCallback(
+    <T extends { errcode?: number; errmsg?: string }>(request: Promise<T>, fallback: string) =>
+      safeApiRequest(request, { fallback, onError: msg => message.error(msg) }),
+    []
+  );
 
   const statusQuery = useGetUserStatusQuery();
   const userListQuery = useGetUserListQuery(
@@ -111,31 +117,22 @@ export function UserWorkbenchPage() {
   }, [userListQuery.data]);
 
   async function handleLogin() {
-    const response = await login({ email, password }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '登录失败');
-      return;
-    }
+    const response = await callApi(login({ email, password }).unwrap(), '登录失败');
+    if (!response) return;
     message.success('登录成功');
     await statusQuery.refetch();
   }
 
   async function handleRegister() {
-    const response = await registerUser({ email, password, username }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '注册失败');
-      return;
-    }
+    const response = await callApi(registerUser({ email, password, username }).unwrap(), '注册失败');
+    if (!response) return;
     message.success('注册成功');
     await statusQuery.refetch();
   }
 
   async function handleLogout() {
-    const response = await logout().unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '退出失败');
-      return;
-    }
+    const response = await callApi(logout().unwrap(), '退出失败');
+    if (!response) return;
     message.success('已退出');
     await statusQuery.refetch();
   }
@@ -145,11 +142,8 @@ export function UserWorkbenchPage() {
       message.error('请输入有效 UID');
       return;
     }
-    const response = await triggerFindUser({ id: targetUid }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '查询用户失败');
-      return;
-    }
+    const response = await callApi(triggerFindUser({ id: targetUid }).unwrap(), '查询用户失败');
+    if (!response) return;
     setFindResultText(toJsonText(response.data));
   }
 
@@ -159,11 +153,8 @@ export function UserWorkbenchPage() {
       message.error('请输入关键词');
       return;
     }
-    const response = await triggerSearchUsers({ q: keyword }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '用户搜索失败');
-      return;
-    }
+    const response = await callApi(triggerSearchUsers({ q: keyword }).unwrap(), '用户搜索失败');
+    if (!response) return;
     setSearchResultText(toJsonText(response.data));
   }
 
@@ -172,15 +163,15 @@ export function UserWorkbenchPage() {
       message.error('请输入有效 UID');
       return;
     }
-    const response = await updateUser({
-      uid: targetUid,
-      username: updateUsername.trim() || undefined,
-      email: updateEmail.trim() || undefined
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '更新用户失败');
-      return;
-    }
+    const response = await callApi(
+      updateUser({
+        uid: targetUid,
+        username: updateUsername.trim() || undefined,
+        email: updateEmail.trim() || undefined
+      }).unwrap(),
+      '更新用户失败'
+    );
+    if (!response) return;
     message.success('用户信息已更新');
     await Promise.all([statusQuery.refetch(), userListQuery.refetch()]);
   }
@@ -190,15 +181,15 @@ export function UserWorkbenchPage() {
       message.error('请输入有效 UID');
       return;
     }
-    const response = await changePassword({
-      uid: targetUid,
-      old_password: oldPassword,
-      password: newPassword
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '修改密码失败');
-      return;
-    }
+    const response = await callApi(
+      changePassword({
+        uid: targetUid,
+        old_password: oldPassword,
+        password: newPassword
+      }).unwrap(),
+      '修改密码失败'
+    );
+    if (!response) return;
     message.success('密码已更新');
   }
 
@@ -207,21 +198,15 @@ export function UserWorkbenchPage() {
       message.error('请输入有效 UID');
       return;
     }
-    const response = await deleteUser({ id: deleteUid }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '删除用户失败');
-      return;
-    }
+    const response = await callApi(deleteUser({ id: deleteUid }).unwrap(), '删除用户失败');
+    if (!response) return;
     message.success('用户删除请求已执行');
     await userListQuery.refetch();
   }
 
   async function handleUpdateStudy() {
-    const response = await triggerUpdateStudy().unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || 'up_study 调用失败');
-      return;
-    }
+    const response = await callApi(triggerUpdateStudy().unwrap(), 'up_study 调用失败');
+    if (!response) return;
     message.success('study 已更新');
     await statusQuery.refetch();
   }
@@ -231,36 +216,33 @@ export function UserWorkbenchPage() {
       message.error('请输入有效 ID');
       return;
     }
-    const response = await triggerProjectContext({
-      type: projectContextType,
-      id: projectContextId
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || 'project 上下文查询失败');
-      return;
-    }
+    const response = await callApi(
+      triggerProjectContext({
+        type: projectContextType,
+        id: projectContextId
+      }).unwrap(),
+      'project 上下文查询失败'
+    );
+    if (!response) return;
     setProjectContextText(toJsonText(response.data));
   }
 
   async function handleUploadAvatar() {
-    const response = await uploadAvatar({ basecode: avatarBasecode.trim() }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '头像上传失败');
-      return;
-    }
+    const response = await callApi(uploadAvatar({ basecode: avatarBasecode.trim() }).unwrap(), '头像上传失败');
+    if (!response) return;
     setAvatarVersion(Date.now());
     message.success('头像已上传');
   }
 
   async function handleLoginByToken() {
-    const response = await loginByToken({
-      email: tokenEmail.trim(),
-      username: tokenUsername.trim() || undefined
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || 'token 登录失败');
-      return;
-    }
+    const response = await callApi(
+      loginByToken({
+        email: tokenEmail.trim(),
+        username: tokenUsername.trim() || undefined
+      }).unwrap(),
+      'token 登录失败'
+    );
+    if (!response) return;
     message.success('token 登录成功');
     await statusQuery.refetch();
   }
@@ -425,7 +407,7 @@ export function UserWorkbenchPage() {
               <Button onClick={handleChangePassword} loading={changePasswordState.isLoading}>
                 修改密码
               </Button>
-              <Button onClick={handleUpdateStudy} loading={updateStudyQuery.isFetching}>
+              <Button onClick={handleUpdateStudy} loading={updateStudyQuery.isLoading}>
                 up_study
               </Button>
 

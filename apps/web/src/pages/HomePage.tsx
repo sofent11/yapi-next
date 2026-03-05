@@ -1,16 +1,19 @@
 import { Row, Col, Button, Card } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
 import { AppstoreOutlined, ApiOutlined, DatabaseOutlined, TeamOutlined } from '@ant-design/icons';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
+import type { ComponentType } from 'react';
 import LogoSVG from '../components/LogoSVG';
 import { webPlugins } from '../plugins';
 import { useGetUserStatusQuery } from '../services/yapi-api';
 import './HomePage.scss';
 
-const ThirdLogin = webPlugins.getThirdLoginComponent() as React.FC | undefined | null;
-
 export function HomePage() {
   const navigate = useNavigate();
+  const ThirdLogin = useMemo(
+    () => webPlugins.getThirdLoginComponent() as ComponentType | null,
+    []
+  );
   const { data: statusData } = useGetUserStatusQuery();
   const user = statusData?.data;
   const isLogin = statusData?.errcode === 0 && !!user;

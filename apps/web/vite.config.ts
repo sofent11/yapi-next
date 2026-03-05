@@ -12,6 +12,19 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version)
   },
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('/antd/') || id.includes('/@ant-design/')) {
+            return 'antd';
+          }
+          return undefined;
+        }
+      }
+    }
+  },
   server: {
     host: webHost,
     port: webPort,

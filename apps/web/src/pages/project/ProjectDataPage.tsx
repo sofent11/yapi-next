@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, App as AntdApp, Button, Card, Col, Input, Modal, Progress, Row, Select, Space, Switch, Tabs, Typography, Upload, Tooltip, Radio } from 'antd';
 import json5 from 'json5';
 import type { SpecImportResult } from '@yapi-next/shared-types';
@@ -10,6 +10,7 @@ import {
   useInterUploadMutation
 } from '../../services/yapi-api';
 import { webPlugins, type ExportDataItem, type ImportDataItem } from '../../plugins';
+import { safeApiRequest } from '../../utils/safe-request';
 import './ProjectData.scss';
 
 const { Text, Paragraph } = Typography;
@@ -395,6 +396,11 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
   const [importSpec, importState] = useImportSpecMutation();
   const [interUpload, uploadState] = useInterUploadMutation();
   const [exportSpec, exportState] = useExportSpecMutation();
+  const callApi = useCallback(
+    <T extends { errcode?: number; errmsg?: string }>(request: Promise<T>, fallback: string) =>
+      safeApiRequest(request, { fallback, onError: msg => messageApi.error(msg) }),
+    [messageApi]
+  );
   const catMenuQuery = useGetCatMenuQuery(
     { projectId: props.projectId, token },
     { skip: props.projectId <= 0 }
@@ -501,11 +507,8 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
 
   async function handlePreview(overrides?: ImportInputOverrides) {
     if (!canSubmitImport(overrides)) return;
-    const response = await importSpec(getImportPayload({ dryRun: true, ...overrides })).unwrap();
-    if (response.errcode !== 0) {
-      messageApi.error(response.errmsg || '导入预检失败');
-      return;
-    }
+    const response = await callApi(importSpec(getImportPayload({ dryRun: true, ...overrides })).unwrap(), '导入预检失败');
+    if (!response) return;
     const data = (response.data || null) as SpecImportResult | null;
     setPreview(data);
     messageApi.success('预检完成');
@@ -513,11 +516,8 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
 
   async function handleImport(overrides?: ImportInputOverrides) {
     if (!canSubmitImport(overrides)) return;
-    const dryRunResponse = await importSpec(getImportPayload({ dryRun: true, ...overrides })).unwrap();
-    if (dryRunResponse.errcode !== 0) {
-      messageApi.error(dryRunResponse.errmsg || '导入预检失败');
-      return;
-    }
+    const dryRunResponse = await callApi(importSpec(getImportPayload({ dryRun: true, ...overrides })).unwrap(), '导入预检失败');
+    if (!dryRunResponse) return;
 
     const dryRunData = (dryRunResponse.data || null) as SpecImportResult | null;
     if (dryRunData) {
@@ -529,11 +529,8 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
       }
     }
 
-    const response = await importSpec(getImportPayload({ async: true, ...overrides })).unwrap();
-    if (response.errcode !== 0) {
-      messageApi.error(response.errmsg || '导入失败');
-      return;
-    }
+    const response = await callApi(importSpec(getImportPayload({ async: true, ...overrides })).unwrap(), '导入失败');
+    if (!response) return;
 
     const payload = (response.data || {}) as Record<string, unknown>;
     const nextTaskId = String(payload.task_id || '');
@@ -551,34 +548,34 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
     if (!canSubmitImport(overrides)) return;
     const nextJsonText = overrides?.jsonText ?? jsonText;
     const nextUrlText = (overrides?.urlText ?? urlText).trim();
-    const response = await interUpload({
-      project_id: props.projectId,
-      token,
-      source,
-      format,
-      merge: syncMode,
-      interfaceData: source === 'json' ? nextJsonText : undefined,
-      url: source === 'url' ? nextUrlText : undefined
-    }).unwrap();
-    if (response.errcode !== 0) {
-      messageApi.error(response.errmsg || '兼容导入失败');
-      return;
-    }
+    const response = await callApi(
+      interUpload({
+        project_id: props.projectId,
+        token,
+        source,
+        format,
+        merge: syncMode,
+        interfaceData: source === 'json' ? nextJsonText : undefined,
+        url: source === 'url' ? nextUrlText : undefined
+      }).unwrap(),
+      '兼容导入失败'
+    );
+    if (!response) return;
     messageApi.success(response.errmsg || '兼容导入成功');
   }
 
   async function handleExport(selectedFormat: ExportFormat = exportFormat) {
-    const response = await exportSpec({
-      project_id: props.projectId,
-      token,
-      format: selectedFormat,
-      status: exportStatus,
-      withWiki
-    }).unwrap();
-    if (response.errcode !== 0) {
-      messageApi.error(response.errmsg || '导出失败');
-      return;
-    }
+    const response = await callApi(
+      exportSpec({
+        project_id: props.projectId,
+        token,
+        format: selectedFormat,
+        status: exportStatus,
+        withWiki
+      }).unwrap(),
+      '导出失败'
+    );
+    if (!response) return;
     setExportText(JSON.stringify(response.data || {}, null, 2));
     messageApi.success('导出成功');
   }
@@ -692,18 +689,18 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
       }
     }
 
-    const response = await interUpload({
-      project_id: props.projectId,
-      token,
-      source: 'json',
-      format: importFormat,
-      merge: syncMode,
-      interfaceData
-    }).unwrap();
-    if (response.errcode !== 0) {
-      messageApi.error(response.errmsg || `${importer.name} 导入失败`);
-      return;
-    }
+    const response = await callApi(
+      interUpload({
+        project_id: props.projectId,
+        token,
+        source: 'json',
+        format: importFormat,
+        merge: syncMode,
+        interfaceData
+      }).unwrap(),
+      `${importer.name} 导入失败`
+    );
+    if (!response) return;
     messageApi.success(response.errmsg || `${importer.name} 导入成功`);
   }
 

@@ -83,27 +83,31 @@ export function AddProjectPage() {
   }, [form, groupOptions, searchParams]);
 
   async function handleSubmit(values: CreateProjectForm) {
-    const response = await addProject({
-      name: values.name.trim(),
-      group_id: Number(values.group_id),
-      basepath: normalizeBasepath(values.basepath),
-      desc: values.desc?.trim() || '',
-      color: randomProjectColorKey(),
-      icon: randomProjectIconKey(),
-      project_type: values.project_type
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '创建项目失败');
-      return;
+    try {
+      const response = await addProject({
+        name: values.name.trim(),
+        group_id: Number(values.group_id),
+        basepath: normalizeBasepath(values.basepath),
+        desc: values.desc?.trim() || '',
+        color: randomProjectColorKey(),
+        icon: randomProjectIconKey(),
+        project_type: values.project_type
+      }).unwrap();
+      if (response.errcode !== 0) {
+        message.error(response.errmsg || '创建项目失败');
+        return;
+      }
+      message.success('创建成功! ');
+      const projectId = Number(response.data?._id || 0);
+      if (projectId > 0) {
+        navigate(`/project/${projectId}/interface/api`);
+        return;
+      }
+      const myGroupId = Number(myGroupQuery.data?.data?._id || 0);
+      navigate(myGroupId > 0 ? `/group/${myGroupId}` : '/group');
+    } catch (error) {
+      message.error((error as Error)?.message || '创建项目失败，请稍后重试');
     }
-    message.success('创建成功! ');
-    const projectId = Number(response.data?._id || 0);
-    if (projectId > 0) {
-      navigate(`/project/${projectId}/interface/api`);
-      return;
-    }
-    const myGroupId = Number(myGroupQuery.data?.data?._id || 0);
-    navigate(myGroupId > 0 ? `/group/${myGroupId}` : '/group');
   }
 
   return (

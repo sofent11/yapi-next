@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FollowItem, GroupListItem, LegacyInterfaceDTO, ProjectListItem } from '@yapi-next/shared-types';
 import {
   Alert,
@@ -53,6 +53,7 @@ import {
   useUpdateInterfaceCatMutation,
   useUpdateInterfaceMutation
 } from '../services/yapi-api';
+import { safeApiRequest } from '../utils/safe-request';
 
 const { Paragraph } = Typography;
 
@@ -127,6 +128,11 @@ export function ProjectWorkbenchPage() {
   const [triggerCheckProjectName, checkProjectNameState] = useLazyCheckProjectNameQuery();
   const [triggerSearchProject, searchProjectState] = useLazySearchProjectQuery();
   const [triggerFetchSwagger, fetchSwaggerState] = useLazyFetchSwaggerByUrlQuery();
+  const callApi = useCallback(
+    <T extends { errcode?: number; errmsg?: string }>(request: Promise<T>, fallback: string) =>
+      safeApiRequest(request, { fallback, onError: msg => message.error(msg) }),
+    []
+  );
 
   const statusQuery = useGetUserStatusQuery();
   const isLoggedIn = statusQuery.data?.errcode === 0 && !!statusQuery.data?.data;
@@ -229,21 +235,15 @@ export function ProjectWorkbenchPage() {
   }, [interfaceListQuery.data]);
 
   async function handleLogin() {
-    const response = await login({ email, password }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '登录失败');
-      return;
-    }
+    const response = await callApi(login({ email, password }).unwrap(), '登录失败');
+    if (!response) return;
     message.success('登录成功');
     statusQuery.refetch();
   }
 
   async function handleLogout() {
-    const response = await logout().unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '退出失败');
-      return;
-    }
+    const response = await callApi(logout().unwrap(), '退出失败');
+    if (!response) return;
     setSelectedProjectId(0);
     setAccessToken('');
     message.success('已退出');
@@ -252,11 +252,8 @@ export function ProjectWorkbenchPage() {
 
   async function handleUpdateToken() {
     if (selectedProjectId <= 0) return;
-    const response = await updateToken({ projectId: selectedProjectId }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '更新 token 失败');
-      return;
-    }
+    const response = await callApi(updateToken({ projectId: selectedProjectId }).unwrap(), '更新 token 失败');
+    if (!response) return;
     if (response.data?.token) {
       setAccessToken(response.data.token);
     }
@@ -266,16 +263,16 @@ export function ProjectWorkbenchPage() {
 
   async function handleUpdateProject() {
     if (selectedProjectId <= 0) return;
-    const response = await updateProject({
-      id: selectedProjectId,
-      name: projectName,
-      basepath: projectBasepath,
-      desc: projectDesc
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '更新项目失败');
-      return;
-    }
+    const response = await callApi(
+      updateProject({
+        id: selectedProjectId,
+        name: projectName,
+        basepath: projectBasepath,
+        desc: projectDesc
+      }).unwrap(),
+      '更新项目失败'
+    );
+    if (!response) return;
     await projectDetailQuery.refetch();
     message.success('项目信息已更新');
   }
@@ -289,16 +286,16 @@ export function ProjectWorkbenchPage() {
       message.error('项目名称不能为空');
       return;
     }
-    const response = await addProject({
-      name: newProjectName.trim(),
-      group_id: groupId,
-      basepath: newProjectBasepath.trim(),
-      project_type: newProjectType
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '创建项目失败');
-      return;
-    }
+    const response = await callApi(
+      addProject({
+        name: newProjectName.trim(),
+        group_id: groupId,
+        basepath: newProjectBasepath.trim(),
+        project_type: newProjectType
+      }).unwrap(),
+      '创建项目失败'
+    );
+    if (!response) return;
     await projectListQuery.refetch();
     if (response.data?._id) {
       setSelectedProjectId(response.data._id);
@@ -308,11 +305,8 @@ export function ProjectWorkbenchPage() {
 
   async function handleDelProject() {
     if (selectedProjectId <= 0) return;
-    const response = await delProject({ id: selectedProjectId }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '删除项目失败');
-      return;
-    }
+    const response = await callApi(delProject({ id: selectedProjectId }).unwrap(), '删除项目失败');
+    if (!response) return;
     setSelectedProjectId(0);
     await projectListQuery.refetch();
     message.success('项目已删除');
@@ -331,17 +325,17 @@ export function ProjectWorkbenchPage() {
       message.error('复制后的项目名称不能为空');
       return;
     }
-    const response = await copyProject({
-      _id: selectedProjectId,
-      name: copyProjectName.trim(),
-      group_id: groupId,
-      basepath: copyProjectBasepath.trim(),
-      project_type: copyProjectType
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '复制项目失败');
-      return;
-    }
+    const response = await callApi(
+      copyProject({
+        _id: selectedProjectId,
+        name: copyProjectName.trim(),
+        group_id: groupId,
+        basepath: copyProjectBasepath.trim(),
+        project_type: copyProjectType
+      }).unwrap(),
+      '复制项目失败'
+    );
+    if (!response) return;
     await projectListQuery.refetch();
     if (response.data?._id) {
       setSelectedProjectId(response.data._id);
@@ -350,36 +344,30 @@ export function ProjectWorkbenchPage() {
   }
 
   async function handleAddFollow(projectId: number) {
-    const response = await addFollow({ projectid: projectId }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '关注项目失败');
-      return;
-    }
+    const response = await callApi(addFollow({ projectid: projectId }).unwrap(), '关注项目失败');
+    if (!response) return;
     await Promise.all([followListQuery.refetch(), projectListQuery.refetch()]);
     message.success('已关注项目');
   }
 
   async function handleDelFollow(projectId: number) {
-    const response = await delFollow({ projectid: projectId }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '取消关注失败');
-      return;
-    }
+    const response = await callApi(delFollow({ projectid: projectId }).unwrap(), '取消关注失败');
+    if (!response) return;
     await Promise.all([followListQuery.refetch(), projectListQuery.refetch()]);
     message.success('已取消关注');
   }
 
   async function handleUpsetProject() {
     if (selectedProjectId <= 0) return;
-    const response = await upsetProject({
-      id: selectedProjectId,
-      icon: projectIcon,
-      color: projectColor
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '项目图标/颜色更新失败');
-      return;
-    }
+    const response = await callApi(
+      upsetProject({
+        id: selectedProjectId,
+        icon: projectIcon,
+        color: projectColor
+      }).unwrap(),
+      '项目图标/颜色更新失败'
+    );
+    if (!response) return;
     await projectDetailQuery.refetch();
     message.success('项目图标/颜色已更新');
   }
@@ -389,33 +377,27 @@ export function ProjectWorkbenchPage() {
       message.error('请先选择分组');
       return;
     }
-    const response = await triggerCheckProjectName({
-      name: newProjectName.trim(),
-      groupId
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '项目名校验失败');
-      return;
-    }
+    const response = await callApi(
+      triggerCheckProjectName({
+        name: newProjectName.trim(),
+        groupId
+      }).unwrap(),
+      '项目名校验失败'
+    );
+    if (!response) return;
     message.success('项目名可用');
   }
 
   async function handleSearchProject() {
-    const response = await triggerSearchProject({ q: searchKeyword.trim() }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '搜索失败');
-      return;
-    }
+    const response = await callApi(triggerSearchProject({ q: searchKeyword.trim() }).unwrap(), '搜索失败');
+    if (!response) return;
     setSearchResultText(toJsonText(response.data || {}));
     message.success('搜索完成');
   }
 
   async function handleFetchSwagger() {
-    const response = await triggerFetchSwagger({ url: swaggerUrl.trim() }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '获取 Swagger 失败');
-      return;
-    }
+    const response = await callApi(triggerFetchSwagger({ url: swaggerUrl.trim() }).unwrap(), '获取 Swagger 失败');
+    if (!response) return;
     setSwaggerPreviewText(toJsonText(response.data || {}));
     message.success('Swagger 数据已拉取');
   }
@@ -431,11 +413,11 @@ export function ProjectWorkbenchPage() {
       message.error(err instanceof Error ? err.message : 'env JSON 格式错误');
       return;
     }
-    const response = await updateProjectEnv({ id: selectedProjectId, env: env as any }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '更新环境失败');
-      return;
-    }
+    const response = await callApi(
+      updateProjectEnv({ id: selectedProjectId, env: env as any }).unwrap(),
+      '更新环境失败'
+    );
+    if (!response) return;
     await projectEnvQuery.refetch();
     message.success('项目环境已更新');
   }
@@ -451,11 +433,11 @@ export function ProjectWorkbenchPage() {
       message.error(err instanceof Error ? err.message : 'tag JSON 格式错误');
       return;
     }
-    const response = await updateProjectTag({ id: selectedProjectId, tag: tag as any }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '更新标签失败');
-      return;
-    }
+    const response = await callApi(
+      updateProjectTag({ id: selectedProjectId, tag: tag as any }).unwrap(),
+      '更新标签失败'
+    );
+    if (!response) return;
     await projectDetailQuery.refetch();
     message.success('项目标签已更新');
   }
@@ -470,15 +452,15 @@ export function ProjectWorkbenchPage() {
       message.error('请输入有效的 member_uids（逗号分隔）');
       return;
     }
-    const response = await addProjectMember({
-      id: selectedProjectId,
-      member_uids: memberUids,
-      role: memberRole
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '添加成员失败');
-      return;
-    }
+    const response = await callApi(
+      addProjectMember({
+        id: selectedProjectId,
+        member_uids: memberUids,
+        role: memberRole
+      }).unwrap(),
+      '添加成员失败'
+    );
+    if (!response) return;
     await projectMemberListQuery.refetch();
     message.success('项目成员已更新');
   }
@@ -490,15 +472,15 @@ export function ProjectWorkbenchPage() {
       message.error('member_uid 无效');
       return;
     }
-    const response = await changeProjectMemberRole({
-      id: selectedProjectId,
-      member_uid: memberUid,
-      role: memberRole
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '修改角色失败');
-      return;
-    }
+    const response = await callApi(
+      changeProjectMemberRole({
+        id: selectedProjectId,
+        member_uid: memberUid,
+        role: memberRole
+      }).unwrap(),
+      '修改角色失败'
+    );
+    if (!response) return;
     await projectMemberListQuery.refetch();
     message.success('成员角色已更新');
   }
@@ -510,15 +492,15 @@ export function ProjectWorkbenchPage() {
       message.error('member_uid 无效');
       return;
     }
-    const response = await changeProjectMemberEmailNotice({
-      id: selectedProjectId,
-      member_uid: memberUid,
-      notice: memberNotice
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '修改邮件通知失败');
-      return;
-    }
+    const response = await callApi(
+      changeProjectMemberEmailNotice({
+        id: selectedProjectId,
+        member_uid: memberUid,
+        notice: memberNotice
+      }).unwrap(),
+      '修改邮件通知失败'
+    );
+    if (!response) return;
     await projectMemberListQuery.refetch();
     message.success('成员邮件通知已更新');
   }
@@ -530,14 +512,14 @@ export function ProjectWorkbenchPage() {
       message.error('member_uid 无效');
       return;
     }
-    const response = await delProjectMember({
-      id: selectedProjectId,
-      member_uid: memberUid
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '删除成员失败');
-      return;
-    }
+    const response = await callApi(
+      delProjectMember({
+        id: selectedProjectId,
+        member_uid: memberUid
+      }).unwrap(),
+      '删除成员失败'
+    );
+    if (!response) return;
     await projectMemberListQuery.refetch();
     message.success('项目成员已删除');
   }
@@ -548,16 +530,16 @@ export function ProjectWorkbenchPage() {
       message.error('分类名称不能为空');
       return;
     }
-    const response = await addInterfaceCat({
-      project_id: selectedProjectId,
-      name: catName.trim(),
-      desc: catDesc.trim() || undefined,
-      token: accessToken || undefined
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '新增分类失败');
-      return;
-    }
+    const response = await callApi(
+      addInterfaceCat({
+        project_id: selectedProjectId,
+        name: catName.trim(),
+        desc: catDesc.trim() || undefined,
+        token: accessToken || undefined
+      }).unwrap(),
+      '新增分类失败'
+    );
+    if (!response) return;
     await catMenuQuery.refetch();
     await interfaceListQuery.refetch();
     message.success('分类已新增');
@@ -570,16 +552,16 @@ export function ProjectWorkbenchPage() {
       message.error('请选择分类');
       return;
     }
-    const response = await updateInterfaceCat({
-      catid,
-      name: catName.trim() || undefined,
-      desc: catDesc.trim() || undefined,
-      token: accessToken || undefined
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '更新分类失败');
-      return;
-    }
+    const response = await callApi(
+      updateInterfaceCat({
+        catid,
+        name: catName.trim() || undefined,
+        desc: catDesc.trim() || undefined,
+        token: accessToken || undefined
+      }).unwrap(),
+      '更新分类失败'
+    );
+    if (!response) return;
     await catMenuQuery.refetch();
     message.success('分类已更新');
   }
@@ -591,14 +573,14 @@ export function ProjectWorkbenchPage() {
       message.error('请选择分类');
       return;
     }
-    const response = await delInterfaceCat({
-      catid,
-      token: accessToken || undefined
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '删除分类失败');
-      return;
-    }
+    const response = await callApi(
+      delInterfaceCat({
+        catid,
+        token: accessToken || undefined
+      }).unwrap(),
+      '删除分类失败'
+    );
+    if (!response) return;
     await catMenuQuery.refetch();
     await interfaceListQuery.refetch();
     message.success('分类已删除');
@@ -615,18 +597,18 @@ export function ProjectWorkbenchPage() {
       message.error('接口标题和路径不能为空');
       return;
     }
-    const response = await addInterface({
-      project_id: selectedProjectId,
-      catid,
-      title: interfaceTitle.trim(),
-      path: interfacePath.trim(),
-      method: interfaceMethod,
-      token: accessToken || undefined
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '新增接口失败');
-      return;
-    }
+    const response = await callApi(
+      addInterface({
+        project_id: selectedProjectId,
+        catid,
+        title: interfaceTitle.trim(),
+        path: interfacePath.trim(),
+        method: interfaceMethod,
+        token: accessToken || undefined
+      }).unwrap(),
+      '新增接口失败'
+    );
+    if (!response) return;
     await interfaceListQuery.refetch();
     message.success('接口已新增');
   }
@@ -649,11 +631,8 @@ export function ProjectWorkbenchPage() {
     if (Number.isFinite(catid) && catid > 0) {
       payload.catid = catid;
     }
-    const response = await updateInterface(payload as any).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '更新接口失败');
-      return;
-    }
+    const response = await callApi(updateInterface(payload as any).unwrap(), '更新接口失败');
+    if (!response) return;
     await interfaceListQuery.refetch();
     message.success('接口已更新');
   }
@@ -665,14 +644,14 @@ export function ProjectWorkbenchPage() {
       message.error('请输入有效接口ID');
       return;
     }
-    const response = await delInterface({
-      id: interfaceId,
-      token: accessToken || undefined
-    }).unwrap();
-    if (response.errcode !== 0) {
-      message.error(response.errmsg || '删除接口失败');
-      return;
-    }
+    const response = await callApi(
+      delInterface({
+        id: interfaceId,
+        token: accessToken || undefined
+      }).unwrap(),
+      '删除接口失败'
+    );
+    if (!response) return;
     await interfaceListQuery.refetch();
     message.success('接口已删除');
   }

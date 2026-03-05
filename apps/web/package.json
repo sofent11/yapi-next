@@ -12,6 +12,7 @@
     "@reduxjs/toolkit": "^2.6.1",
     "@yapi-next/shared-types": "file:../../packages/shared-types",
     "antd": "^5.24.2",
+    "dompurify": "^3.3.1",
     "json5": "^2.2.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
