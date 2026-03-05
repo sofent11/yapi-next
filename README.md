@@ -54,36 +54,28 @@ npm run next:smoke:api
 npm run next:self-assess:api
 ```
 
-> 说明：仓库已默认切换到 Next 架构（`apps/api` + `apps/web`）。历史 Koa/ykit 启动方式与脚本已进入清理阶段，不再作为默认入口。
+> 说明：仓库已默认切换到 Next 架构（`apps/api` + `apps/web`）。历史 Koa/ykit 代码与脚本已移除。
 
 ### 内网部署
 #### 环境要求
-* nodejs（7.6+)
-* mongodb（2.6+）
-* git
+* Node.js 22 LTS+
+* MongoDB 7+
 #### 安装
-使用我们提供的 yapi-cli 工具，部署 YApi 平台是非常容易的。执行 yapi server 启动可视化部署程序，输入相应的配置和点击开始部署，就能完成整个网站的部署。部署完成之后，可按照提示信息，执行 node/{网站路径/server/app.js} 启动服务器。在浏览器打开指定url, 点击登录输入您刚才设置的管理员邮箱，默认密码为 ymfe.org 登录系统（默认密码可在个人中心修改）。
+```bash
+npm install
+npm run next:build
+npm run next:start
+```
 
-    npm install -g yapi-cli --registry https://registry.npm.taobao.org
-    yapi server 
-    
-#### 服务管理
-利用pm2方便服务管理维护。
-
-    npm install pm2 -g  //安装pm2
-    cd  {项目目录}
-    pm2 start "vendors/server/app.js" --name yapi //pm2管理yapi服务
-    pm2 info yapi //查看服务信息
-    pm2 stop yapi //停止服务
-    pm2 restart yapi //重启服务
-
-#### 升级
-升级项目版本是非常容易的，并且不会影响已有的项目数据，只会同步 vendors 目录下的源码文件。
-    
-    cd  {项目目录}
-    yapi ls //查看版本号列表
-    yapi update //更新到最新版本
-    yapi update -v {Version} //更新到指定版本
+#### 服务管理（pm2）
+```bash
+npm install pm2 -g
+cd {项目目录}
+pm2 start "npm run next:start" --name yapi-next
+pm2 info yapi-next
+pm2 stop yapi-next
+pm2 restart yapi-next
+```
     
 ### 教程
 * [使用 YApi 管理 API 文档，测试， mock](https://juejin.im/post/5acc879f6fb9a028c42e8822)
