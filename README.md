@@ -27,6 +27,35 @@ YApi 是<strong>高效</strong>、<strong>易用</strong>、<strong>功能强大
 *  支持 postman, har, swagger 数据导入
 *  免费开源，内网部署，信息再也不怕泄露了
 
+### 快速开始（Next 重构版）
+#### 环境要求
+* Node.js 22 LTS+
+* MongoDB 7+
+
+#### 本地启动
+```bash
+npm install
+npm start
+```
+
+默认会启动：
+* API: `http://127.0.0.1:3300`
+* Web: `http://127.0.0.1:5173`
+
+#### 构建与验证
+```bash
+# 构建 shared-types + api + web
+npm run next:build
+
+# 冒烟回归（临时 Mongo + API）
+npm run next:smoke:api
+
+# 全量自评（索引/查询计划/性能/round-trip）
+npm run next:self-assess:api
+```
+
+> 说明：仓库已默认切换到 Next 架构（`apps/api` + `apps/web`）。历史 Koa/ykit 启动方式与脚本已进入清理阶段，不再作为默认入口。
+
 ### 内网部署
 #### 环境要求
 * nodejs（7.6+)
@@ -127,4 +156,3 @@ YApi 是<strong>高效</strong>、<strong>易用</strong>、<strong>功能强大
 
 ### License
 Apache License 2.0
-

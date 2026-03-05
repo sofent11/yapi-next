@@ -12,8 +12,7 @@ import { CounterService } from './counter.service';
 import { InterfaceTreeCacheService } from './interface-tree-cache.service';
 import { ProjectCompatService } from './project-compat.service';
 import { SessionUser } from './session-auth.service';
-
-const mergeJsonSchema = require('../../../../common/mergeJsonSchema');
+import { mergeJsonSchema } from '../legacy/merge-json-schema';
 
 type AccessOptions = {
   user?: SessionUser | null;

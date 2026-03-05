@@ -1,4 +1,4 @@
-@charset "UTF-8";
+export const DEFAULT_THEME_CSS = `@charset "UTF-8";
 html,
 body,
 h1,
@@ -384,11 +384,11 @@ body {
 }
 
 .yapi-run-auto-test .icon-check-circle:before {
-  content: "\2713";
+  content: "\\2713";
 }
 
 .yapi-run-auto-test .icon-close-circle:before {
-  content: "\2715";
+  content: "\\2715";
 }
 
 .yapi-run-auto-test .icon-warning-circle:before {
@@ -439,4 +439,4 @@ body {
   background-color: #ffb74c;
 }
 
-/*# sourceMappingURL=defaultTheme.css.map */
+/*# sourceMappingURL=defaultTheme.css.map */`;

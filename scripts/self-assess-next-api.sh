@@ -278,7 +278,7 @@ while (( seed_remaining > 0 )); do
     PATH_OFFSET="${seed_offset}" \
     SYNC_MODE="${IMPORT_SYNC_MODE}" \
     TARGET_MS="9999999" \
-    node "${ROOT_DIR}/server/scripts/perf/bench-import.js")"
+    node "${ROOT_DIR}/scripts/perf/bench-import.js")"
   seed_batch_errcode="$(json_field "${seed_batch_json}" "errcode")"
   if [[ "${seed_batch_errcode}" != "0" ]]; then
     fail "seed import batch ${seed_batch_count} failed: ${seed_batch_json}"
@@ -315,7 +315,7 @@ menu_json="$(run_bench_capture_json "bench-menu" env \
   TOTAL_REQUESTS="${MENU_TOTAL_REQUESTS}" \
   CONCURRENCY="${MENU_CONCURRENCY}" \
   TARGET_P95="${MENU_TARGET_P95}" \
-  node "${ROOT_DIR}/server/scripts/perf/bench-menu.js")"
+  node "${ROOT_DIR}/scripts/perf/bench-menu.js")"
 
 log "running export benchmark"
 export_json="$(run_bench_capture_json "bench-export" env \
@@ -327,7 +327,7 @@ export_json="$(run_bench_capture_json "bench-export" env \
   TOTAL_REQUESTS="${EXPORT_TOTAL_REQUESTS}" \
   CONCURRENCY="${EXPORT_CONCURRENCY}" \
   TARGET_P95="${EXPORT_TARGET_P95}" \
-  node "${ROOT_DIR}/server/scripts/perf/bench-export.js")"
+  node "${ROOT_DIR}/scripts/perf/bench-export.js")"
 
 log "running import benchmark"
 import_json="$(run_bench_capture_json "bench-import" env \
@@ -338,7 +338,7 @@ import_json="$(run_bench_capture_json "bench-import" env \
   API_COUNT="${IMPORT_API_COUNT}" \
   SYNC_MODE="${IMPORT_SYNC_MODE}" \
   TARGET_MS="${IMPORT_TARGET_MS}" \
-  node "${ROOT_DIR}/server/scripts/perf/bench-import.js")"
+  node "${ROOT_DIR}/scripts/perf/bench-import.js")"
 
 log "running openapi round-trip benchmark"
 roundtrip_json="$(run_bench_capture_json "bench-roundtrip" env \
@@ -348,7 +348,7 @@ roundtrip_json="$(run_bench_capture_json "bench-roundtrip" env \
   TOKEN="${roundtrip_token}" \
   SPEC_FILE="${ROUNDTRIP_SPEC_FILE}" \
   TARGET_RATIO="${ROUNDTRIP_TARGET_RATIO}" \
-  node "${ROOT_DIR}/server/scripts/perf/bench-roundtrip.js")"
+  node "${ROOT_DIR}/scripts/perf/bench-roundtrip.js")"
 
 menu_ok="$(json_field "${menu_json}" "ok")"
 export_ok="$(json_field "${export_json}" "ok")"

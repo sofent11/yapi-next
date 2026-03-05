@@ -8,8 +8,7 @@ import { CounterService } from './counter.service';
 import { handleVarPath, normalizePath, verifyPath } from '../common/path-utils';
 import { NormalizedApiItem } from './openapi-parser.service';
 import { InterfaceTreeCacheService } from './interface-tree-cache.service';
-
-const mergeJsonSchema = require('../../../../common/mergeJsonSchema');
+import { mergeJsonSchema } from '../legacy/merge-json-schema';
 
 const BULK_WRITE_CHUNK_SIZE = 300;
 

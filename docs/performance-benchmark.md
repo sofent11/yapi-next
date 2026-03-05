@@ -90,16 +90,16 @@ npm run next:self-assess:api
 - 结果会写入 `reports/next-self-assess-*.json`。
 
 ## 9. k6 脚本（可选）
-脚本目录：`server/scripts/perf/k6`
+脚本目录：`scripts/perf/k6`
 
 示例：
 ```bash
 # 菜单 P95
-k6 run -e BASE_URL=http://127.0.0.1:3000 -e PROJECT_ID=11 -e TOKEN=xxxx server/scripts/perf/k6/menu.js
+k6 run -e BASE_URL=http://127.0.0.1:3000 -e PROJECT_ID=11 -e TOKEN=xxxx scripts/perf/k6/menu.js
 
 # 导出 P95
-k6 run -e BASE_URL=http://127.0.0.1:3000 -e PROJECT_ID=11 -e TOKEN=xxxx server/scripts/perf/k6/export.js
+k6 run -e BASE_URL=http://127.0.0.1:3000 -e PROJECT_ID=11 -e TOKEN=xxxx scripts/perf/k6/export.js
 
 # 1000 接口导入（单次）
-k6 run -e BASE_URL=http://127.0.0.1:3000 -e PROJECT_ID=11 -e TOKEN=xxxx -e API_COUNT=1000 server/scripts/perf/k6/import.js
+k6 run -e BASE_URL=http://127.0.0.1:3000 -e PROJECT_ID=11 -e TOKEN=xxxx -e API_COUNT=1000 scripts/perf/k6/import.js
 ```

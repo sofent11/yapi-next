@@ -1,6 +1,6 @@
 import test from 'ava';
 
-const { calcStats } = require('../../server/scripts/perf/utils');
+const { calcStats } = require('../../scripts/perf/utils');
 
 test('calcStats should return basic percentiles', t => {
   const stats = calcStats([10, 20, 30, 40, 50]);

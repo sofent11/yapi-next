@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import path from 'node:path';
 import { InterfaceEntity } from '../database/schemas/interface.schema';
 import { ProjectEntity } from '../database/schemas/project.schema';
+import { mockExtra } from '../legacy/mock-extra';
 
 type LooseObject = Record<string, unknown>;
 
@@ -342,22 +342,8 @@ export class MockService {
 
   private loadMockExtra(): ((mockJson: unknown, context?: LooseObject) => unknown) | null {
     if (typeof this.mockExtraFn !== 'undefined') return this.mockExtraFn;
-    const candidates = [
-      path.resolve(process.cwd(), 'common/mock-extra.js'),
-      path.resolve(__dirname, '../../../../common/mock-extra.js')
-    ];
-    for (const file of candidates) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const loaded = require(file);
-        if (typeof loaded === 'function') {
-          this.mockExtraFn = loaded as (mockJson: unknown, context?: LooseObject) => unknown;
-          return this.mockExtraFn;
-        }
-      } catch (_err) {}
-    }
-    this.mockExtraFn = null;
-    return null;
+    this.mockExtraFn = mockExtra;
+    return this.mockExtraFn;
   }
 
   private loadMockJs(): { mock: (input: unknown) => unknown } | null {

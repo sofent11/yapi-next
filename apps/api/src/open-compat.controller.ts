@@ -23,6 +23,7 @@ import { ProjectEntity } from './database/schemas/project.schema';
 import { ColCompatService } from './services/col-compat.service';
 import { ProjectAuthService } from './services/project-auth.service';
 import { SpecService } from './services/spec.service';
+import { renderReportHtml } from './legacy/report-html';
 
 type LegacyParam = Record<string, unknown> & {
   name?: string;
@@ -85,8 +86,6 @@ type AutoTestReport = {
   numbs: number;
   list: AutoTestResultItem[];
 };
-
-const renderToHtml = require('../../../server/utils/reportHtml') as (report: AutoTestReport) => string;
 
 @Controller('open')
 export class OpenCompatController {
@@ -267,7 +266,7 @@ export class OpenCompatController {
         return report;
       }
       reply.header('Content-Type', 'text/html; charset=utf-8');
-      return renderToHtml(report);
+      return renderReportHtml(report);
     } catch (err) {
       const mapped = mapError(err);
       if (
