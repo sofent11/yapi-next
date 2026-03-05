@@ -24,7 +24,7 @@ export class InterfaceTreeCacheService {
       return null;
     }
 
-    return this.clone(entry.value);
+    return entry.value;
   }
 
   set<T>(projectId: number, key: string, value: T): void {
@@ -32,7 +32,7 @@ export class InterfaceTreeCacheService {
     this.cache.set(key, {
       projectVersion: currentVersion,
       expireAt: Date.now() + this.ttlMs,
-      value: this.clone(value)
+      value
     });
   }
 
@@ -57,9 +57,5 @@ export class InterfaceTreeCacheService {
     const raw = Number(process.env.INTERFACE_TREE_CACHE_TTL_MS || 15000);
     if (Number.isFinite(raw) && raw > 0) return raw;
     return 15000;
-  }
-
-  private clone<T>(value: T): T {
-    return JSON.parse(JSON.stringify(value)) as T;
   }
 }

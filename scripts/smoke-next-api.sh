@@ -7,6 +7,7 @@ API_PORT="${API_PORT:-3301}"
 DB_NAME="${DB_NAME:-yapi_next_smoke}"
 MONGO_CONTAINER="${MONGO_CONTAINER:-yapi-next-smoke-mongo-$$}"
 MONGO_URL="mongodb://127.0.0.1:${MONGO_PORT}/${DB_NAME}"
+SERVER_BASE="http://127.0.0.1:${API_PORT}"
 API_BASE="http://127.0.0.1:${API_PORT}/api"
 
 COOKIE_JAR="$(mktemp -t yapi-next-cookie.XXXXXX)"
@@ -76,6 +77,11 @@ urlencode() {
 request_get() {
   local path="$1"
   curl -sS -b "${COOKIE_JAR}" -c "${COOKIE_JAR}" "${API_BASE}${path}"
+}
+
+request_get_root() {
+  local path="$1"
+  curl -sS -b "${COOKIE_JAR}" -c "${COOKIE_JAR}" "${SERVER_BASE}${path}"
 }
 
 request_post() {
@@ -166,6 +172,21 @@ resp="$(request_get "/interface/tree?project_id=${project_id}&page=1&limit=20&in
 assert_ok 'interface/tree' "${resp}"
 resp="$(request_get "/interface/tree/node?catid=${cat_id}&page=1&limit=20")"
 assert_ok 'interface/tree/node' "${resp}"
+
+log 'prepare interface mock payload'
+resp="$(request_post '/interface/up' "{\"id\":${interface_id},\"res_body_type\":\"json\",\"res_body\":\"{\\\"code\\\":200,\\\"message\\\":\\\"mock-ok\\\"}\"}")"
+assert_ok 'interface/up' "${resp}"
+
+log 'check mock route without api prefix'
+mock_resp="$(request_get_root "/mock/${project_id}/smoke/manual")"
+node -e '
+const obj = JSON.parse(process.argv[1]);
+if (!obj || obj.code !== 200 || obj.message !== "mock-ok") process.exit(1);
+' "${mock_resp}" || fail "mock route content check failed: ${mock_resp}"
+
+log 'check /api/mock is excluded by global prefix'
+mock_prefixed_code="$(curl -sS -o /dev/null -w '%{http_code}' "${API_BASE}/mock/${project_id}/smoke/manual")"
+[[ "${mock_prefixed_code}" == "404" ]] || fail "/api/mock should be 404, got ${mock_prefixed_code}"
 
 log 'import openapi3 via /spec/import'
 import_payload="$(node -e '

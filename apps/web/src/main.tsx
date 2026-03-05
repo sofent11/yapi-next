@@ -2,7 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
-import { ConfigProvider } from 'antd';
+import { App as AntdApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { App } from './App';
 import { store } from './store';
@@ -18,14 +18,16 @@ createRoot(document.getElementById('root') as HTMLElement).render(
         }
       }}
     >
-      <BrowserRouter
-        future={{
-          v7_startTransition: true,
-          v7_relativeSplatPath: true
-        }}
-      >
-        <App />
-      </BrowserRouter>
+      <AntdApp>
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true
+          }}
+        >
+          <App />
+        </BrowserRouter>
+      </AntdApp>
     </ConfigProvider>
   </Provider>
 );

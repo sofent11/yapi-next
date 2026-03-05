@@ -124,6 +124,6 @@ export class InterfaceTreeController {
   }
 
   private normalizeDetail(source: string | undefined): 'full' | 'summary' {
-    return source === 'summary' ? 'summary' : 'full';
+    return source === 'full' ? 'full' : 'summary';
   }
 }

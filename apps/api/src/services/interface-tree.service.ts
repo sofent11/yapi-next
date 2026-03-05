@@ -264,8 +264,11 @@ export class InterfaceTreeService {
   }
 
   private interfaceProjection(detail?: 'full' | 'summary'): string | undefined {
-    if (detail !== 'summary') return undefined;
-    return '_id title path method catid status tag index up_time';
+    if (detail === 'summary') {
+      return '_id title path method catid status tag index up_time';
+    }
+    // Keep list_menu payload aligned with legacy menu fields while avoiding full-document scans.
+    return '_id title uid path method project_id catid edit_uid status add_time up_time index tag api_opened';
   }
 
   private recordCacheMetric(route: string, status: 'hit' | 'miss', durationMs: number): void {

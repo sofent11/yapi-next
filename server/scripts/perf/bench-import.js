@@ -4,6 +4,7 @@ const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:3000';
 const PROJECT_ID = process.env.PROJECT_ID;
 const TOKEN = process.env.TOKEN;
 const API_COUNT = parseInt(process.env.API_COUNT || '1000', 10);
+const PATH_OFFSET = parseInt(process.env.PATH_OFFSET || '0', 10);
 const SYNC_MODE = process.env.SYNC_MODE || 'merge';
 const TARGET_MS = parseInt(process.env.TARGET_MS || '60000', 10);
 
@@ -12,14 +13,15 @@ if (!PROJECT_ID) {
   process.exit(1);
 }
 
-function createSpec(count) {
+function createSpec(count, offset) {
   const paths = {};
   for (let i = 0; i < count; i++) {
-    const p = `/perf/v1/resource/${i}`;
+    const index = offset + i;
+    const p = `/perf/v1/resource/${index}`;
     paths[p] = {
       get: {
-        summary: `perf-${i}`,
-        operationId: `perf_get_${i}`,
+        summary: `perf-${index}`,
+        operationId: `perf_get_${index}`,
         tags: ['perf'],
         parameters: [
           {
@@ -60,7 +62,7 @@ function createSpec(count) {
 }
 
 async function main() {
-  const spec = createSpec(API_COUNT);
+  const spec = createSpec(API_COUNT, PATH_OFFSET);
   const payload = {
     project_id: Number(PROJECT_ID),
     format: 'openapi3',
@@ -73,7 +75,7 @@ async function main() {
   }
   const url = `${BASE_URL}/api/spec/import`;
   console.log(`[bench-import] url=${url}`);
-  console.log(`[bench-import] apiCount=${API_COUNT}, syncMode=${SYNC_MODE}`);
+  console.log(`[bench-import] apiCount=${API_COUNT}, pathOffset=${PATH_OFFSET}, syncMode=${SYNC_MODE}`);
 
   const start = Date.now();
   const res = await axios.post(url, payload, { timeout: 10 * 60 * 1000 });

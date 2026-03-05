@@ -14,6 +14,7 @@ import { FollowCompatController } from './follow-compat.controller';
 import { ColCompatController } from './col-compat.controller';
 import { LogCompatController } from './log-compat.controller';
 import { TestCompatController } from './test-compat.controller';
+import { MockController } from './mock.controller';
 import { CounterEntity, CounterSchema } from './database/schemas/counter.schema';
 import { AvatarEntity, AvatarSchema } from './database/schemas/avatar.schema';
 import { GroupEntity, GroupSchema } from './database/schemas/group.schema';
@@ -47,6 +48,7 @@ import { GroupCompatService } from './services/group-compat.service';
 import { FollowCompatService } from './services/follow-compat.service';
 import { ColCompatService } from './services/col-compat.service';
 import { LogCompatService } from './services/log-compat.service';
+import { MockService } from './services/mock.service';
 
 @Module({
   imports: [
@@ -83,7 +85,8 @@ import { LogCompatService } from './services/log-compat.service';
     FollowCompatController,
     ColCompatController,
     LogCompatController,
-    TestCompatController
+    TestCompatController,
+    MockController
   ],
   providers: [
     CounterService,
@@ -105,7 +108,8 @@ import { LogCompatService } from './services/log-compat.service';
     GroupCompatService,
     FollowCompatService,
     ColCompatService,
-    LogCompatService
+    LogCompatService,
+    MockService
   ]
 })
 export class AppModule {}

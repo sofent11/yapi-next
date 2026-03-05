@@ -33,7 +33,7 @@ async function runWorker(url, shared) {
     const start = Date.now();
     try {
       const res = await axios.get(url, { timeout: 60000 });
-      if (typeof res.data === 'string' && res.data.length > 0) {
+      if (isExportSuccess(res && res.data)) {
         shared.success++;
       } else {
         shared.failed++;
@@ -44,6 +44,25 @@ async function runWorker(url, shared) {
       shared.latencies.push(Date.now() - start);
     }
   }
+}
+
+function isExportSuccess(payload) {
+  if (typeof payload === 'string') {
+    return payload.length > 0;
+  }
+  if (!payload || typeof payload !== 'object') {
+    return false;
+  }
+  if (typeof payload.errcode === 'number') {
+    if (payload.errcode !== 0) {
+      return false;
+    }
+    return Boolean(payload.data);
+  }
+  if (payload.openapi || payload.swagger || payload.paths) {
+    return true;
+  }
+  return false;
 }
 
 async function main() {

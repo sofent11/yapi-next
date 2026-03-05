@@ -7,6 +7,7 @@ const TOKEN = process.env.TOKEN;
 const TOTAL_REQUESTS = parseInt(process.env.TOTAL_REQUESTS || '300', 10);
 const CONCURRENCY = parseInt(process.env.CONCURRENCY || '20', 10);
 const TARGET_P95 = parseInt(process.env.TARGET_P95 || '500', 10);
+const WARMUP_REQUESTS = parseInt(process.env.WARMUP_REQUESTS || '5', 10);
 
 if (!PROJECT_ID) {
   console.error('Missing PROJECT_ID');
@@ -45,7 +46,15 @@ async function runWorker(url, shared) {
 async function main() {
   const url = buildUrl();
   console.log(`[bench-menu] url=${url}`);
-  console.log(`[bench-menu] total=${TOTAL_REQUESTS}, concurrency=${CONCURRENCY}`);
+  console.log(`[bench-menu] total=${TOTAL_REQUESTS}, concurrency=${CONCURRENCY}, warmup=${WARMUP_REQUESTS}`);
+
+  if (WARMUP_REQUESTS > 0) {
+    for (let i = 0; i < WARMUP_REQUESTS; i++) {
+      try {
+        await axios.get(url, { timeout: 30000 });
+      } catch (_err) {}
+    }
+  }
 
   const shared = {
     cursor: 0,

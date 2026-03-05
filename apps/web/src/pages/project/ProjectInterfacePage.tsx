@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   AutoComplete,
@@ -54,13 +54,14 @@ import {
   useGetColListQuery,
   useGetCatMenuQuery,
   useGetInterfaceListQuery,
+  useGetInterfaceTreeQuery,
   useGetInterfaceQuery,
   useGetProjectTokenQuery,
   useLazyDelColCaseQuery,
   useLazyDelColQuery,
   useLazyGetColCaseQuery,
   useLazyGetInterfaceQuery,
-  useGetListMenuQuery,
+  useLazyGetInterfaceTreeNodeQuery,
   useUpColCaseIndexMutation,
   useUpColCaseMutation,
   useUpColCompatMutation,
@@ -80,6 +81,8 @@ const { Sider, Content } = Layout;
 const { Text } = Typography;
 
 const STABLE_EMPTY_ARRAY: any[] = [];
+const TREE_CATEGORY_LIMIT = 1000;
+const TREE_NODE_PAGE_LIMIT = 200;
 
 type ProjectInterfacePageProps = {
   projectId: number;
@@ -783,6 +786,11 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   const [listPage, setListPage] = useState(1);
   const [menuKeyword, setMenuKeyword] = useState('');
   const [expandedCatIds, setExpandedCatIds] = useState<number[]>([]);
+  const [catInterfaceMap, setCatInterfaceMap] = useState<Record<number, LegacyInterfaceDTO[]>>({});
+  const [catLoadingMap, setCatLoadingMap] = useState<Record<number, boolean>>({});
+  const [, setCatLoadedMap] = useState<Record<number, boolean>>({});
+  const catLoadingRef = useRef<Record<number, boolean>>({});
+  const catLoadedRef = useRef<Record<number, boolean>>({});
   const [draggingMenuItem, setDraggingMenuItem] = useState<MenuDragItem | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'done' | 'undone'>('all');
   const [colKeyword, setColKeyword] = useState('');
@@ -800,6 +808,11 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   const [importColId, setImportColId] = useState(0);
   const [importProjectId, setImportProjectId] = useState(0);
   const [importSelectedRowKeys, setImportSelectedRowKeys] = useState<Array<string | number>>([]);
+  const [importCatInterfaceMap, setImportCatInterfaceMap] = useState<Record<number, LegacyInterfaceDTO[]>>({});
+  const [importCatLoadingMap, setImportCatLoadingMap] = useState<Record<number, boolean>>({});
+  const [, setImportCatLoadedMap] = useState<Record<number, boolean>>({});
+  const importCatLoadingRef = useRef<Record<number, boolean>>({});
+  const importCatLoadedRef = useRef<Record<number, boolean>>({});
   const [autoTestRunning, setAutoTestRunning] = useState(false);
   const [autoTestModalOpen, setAutoTestModalOpen] = useState(false);
   const [autoTestReport, setAutoTestReport] = useState<AutoTestReport | null>(null);
@@ -835,11 +848,21 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   const catId = action === 'api' && actionId?.startsWith('cat_') ? Number(actionId.slice(4)) : 0;
   const colIdFromRoute = action === 'col' ? parseColId(actionId) : 0;
   const caseId = action === 'case' ? actionId || '' : '';
+  const shouldFetchGlobalInterfaceList =
+    action === 'api' && (menuKeyword.trim().length > 0 || (catId <= 0 && interfaceId <= 0));
 
-  const menuQuery = useGetListMenuQuery(
-    { projectId: props.projectId, token: props.token, detail: 'full' },
-    { skip: props.projectId <= 0 }
+  const treeQuery = useGetInterfaceTreeQuery(
+    {
+      projectId: props.projectId,
+      token: props.token,
+      page: 1,
+      limit: TREE_CATEGORY_LIMIT,
+      includeList: false,
+      detail: 'summary'
+    },
+    { skip: props.projectId <= 0 || action !== 'api' }
   );
+  const [fetchInterfaceTreeNode] = useLazyGetInterfaceTreeNodeQuery();
   const listQuery = useGetInterfaceListQuery(
     {
       projectId: props.projectId,
@@ -847,7 +870,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       page: 1,
       limit: 'all'
     },
-    { skip: props.projectId <= 0 || action !== 'api' }
+    { skip: props.projectId <= 0 || (!addCaseOpen && !shouldFetchGlobalInterfaceList) }
   );
   const detailQuery = useGetInterfaceQuery(
     {
@@ -920,18 +943,161 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     { groupId: Number(props.projectGroupId || 0) },
     { skip: Number(props.projectGroupId || 0) <= 0 || !importModalOpen }
   );
-  const importMenuQuery = useGetListMenuQuery(
-    { projectId: importProjectId, token: props.token, detail: 'full' },
+  const importTreeQuery = useGetInterfaceTreeQuery(
+    {
+      projectId: importProjectId,
+      token: props.token,
+      page: 1,
+      limit: TREE_CATEGORY_LIMIT,
+      includeList: false,
+      detail: 'summary'
+    },
     { skip: importProjectId <= 0 || !importModalOpen }
   );
+  const [fetchImportTreeNode] = useLazyGetInterfaceTreeNodeQuery();
 
-  const menuRows = (menuQuery.data?.data || STABLE_EMPTY_ARRAY) as InterfaceTreeNode[];
   const allInterfaces = (listQuery.data?.data?.list || STABLE_EMPTY_ARRAY) as LegacyInterfaceDTO[];
+  const treeRows = (treeQuery.data?.data?.list || STABLE_EMPTY_ARRAY) as InterfaceTreeNode[];
+  const allInterfaceMapByCat = useMemo(() => {
+    const map = new Map<number, LegacyInterfaceDTO[]>();
+    allInterfaces.forEach(item => {
+      const key = Number(item.catid || 0);
+      if (key <= 0) return;
+      if (!map.has(key)) {
+        map.set(key, []);
+      }
+      map.get(key)?.push(item);
+    });
+    return map;
+  }, [allInterfaces]);
+  const menuRows = useMemo<InterfaceTreeNode[]>(
+    () =>
+      treeRows.map(cat => {
+        const catIdNum = Number(cat._id || 0);
+        return {
+          ...cat,
+          list: catInterfaceMap[catIdNum] || []
+        };
+      }),
+    [catInterfaceMap, treeRows]
+  );
   const catRows = (catMenuQuery.data?.data || STABLE_EMPTY_ARRAY) as Array<{ _id: number; name: string; desc?: string }>;
   const currentInterface = (detailQuery.data?.data || null) as LegacyInterfaceDTO | null;
   const colRows = (colListQuery.data?.data || STABLE_EMPTY_ARRAY) as any[];
   const caseRows = (caseListQuery.data?.data || STABLE_EMPTY_ARRAY) as any[];
   const canEdit = /(admin|owner|dev)/.test(String(props.projectRole || ''));
+
+  const loadCatInterfaces = useCallback(
+    async (catid: number, force = false) => {
+      const catIdNum = Number(catid || 0);
+      if (catIdNum <= 0) return;
+      if (!force && (catLoadedRef.current[catIdNum] || catLoadingRef.current[catIdNum])) return;
+      catLoadingRef.current[catIdNum] = true;
+      setCatLoadingMap(prev => ({ ...prev, [catIdNum]: true }));
+      try {
+        const merged: LegacyInterfaceDTO[] = [];
+        let page = 1;
+        let total = 1;
+        while (page <= total) {
+          const response = await fetchInterfaceTreeNode(
+            {
+              catid: catIdNum,
+              token: props.token,
+              page,
+              limit: TREE_NODE_PAGE_LIMIT,
+              detail: 'full'
+            },
+            true
+          ).unwrap();
+          if (response.errcode !== 0) {
+            throw new Error(response.errmsg || '加载分类接口失败');
+          }
+          const nodeData = (response.data || {}) as { list?: LegacyInterfaceDTO[]; total?: number };
+          const rows = Array.isArray(nodeData.list) ? nodeData.list : [];
+          merged.push(...rows);
+          const totalPageCount = Number(nodeData.total || 1);
+          total = Number.isFinite(totalPageCount) && totalPageCount > 0 ? totalPageCount : 1;
+          page += 1;
+        }
+        setCatInterfaceMap(prev => ({ ...prev, [catIdNum]: merged }));
+        catLoadedRef.current[catIdNum] = true;
+        setCatLoadedMap(prev => ({ ...prev, [catIdNum]: true }));
+      } catch (err) {
+        catLoadedRef.current[catIdNum] = false;
+        setCatLoadedMap(prev => ({ ...prev, [catIdNum]: false }));
+        message.error(err instanceof Error ? err.message : '加载分类接口失败');
+      } finally {
+        catLoadingRef.current[catIdNum] = false;
+        setCatLoadingMap(prev => ({ ...prev, [catIdNum]: false }));
+      }
+    },
+    [fetchInterfaceTreeNode, props.token]
+  );
+
+  const refreshInterfaceMenu = useCallback(async () => {
+    catLoadingRef.current = {};
+    catLoadedRef.current = {};
+    setCatInterfaceMap({});
+    setCatLoadingMap({});
+    setCatLoadedMap({});
+    await Promise.all([treeQuery.refetch(), catMenuQuery.refetch()]);
+  }, [catMenuQuery, treeQuery]);
+
+  const refetchInterfaceListSafe = useCallback(async () => {
+    if (addCaseOpen || shouldFetchGlobalInterfaceList) {
+      await listQuery.refetch();
+    }
+  }, [addCaseOpen, listQuery, shouldFetchGlobalInterfaceList]);
+
+  const loadImportCatInterfaces = useCallback(
+    async (catid: number, options?: { force?: boolean; notifyError?: boolean }) => {
+      const catIdNum = Number(catid || 0);
+      if (catIdNum <= 0) return;
+      const force = options?.force === true;
+      if (!force && (importCatLoadedRef.current[catIdNum] || importCatLoadingRef.current[catIdNum])) return;
+      importCatLoadingRef.current[catIdNum] = true;
+      setImportCatLoadingMap(prev => ({ ...prev, [catIdNum]: true }));
+      try {
+        const merged: LegacyInterfaceDTO[] = [];
+        let page = 1;
+        let total = 1;
+        while (page <= total) {
+          const response = await fetchImportTreeNode(
+            {
+              catid: catIdNum,
+              token: props.token,
+              page,
+              limit: TREE_NODE_PAGE_LIMIT,
+              detail: 'full'
+            },
+            true
+          ).unwrap();
+          if (response.errcode !== 0) {
+            throw new Error(response.errmsg || '加载导入接口失败');
+          }
+          const nodeData = (response.data || {}) as { list?: LegacyInterfaceDTO[]; total?: number };
+          const rows = Array.isArray(nodeData.list) ? nodeData.list : [];
+          merged.push(...rows);
+          const totalPageCount = Number(nodeData.total || 1);
+          total = Number.isFinite(totalPageCount) && totalPageCount > 0 ? totalPageCount : 1;
+          page += 1;
+        }
+        setImportCatInterfaceMap(prev => ({ ...prev, [catIdNum]: merged }));
+        importCatLoadedRef.current[catIdNum] = true;
+        setImportCatLoadedMap(prev => ({ ...prev, [catIdNum]: true }));
+      } catch (err) {
+        importCatLoadedRef.current[catIdNum] = false;
+        setImportCatLoadedMap(prev => ({ ...prev, [catIdNum]: false }));
+        if (options?.notifyError !== false) {
+          message.error(err instanceof Error ? err.message : '加载导入接口失败');
+        }
+      } finally {
+        importCatLoadingRef.current[catIdNum] = false;
+        setImportCatLoadingMap(prev => ({ ...prev, [catIdNum]: false }));
+      }
+    },
+    [fetchImportTreeNode, props.token]
+  );
   const interfaceTabs = useMemo<Record<string, InterfaceTabItem>>(() => {
     const tabs: Record<string, InterfaceTabItem> = {
       view: { name: '预览' },
@@ -1043,10 +1209,10 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
 
   const currentList = useMemo(() => {
     if (catId > 0) {
-      return allInterfaces.filter(item => Number(item.catid) === catId);
+      return catInterfaceMap[catId] || STABLE_EMPTY_ARRAY;
     }
     return allInterfaces;
-  }, [allInterfaces, catId]);
+  }, [allInterfaces, catId, catInterfaceMap]);
 
   const filteredList = useMemo(() => {
     let rows = [...currentList];
@@ -1063,6 +1229,10 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     }
     return rows;
   }, [currentList, listKeyword, statusFilter]);
+  const currentListLoading =
+    catId > 0
+      ? catLoadingMap[catId] === true
+      : Boolean(listQuery.isLoading || listQuery.isFetching);
 
   const currentCatName = useMemo(() => {
     if (!catId) return '全部接口';
@@ -1079,14 +1249,16 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     if (!keyword) return menuRows;
     return menuRows
       .map(cat => {
+        const catIdNum = Number(cat._id || 0);
         const catName = String(cat.name || '').toLowerCase();
-        const list = (cat.list || []).filter(item => {
+        const sourceList = allInterfaceMapByCat.get(catIdNum) || cat.list || [];
+        const list = sourceList.filter(item => {
           const title = String(item.title || '').toLowerCase();
           const path = String(item.path || '').toLowerCase();
           return title.includes(keyword) || path.includes(keyword);
         });
         if (catName.includes(keyword)) {
-          return { ...cat };
+          return { ...cat, list: sourceList };
         }
         if (list.length > 0) {
           return { ...cat, list };
@@ -1094,7 +1266,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         return null;
       })
       .filter(Boolean) as InterfaceTreeNode[];
-  }, [menuKeyword, menuRows]);
+  }, [allInterfaceMapByCat, menuKeyword, menuRows]);
   const menuDragEnabled = canEdit && menuKeyword.trim().length === 0;
   const menuDisplayRows = useMemo(
     () => (menuKeyword.trim().length > 0 ? filteredMenuRows : menuRows),
@@ -1126,7 +1298,18 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   const importProjectRows = (projectListQuery.data?.data?.list || STABLE_EMPTY_ARRAY).filter(
     item => Number(item._id || 0) !== props.projectId
   );
-  const importMenuRows = (importMenuQuery.data?.data || STABLE_EMPTY_ARRAY) as InterfaceTreeNode[];
+  const importTreeRows = (importTreeQuery.data?.data?.list || STABLE_EMPTY_ARRAY) as InterfaceTreeNode[];
+  const importMenuRows = useMemo<InterfaceTreeNode[]>(
+    () =>
+      importTreeRows.map(cat => {
+        const catIdNum = Number(cat._id || 0);
+        return {
+          ...cat,
+          list: importCatInterfaceMap[catIdNum] || []
+        };
+      }),
+    [importCatInterfaceMap, importTreeRows]
+  );
   const importTableRows = useMemo<ImportInterfaceRow[]>(() => {
     return importMenuRows.map(cat => ({
       key: `category_${cat._id}`,
@@ -1144,6 +1327,10 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       }))
     }));
   }, [importMenuRows]);
+  const importLoading = useMemo(
+    () => Object.values(importCatLoadingMap).some(Boolean),
+    [importCatLoadingMap]
+  );
   const selectedImportInterfaceIds = useMemo(
     () =>
       importSelectedRowKeys
@@ -1168,15 +1355,13 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   }, [importProjectRows, props.projectId]);
   const caseInterfaceOptions = useMemo(
     () =>
-      menuRows.flatMap(cat =>
-        (cat.list || []).map(item => ({
-          value: Number(item._id || 0),
-          label: `[${String(item.method || 'GET').toUpperCase()}] ${item.title || item.path || item._id}`,
-          title: item.title || '',
-          path: item.path || ''
-        }))
-      ),
-    [menuRows]
+      allInterfaces.map(item => ({
+        value: Number(item._id || 0),
+        label: `[${String(item.method || 'GET').toUpperCase()}] ${item.title || item.path || item._id}`,
+        title: item.title || '',
+        path: item.path || ''
+      })),
+    [allInterfaces]
   );
   const projectTokenValue = String(projectTokenQuery.data?.data || '');
   const autoTestRows = (autoTestReport?.list || STABLE_EMPTY_ARRAY) as AutoTestResultItem[];
@@ -1207,14 +1392,38 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       return;
     }
     setExpandedCatIds(prev => {
-      const next = new Set(prev);
-      menuRows.forEach(cat => {
-        const id = Number(cat._id || 0);
-        if (id > 0 && !next.has(id)) next.add(id);
-      });
-      return Array.from(next);
+      const validCatIds = new Set(
+        menuRows.map(cat => Number(cat._id || 0)).filter(id => Number.isFinite(id) && id > 0)
+      );
+      const kept = prev.filter(id => validCatIds.has(id));
+      if (catId > 0 && validCatIds.has(catId) && !kept.includes(catId)) {
+        kept.push(catId);
+      }
+      return kept;
     });
-  }, [menuRows]);
+  }, [catId, menuRows]);
+
+  useEffect(() => {
+    if (action !== 'api') return;
+    const targets = new Set<number>();
+    if (catId > 0) {
+      targets.add(catId);
+    }
+    expandedCatIds.forEach(id => {
+      if (id > 0) targets.add(id);
+    });
+    targets.forEach(id => {
+      void loadCatInterfaces(id);
+    });
+  }, [action, catId, expandedCatIds, loadCatInterfaces, treeRows]);
+
+  useEffect(() => {
+    catLoadingRef.current = {};
+    catLoadedRef.current = {};
+    setCatInterfaceMap({});
+    setCatLoadingMap({});
+    setCatLoadedMap({});
+  }, [props.projectId]);
 
   useEffect(() => {
     if (colRows.length === 0) {
@@ -1242,6 +1451,39 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     if (importProjectId > 0) return;
     setImportProjectId(props.projectId);
   }, [importModalOpen, importProjectId, props.projectId]);
+
+  useEffect(() => {
+    if (!importModalOpen) {
+      importCatLoadingRef.current = {};
+      importCatLoadedRef.current = {};
+      setImportCatInterfaceMap({});
+      setImportCatLoadingMap({});
+      setImportCatLoadedMap({});
+      return;
+    }
+    importCatLoadingRef.current = {};
+    importCatLoadedRef.current = {};
+    setImportCatInterfaceMap({});
+    setImportCatLoadingMap({});
+    setImportCatLoadedMap({});
+  }, [importModalOpen, importProjectId]);
+
+  useEffect(() => {
+    if (!importModalOpen || importProjectId <= 0 || importTreeRows.length === 0) return;
+    let cancelled = false;
+    const run = async () => {
+      for (const cat of importTreeRows) {
+        if (cancelled) return;
+        const catIdNum = Number(cat._id || 0);
+        if (catIdNum <= 0) continue;
+        await loadImportCatInterfaces(catIdNum, { notifyError: false });
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [importModalOpen, importProjectId, importTreeRows, loadImportCatInterfaces]);
 
   useEffect(() => {
     if (!addCaseOpen) return;
@@ -1707,7 +1949,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       return;
     }
     message.success('接口已更新');
-    await Promise.all([detailQuery.refetch(), listQuery.refetch(), menuQuery.refetch()]);
+    await Promise.all([detailQuery.refetch(), refetchInterfaceListSafe(), refreshInterfaceMenu()]);
     setEditBaseline(serializeEditValues(values));
     setTab('view');
   }
@@ -1753,7 +1995,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     message.success('接口添加成功');
     setAddInterfaceOpen(false);
     addInterfaceForm.resetFields();
-    await Promise.all([menuQuery.refetch(), listQuery.refetch(), catMenuQuery.refetch()]);
+    await Promise.all([refreshInterfaceMenu(), refetchInterfaceListSafe()]);
     const id = Number(response.data?._id || 0);
     if (id > 0) {
       navigate(`/project/${props.projectId}/interface/api/${id}`);
@@ -1782,7 +2024,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     message.success('接口分类添加成功');
     setAddCatOpen(false);
     addCatForm.resetFields();
-    await Promise.all([menuQuery.refetch(), catMenuQuery.refetch()]);
+    await refreshInterfaceMenu();
   }
 
   async function handleUpdateCat(values: EditCatForm) {
@@ -1803,7 +2045,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     message.success('分类已更新');
     setEditCatOpen(false);
     setEditingCat(null);
-    await Promise.all([menuQuery.refetch(), catMenuQuery.refetch(), listQuery.refetch()]);
+    await Promise.all([refreshInterfaceMenu(), refetchInterfaceListSafe()]);
   }
 
   function openEditCatModal(cat: InterfaceTreeNode) {
@@ -1837,7 +2079,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
           return;
         }
         message.success('分类已删除');
-        await Promise.all([menuQuery.refetch(), catMenuQuery.refetch(), listQuery.refetch()]);
+        await Promise.all([refreshInterfaceMenu(), refetchInterfaceListSafe()]);
         navigate(`/project/${props.projectId}/interface/api`);
       }
     });
@@ -1860,7 +2102,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
           return;
         }
         message.success('接口已删除');
-        await Promise.all([listQuery.refetch(), menuQuery.refetch(), catMenuQuery.refetch()]);
+        await Promise.all([refetchInterfaceListSafe(), refreshInterfaceMenu()]);
         if (interfaceId === id) {
           navigate(`/project/${props.projectId}/interface/api`);
         }
@@ -1914,7 +2156,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       return;
     }
     message.success('接口已复制');
-    await Promise.all([listQuery.refetch(), menuQuery.refetch(), catMenuQuery.refetch()]);
+    await Promise.all([refetchInterfaceListSafe(), refreshInterfaceMenu()]);
     const id = Number(response.data?._id || 0);
     if (id > 0) {
       navigate(`/project/${props.projectId}/interface/api/${id}`);
@@ -2142,7 +2384,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         message.error(response.errmsg || '分类排序失败');
         return;
       }
-      await Promise.all([menuQuery.refetch(), catMenuQuery.refetch()]);
+      await refreshInterfaceMenu();
       return;
     }
 
@@ -2156,7 +2398,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         message.error(response.errmsg || '移动接口失败');
         return;
       }
-      await Promise.all([menuQuery.refetch(), listQuery.refetch(), catMenuQuery.refetch()]);
+      await Promise.all([refreshInterfaceMenu(), refetchInterfaceListSafe()]);
     }
   }
 
@@ -2177,7 +2419,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         message.error(response.errmsg || '移动接口失败');
         return;
       }
-      await Promise.all([menuQuery.refetch(), listQuery.refetch(), catMenuQuery.refetch()]);
+      await Promise.all([refreshInterfaceMenu(), refetchInterfaceListSafe()]);
       return;
     }
 
@@ -2192,7 +2434,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       message.error(response.errmsg || '接口排序失败');
       return;
     }
-    await Promise.all([menuQuery.refetch(), listQuery.refetch()]);
+    await Promise.all([refreshInterfaceMenu(), refetchInterfaceListSafe()]);
   }
 
   function openColModal(type: 'add' | 'edit', col?: { _id?: number; name?: string; desc?: string }) {
@@ -3002,130 +3244,143 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
               {(() => {
                 const catIdNum = Number(cat._id || 0);
                 const expanded = keywordMode || expandedCatIds.includes(catIdNum);
+                const shouldShowInterfaces =
+                  menuKeyword.trim().length > 0 || expandedCatIds.includes(Number(cat._id || 0));
+                const catLoading = catLoadingMap[catIdNum] === true;
+                const visibleInterfaces = shouldShowInterfaces ? cat.list || [] : [];
                 return (
-                  <button
-                    type="button"
-                    className={`legacy-interface-cat-title${catId === Number(cat._id) ? ' active' : ''}`}
-                    draggable={menuDragEnabled}
-                    onDragStart={event => {
-                      if (!menuDragEnabled) return;
-                      setDraggingMenuItem({ type: 'cat', id: Number(cat._id || 0) });
-                      event.dataTransfer.effectAllowed = 'move';
-                    }}
-                    onDragEnd={() => setDraggingMenuItem(null)}
-                    onClick={() =>
-                      navigateWithGuard(`/project/${props.projectId}/interface/api/cat_${cat._id}`)
-                    }
-                  >
-                    <span className="legacy-interface-cat-main">
-                      <span
-                        className="legacy-interface-cat-toggle"
-                        onClick={event => {
+                  <>
+                    <button
+                      type="button"
+                      className={`legacy-interface-cat-title${catId === Number(cat._id) ? ' active' : ''}`}
+                      draggable={menuDragEnabled}
+                      onDragStart={event => {
+                        if (!menuDragEnabled) return;
+                        setDraggingMenuItem({ type: 'cat', id: Number(cat._id || 0) });
+                        event.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onDragEnd={() => setDraggingMenuItem(null)}
+                      onClick={() =>
+                        navigateWithGuard(`/project/${props.projectId}/interface/api/cat_${cat._id}`)
+                      }
+                    >
+                      <span className="legacy-interface-cat-main">
+                        <span
+                          className="legacy-interface-cat-toggle"
+                          onClick={event => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (keywordMode) return;
+                            const opened = expandedCatIds.includes(catIdNum);
+                            if (!opened) {
+                              void loadCatInterfaces(catIdNum);
+                            }
+                            setExpandedCatIds(prev => {
+                              if (prev.includes(catIdNum)) {
+                                return prev.filter(item => item !== catIdNum);
+                              }
+                              return [...prev, catIdNum];
+                            });
+                          }}
+                        >
+                          {expanded ? <DownOutlined /> : <RightOutlined />}
+                        </span>
+                        <span className="legacy-interface-cat-name">{cat.name}</span>
+                      </span>
+                      <Space size={4} className="legacy-interface-cat-actions">
+                        {canEdit ? (
+                          <>
+                            <PlusOutlined
+                              onClick={event => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                openAddInterfaceModal(Number(cat._id || 0));
+                              }}
+                            />
+                            <EditOutlined
+                              onClick={event => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                openEditCatModal(cat);
+                              }}
+                            />
+                            <DeleteOutlined
+                              onClick={event => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                confirmDeleteCat(cat);
+                              }}
+                            />
+                          </>
+                        ) : null}
+                        <Tag>{cat.interface_count || cat.list?.length || 0}</Tag>
+                      </Space>
+                    </button>
+                    {shouldShowInterfaces && visibleInterfaces.length === 0 && catLoading ? (
+                      <div style={{ padding: '6px 12px', color: '#8c8c8c', fontSize: 12 }}>加载接口中...</div>
+                    ) : null}
+                    {shouldShowInterfaces && visibleInterfaces.length === 0 && !catLoading ? (
+                      <div style={{ padding: '6px 12px', color: '#8c8c8c', fontSize: 12 }}>暂无接口</div>
+                    ) : null}
+                    {visibleInterfaces.map(item => (
+                      <button
+                        key={`iface-${item._id}`}
+                        type="button"
+                        className={`legacy-interface-item${interfaceId === Number(item._id) ? ' active' : ''}`}
+                        draggable={menuDragEnabled}
+                        onDragStart={event => {
+                          if (!menuDragEnabled) return;
+                          setDraggingMenuItem({
+                            type: 'interface',
+                            id: Number(item._id || 0),
+                            catid: Number(cat._id || 0)
+                          });
+                          event.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragEnd={() => setDraggingMenuItem(null)}
+                        onDragOver={event => {
+                          if (!menuDragEnabled) return;
+                          event.preventDefault();
+                        }}
+                        onDrop={event => {
+                          if (!menuDragEnabled) return;
                           event.preventDefault();
                           event.stopPropagation();
-                          if (keywordMode) return;
-                          setExpandedCatIds(prev => {
-                            if (prev.includes(catIdNum)) {
-                              return prev.filter(item => item !== catIdNum);
-                            }
-                            return [...prev, catIdNum];
-                          });
+                          void handleDropOnInterface(Number(cat._id || 0), Number(item._id || 0));
                         }}
+                        onClick={() =>
+                          navigateWithGuard(`/project/${props.projectId}/interface/api/${item._id}`)
+                        }
                       >
-                        {expanded ? <DownOutlined /> : <RightOutlined />}
-                      </span>
-                      <span className="legacy-interface-cat-name">{cat.name}</span>
-                    </span>
-                    <Space size={4} className="legacy-interface-cat-actions">
-                      {canEdit ? (
-                        <>
-                          <PlusOutlined
-                            onClick={event => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              openAddInterfaceModal(Number(cat._id || 0));
-                            }}
-                          />
-                          <EditOutlined
-                            onClick={event => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              openEditCatModal(cat);
-                            }}
-                          />
-                          <DeleteOutlined
-                            onClick={event => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              confirmDeleteCat(cat);
-                            }}
-                          />
-                        </>
-                      ) : null}
-                      <Tag>{cat.interface_count || cat.list?.length || 0}</Tag>
-                    </Space>
-                  </button>
+                        <span className="legacy-method-pill" style={methodStyle(item.method)}>
+                          {String(item.method || 'GET').toUpperCase()}
+                        </span>
+                        <Tooltip title={item.path}>
+                          <span className="legacy-interface-item-title">{item.title || item.path}</span>
+                        </Tooltip>
+                        {canEdit ? (
+                          <Space size={4} className="legacy-interface-item-actions">
+                            <CopyOutlined
+                              onClick={event => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                void copyInterfaceRow(item as LegacyInterfaceDTO);
+                              }}
+                            />
+                            <DeleteOutlined
+                              onClick={event => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                confirmDeleteInterface(Number(item._id || 0));
+                              }}
+                            />
+                          </Space>
+                        ) : null}
+                      </button>
+                    ))}
+                  </>
                 );
               })()}
-              {(menuKeyword.trim().length > 0 || expandedCatIds.includes(Number(cat._id || 0))
-                ? cat.list || []
-                : []
-              ).map(item => (
-                <button
-                  key={`iface-${item._id}`}
-                  type="button"
-                  className={`legacy-interface-item${interfaceId === Number(item._id) ? ' active' : ''}`}
-                  draggable={menuDragEnabled}
-                  onDragStart={event => {
-                    if (!menuDragEnabled) return;
-                    setDraggingMenuItem({
-                      type: 'interface',
-                      id: Number(item._id || 0),
-                      catid: Number(cat._id || 0)
-                    });
-                    event.dataTransfer.effectAllowed = 'move';
-                  }}
-                  onDragEnd={() => setDraggingMenuItem(null)}
-                  onDragOver={event => {
-                    if (!menuDragEnabled) return;
-                    event.preventDefault();
-                  }}
-                  onDrop={event => {
-                    if (!menuDragEnabled) return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void handleDropOnInterface(Number(cat._id || 0), Number(item._id || 0));
-                  }}
-                  onClick={() =>
-                    navigateWithGuard(`/project/${props.projectId}/interface/api/${item._id}`)
-                  }
-                >
-                  <span className="legacy-method-pill" style={methodStyle(item.method)}>
-                    {String(item.method || 'GET').toUpperCase()}
-                  </span>
-                  <Tooltip title={item.path}>
-                    <span className="legacy-interface-item-title">{item.title || item.path}</span>
-                  </Tooltip>
-                  {canEdit ? (
-                    <Space size={4} className="legacy-interface-item-actions">
-                      <CopyOutlined
-                        onClick={event => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          void copyInterfaceRow(item as LegacyInterfaceDTO);
-                        }}
-                      />
-                      <DeleteOutlined
-                        onClick={event => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          confirmDeleteInterface(Number(item._id || 0));
-                        }}
-                      />
-                    </Space>
-                  ) : null}
-                </button>
-              ))}
             </div>
           ))}
         </div>
@@ -3393,7 +3648,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
 
             <Table
               rowKey={row => Number(row._id || 0)}
-              loading={listQuery.isLoading}
+              loading={currentListLoading}
               dataSource={pagedFilteredList}
               locale={{
                 emptyText:
@@ -3460,7 +3715,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
                           message.error(response.errmsg || '更新状态失败');
                           return;
                         }
-                        await Promise.all([listQuery.refetch(), menuQuery.refetch()]);
+                        await Promise.all([refetchInterfaceListSafe(), refreshInterfaceMenu()]);
                       }}
                       options={[
                         { label: '已完成', value: 'done' },
@@ -3487,7 +3742,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
                           message.error(response.errmsg || '更新分类失败');
                           return;
                         }
-                        await Promise.all([listQuery.refetch(), menuQuery.refetch()]);
+                        await Promise.all([refetchInterfaceListSafe(), refreshInterfaceMenu()]);
                       }}
                       options={catRows.map(item => ({
                         label: item.name,
@@ -5099,7 +5354,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
             rowKey="key"
             size="small"
             pagination={false}
-            loading={importMenuQuery.isLoading || importMenuQuery.isFetching || projectListQuery.isFetching}
+            loading={importTreeQuery.isLoading || importTreeQuery.isFetching || importLoading || projectListQuery.isFetching}
             dataSource={importTableRows}
             defaultExpandAllRows
             rowSelection={{

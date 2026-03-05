@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Col, Input, Modal, Progress, Row, Select, Space, Switch, Tabs, Typography, Upload, message, Tooltip, Radio } from 'antd';
+import { Alert, App as AntdApp, Button, Card, Col, Input, Modal, Progress, Row, Select, Space, Switch, Tabs, Typography, Upload, Tooltip, Radio } from 'antd';
 import json5 from 'json5';
 import type { SpecImportResult } from '@yapi-next/shared-types';
 import {
@@ -25,6 +25,10 @@ type SyncMode = 'normal' | 'good' | 'merge';
 
 type ExportFormat = 'openapi3' | 'swagger2';
 type ExportStatus = 'all' | 'open';
+type ImportInputOverrides = Partial<{
+  jsonText: string;
+  urlText: string;
+}>;
 
 type LegacyImportParam = Record<string, unknown> & {
   name?: string;
@@ -332,10 +336,14 @@ function buildOpenApiFromLegacyImport(params: {
   };
 }
 
-async function confirmImport(summary: SpecImportResult, syncMode: SyncMode): Promise<boolean> {
+async function confirmImport(
+  summary: SpecImportResult,
+  syncMode: SyncMode,
+  modalApi: Pick<ReturnType<typeof AntdApp.useApp>['modal'], 'confirm'>
+): Promise<boolean> {
   if (syncMode !== 'merge' && syncMode !== 'good') return true;
   return new Promise(resolve => {
-    const modal = Modal.confirm({
+    const modal = modalApi.confirm({
       title: '确认执行规范导入',
       okType: 'danger',
       okText: '确认',
@@ -359,6 +367,7 @@ async function confirmImport(summary: SpecImportResult, syncMode: SyncMode): Pro
 }
 
 export function ProjectDataPage(props: ProjectDataPageProps) {
+  const { message: messageApi, modal } = AntdApp.useApp();
   const [source, setSource] = useState<SpecSource>('json');
   const [importMethod, setImportMethod] = useState('swagger');
   const [exportMethod, setExportMethod] = useState<string>('openapi3');
@@ -410,9 +419,9 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
     if (notifiedStatus === task.status) return;
 
     if (task.status === 'success') {
-      message.success(task.message || '导入任务执行成功');
+      messageApi.success(task.message || '导入任务执行成功');
     } else {
-      message.error(task.message || '导入任务执行失败');
+      messageApi.error(task.message || '导入任务执行失败');
     }
     setNotifiedStatus(task.status);
   }, [notifiedStatus, taskQuery.data]);
@@ -447,75 +456,82 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
     return webPlugins.collectExportDataModules({ projectId: props.projectId });
   }, [props.projectId]);
 
-  function getImportPayload(overrides?: Partial<{ dryRun: boolean; async: boolean }>) {
+  function getImportPayload(
+    overrides?: Partial<{ dryRun: boolean; async: boolean }> & ImportInputOverrides
+  ) {
+    const nextJsonText = overrides?.jsonText ?? jsonText;
+    const nextUrlText = (overrides?.urlText ?? urlText).trim();
     return {
       project_id: props.projectId,
       token,
       format,
       syncMode,
       source,
-      json: source === 'json' ? jsonText : undefined,
-      url: source === 'url' ? urlText.trim() : undefined,
+      json: source === 'json' ? nextJsonText : undefined,
+      url: source === 'url' ? nextUrlText : undefined,
       dryRun: overrides?.dryRun,
       async: overrides?.async
     };
   }
 
-  function canSubmitImport(): boolean {
+  function canSubmitImport(overrides?: ImportInputOverrides): boolean {
+    const nextJsonText = overrides?.jsonText ?? jsonText;
+    const nextUrlText = (overrides?.urlText ?? urlText).trim();
     if (source === 'url') {
-      if (!urlText.trim()) {
-        message.error('请输入规范 URL');
+      if (!nextUrlText) {
+        messageApi.error('请输入规范 URL');
         return false;
       }
       return true;
     }
-    if (!jsonText.trim()) {
-      message.error('请输入或上传规范 JSON');
+    if (!nextJsonText.trim()) {
+      messageApi.error('请输入或上传规范 JSON');
       return false;
     }
     return true;
   }
 
-  async function readTextFile(file: File) {
+  async function readTextFile(file: File): Promise<string> {
     const text = await file.text();
     setJsonText(text);
     setImportFileName(file.name);
-    message.success(`已加载文件: ${file.name}`);
+    messageApi.success(`已加载文件: ${file.name}`);
+    return text;
   }
 
-  async function handlePreview() {
-    if (!canSubmitImport()) return;
-    const response = await importSpec(getImportPayload({ dryRun: true })).unwrap();
+  async function handlePreview(overrides?: ImportInputOverrides) {
+    if (!canSubmitImport(overrides)) return;
+    const response = await importSpec(getImportPayload({ dryRun: true, ...overrides })).unwrap();
     if (response.errcode !== 0) {
-      message.error(response.errmsg || '导入预检失败');
+      messageApi.error(response.errmsg || '导入预检失败');
       return;
     }
     const data = (response.data || null) as SpecImportResult | null;
     setPreview(data);
-    message.success('预检完成');
+    messageApi.success('预检完成');
   }
 
-  async function handleImport() {
-    if (!canSubmitImport()) return;
-    const dryRunResponse = await importSpec(getImportPayload({ dryRun: true })).unwrap();
+  async function handleImport(overrides?: ImportInputOverrides) {
+    if (!canSubmitImport(overrides)) return;
+    const dryRunResponse = await importSpec(getImportPayload({ dryRun: true, ...overrides })).unwrap();
     if (dryRunResponse.errcode !== 0) {
-      message.error(dryRunResponse.errmsg || '导入预检失败');
+      messageApi.error(dryRunResponse.errmsg || '导入预检失败');
       return;
     }
 
     const dryRunData = (dryRunResponse.data || null) as SpecImportResult | null;
     if (dryRunData) {
       setPreview(dryRunData);
-      const ok = await confirmImport(dryRunData, syncMode);
+      const ok = await confirmImport(dryRunData, syncMode, modal);
       if (!ok) {
-        message.info('已取消导入');
+        messageApi.info('已取消导入');
         return;
       }
     }
 
-    const response = await importSpec(getImportPayload({ async: true })).unwrap();
+    const response = await importSpec(getImportPayload({ async: true, ...overrides })).unwrap();
     if (response.errcode !== 0) {
-      message.error(response.errmsg || '导入失败');
+      messageApi.error(response.errmsg || '导入失败');
       return;
     }
 
@@ -524,29 +540,31 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
     if (nextTaskId) {
       setTaskId(nextTaskId);
       setNotifiedStatus('');
-      message.success(response.errmsg || '导入任务已提交');
+      messageApi.success(response.errmsg || '导入任务已提交');
       return;
     }
 
-    message.success(response.errmsg || '导入成功');
+    messageApi.success(response.errmsg || '导入成功');
   }
 
-  async function handleCompatImport() {
-    if (!canSubmitImport()) return;
+  async function handleCompatImport(overrides?: ImportInputOverrides) {
+    if (!canSubmitImport(overrides)) return;
+    const nextJsonText = overrides?.jsonText ?? jsonText;
+    const nextUrlText = (overrides?.urlText ?? urlText).trim();
     const response = await interUpload({
       project_id: props.projectId,
       token,
       source,
       format,
       merge: syncMode,
-      interfaceData: source === 'json' ? jsonText : undefined,
-      url: source === 'url' ? urlText.trim() : undefined
+      interfaceData: source === 'json' ? nextJsonText : undefined,
+      url: source === 'url' ? nextUrlText : undefined
     }).unwrap();
     if (response.errcode !== 0) {
-      message.error(response.errmsg || '兼容导入失败');
+      messageApi.error(response.errmsg || '兼容导入失败');
       return;
     }
-    message.success(response.errmsg || '兼容导入成功');
+    messageApi.success(response.errmsg || '兼容导入成功');
   }
 
   async function handleExport(selectedFormat: ExportFormat = exportFormat) {
@@ -558,16 +576,16 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
       withWiki
     }).unwrap();
     if (response.errcode !== 0) {
-      message.error(response.errmsg || '导出失败');
+      messageApi.error(response.errmsg || '导出失败');
       return;
     }
     setExportText(JSON.stringify(response.data || {}, null, 2));
-    message.success('导出成功');
+    messageApi.success('导出成功');
   }
 
   function downloadExportJson() {
     if (!exportText.trim()) {
-      message.info('请先执行导出');
+      messageApi.info('请先执行导出');
       return;
     }
     const blob = new Blob([exportText], { type: 'application/json;charset=utf-8' });
@@ -592,35 +610,37 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
     document.body.removeChild(link);
   }
 
-  async function handlePluginImport(moduleKey: string) {
+  async function handlePluginImport(moduleKey: string, overrides?: ImportInputOverrides) {
     const importer = importDataModules[moduleKey];
     if (!importer) return;
     if (typeof importer.run !== 'function') {
       if (importer.route) {
         window.open(importer.route, '_blank', 'noopener,noreferrer');
       } else {
-        message.warning('该导入插件未提供可执行入口');
+        messageApi.warning('该导入插件未提供可执行入口');
       }
       return;
     }
     let importSourceText = '';
+    const nextJsonText = overrides?.jsonText ?? jsonText;
+    const nextUrlText = (overrides?.urlText ?? urlText).trim();
     if (source === 'url') {
-      if (!urlText.trim()) {
-        message.error('请输入规范 URL');
+      if (!nextUrlText) {
+        messageApi.error('请输入规范 URL');
         return;
       }
       try {
-        const response = await fetch(urlText.trim(), { method: 'GET' });
+        const response = await fetch(nextUrlText, { method: 'GET' });
         importSourceText = await response.text();
       } catch (err) {
-        message.error((err as Error)?.message || '下载 URL 内容失败');
+        messageApi.error((err as Error)?.message || '下载 URL 内容失败');
         return;
       }
     } else {
-      importSourceText = jsonText;
+      importSourceText = nextJsonText;
     }
     if (!String(importSourceText || '').trim()) {
-      message.error('请先输入或上传待转换的内容（JSON 文本）');
+      messageApi.error('请先输入或上传待转换的内容（JSON 文本）');
       return;
     }
 
@@ -628,11 +648,11 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
     try {
       converted = await importer.run(importSourceText);
     } catch (err) {
-      message.error((err as Error)?.message || '插件导入转换失败');
+      messageApi.error((err as Error)?.message || '插件导入转换失败');
       return;
     }
     if (converted == null) {
-      message.error('插件导入转换结果为空');
+      messageApi.error('插件导入转换结果为空');
       return;
     }
 
@@ -681,22 +701,22 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
       interfaceData
     }).unwrap();
     if (response.errcode !== 0) {
-      message.error(response.errmsg || `${importer.name} 导入失败`);
+      messageApi.error(response.errmsg || `${importer.name} 导入失败`);
       return;
     }
-    message.success(response.errmsg || `${importer.name} 导入成功`);
+    messageApi.success(response.errmsg || `${importer.name} 导入成功`);
   }
 
-  async function handleImportByMethod() {
+  async function handleImportByMethod(overrides?: ImportInputOverrides) {
     if (importMethod === 'swagger') {
-      await handleImport();
+      await handleImport(overrides);
       return;
     }
     if (importMethod === 'compat') {
-      await handleCompatImport();
+      await handleCompatImport(overrides);
       return;
     }
-    await handlePluginImport(importMethod);
+    await handlePluginImport(importMethod, overrides);
   }
 
   async function handleExportByMethod() {
@@ -706,7 +726,7 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
     }
     const pluginItem = exportDataModules[exportMethod];
     if (!pluginItem?.route) {
-      message.warning('该导出插件未提供可访问路由');
+      messageApi.warning('该导出插件未提供可访问路由');
       return;
     }
     const href = buildPluginExportHref(pluginItem.route);
@@ -847,9 +867,13 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
                 <Upload.Dragger
                   maxCount={1}
                   showUploadList={false}
-                  beforeUpload={file => {
-                    void readTextFile(file as File);
-                    setTimeout(() => void handleImportByMethod(), 500);
+                  beforeUpload={async file => {
+                    try {
+                      const loadedText = await readTextFile(file as File);
+                      await handleImportByMethod({ jsonText: loadedText });
+                    } catch (error) {
+                      messageApi.error((error as Error)?.message || '读取文件失败');
+                    }
                     return false;
                   }}
                 >

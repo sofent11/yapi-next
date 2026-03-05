@@ -29,6 +29,7 @@ import { useParams } from 'react-router-dom';
 import type { LegacyRouteContract } from '../types/legacy-contract';
 
 const { Text, Paragraph } = Typography;
+const DRAFT4_SCHEMA_URI = 'http://json-schema.org/draft-04/schema#';
 
 export type HeaderMenuItem = {
   path: string;
@@ -164,6 +165,120 @@ function parseMaybeJson(text: string): unknown {
   } catch (_err) {
     return raw;
   }
+}
+
+function toObject(input: unknown): Record<string, unknown> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  return input as Record<string, unknown>;
+}
+
+function inferPrimitiveSchema(value: unknown): Record<string, unknown> {
+  if (value === null) return { type: 'null' };
+  if (typeof value === 'boolean') return { type: 'boolean' };
+  if (typeof value === 'number') return { type: Number.isInteger(value) ? 'integer' : 'number' };
+  if (typeof value === 'string') return { type: 'string' };
+  return { type: 'string' };
+}
+
+function mergeInferredSchemas(schemas: Record<string, unknown>[]): Record<string, unknown> {
+  if (schemas.length === 0) return { type: 'string' };
+  if (schemas.length === 1) return schemas[0];
+  const types = schemas.map(schema => String(schema.type || 'string'));
+  const uniq = Array.from(new Set(types));
+  if (uniq.length > 1) {
+    if (uniq.length === 2 && uniq.includes('null')) {
+      return schemas.find(schema => String(schema.type || '') !== 'null') || schemas[0];
+    }
+    return schemas[0];
+  }
+  if (uniq[0] === 'object') {
+    const keys = new Set<string>();
+    schemas.forEach(schema => {
+      const properties = toObject(schema.properties);
+      Object.keys(properties).forEach(key => keys.add(key));
+    });
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+    Array.from(keys).forEach(key => {
+      const childSchemas = schemas
+        .map(schema => toObject(toObject(schema.properties)[key]))
+        .filter(item => Object.keys(item).length > 0);
+      properties[key] = mergeInferredSchemas(childSchemas);
+      const allRequired = schemas.every(schema => Object.prototype.hasOwnProperty.call(toObject(schema.properties), key));
+      if (allRequired) required.push(key);
+    });
+    return {
+      type: 'object',
+      properties,
+      ...(required.length > 0 ? { required } : {})
+    };
+  }
+  if (uniq[0] === 'array') {
+    const itemSchemas = schemas
+      .map(schema => toObject(schema.items))
+      .filter(item => Object.keys(item).length > 0);
+    return {
+      type: 'array',
+      items: itemSchemas.length > 0 ? mergeInferredSchemas(itemSchemas) : { type: 'string' }
+    };
+  }
+  return schemas[0];
+}
+
+function inferSchemaFromSample(value: unknown): Record<string, unknown> {
+  if (Array.isArray(value)) {
+    const itemSchemas = value.map(item => inferSchemaFromSample(item));
+    return {
+      type: 'array',
+      items: itemSchemas.length > 0 ? mergeInferredSchemas(itemSchemas) : { type: 'string' }
+    };
+  }
+  if (value && typeof value === 'object') {
+    const source = value as Record<string, unknown>;
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+    Object.keys(source).forEach(key => {
+      properties[key] = inferSchemaFromSample(source[key]);
+      required.push(key);
+    });
+    return {
+      type: 'object',
+      properties,
+      ...(required.length > 0 ? { required } : {})
+    };
+  }
+  return inferPrimitiveSchema(value);
+}
+
+function inferDraft4SchemaTextFromJsonText(input: string, requireObjectOrArray = true): string | null {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = json5.parse(raw);
+  } catch (_err) {
+    return null;
+  }
+  if (requireObjectOrArray && (!parsed || typeof parsed !== 'object')) {
+    return null;
+  }
+  const schema = inferSchemaFromSample(parsed);
+  const root =
+    String(schema.type || '') === 'object' || String(schema.type || '') === 'array'
+      ? schema
+      : {
+          type: 'object',
+          properties: { data: schema },
+          required: ['data']
+        };
+  return JSON.stringify(
+    {
+      $schema: DRAFT4_SCHEMA_URI,
+      ...root
+    },
+    null,
+    2
+  );
 }
 
 function toStringValue(value: unknown): string {
@@ -1568,11 +1683,13 @@ function createPostmanImporter(): ImportDataItem {
           ...item,
           required: '1'
         }));
+        const contentType = headers.find(item => item.name.toLowerCase() === 'content-type')?.value.toLowerCase() || '';
         const body = (request.body || {}) as Record<string, unknown>;
         const bodyMode = toStringValue(body.mode);
         let reqBodyType: 'form' | 'json' | 'raw' = 'raw';
         let reqBodyForm: Array<Record<string, unknown>> = [];
         let reqBodyOther = '';
+        let reqBodyIsJsonSchema = false;
         if (bodyMode === 'urlencoded' || bodyMode === 'formdata') {
           reqBodyType = 'form';
           const rows = Array.isArray(body[bodyMode]) ? (body[bodyMode] as unknown[]) : [];
@@ -1590,11 +1707,17 @@ function createPostmanImporter(): ImportDataItem {
             .filter(item => item.name);
         } else if (bodyMode === 'raw') {
           const raw = toStringValue(body.raw);
-          reqBodyOther = raw;
-          reqBodyType = raw.trim().startsWith('{') || raw.trim().startsWith('[') ? 'json' : 'raw';
+          const schemaText =
+            contentType.includes('application/json') || raw.trim().startsWith('{') || raw.trim().startsWith('[')
+              ? inferDraft4SchemaTextFromJsonText(raw)
+              : null;
+          reqBodyOther = schemaText || raw;
+          reqBodyType = schemaText ? 'json' : 'raw';
+          reqBodyIsJsonSchema = Boolean(schemaText);
         }
 
         const firstResponseBody = toStringValue(responseExample?.body || '');
+        const responseSchemaText = inferDraft4SchemaTextFromJsonText(firstResponseBody);
         apis.push({
           title: title || path,
           path,
@@ -1605,10 +1728,10 @@ function createPostmanImporter(): ImportDataItem {
           req_body_type: reqBodyType,
           req_body_form: reqBodyForm,
           req_body_other: reqBodyOther,
-          req_body_is_json_schema: false,
-          res_body_type: 'raw',
-          res_body: firstResponseBody,
-          res_body_is_json_schema: false,
+          req_body_is_json_schema: reqBodyIsJsonSchema,
+          res_body_type: responseSchemaText ? 'json' : 'raw',
+          res_body: responseSchemaText || firstResponseBody,
+          res_body_is_json_schema: Boolean(responseSchemaText),
           desc: toStringValue(request.description || '')
         });
       }
@@ -1676,12 +1799,29 @@ function createHarImporter(): ImportDataItem {
         const bodyText = toStringValue(postData.text);
         let reqBodyType: 'form' | 'json' | 'raw' = 'raw';
         let reqBodyForm: Array<Record<string, unknown>> = [];
+        let reqBodyOther = bodyText;
+        let reqBodyIsJsonSchema = false;
         if (mime.includes('form-urlencoded') || mime.includes('multipart/form-data')) {
           reqBodyType = 'form';
           reqBodyForm = normalizeSimpleParam(postData.params).map(item => ({ ...item, type: 'text' }));
         } else if (mime.includes('application/json')) {
           reqBodyType = 'json';
+          const schemaText = inferDraft4SchemaTextFromJsonText(bodyText);
+          if (schemaText) {
+            reqBodyOther = schemaText;
+            reqBodyIsJsonSchema = true;
+          }
         }
+        const responseContent = (response.content || {}) as Record<string, unknown>;
+        let responseText = toStringValue(responseContent.text || '');
+        if (toStringValue(responseContent.encoding).toLowerCase() === 'base64' && responseText) {
+          try {
+            responseText = atob(responseText);
+          } catch (_err) {
+            // Keep original response text when base64 decode fails.
+          }
+        }
+        const responseSchemaText = inferDraft4SchemaTextFromJsonText(responseText);
         apis.push({
           title: path,
           path,
@@ -1691,11 +1831,11 @@ function createHarImporter(): ImportDataItem {
           req_headers: headers,
           req_body_type: reqBodyType,
           req_body_form: reqBodyForm,
-          req_body_other: bodyText,
-          req_body_is_json_schema: false,
-          res_body_type: 'raw',
-          res_body: toStringValue((response.content as Record<string, unknown> | undefined)?.text || ''),
-          res_body_is_json_schema: false,
+          req_body_other: reqBodyOther,
+          req_body_is_json_schema: reqBodyIsJsonSchema,
+          res_body_type: responseSchemaText ? 'json' : 'raw',
+          res_body: responseSchemaText || responseText,
+          res_body_is_json_schema: Boolean(responseSchemaText),
           desc: ''
         });
       });

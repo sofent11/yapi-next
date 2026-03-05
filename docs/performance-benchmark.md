@@ -4,6 +4,7 @@
 - 菜单接口：`/api/interface/list_menu` P95 < 500ms（1 万接口规模）
 - 导入性能：1000 接口导入 < 60s
 - 导出性能：OpenAPI3 导出 P95 < 2s
+- OpenAPI round-trip：关键字段一致率 >= 99%
 
 ## 2. 环境准备
 - 启动服务并确认可访问。
@@ -59,13 +60,36 @@ npm run perf:import
 ## 6. 建议流程
 1. 先跑 `perf:menu`，确认菜单链路瓶颈是否解除。
 2. 再跑 `perf:import`，确认 bulk 写入链路。
-3. 最后跑 `perf:export`，确认 OAS3 导出能力。
-4. 每次改动后保留结果 JSON 作为基线对比。
-5. 如需查看内置指标快照（管理员登录态）：
-   - `GET /api/spec/metrics`
-   - 重置指标：`GET /api/spec/metrics?reset=true`
+3. 跑 `perf:roundtrip`，确认 OAS3 导入导出语义一致性。
+4. 最后跑 `perf:export`，确认 OAS3 导出能力。
+5. 每次改动后保留结果 JSON 作为基线对比。
 
-## 7. k6 脚本（可选）
+## 7. OpenAPI round-trip 自评
+```bash
+BASE_URL=http://127.0.0.1:3000 \
+PROJECT_ID=11 \
+TOKEN=xxxx \
+SPEC_FILE=./test/swagger.v3.json \
+TARGET_RATIO=99 \
+npm run perf:roundtrip
+```
+
+输出字段：
+- `consistencyRatio`：关键字段一致率（百分比）
+- `missingOperations`：导出后缺失的 operation 列表
+- `driftedOperations`：发生字段漂移的 operation 列表（最多 30 条）
+- `ok`：是否达标
+
+## 8. 一键全量自评（推荐）
+```bash
+npm run next:self-assess:api
+```
+
+说明：
+- 脚本会自动拉起临时 Mongo + API，执行索引检查、核心查询 explain（禁止 `COLLSCAN`）、10k/1000 性能门槛和 round-trip 检查。
+- 结果会写入 `reports/next-self-assess-*.json`。
+
+## 9. k6 脚本（可选）
 脚本目录：`server/scripts/perf/k6`
 
 示例：
