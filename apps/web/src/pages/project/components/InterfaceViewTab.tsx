@@ -51,7 +51,7 @@ function renderParamTable(title: string, columns: ParamColumns, rows: ParamRow[]
 }
 
 export function InterfaceViewTab(props: InterfaceViewTabProps) {
-  const uid = Number((props.currentInterface as Record<string, unknown>).uid || 0);
+  const uid = Number((props.currentInterface as unknown as Record<string, unknown>).uid || 0);
   const tags = Array.isArray(props.currentInterface.tag)
     ? props.currentInterface.tag.map(item => String(item)).filter(Boolean)
     : [];
@@ -88,10 +88,10 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
                 uid > 0 ? (
                   <Link className="user-name" to={`/user/profile/${uid}`}>
                     <Avatar className="user-img" size={28} src={`/api/user/avatar?uid=${uid}`} />
-                    {String((props.currentInterface as Record<string, unknown>).username || '-')}
+                    {String((props.currentInterface as unknown as Record<string, unknown>).username || '-')}
                   </Link>
                 ) : (
-                  String((props.currentInterface as Record<string, unknown>).username || '-')
+                  String((props.currentInterface as unknown as Record<string, unknown>).username || '-')
                 )
             },
             {
@@ -106,7 +106,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
             {
               key: 'updated',
               label: '更新时间',
-              children: props.formatUnixTime((props.currentInterface as Record<string, unknown>).up_time)
+              children: props.formatUnixTime((props.currentInterface as unknown as Record<string, unknown>).up_time)
             },
             tags.length > 0
               ? {

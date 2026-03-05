@@ -36,7 +36,7 @@ const EMAIL_RULES = [
       return Promise.resolve();
     }
   }
-] as const;
+];
 
 function normalizeRedirect(target: string | null): string {
   if (!target || !target.startsWith('/')) return '/group';

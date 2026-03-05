@@ -759,10 +759,10 @@ export const yapiApi = createApi({
         })}`
       }),
       providesTags: (result, _error, args) => {
-        const treeRows = ((result?.data?.list || []) as Array<Record<string, unknown>>);
+        const treeRows = ((result?.data?.list || []) as unknown as Array<Record<string, unknown>>);
         const categoryTags = collectInterfaceCategoryTags(treeRows);
         const interfaceTags = collectInterfaceEntityTags(
-          treeRows.flatMap(item => (Array.isArray(item.list) ? (item.list as Array<Record<string, unknown>>) : []))
+          treeRows.flatMap(item => (Array.isArray(item.list) ? (item.list as unknown as Array<Record<string, unknown>>) : []))
         );
         return [interfaceProjectTag(args.projectId), ...categoryTags, ...interfaceTags];
       }
@@ -787,7 +787,7 @@ export const yapiApi = createApi({
         })}`
       }),
       providesTags: (result, _error, args) => {
-        const rows = (result?.data?.list || []) as Array<Record<string, unknown>>;
+        const rows = (result?.data?.list || []) as unknown as Array<Record<string, unknown>>;
         return [interfaceCategoryTag(args.catid), ...collectInterfaceEntityTags(rows)];
       }
     }),
@@ -803,10 +803,10 @@ export const yapiApi = createApi({
         })}`
       }),
       providesTags: (result, _error, args) => {
-        const treeRows = ((result?.data || []) as Array<Record<string, unknown>>);
+        const treeRows = ((result?.data || []) as unknown as Array<Record<string, unknown>>);
         const categoryTags = collectInterfaceCategoryTags(treeRows);
         const interfaceTags = collectInterfaceEntityTags(
-          treeRows.flatMap(item => (Array.isArray(item.list) ? (item.list as Array<Record<string, unknown>>) : []))
+          treeRows.flatMap(item => (Array.isArray(item.list) ? (item.list as unknown as Array<Record<string, unknown>>) : []))
         );
         return [interfaceProjectTag(args.projectId), ...categoryTags, ...interfaceTags];
       }
@@ -833,7 +833,7 @@ export const yapiApi = createApi({
         })}`
       }),
       providesTags: (result, _error, args) => {
-        const rows = (result?.data?.list || []) as Array<Record<string, unknown>>;
+        const rows = (result?.data?.list || []) as unknown as Array<Record<string, unknown>>;
         return [
           interfaceProjectTag(args.projectId),
           ...collectInterfaceEntityTags(rows),
@@ -937,7 +937,7 @@ export const yapiApi = createApi({
       }),
       providesTags: (result, _error, args) => [
         interfaceProjectTag(args.projectId),
-        ...collectInterfaceCategoryTags((result?.data || []) as Array<Record<string, unknown>>)
+        ...collectInterfaceCategoryTags((result?.data || []) as unknown as Array<Record<string, unknown>>)
       ]
     }),
     addInterfaceCat: builder.mutation<

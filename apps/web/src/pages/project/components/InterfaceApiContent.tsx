@@ -58,9 +58,9 @@ type InterfaceApiContentProps = {
   normalizePathInput: (input: string | undefined) => string;
   projectTagOptions: Array<{ label: string; value: string }>;
   onOpenTagSetting: () => void;
-  sanitizeReqQuery: (input: unknown) => unknown;
-  sanitizeReqHeaders: (input: unknown) => unknown;
-  sanitizeReqBodyForm: (input: unknown) => unknown;
+  sanitizeReqQuery: (input: unknown) => Array<Record<string, unknown>>;
+  sanitizeReqHeaders: (input: unknown) => Array<Record<string, unknown>>;
+  sanitizeReqBodyForm: (input: unknown) => Array<Record<string, unknown>>;
   onOpenBulkImport: (field: 'req_query' | 'req_body_form') => void;
   httpRequestHeaders: string[];
   projectIsJson5?: boolean;
@@ -110,7 +110,7 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
           basepath={props.basepath}
           canEdit={props.canEdit}
           activeInterfaceId={props.interfaceId}
-          currentCat={props.currentCat}
+          currentCat={props.currentCat as any}
           currentCatName={props.currentCatName}
           filteredList={props.filteredList}
           currentListLoading={props.currentListLoading}

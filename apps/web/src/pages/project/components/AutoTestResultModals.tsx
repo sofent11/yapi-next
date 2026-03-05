@@ -220,7 +220,7 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
                 icon={<CopyOutlined />}
                 onClick={() =>
                   void copyText(
-                    (props.detailItem.validRes || []).map(item => item?.message || '').join('\n') || '-',
+                    (props.detailItem?.validRes || []).map(item => item?.message || '').join('\n') || '-',
                     '校验信息已复制'
                   )
                 }
@@ -238,7 +238,7 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
               <Button
                 size="small"
                 icon={<CopyOutlined />}
-                onClick={() => void copyText(stringifyPretty(props.detailItem.params), '请求参数已复制')}
+                onClick={() => void copyText(stringifyPretty(props.detailItem?.params), '请求参数已复制')}
               >
                 复制
               </Button>
@@ -249,7 +249,7 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
               <Button
                 size="small"
                 icon={<CopyOutlined />}
-                onClick={() => void copyText(stringifyPretty(props.detailItem.res_header), '响应头已复制')}
+                onClick={() => void copyText(stringifyPretty(props.detailItem?.res_header), '响应头已复制')}
               >
                 复制
               </Button>
@@ -260,7 +260,7 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
               <Button
                 size="small"
                 icon={<CopyOutlined />}
-                onClick={() => void copyText(stringifyPretty(props.detailItem.res_body), '响应体已复制')}
+                onClick={() => void copyText(stringifyPretty(props.detailItem?.res_body), '响应体已复制')}
               >
                 复制
               </Button>

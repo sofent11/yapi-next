@@ -466,7 +466,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                 <Tabs
                   className="legacy-edit-response-tabs"
                   activeKey={props.resEditorTab}
-                  onChange={props.onResponseEditorTabChange}
+                  onChange={key => props.onResponseEditorTabChange(key as 'tpl' | 'preview')}
                   items={[
                     {
                       key: 'tpl',

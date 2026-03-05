@@ -45,9 +45,9 @@ type InterfaceApiDetailTabsProps = {
   normalizePathInput: (input: string | undefined) => string;
   projectTagOptions: Array<{ label: string; value: string }>;
   onOpenTagSetting: () => void;
-  sanitizeReqQuery: (input: unknown) => unknown;
-  sanitizeReqHeaders: (input: unknown) => unknown;
-  sanitizeReqBodyForm: (input: unknown) => unknown;
+  sanitizeReqQuery: (input: unknown) => Array<Record<string, unknown>>;
+  sanitizeReqHeaders: (input: unknown) => Array<Record<string, unknown>>;
+  sanitizeReqBodyForm: (input: unknown) => Array<Record<string, unknown>>;
   onOpenBulkImport: (field: 'req_query' | 'req_body_form') => void;
   httpRequestHeaders: string[];
   editBodyType: string;

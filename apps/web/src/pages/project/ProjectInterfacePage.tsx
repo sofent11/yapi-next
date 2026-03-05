@@ -50,8 +50,9 @@ import { InterfaceCoreModals } from './components/InterfaceCoreModals';
 import { InterfaceMenuPanel } from './components/InterfaceMenuPanel';
 import { InterfaceWorkspaceLayout } from './components/InterfaceWorkspaceLayout';
 import type { CaseDetailData, CollectionCaseRow, CollectionRow } from './components/collection-types';
+import { generateMockStringFromJsonSchema } from '../../utils/schema-mock';
 
-const STABLE_EMPTY_ARRAY: unknown[] = [];
+const STABLE_EMPTY_ARRAY: any[] = [];
 const TREE_CATEGORY_LIMIT = 1000;
 const TREE_NODE_PAGE_LIMIT = 200;
 const INTERFACE_LIST_PAGE_LIMIT = 200;
@@ -1241,7 +1242,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   );
   const catSelectOptions = useMemo(
     () =>
-      catRows.map(item => ({
+      catRows.map((item: any) => ({
         label: item.name,
         value: Number(item._id || 0)
       })),
@@ -1727,11 +1728,16 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         2
       )
     );
-    const bodySource =
-      currentInterface.req_body_type === 'form'
-        ? currentInterface.req_body_form || []
-        : currentInterface.req_body_other || {};
-    setRunBody(JSON.stringify(bodySource, null, 2));
+    let bodyText = '{}';
+    if (currentInterface.req_body_type === 'form') {
+      bodyText = JSON.stringify(currentInterface.req_body_form || [], null, 2);
+    } else if (currentInterface.req_body_is_json_schema && typeof currentInterface.req_body_other === 'string') {
+      bodyText = generateMockStringFromJsonSchema(currentInterface.req_body_other);
+    } else {
+      const other = currentInterface.req_body_other;
+      bodyText = typeof other === 'string' ? other : JSON.stringify(other || {}, null, 2);
+    }
+    setRunBody(bodyText);
     setRunResponse('');
   }, [currentInterface, props.basepath]);
 
@@ -1971,7 +1977,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         switch_notice: values.switch_notice === true,
         api_opened: values.api_opened === true,
         token: props.token
-      }).unwrap(),
+      } as any).unwrap(),
       '保存失败'
     );
     if (!response) return;
@@ -3419,7 +3425,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         onListPageChange={setListPage}
         onOpenAddInterface={openAddInterfaceModal}
         onOpenAddCat={openAddCatModal}
-        onOpenEditCat={openEditCatModal}
+        onOpenEditCat={openEditCatModal as any}
         onNavigateInterface={id => navigateWithGuard(`/project/${props.projectId}/interface/api/${id}`)}
         onUpdateStatus={handleInterfaceListStatusChange}
         onUpdateCategory={handleInterfaceListCatChange}
@@ -3445,7 +3451,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         supportsRequestBody={supportsRequestBody}
         reqRadioType={reqRadioType}
         onReqRadioTypeChange={setReqRadioType}
-        normalizePathInput={normalizePathInput}
+        normalizePathInput={normalizePathInput as any}
         projectTagOptions={projectTagOptions}
         onOpenTagSetting={openTagSettingModal}
         sanitizeReqQuery={sanitizeReqQuery}
@@ -3456,13 +3462,13 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         projectIsJson5={props.projectIsJson5}
         reqSchemaEditorMode={reqSchemaEditorMode}
         onReqSchemaEditorModeChange={setReqSchemaEditorMode}
-        watchedReqBodyOther={watchedReqBodyOther}
+        watchedReqBodyOther={watchedReqBodyOther as string}
         editValues={(watchedValues || {}) as Record<string, unknown>}
         resEditorTab={resEditorTab}
         onResponseEditorTabChange={handleResponseEditorTabChange}
         resSchemaEditorMode={resSchemaEditorMode}
         onResSchemaEditorModeChange={setResSchemaEditorMode}
-        watchedResBody={watchedResBody}
+        watchedResBody={watchedResBody as string}
         resPreviewText={resPreviewText}
         onSave={() => void handleSave()}
         saving={updateState.isLoading}
@@ -3526,7 +3532,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         onDownloadReport={() => openAutoTest('html', true)}
         onOpenReportModal={() => setAutoTestModalOpen(true)}
         onOpenReportDetail={item => {
-          setAutoTestDetailItem(item);
+          setAutoTestDetailItem(item as any);
           setAutoTestModalOpen(false);
         }}
         onNavigateCase={nextCaseId => navigateWithGuard(`/project/${props.projectId}/interface/case/${nextCaseId}`)}
