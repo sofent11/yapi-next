@@ -31,11 +31,11 @@ import {
 } from '../../services/yapi-api';
 import { webPlugins, type SubSettingNavItem } from '../../plugins';
 import {
-  PROJECT_COLOR_MAP,
   PROJECT_COLOR_OPTIONS,
   PROJECT_ICON_OPTIONS,
   renderProjectIcon,
-  resolveProjectColor
+  resolveProjectColor,
+  resolveProjectColorKey
 } from '../../utils/project-visual';
 import { legacyNameValidator } from '../../utils/legacy-validation';
 import { PageHeader, SectionCard } from '../../components/layout';
@@ -127,6 +127,8 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
   const projectColorKey = String(projectVisual.color || 'blue');
   const projectIconKey = String(projectVisual.icon || 'code-o');
   const projectVisualColor = resolveProjectColor(projectColorKey, String(project?.name || props.projectId));
+  const projectVisualColorKey = resolveProjectColorKey(projectColorKey);
+  const projectVisualColorClass = projectVisualColorKey ? `legacy-project-color-${projectVisualColorKey}` : '';
 
   const mockUrl = useMemo(() => {
     if (!project?._id) return '-';
@@ -397,7 +399,7 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
                           <Radio.Button
                             key={item}
                             value={item}
-                            style={{ backgroundColor: PROJECT_COLOR_MAP[item], color: '#fff', fontWeight: 'bold' }}
+                            className={`legacy-project-color-option legacy-project-color-${item}`}
                           >
                             {projectColorKey === item ? '✓' : null}
                           </Radio.Button>
@@ -412,7 +414,7 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
                         disabled={upsetState.isLoading}
                       >
                         {PROJECT_ICON_OPTIONS.map(item => (
-                          <Radio.Button key={item} value={item} style={{ fontWeight: 'bold' }}>
+                          <Radio.Button key={item} value={item} className="legacy-project-icon-option">
                             {renderProjectIcon(item)}
                           </Radio.Button>
                         ))}
@@ -421,9 +423,9 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
                   >
                     <button type="button" className="legacy-project-setting-logo-btn">
                       <span
-                        className="legacy-project-setting-logo"
+                        className={`legacy-project-setting-logo ${projectVisualColorClass}`.trim()}
                         title="点击修改项目图标和颜色"
-                        style={{ backgroundColor: projectVisualColor }}
+                        style={projectVisualColorClass ? undefined : { backgroundColor: projectVisualColor }}
                       >
                         {renderProjectIcon(projectIconKey)}
                       </span>
@@ -581,7 +583,7 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
             label: '环境配置',
             children: (
               <SectionCard className="m-panel legacy-project-setting-card">
-                <Space direction="vertical" style={{ width: '100%' }}>
+                <Space direction="vertical" className="legacy-workspace-stack">
                   <Space>
                     <Button
                       onClick={() =>
@@ -621,7 +623,7 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
                         </Button>
                       }
                     >
-                      <Space direction="vertical" style={{ width: '100%' }}>
+                      <Space direction="vertical" className="legacy-workspace-stack">
                         <Input
                           value={item.name}
                           onChange={event =>
@@ -699,7 +701,7 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
                 label: 'Token 配置',
                 children: (
                   <SectionCard className="m-panel legacy-project-setting-card">
-                    <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space direction="vertical" className="legacy-workspace-stack">
                       <Text strong>工具标识</Text>
                       <Text type="secondary">
                         每个项目都有唯一 token，可用于请求项目 openapi。
@@ -714,7 +716,7 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
                         ) : null}
                         <Button onClick={() => tokenQuery.refetch()}>刷新</Button>
                       </Space>
-                      <Text strong style={{ marginTop: 8 }}>
+                      <Text strong className="legacy-workspace-text-top">
                         Open 接口
                       </Text>
                       <Text type="secondary">
@@ -793,7 +795,7 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
         okText="确认删除"
         okButtonProps={{ danger: true, loading: delState.isLoading }}
       >
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space direction="vertical" className="legacy-workspace-stack">
           <Alert
             type="warning"
             showIcon

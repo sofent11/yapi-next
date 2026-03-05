@@ -299,16 +299,16 @@ export function InterfaceExplorerPage() {
   const currentInterface = interfaceDetail || selectedInterface;
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Space direction="vertical" size={16} className="legacy-workspace-stack">
       <Card>
-        <Paragraph style={{ marginBottom: 8 }}>
+        <Paragraph className="legacy-workspace-paragraph-spaced">
           新版接口树浏览器：分类分页 + 节点懒加载 + 虚拟滚动，直接使用 `/interface/tree` 与 `/interface/tree/node`。
         </Paragraph>
         <Row gutter={12}>
           <Col span={5}>
             <Text>Project ID</Text>
             <InputNumber
-              style={{ width: '100%', marginTop: 8 }}
+              className="legacy-workspace-control-top"
               min={1}
               value={projectId}
               onChange={value => setProjectId(typeof value === 'number' ? value : 0)}
@@ -317,7 +317,7 @@ export function InterfaceExplorerPage() {
           <Col span={9}>
             <Text>Token (私有项目必填)</Text>
             <Input
-              style={{ marginTop: 8 }}
+              className="legacy-workspace-field-top"
               value={token}
               onChange={event => setToken(event.target.value)}
               placeholder="project token"
@@ -326,14 +326,14 @@ export function InterfaceExplorerPage() {
           <Col span={4}>
             <Text>分类分页大小</Text>
             <InputNumber
-              style={{ width: '100%', marginTop: 8 }}
+              className="legacy-workspace-control-top"
               min={10}
               max={200}
               value={limit}
               onChange={value => setLimit(typeof value === 'number' ? value : 50)}
             />
           </Col>
-          <Col span={6} style={{ display: 'flex', alignItems: 'end' }}>
+          <Col span={6} className="legacy-workspace-col-end">
             <Button type="primary" onClick={handleRefresh} loading={treeQuery.isFetching}>
               刷新分类树
             </Button>
@@ -361,7 +361,7 @@ export function InterfaceExplorerPage() {
               onExpand={keys => setExpandedKeys(keys as any)}
               onSelect={handleSelect as any}
             />
-            <div style={{ marginTop: 12 }}>
+            <div className="legacy-workspace-pagination-wrap">
               <Pagination
                 size="small"
                 current={page}
@@ -403,7 +403,7 @@ export function InterfaceExplorerPage() {
             }
           >
             {currentInterface ? (
-              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+              <Space direction="vertical" className="legacy-workspace-stack" size={12}>
                 <Descriptions size="small" column={1} bordered>
                   <Descriptions.Item label="ID">{currentInterface._id || '-'}</Descriptions.Item>
                   <Descriptions.Item label="标题">{currentInterface.title || '-'}</Descriptions.Item>
@@ -426,7 +426,7 @@ export function InterfaceExplorerPage() {
                 <Row gutter={8}>
                   <Col span={12}>
                     <Select<'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'>
-                      style={{ width: '100%' }}
+                      className="legacy-workspace-control"
                       value={editMethod}
                       onChange={value => setEditMethod(value)}
                       options={[
@@ -440,7 +440,7 @@ export function InterfaceExplorerPage() {
                   </Col>
                   <Col span={12}>
                     <Select<'done' | 'undone'>
-                      style={{ width: '100%' }}
+                      className="legacy-workspace-control"
                       value={editStatus}
                       onChange={value => setEditStatus(value)}
                       options={[

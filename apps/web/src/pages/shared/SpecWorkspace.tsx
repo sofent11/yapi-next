@@ -32,6 +32,7 @@ import {
   useListImportTasksQuery
 } from '../../services/yapi-api';
 import { PageHeader, SectionCard } from '../../components/layout';
+import { getHttpMethodBadgeClassName, normalizeHttpMethod } from '../../utils/http-method';
 import { safeApiRequest } from '../../utils/safe-request';
 
 const { Text } = Typography;
@@ -41,6 +42,9 @@ type SpecWorkspaceMode = 'console' | 'workbench';
 type SpecWorkspaceProps = {
   mode: SpecWorkspaceMode;
 };
+
+const DEFAULT_SPEC_JSON_SAMPLE =
+  '{\n  "openapi": "3.0.0",\n  "info": { "title": "Demo", "version": "1.0.0" },\n  "paths": {}\n}';
 
 function formatUnixTime(value?: number): string {
   if (!value || value <= 0) return '-';
@@ -64,6 +68,14 @@ function downloadJsonFile(filename: string, value: unknown) {
   URL.revokeObjectURL(url);
 }
 
+function formatJsonInput(text: string): string | null {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch (_err) {
+    return null;
+  }
+}
+
 export function SpecWorkspace(props: SpecWorkspaceProps) {
   const isWorkbench = props.mode === 'workbench';
   const [projectId, setProjectId] = useState<number>(11);
@@ -71,9 +83,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
   const [source, setSource] = useState<SpecSource>('json');
   const [syncMode, setSyncMode] = useState<SyncMode>('merge');
   const [format, setFormat] = useState<'auto' | 'swagger2' | 'openapi3'>('auto');
-  const [specJson, setSpecJson] = useState<string>(
-    '{\n  "openapi": "3.0.0",\n  "info": { "title": "Demo", "version": "1.0.0" },\n  "paths": {}\n}'
-  );
+  const [specJson, setSpecJson] = useState<string>(DEFAULT_SPEC_JSON_SAMPLE);
   const [specUrl, setSpecUrl] = useState<string>('');
   const [taskId, setTaskId] = useState<string>('');
   const [selectedCatid, setSelectedCatid] = useState<number>(0);
@@ -189,6 +199,29 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
     message.success('导出成功');
   }
 
+  async function copyToClipboard(text: string, label: string) {
+    if (!text.trim()) {
+      message.warning(`${label}为空`);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success(`${label}已复制`);
+    } catch (_err) {
+      message.error('复制失败，请手动复制');
+    }
+  }
+
+  function handleFormatSpecJson() {
+    const formatted = formatJsonInput(specJson);
+    if (!formatted) {
+      message.error('当前 JSON 不是合法格式，无法格式化');
+      return;
+    }
+    setSpecJson(formatted);
+    message.success('JSON 已格式化');
+  }
+
   return (
     <div className={`legacy-workspace-page legacy-spec-workspace ${isWorkbench ? 'is-workbench' : 'is-console'}`}>
       <PageHeader
@@ -205,7 +238,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
           <Col xs={24} md={8}>
             <Text>Project ID</Text>
             <InputNumber
-              style={{ width: '100%', marginTop: 8 }}
+              className="legacy-workspace-control-top"
               min={1}
               value={projectId}
               onChange={value => setProjectId(typeof value === 'number' ? value : 0)}
@@ -214,7 +247,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
           <Col xs={24} md={16}>
             <Text>{isWorkbench ? 'Token (可选，私有项目必填)' : 'Token (私有项目必填)'}</Text>
             <Input
-              style={{ marginTop: 8 }}
+              className="legacy-workspace-field-top"
               value={token}
               onChange={event => setToken(event.target.value)}
               placeholder={isWorkbench ? 'demo-token' : 'project token'}
@@ -226,12 +259,12 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
       <Row gutter={16} className="legacy-workspace-row">
         <Col xs={24} xl={12}>
           <SectionCard title={isWorkbench ? 'OpenAPI 导入任务' : '规范导入'} className="legacy-workspace-card">
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
               <Row gutter={8}>
                 <Col xs={24} md={8}>
                   <Text>{isWorkbench ? '来源' : 'Source'}</Text>
                   <Select<SpecSource>
-                    style={{ width: '100%', marginTop: 8 }}
+                    className="legacy-workspace-control-top"
                     value={source}
                     onChange={setSource}
                     options={[
@@ -243,7 +276,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 <Col xs={24} md={8}>
                   <Text>{isWorkbench ? '格式' : 'Format'}</Text>
                   <Select<'auto' | 'swagger2' | 'openapi3'>
-                    style={{ width: '100%', marginTop: 8 }}
+                    className="legacy-workspace-control-top"
                     value={format}
                     onChange={setFormat}
                     options={[
@@ -256,7 +289,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 <Col xs={24} md={8}>
                   <Text>{isWorkbench ? '同步模式' : 'Sync Mode'}</Text>
                   <Select<SyncMode>
-                    style={{ width: '100%', marginTop: 8 }}
+                    className="legacy-workspace-control-top"
                     value={syncMode}
                     onChange={setSyncMode}
                     options={[
@@ -269,12 +302,25 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
               </Row>
 
               {source === 'json' ? (
-                <Input.TextArea
-                  rows={isWorkbench ? 12 : 10}
-                  value={specJson}
-                  onChange={event => setSpecJson(event.target.value)}
-                  placeholder={isWorkbench ? '粘贴 OpenAPI/Swagger JSON' : '粘贴 OpenAPI / Swagger JSON'}
-                />
+                <>
+                  <Space className="legacy-workspace-result-actions" size={8}>
+                    <Button size="small" onClick={handleFormatSpecJson} disabled={!specJson.trim()}>
+                      格式化 JSON
+                    </Button>
+                    <Button size="small" onClick={() => setSpecJson(DEFAULT_SPEC_JSON_SAMPLE)}>
+                      加载示例
+                    </Button>
+                    <Button size="small" onClick={() => setSpecJson('')} disabled={!specJson.trim()}>
+                      清空
+                    </Button>
+                  </Space>
+                  <Input.TextArea
+                    rows={isWorkbench ? 12 : 10}
+                    value={specJson}
+                    onChange={event => setSpecJson(event.target.value)}
+                    placeholder={isWorkbench ? '粘贴 OpenAPI/Swagger JSON' : '粘贴 OpenAPI / Swagger JSON'}
+                  />
+                </>
               ) : (
                 <Input
                   value={specUrl}
@@ -293,7 +339,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                   showIcon
                   message={`当前任务: ${taskId}`}
                   description={
-                    <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                    <Space direction="vertical" className="legacy-workspace-stack" size={8}>
                       <Space>
                         <Tag color={taskColor(task?.status)}>{task?.status || 'queued'}</Tag>
                         <Text>{task?.message || '-'}</Text>
@@ -318,12 +364,12 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
 
         <Col xs={24} xl={12}>
           <SectionCard title="规范导出" className="legacy-workspace-card">
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
               <Row gutter={8}>
                 <Col xs={24} md={12}>
                   <Text>{isWorkbench ? '导出格式' : 'Format'}</Text>
                   <Select<SpecExportFormat>
-                    style={{ width: '100%', marginTop: 8 }}
+                    className="legacy-workspace-control-top"
                     value={exportFormat}
                     onChange={setExportFormat}
                     options={[
@@ -335,7 +381,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 <Col xs={24} md={12}>
                   <Text>{isWorkbench ? '可见性' : 'Status'}</Text>
                   <Select<'all' | 'open'>
-                    style={{ width: '100%', marginTop: 8 }}
+                    className="legacy-workspace-control-top"
                     value={exportStatus}
                     onChange={setExportStatus}
                     options={
@@ -356,14 +402,34 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 <Button type="primary" onClick={handleExport} loading={exportState.isLoading}>
                   {isWorkbench ? '导出' : '导出规范'}
                 </Button>
-                {!isWorkbench ? (
-                  <Button
-                    disabled={!exportData}
-                    onClick={() => downloadJsonFile(`spec-export-${projectId}-${exportFormat}.json`, exportData)}
-                  >
-                    下载 JSON
-                  </Button>
-                ) : null}
+              </Space>
+              <Space className="legacy-workspace-result-actions" size={8}>
+                <Button
+                  size="small"
+                  disabled={!exportText.trim()}
+                  onClick={() => {
+                    void copyToClipboard(exportText, '导出结果');
+                  }}
+                >
+                  复制结果
+                </Button>
+                <Button
+                  size="small"
+                  disabled={!exportData}
+                  onClick={() => downloadJsonFile(`spec-export-${projectId}-${exportFormat}.json`, exportData)}
+                >
+                  下载 JSON
+                </Button>
+                <Button
+                  size="small"
+                  disabled={!exportText.trim() && !exportData}
+                  onClick={() => {
+                    setExportText('');
+                    setExportData(null);
+                  }}
+                >
+                  清空结果
+                </Button>
               </Space>
               <Input.TextArea
                 rows={isWorkbench ? 14 : 13}
@@ -384,6 +450,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
             loading={tasksQuery.isLoading}
             rowKey="task_id"
             dataSource={taskRows}
+            locale={{ emptyText: '暂无导入任务' }}
             columns={[
               {
                 title: 'Task ID',
@@ -429,6 +496,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 pagination={false}
                 loading={treeQuery.isLoading}
                 dataSource={categoryRows}
+                locale={{ emptyText: '暂无分类数据' }}
                 columns={[
                   { title: '分类ID', dataIndex: '_id', key: '_id', width: 100 },
                   { title: '名称', dataIndex: 'name', key: 'name' },
@@ -454,8 +522,18 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 pagination={false}
                 loading={nodeQuery.isLoading}
                 dataSource={interfaceRows}
+                locale={{ emptyText: selectedCatid > 0 ? '该分类下暂无接口' : '请选择分类后查看接口' }}
                 columns={[
-                  { title: 'Method', dataIndex: 'method', key: 'method', width: 100 },
+                  {
+                    title: 'Method',
+                    dataIndex: 'method',
+                    key: 'method',
+                    width: 110,
+                    render: (value: string) => {
+                      const method = normalizeHttpMethod(value || 'GET');
+                      return <span className={getHttpMethodBadgeClassName(method)}>{method}</span>;
+                    }
+                  },
                   { title: 'Path', dataIndex: 'path', key: 'path' },
                   { title: 'Title', dataIndex: 'title', key: 'title' },
                   { title: 'Status', dataIndex: 'status', key: 'status', width: 100 }
@@ -474,6 +552,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 loading={tasksQuery.isLoading}
                 dataSource={taskRows}
                 pagination={false}
+                locale={{ emptyText: '暂无导入任务' }}
                 columns={[
                   {
                     title: 'Task ID',
@@ -513,6 +592,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 loading={treeQuery.isLoading}
                 dataSource={categoryRows}
                 pagination={false}
+                locale={{ emptyText: '暂无分类数据' }}
                 columns={[
                   { title: '分类ID', dataIndex: '_id', width: 100 },
                   { title: '名称', dataIndex: 'name' },

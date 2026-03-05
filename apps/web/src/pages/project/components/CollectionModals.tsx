@@ -1,5 +1,7 @@
 import { Alert, Button, Form, Input, Modal, Select, Space, Switch, Table, Typography } from 'antd';
-import type { CSSProperties } from 'react';
+import type { FormInstance } from 'antd';
+import { normalizeHttpMethod } from '../../../utils/http-method';
+import type { AddCaseFormValues, ColFormValues, CommonSettingFormValues } from './collection-types';
 
 const { Text } = Typography;
 
@@ -17,10 +19,10 @@ type ImportInterfaceRow = {
 type CollectionModalsProps = {
   colModalType: 'add' | 'edit';
   colModalOpen: boolean;
-  colForm: any;
+  colForm: FormInstance<ColFormValues>;
   colModalLoading: boolean;
   onCancelColModal: () => void;
-  onSubmitCol: (values: { name: string; desc?: string }) => void;
+  onSubmitCol: (values: ColFormValues) => void;
   importModalOpen: boolean;
   importModalLoading: boolean;
   importProjectId: number;
@@ -34,16 +36,16 @@ type CollectionModalsProps = {
   onImportSelectedRowKeysChange: (keys: Array<string | number>) => void;
   onCancelImportModal: () => void;
   onConfirmImportInterfaces: () => void;
-  methodStyle: (method?: string) => CSSProperties;
+  methodClassName: (method?: string) => string;
   addCaseOpen: boolean;
-  addCaseForm: any;
+  addCaseForm: FormInstance<AddCaseFormValues>;
   addCaseLoading: boolean;
   caseInterfaceTruncated: boolean;
   caseInterfaceOptions: Array<{ value: number; label: string; title?: string; path?: string }>;
   onCancelAddCase: () => void;
-  onSubmitAddCase: (values: { interface_id: number; casename: string; case_env?: string }) => void;
+  onSubmitAddCase: (values: AddCaseFormValues) => void;
   commonSettingOpen: boolean;
-  commonSettingForm: any;
+  commonSettingForm: FormInstance<CommonSettingFormValues>;
   commonSettingLoading: boolean;
   onCancelCommonSetting: () => void;
   onSaveCommonSetting: () => void;
@@ -63,7 +65,7 @@ export function CollectionModals(props: CollectionModalsProps) {
         okText="确认"
         cancelText="取消"
       >
-        <Form<any> form={props.colForm} layout="vertical" onFinish={values => void props.onSubmitCol(values)}>
+        <Form<ColFormValues> form={props.colForm} layout="vertical" onFinish={values => void props.onSubmitCol(values)}>
           <Form.Item label="集合名" name="name" rules={[{ required: true, message: '请输入集合命名！' }]}>
             <Input />
           </Form.Item>
@@ -82,29 +84,43 @@ export function CollectionModals(props: CollectionModalsProps) {
         okText="确认"
         cancelText="取消"
         confirmLoading={props.importModalLoading}
+        className="legacy-collection-import-modal"
       >
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          <Space>
+        <Space direction="vertical" className="legacy-collection-modal-stack" size={12}>
+          <Space className="legacy-collection-import-project">
             <Text>选择要导入的项目：</Text>
             <Select<number>
               value={props.importProjectId > 0 ? props.importProjectId : props.currentProjectId}
-              style={{ width: 260 }}
+              className="legacy-collection-import-project-select"
               options={props.importProjectOptions}
               onChange={props.onImportProjectChange}
             />
           </Space>
-          <Alert
-            type="info"
-            showIcon
-            message={`已选择 ${props.selectedImportInterfaceCount} 个接口`}
-          />
+          <div className="legacy-collection-import-summary">
+            <Alert
+              type="info"
+              showIcon
+              className="legacy-collection-import-summary-alert"
+              message={`已选择 ${props.selectedImportInterfaceCount} 个接口`}
+            />
+            <Button
+              size="small"
+              onClick={() => props.onImportSelectedRowKeysChange([])}
+              disabled={props.importSelectedRowKeys.length === 0}
+            >
+              清空选择
+            </Button>
+          </div>
           <Table<ImportInterfaceRow>
+            className="legacy-collection-import-table"
             rowKey="key"
             size="small"
             pagination={false}
             loading={props.importTableLoading}
             dataSource={props.importTableRows}
             defaultExpandAllRows
+            rowClassName={row => (row.isCategory ? 'legacy-collection-import-category-row' : '')}
+            locale={{ emptyText: '当前项目暂无可导入接口' }}
             rowSelection={{
               selectedRowKeys: props.importSelectedRowKeys,
               checkStrictly: false,
@@ -128,12 +144,15 @@ export function CollectionModals(props: CollectionModalsProps) {
                 title: '请求方法',
                 dataIndex: 'method',
                 width: 120,
-                render: (value: string, row) =>
-                  row.isCategory ? '-' : (
-                    <span className="legacy-method-pill" style={props.methodStyle(value || 'GET')}>
-                      {value || 'GET'}
+                render: (value: string, row) => {
+                  if (row.isCategory) return '-';
+                  const method = normalizeHttpMethod(value || 'GET');
+                  return (
+                    <span className={props.methodClassName(method)}>
+                      {method}
                     </span>
-                  )
+                  );
+                }
               },
               {
                 title: '状态',
@@ -164,20 +183,29 @@ export function CollectionModals(props: CollectionModalsProps) {
         cancelText="取消"
         confirmLoading={props.addCaseLoading}
       >
-        <Form<any> form={props.addCaseForm} layout="vertical" onFinish={values => void props.onSubmitAddCase(values)}>
+        <Form<AddCaseFormValues> form={props.addCaseForm} layout="vertical" onFinish={values => void props.onSubmitAddCase(values)}>
           {props.caseInterfaceTruncated ? (
             <Alert
               type="warning"
               showIcon
-              style={{ marginBottom: 12 }}
+              className="legacy-collection-case-truncated-alert"
               message={`接口选项仅展示前 ${props.caseInterfaceOptions.length} 条，请通过左侧筛选或搜索后再添加。`}
             />
           ) : null}
           <Form.Item label="接口" name="interface_id" rules={[{ required: true, message: '请选择接口' }]}>
             <Select
               showSearch
-              optionFilterProp="label"
+              className="legacy-collection-case-interface-select"
+              placeholder="搜索接口名称或路径"
               options={props.caseInterfaceOptions}
+              optionFilterProp="label"
+              filterOption={(input, option) => {
+                const keyword = String(input || '').toLowerCase();
+                const labelText = String(option?.label || '').toLowerCase();
+                const titleText = String((option as { title?: string } | undefined)?.title || '').toLowerCase();
+                const pathText = String((option as { path?: string } | undefined)?.path || '').toLowerCase();
+                return labelText.includes(keyword) || titleText.includes(keyword) || pathText.includes(keyword);
+              }}
             />
           </Form.Item>
           <Form.Item label="用例名称" name="casename" rules={[{ required: true, message: '请输入用例名称' }]}>
@@ -198,8 +226,15 @@ export function CollectionModals(props: CollectionModalsProps) {
         okText="保存"
         cancelText="取消"
         confirmLoading={props.commonSettingLoading}
+        className="legacy-collection-common-setting-modal"
       >
-        <Form<any> form={props.commonSettingForm} layout="vertical">
+        <Form<CommonSettingFormValues> form={props.commonSettingForm} layout="vertical">
+          <Alert
+            type="info"
+            showIcon
+            className="legacy-collection-common-setting-alert"
+            message="执行顺序：先通用规则，再用例脚本。建议先配置字段校验，再补充脚本断言。"
+          />
           <Form.Item
             label="检查 Http Code = 200"
             name="checkHttpCodeIs200"
@@ -211,17 +246,17 @@ export function CollectionModals(props: CollectionModalsProps) {
           <Form.Item
             label="检查返回 JSON 字段"
             tooltip="例如检查 code 是否等于 0"
-            style={{ marginBottom: 8 }}
+            className="legacy-collection-inline-setting-row"
           >
-            <Space wrap>
+            <Space wrap className="legacy-collection-inline-setting-fields">
               <Form.Item name="checkResponseFieldEnable" valuePropName="checked" noStyle>
                 <Switch checkedChildren="开" unCheckedChildren="关" />
               </Form.Item>
-              <Form.Item name="checkResponseFieldName" noStyle>
-                <Input style={{ width: 180 }} placeholder="字段名，如 code" />
+              <Form.Item name="checkResponseFieldName" noStyle className="legacy-collection-inline-field">
+                <Input className="legacy-collection-inline-input" placeholder="字段名，如 code" />
               </Form.Item>
-              <Form.Item name="checkResponseFieldValue" noStyle>
-                <Input style={{ width: 180 }} placeholder="期望值，如 0" />
+              <Form.Item name="checkResponseFieldValue" noStyle className="legacy-collection-inline-field">
+                <Input className="legacy-collection-inline-input" placeholder="期望值，如 0" />
               </Form.Item>
             </Space>
           </Form.Item>
@@ -236,9 +271,9 @@ export function CollectionModals(props: CollectionModalsProps) {
           <Form.Item
             label="全局测试脚本"
             tooltip="启用后每个 case 会先执行全局脚本，再执行 case 脚本"
-            style={{ marginBottom: 8 }}
+            className="legacy-collection-inline-setting-row"
           >
-            <Space wrap style={{ marginBottom: 8 }}>
+            <Space wrap className="legacy-collection-script-switch-row">
               <Form.Item name="checkScriptEnable" valuePropName="checked" noStyle>
                 <Switch checkedChildren="开" unCheckedChildren="关" />
               </Form.Item>

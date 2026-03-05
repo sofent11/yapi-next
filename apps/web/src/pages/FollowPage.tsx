@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
+import type { KeyboardEvent } from 'react';
 import { StarFilled } from '@ant-design/icons';
 import { Button, Card, Spin, Tooltip, message } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { useDelFollowMutation, useGetFollowListQuery } from '../services/yapi-api';
-import { renderProjectIcon, resolveProjectColor } from '../utils/project-visual';
+import { renderProjectIcon, resolveProjectColor, resolveProjectColorKey } from '../utils/project-visual';
 import { AppShell, PageHeader, SectionCard } from '../components/layout';
 import { LegacyErrMsg } from '../components/LegacyErrMsg';
 
@@ -42,6 +43,10 @@ export function FollowPage() {
     if (pid <= 0) return null;
     const visual = getProjectVisual(project);
     const color = resolveProjectColor(visual.color, projectName);
+    const colorKey = resolveProjectColorKey(visual.color);
+    const logoClassName = colorKey
+      ? `legacy-follow-project-logo legacy-project-color-${colorKey}`
+      : 'legacy-follow-project-logo';
     const lastUpdate = Number(project.up_time || 0);
     const updatedAt = lastUpdate
       ? new Date(lastUpdate * 1000).toLocaleString('zh-CN', {
@@ -53,18 +58,31 @@ export function FollowPage() {
         })
       : '未知';
 
+    const handleNavigate = () => navigate(`/project/${pid}`);
+
+    const handleCardKeydown = (event: KeyboardEvent) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        handleNavigate();
+      }
+    };
+
     return (
       <Card
         key={pid}
         hoverable
         className="legacy-follow-project-card"
-        onClick={() => navigate(`/project/${pid}`)}
+        onClick={handleNavigate}
+        role="button"
+        tabIndex={0}
+        onKeyDown={handleCardKeydown}
         extra={
           <Tooltip placement="left" title="取消关注">
             <Button
               type="text"
               className="legacy-follow-star-btn"
               icon={<StarFilled />}
+              aria-label={`取消关注 ${projectName}`}
               onClick={event => {
                 event.stopPropagation();
                 void handleDel(pid);
@@ -74,7 +92,7 @@ export function FollowPage() {
         }
       >
         <div className="legacy-follow-project-head">
-          <div className="legacy-follow-project-logo" style={{ backgroundColor: color }}>
+          <div className={logoClassName} style={colorKey ? undefined : { backgroundColor: color }}>
             {renderProjectIcon(visual.icon)}
           </div>
         </div>

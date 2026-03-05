@@ -264,7 +264,7 @@ export function UserPage() {
               showIcon
               message="仅管理员可查看完整用户列表"
               description={<Link to={`/user/profile/${currentUid}`}>进入个人中心</Link>}
-              style={{ marginBottom: 16 }}
+              className="legacy-user-alert-spaced"
             />
           ) : null}
 
@@ -364,7 +364,7 @@ export function UserPage() {
                 id="avatar-upload-input"
                 type="file"
                 accept="image/png,image/jpeg"
-                style={{ display: 'none' }}
+                className="legacy-hidden-input"
                 onChange={event => {
                   const file = event.target.files?.[0];
                   void handleAvatarUpload(file);
@@ -435,7 +435,7 @@ export function UserPage() {
                       { value: 'admin', label: '管理员' },
                       { value: 'member', label: '会员' }
                     ]}
-                    style={{ width: 180 }}
+                    className="legacy-user-role-select"
                   />
                   {canEditRole ? (
                     <Button type="primary" onClick={() => void handleSaveProfile()} loading={updateUserState.isLoading}>

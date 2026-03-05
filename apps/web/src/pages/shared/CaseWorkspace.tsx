@@ -42,6 +42,14 @@ function toJson(input: unknown): string {
   }
 }
 
+function formatJsonInput(text: string): string | null {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch (_err) {
+    return null;
+  }
+}
+
 export function CaseWorkspace(props: CaseWorkspaceProps) {
   const [projectId, setProjectId] = useState<number>(11);
   const [token, setToken] = useState<string>('');
@@ -82,6 +90,19 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
   const notifyRequestError = (error: unknown, fallback: string) => {
     message.error(getRequestErrorMessage(error, fallback));
   };
+
+  async function copyToClipboard(text: string, label: string) {
+    if (!text.trim()) {
+      message.warning(`${label}为空`);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success(`${label}已复制`);
+    } catch (_err) {
+      message.error('复制失败，请手动复制');
+    }
+  }
 
   useEffect(() => {
     const rows = colListQuery.data?.data || [];
@@ -251,6 +272,16 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
     }
   }
 
+  function handleFormatResponseBody() {
+    const formatted = formatJsonInput(responseBody);
+    if (!formatted) {
+      message.error('response.body 不是合法 JSON，无法格式化');
+      return;
+    }
+    setResponseBody(formatted);
+    message.success('response.body 已格式化');
+  }
+
   return (
     <div className="legacy-workspace-page legacy-case-workspace">
       <PageHeader title={props.title || 'Case Console'} subtitle={props.description} />
@@ -260,7 +291,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
           <Col xs={24} md={8}>
             <Text>Project ID</Text>
             <InputNumber
-              style={{ width: '100%', marginTop: 8 }}
+              className="legacy-workspace-control-top"
               min={1}
               value={projectId}
               onChange={value => setProjectId(Number(value || 0))}
@@ -269,7 +300,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
           <Col xs={24} md={16}>
             <Text>Token (私有项目建议填写)</Text>
             <Input
-              style={{ marginTop: 8 }}
+              className="legacy-workspace-field-top"
               value={token}
               onChange={event => setToken(event.target.value)}
               placeholder="project token"
@@ -281,7 +312,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
       <Row gutter={16} className="legacy-workspace-row">
         <Col xs={24} xl={12}>
           <SectionCard title="测试集合" className="legacy-workspace-card">
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
               <Input value={colName} onChange={event => setColName(event.target.value)} placeholder="测试集名称" />
               <Input value={colDesc} onChange={event => setColDesc(event.target.value)} placeholder="测试集描述" />
               <Button type="primary" onClick={handleAddCol} loading={addColState.isLoading}>
@@ -292,6 +323,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
                 loading={colListQuery.isFetching}
                 pagination={false}
                 dataSource={colRows}
+                locale={{ emptyText: '暂无测试集合' }}
                 columns={[
                   { title: 'ID', dataIndex: '_id', width: 90 },
                   { title: 'Name', dataIndex: 'name' },
@@ -321,11 +353,11 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
         </Col>
         <Col xs={24} xl={12}>
           <SectionCard title={`测试用例 ${selectedColId > 0 ? `(col_id=${selectedColId})` : ''}`} className="legacy-workspace-card">
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
               <Row gutter={8}>
                 <Col xs={24} md={10}>
                   <InputNumber
-                    style={{ width: '100%' }}
+                    className="legacy-workspace-control"
                     min={1}
                     value={caseInterfaceId}
                     onChange={value => setCaseInterfaceId(Number(value || 0))}
@@ -345,6 +377,8 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
                 loading={caseListQuery.isFetching}
                 pagination={false}
                 dataSource={caseRows}
+                rowClassName={row => (selectedCaseId && row._id === selectedCaseId ? 'legacy-workspace-active-row' : '')}
+                locale={{ emptyText: selectedColId > 0 ? '该测试集暂无用例' : '请先选择测试集' }}
                 columns={[
                   { title: 'Case ID', dataIndex: '_id', width: 180 },
                   { title: 'Name', dataIndex: 'casename' },
@@ -388,14 +422,14 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
       <Row gutter={16} className="legacy-workspace-row">
         <Col xs={24} xl={12}>
           <SectionCard title="run_script 验证" className="legacy-workspace-card">
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
               <Alert
                 showIcon
                 type="info"
                 message={`selected_case=${selectedCaseId || '-'} / interface_id=${caseInterfaceId || '-'}`}
               />
               <InputNumber
-                style={{ width: '100%' }}
+                className="legacy-workspace-control"
                 min={100}
                 max={599}
                 value={responseStatus}
@@ -408,6 +442,11 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
                 onChange={event => setResponseBody(event.target.value)}
                 placeholder='response.body (JSON), e.g. {"code":0}'
               />
+              <Space className="legacy-workspace-result-actions" size={8}>
+                <Button size="small" onClick={handleFormatResponseBody} disabled={!responseBody.trim()}>
+                  格式化 Body JSON
+                </Button>
+              </Space>
               <Input.TextArea
                 rows={3}
                 value={scriptText}
@@ -417,16 +456,56 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
               <Button type="primary" onClick={handleRunScript} loading={runScriptState.isLoading}>
                 执行 run_script
               </Button>
+              <Space className="legacy-workspace-result-actions" size={8}>
+                <Button
+                  size="small"
+                  disabled={!runResultText.trim()}
+                  onClick={() => {
+                    void copyToClipboard(runResultText, 'run_script 响应');
+                  }}
+                >
+                  复制响应
+                </Button>
+                <Button size="small" disabled={!runResultText.trim()} onClick={() => setRunResultText('')}>
+                  清空
+                </Button>
+              </Space>
               <Input.TextArea rows={10} readOnly value={runResultText} placeholder="run_script 响应" />
             </Space>
           </SectionCard>
         </Col>
         <Col xs={24} xl={12}>
           <SectionCard title="Case 变量与环境视图" className="legacy-workspace-card">
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
-              <Text strong>case_env_list</Text>
+            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
+              <Space className="legacy-workspace-result-head" align="center">
+                <Text strong>case_env_list</Text>
+                <Space className="legacy-workspace-result-actions" size={8}>
+                  <Button
+                    size="small"
+                    disabled={!envListText.trim()}
+                    onClick={() => {
+                      void copyToClipboard(envListText, 'case_env_list 响应');
+                    }}
+                  >
+                    复制响应
+                  </Button>
+                </Space>
+              </Space>
               <Input.TextArea rows={7} readOnly value={envListText} placeholder="环境列表响应" />
-              <Text strong>case_list_by_var_params</Text>
+              <Space className="legacy-workspace-result-head" align="center">
+                <Text strong>case_list_by_var_params</Text>
+                <Space className="legacy-workspace-result-actions" size={8}>
+                  <Button
+                    size="small"
+                    disabled={!varCaseText.trim()}
+                    onClick={() => {
+                      void copyToClipboard(varCaseText, 'case_list_by_var_params 响应');
+                    }}
+                  >
+                    复制响应
+                  </Button>
+                </Space>
+              </Space>
               <Input.TextArea rows={7} readOnly value={varCaseText} placeholder="变量参数视图响应" />
             </Space>
           </SectionCard>

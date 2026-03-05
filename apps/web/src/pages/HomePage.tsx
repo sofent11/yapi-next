@@ -114,7 +114,7 @@ export function HomePage() {
           <div className="home-v2-hero-panel">
             <Card bordered={false}>
               <Title level={4}>核心能力</Title>
-              <Space direction="vertical" size={10} style={{ width: '100%' }}>
+              <Space direction="vertical" size={10} className="legacy-workspace-stack">
                 <Text>1. 项目与分组权限管理</Text>
                 <Text>2. 接口预览 / 编辑 / 运行三态工作流</Text>
                 <Text>3. 测试集合、自动测试和报告查看</Text>

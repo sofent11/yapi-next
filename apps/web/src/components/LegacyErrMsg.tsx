@@ -83,7 +83,7 @@ export function LegacyErrMsg(props: LegacyErrMsgProps) {
         {desc}
       </Text>
       {props.type === 'noFollow' ? (
-        <Space style={{ marginTop: 8 }}>
+        <Space className="legacy-err-msg-actions">
           <Button type="link" onClick={() => navigate('/group')}>
             去项目广场
           </Button>
@@ -92,4 +92,3 @@ export function LegacyErrMsg(props: LegacyErrMsgProps) {
     </div>
   );
 }
-

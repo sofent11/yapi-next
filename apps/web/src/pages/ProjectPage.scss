@@ -1,5 +1,9 @@
+.legacy-project-page-root {
+    padding: 24px;
+}
+
 .m-subnav {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     background-color: transparent;
     font-size: 14px;
     border: none;
@@ -22,5 +26,11 @@
             padding: 0 24px;
             font-weight: 500;
         }
+    }
+}
+
+@media (max-width: 900px) {
+    .legacy-project-page-root {
+        padding: 12px;
     }
 }

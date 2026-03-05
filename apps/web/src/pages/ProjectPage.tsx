@@ -5,6 +5,7 @@ import type { MenuProps } from 'antd';
 import { useGetGroupQuery, useGetProjectQuery } from '../services/yapi-api';
 import { webPlugins, type SubNavItem } from '../plugins';
 import { AppShell } from '../components/layout/AppShell';
+import { PageHeader } from '../components/layout/PageHeader';
 import './ProjectPage.scss';
 
 const BUILT_IN_NAV_KEYS = new Set(['interface', 'activity', 'data', 'members', 'setting']);
@@ -156,7 +157,15 @@ export function ProjectPage() {
   }
 
   return (
-    <AppShell>
+    <AppShell className="legacy-project-page-root">
+      <PageHeader
+        title={String(project?.name || `项目 #${projectId}`)}
+        subtitle={
+          project?.basepath
+            ? `BasePath: ${project.basepath}`
+            : '接口、测试、数据与成员配置统一管理'
+        }
+      />
       <div className="m-subnav">
         <Menu
           mode="horizontal"

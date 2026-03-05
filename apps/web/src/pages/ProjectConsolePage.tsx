@@ -1,43 +1,16 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import type { GroupListItem, ProjectListItem } from '@yapi-next/shared-types';
+import { useNavigate, useParams } from 'react-router-dom';
+import type { GroupListItem, ProjectListItem, UserSearchItem } from '@yapi-next/shared-types';
+import { UserOutlined } from '@ant-design/icons';
 import {
-  CopyOutlined,
-  DownOutlined,
-  ExclamationCircleOutlined,
-  FolderOpenOutlined,
-  PlusOutlined,
-  QuestionCircleOutlined,
-  SearchOutlined,
-  StarFilled,
-  StarOutlined,
-  UpOutlined,
-  UserOutlined,
-  FolderAddOutlined
-} from '@ant-design/icons';
-import {
-  Alert,
-  Avatar,
   Button,
-  Card,
-  Col,
-  Row,
+  Alert,
   Form,
-  Input,
   Layout,
   Modal,
-  Popover,
-  Popconfirm,
-  Select,
   Space,
-  Spin,
-  Switch,
-  Table,
   Tabs,
-  Tooltip,
-  Typography,
-  message,
-  Menu
+  message
 } from 'antd';
 import {
   useAddFollowMutation,
@@ -57,16 +30,18 @@ import {
   useGetUserStatusQuery,
   useUpdateGroupMutation
 } from '../services/yapi-api';
-import { renderProjectIcon, resolveProjectColor } from '../utils/project-visual';
-import { LegacyGuideActions } from '../components/LegacyGuideActions';
-import { LegacyErrMsg } from '../components/LegacyErrMsg';
-import { LegacyTimeline } from '../components/LegacyTimeline';
+import { ProjectConsoleActivityTab } from './components/ProjectConsoleActivityTab';
+import { ProjectConsoleMembersTab } from './components/ProjectConsoleMembersTab';
+import { ProjectConsoleModals } from './components/ProjectConsoleModals';
+import { ProjectConsoleProjectTab } from './components/ProjectConsoleProjectTab';
+import { ProjectConsoleSettingTab } from './components/ProjectConsoleSettingTab';
+import type { GroupSettingForm } from './components/ProjectConsoleSettingTab';
+import { ProjectConsoleSidebar } from './components/ProjectConsoleSidebar';
 import { AppShell, PageHeader } from '../components/layout';
 import { useLegacyGuide } from '../context/LegacyGuideContext';
 import { safeApiRequest } from '../utils/safe-request';
 import './Group.scss';
 
-const { Text, Title } = Typography;
 const { Content, Sider } = Layout;
 
 type CreateGroupForm = {
@@ -83,6 +58,12 @@ type GroupMemberRole = 'owner' | 'dev' | 'guest';
 type CopyForm = {
   project_name: string;
 };
+
+type ConsoleTabKey = 'projects' | 'members' | 'activity' | 'setting';
+
+function isConsoleTabKey(key: string): key is ConsoleTabKey {
+  return key === 'projects' || key === 'members' || key === 'activity' || key === 'setting';
+}
 
 function normalizeGroups(myGroup: GroupListItem | undefined, groups: GroupListItem[]): GroupListItem[] {
   const result: GroupListItem[] = [];
@@ -102,14 +83,8 @@ function normalizeGroups(myGroup: GroupListItem | undefined, groups: GroupListIt
   return result;
 }
 
-type ProjectVisualItem = ProjectListItem & { color?: string; icon?: string };
-
 function canShowGroupSetting(userRole?: string, groupRole?: string, groupType?: string) {
   return (userRole === 'admin' || groupRole === 'owner') && groupType !== 'private';
-}
-
-function getProjectVisual(project: ProjectListItem): ProjectVisualItem {
-  return project as ProjectVisualItem;
 }
 
 export function ProjectConsolePage() {
@@ -118,18 +93,19 @@ export function ProjectConsolePage() {
   const routeGroupId = Number(params.groupId || 0);
 
   const [createGroupForm] = Form.useForm<CreateGroupForm>();
-  const [settingGroupForm] = Form.useForm<CreateGroupForm>();
+  const [settingGroupForm] = Form.useForm<GroupSettingForm>();
   const [copyForm] = Form.useForm<CopyForm>();
   const customFieldName = Form.useWatch('custom_field1_name', settingGroupForm);
   const customFieldEnable = Form.useWatch('custom_field1_enable', settingGroupForm);
 
   const [groupKeyword, setGroupKeyword] = useState('');
-  const [activeTab, setActiveTab] = useState<'projects' | 'members' | 'activity' | 'setting'>('projects');
+  const [activeTab, setActiveTab] = useState<ConsoleTabKey>('projects');
   const [groupId, setGroupId] = useState<number>(Number.isFinite(routeGroupId) ? routeGroupId : 0);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [copyModalOpen, setCopyModalOpen] = useState(false);
   const [copyProjectTarget, setCopyProjectTarget] = useState<ProjectListItem | null>(null);
   const [showDangerOptions, setShowDangerOptions] = useState(false);
+  const [dangerConfirmName, setDangerConfirmName] = useState('');
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [memberUidInput, setMemberUidInput] = useState('');
   const [memberSelectedUids, setMemberSelectedUids] = useState<number[]>([]);
@@ -213,6 +189,7 @@ export function ProjectConsolePage() {
   useEffect(() => {
     if (!selectedGroup) return;
     setShowDangerOptions(false);
+    setDangerConfirmName('');
     settingGroupForm.setFieldsValue({
       group_name: selectedGroup.group_name || '',
       group_desc: selectedGroup.group_desc || '',
@@ -288,19 +265,19 @@ export function ProjectConsolePage() {
     }
     const response = await callApi(searchUsers({ q }).unwrap(), '搜索用户失败');
     if (!response) return;
-    const options = (response.data || [])
-      .map(item => {
-        const row = item as unknown as Record<string, unknown>;
-        const uid = Number(row.uid || row._id || 0);
-        if (!Number.isFinite(uid) || uid <= 0) return null;
-        const username = String(row.username || uid);
-        const email = String(row.email || '');
-        return {
+    const options = (response.data || []).flatMap(item => {
+      const row = item as UserSearchItem;
+      const uid = Number(row.uid || 0);
+      if (!Number.isFinite(uid) || uid <= 0) return [];
+      const username = String(row.username || uid);
+      const email = String(row.email || '');
+      return [
+        {
           value: uid,
           label: email ? `${username} (${email})` : username
-        };
-      })
-      .filter(Boolean) as Array<{ label: string; value: number }>;
+        }
+      ];
+    });
     setOwnerUserOptions(options);
   }
 
@@ -312,25 +289,34 @@ export function ProjectConsolePage() {
     }
     const response = await callApi(searchUsers({ q }).unwrap(), '搜索用户失败');
     if (!response) return;
-    const options = (response.data || [])
-      .map(item => {
-        const row = item as unknown as Record<string, unknown>;
-        const uid = Number(row.uid || row._id || 0);
-        if (!Number.isFinite(uid) || uid <= 0) return null;
-        const username = String(row.username || uid);
-        const email = String(row.email || '');
-        return {
+    const options = (response.data || []).flatMap(item => {
+      const row = item as UserSearchItem;
+      const uid = Number(row.uid || 0);
+      if (!Number.isFinite(uid) || uid <= 0) return [];
+      const username = String(row.username || uid);
+      const email = String(row.email || '');
+      return [
+        {
           value: uid,
           label: email ? `${username} (${email})` : username
-        };
-      })
-      .filter(Boolean) as Array<{ label: string; value: number }>;
+        }
+      ];
+    });
     setMemberUserOptions(options);
   }
 
   function handleDeleteGroup() {
     if (groupId <= 0 || !selectedGroup) return;
-    let inputName = '';
+    const expectedGroupName = String(selectedGroup.group_name || '').trim();
+    const inputName = dangerConfirmName.trim();
+    if (!inputName) {
+      message.error('请输入分组名称以确认删除');
+      return;
+    }
+    if (inputName !== expectedGroupName) {
+      message.error('分组名称有误');
+      return;
+    }
     Modal.confirm({
       title: `确认删除 ${selectedGroup.group_name} 分组吗？`,
       okText: '确认删除',
@@ -338,30 +324,23 @@ export function ProjectConsolePage() {
       okType: 'danger',
       okButtonProps: { loading: delGroupState.isLoading },
       content: (
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space direction="vertical" className="legacy-console-danger-confirm-content">
           <Alert
             type="warning"
             showIcon
             message="此操作会删除该分组下所有项目和接口，且无法恢复。"
           />
-          <Input
-            placeholder="请输入分组名称确认删除"
-            onChange={event => {
-              inputName = event.target.value;
-            }}
-          />
+          <div>已确认分组名: <b>{inputName}</b></div>
         </Space>
       ),
       onOk: async () => {
-        if (inputName.trim() !== String(selectedGroup.group_name || '').trim()) {
-          message.error('分组名称有误');
-          throw new Error('group_name_not_match');
-        }
         const response = await callApi(delGroup({ id: groupId }).unwrap(), '删除分组失败');
         if (!response) {
           throw new Error('delete_group_failed');
         }
         message.success('删除分组成功');
+        setDangerConfirmName('');
+        setShowDangerOptions(false);
         setActiveTab('projects');
         const [groupListResult, myGroupResult] = await Promise.all([
           groupListQuery.refetch(),
@@ -472,7 +451,7 @@ export function ProjectConsolePage() {
     await groupMemberQuery.refetch();
   }
 
-  async function handleSaveGroupSettings(values: CreateGroupForm) {
+  async function handleSaveGroupSettings(values: GroupSettingForm) {
     const customFieldName = String(values.custom_field1_name || '').trim();
     const customFieldEnable = Boolean(values.custom_field1_enable);
     if (customFieldEnable && !customFieldName) {
@@ -520,113 +499,77 @@ export function ProjectConsolePage() {
     }
   }, [activeTab, showActivity, showMembers, showSetting]);
 
-  const renderProjectCard = (project: ProjectListItem, isFollowPage?: boolean) => {
-    const pid = Number(project._id);
-    const visual = getProjectVisual(project);
-    const color = resolveProjectColor(visual.color, project.name || String(pid));
-    return (
-      <div className="card-container" key={pid}>
-        <Card
-          bordered={false}
-          className="m-card"
-          onClick={() => navigate(`/project/${pid}`)}
-        >
-          <div
-            className="ui-logo"
-            style={{ backgroundColor: color }}
-          >
-            {renderProjectIcon(visual.icon)}
-          </div>
-          <h4 className="ui-title">{project.name}</h4>
-        </Card>
-        <div
-          className="card-btns"
-          onClick={(e) => handleToggleFollow(project, e)}
-        >
-          <Tooltip placement="rightTop" title={project.follow ? '取消关注' : '添加关注'}>
-            <StarOutlined className={`icon ${project.follow ? 'active' : ''}`} />
-          </Tooltip>
-        </div>
-        {canCopyProject && (
-          <div className="copy-btns" onClick={(e) => {
-            e.stopPropagation();
-            setCopyProjectTarget(project);
-            copyForm.setFieldsValue({ project_name: `${project.name || ''}_copy` });
-            setCopyModalOpen(true);
-          }}>
-            <Tooltip placement="rightTop" title="复制项目">
-              <CopyOutlined className="icon" />
-            </Tooltip>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderMainProjectList = () => {
-    return (
-      <div style={{ paddingTop: '24px' }} className="m-panel card-panel card-panel-s project-list">
-        <Row className="project-list-header">
-          <Col span={16} style={{ textAlign: 'left' }}>
-            {selectedGroup?.group_name || '分组'} 分组共 ({projectRows.length}) 个项目
-          </Col>
-          <Col span={8}>
-            {canCreateProject ? (
-              <Button type="primary" onClick={() => navigate('/add-project')}>添加项目</Button>
-            ) : (
-              <Tooltip title="您没有权限,请联系该分组组长或管理员">
-                <Button type="primary" disabled>添加项目</Button>
-              </Tooltip>
-            )}
-          </Col>
-        </Row>
-        <div style={{ marginTop: 24 }}>
-          {projectListQuery.isFetching && projectRows.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
-          ) : projectRows.length === 0 ? (
-            <LegacyErrMsg type="noProject" />
-          ) : groupType === 'private' ? (
-            <div>
-              {normalProjects.length > 0 && (
-                <Row style={{ borderBottom: '1px solid #eee', marginBottom: '15px' }}>
-                  <Col span={24}><h3 className="owner-type">我的项目</h3></Col>
-                  {normalProjects.map(proj => (
-                    <Col xs={8} lg={6} xxl={4} key={proj._id}>{renderProjectCard(proj)}</Col>
-                  ))}
-                </Row>
-              )}
-              {followedProjects.length > 0 && (
-                <Row>
-                  <Col span={24}><h3 className="owner-type">我的关注</h3></Col>
-                  {followedProjects.map(proj => (
-                    <Col xs={8} lg={6} xxl={4} key={`follow-${proj._id}`}>{renderProjectCard(proj, true)}</Col>
-                  ))}
-                </Row>
-              )}
-            </div>
-          ) : (
-            <Row gutter={[16, 16]}>
-              {mixedPublicProjects.map(proj => (
-                <Col xs={8} lg={6} xxl={4} key={proj._id}>{renderProjectCard(proj)}</Col>
-              ))}
-            </Row>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   const groupMemberCountTitle = `${selectedGroup?.group_name || '当前'} 分组成员 (${groupMembers.length}) 人`;
   const sortedMembers = [...groupMembers].sort((a, b) => {
     const rank = (r?: string) => { if (r === 'owner') return 0; if (r === 'dev') return 1; if (r === 'guest') return 2; return 99; };
     return rank(a.role) - rank(b.role);
   });
 
-  const tabItems: Array<{ key: 'projects' | 'members' | 'activity' | 'setting'; label: string; children: ReactNode }> = [
+  function openAddMemberModal() {
+    setMemberUidInput('');
+    setMemberSelectedUids([]);
+    setMemberUserOptions([]);
+    setMemberRoleInput('dev');
+    setAddMemberOpen(true);
+  }
+
+  function openCreateGroupModal() {
+    createGroupForm.resetFields();
+    setOwnerUserOptions([]);
+    setCreateGroupOpen(true);
+  }
+
+  function handleSelectGroup(nextGroupId: number) {
+    setGroupId(nextGroupId);
+    setActiveTab('projects');
+    navigate(`/group/${nextGroupId}`, { replace: true });
+  }
+
+  async function handleChangeMemberRole(uid: number, role: GroupMemberRole) {
+    const response = await callApi(
+      changeGroupMemberRole({ id: groupId, member_uid: uid, role }).unwrap(),
+      '更新成员角色失败'
+    );
+    if (!response) return;
+    message.success('更新成功');
+    await groupMemberQuery.refetch();
+  }
+
+  async function handleDeleteMember(uid: number) {
+    const response = await callApi(
+      delGroupMember({ id: groupId, member_uid: uid }).unwrap(),
+      '删除成员失败'
+    );
+    if (!response) return;
+    message.success('删除成功');
+    await groupMemberQuery.refetch();
+  }
+
+  const tabItems: Array<{ key: ConsoleTabKey; label: string; children: ReactNode }> = [
     {
       key: 'projects',
       label: '项目列表',
-      children: renderMainProjectList()
+      children: (
+        <ProjectConsoleProjectTab
+          selectedGroupName={selectedGroup?.group_name || ''}
+          groupType={groupType}
+          projectRows={projectRows}
+          normalProjects={normalProjects}
+          followedProjects={followedProjects}
+          mixedPublicProjects={mixedPublicProjects}
+          projectListFetching={projectListQuery.isFetching}
+          canCreateProject={canCreateProject}
+          canCopyProject={canCopyProject}
+          onAddProject={() => navigate('/add-project')}
+          onNavigateProject={projectId => navigate(`/project/${projectId}`)}
+          onToggleFollow={handleToggleFollow}
+          onOpenCopyProject={project => {
+            setCopyProjectTarget(project);
+            copyForm.setFieldsValue({ project_name: `${project.name || ''}_copy` });
+            setCopyModalOpen(true);
+          }}
+        />
+      )
     }
   ];
 
@@ -635,90 +578,19 @@ export function ProjectConsolePage() {
       key: 'members',
       label: '成员列表',
       children: (
-        <div className="m-panel">
-          <Table
-            rowKey={item => Number(item.uid || 0)}
-            loading={groupMemberQuery.isLoading || delGroupMemberState.isLoading || changeGroupMemberRoleState.isLoading}
-            dataSource={sortedMembers as Array<Record<string, unknown>>}
-            pagination={false}
-            locale={{
-              emptyText: <LegacyErrMsg type="noMemberInGroup" />
-            }}
-            columns={[
-              {
-                title: groupMemberCountTitle,
-                dataIndex: 'username',
-                render: (_, row) => {
-                  const uid = Number(row.uid || 0);
-                  const username = String(row.username || '-');
-                  const email = String(row.email || '');
-                  return (
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <Link to={`/user/profile/${uid}`}>
-                        <Avatar src={`/api/user/avatar?uid=${uid}`} style={{ marginRight: 16 }} />
-                      </Link>
-                      <div>
-                        <Link to={`/user/profile/${uid}`}>{username}</Link>
-                        {email && <div style={{ fontSize: 12, color: '#999' }}>{email}</div>}
-                      </div>
-                    </div>
-                  );
-                }
-              },
-              {
-                title: canManageGroupMembers ? (
-                  <Button
-                    type="primary"
-                    onClick={() => {
-                      setMemberUidInput('');
-                      setMemberSelectedUids([]);
-                      setMemberUserOptions([]);
-                      setMemberRoleInput('dev');
-                      setAddMemberOpen(true);
-                    }}
-                  >
-                    添加成员
-                  </Button>
-                ) : '权限',
-                width: 220,
-                render: (_, row) => {
-                  const uid = Number(row.uid || 0);
-                  const value = (row.role as GroupMemberRole) || 'dev';
-                  if (!canManageGroupMembers) return value === 'owner' ? '组长' : value === 'dev' ? '开发者' : '访客';
-                  return (
-                    <Space>
-                      <Select<GroupMemberRole>
-                        value={value}
-                        onChange={async (role) => {
-                          const response = await callApi(
-                            changeGroupMemberRole({ id: groupId, member_uid: uid, role }).unwrap(),
-                            '更新成员角色失败'
-                          );
-                          if (!response) return;
-                          message.success('更新成功');
-                          await groupMemberQuery.refetch();
-                        }}
-                        options={[{ value: 'owner', label: '组长' }, { value: 'dev', label: '开发者' }, { value: 'guest', label: '访客' }]}
-                        style={{ width: 120 }}
-                      />
-                      <Popconfirm title="确认删除该成员？" onConfirm={async () => {
-                        const response = await callApi(
-                          delGroupMember({ id: groupId, member_uid: uid }).unwrap(),
-                          '删除成员失败'
-                        );
-                        if (!response) return;
-                        message.success('删除成功');
-                        await groupMemberQuery.refetch();
-                      }}>
-                        <Button danger size="small">删除</Button>
-                      </Popconfirm>
-                    </Space>
-                  );
-                }
-              }
-            ]}
-          />
-        </div>
+        <ProjectConsoleMembersTab
+          groupMemberCountTitle={groupMemberCountTitle}
+          canManageGroupMembers={canManageGroupMembers}
+          members={sortedMembers}
+          loading={
+            groupMemberQuery.isLoading ||
+            delGroupMemberState.isLoading ||
+            changeGroupMemberRoleState.isLoading
+          }
+          onOpenAddMember={openAddMemberModal}
+          onChangeMemberRole={(uid, role) => handleChangeMemberRole(uid, role)}
+          onDeleteMember={uid => handleDeleteMember(uid)}
+        />
       )
     });
   }
@@ -727,11 +599,7 @@ export function ProjectConsolePage() {
     tabItems.push({
       key: 'activity',
       label: '分组动态',
-      children: (
-        <div className="m-panel">
-          <LegacyTimeline type="group" typeid={groupId} />
-        </div>
-      )
+      children: <ProjectConsoleActivityTab groupId={groupId} />
     });
   }
 
@@ -740,47 +608,21 @@ export function ProjectConsolePage() {
       key: 'setting',
       label: '分组设置',
       children: (
-        <div className="m-panel group-setting-pane">
-          <Form<CreateGroupForm> form={settingGroupForm} layout="vertical" onFinish={handleSaveGroupSettings}>
-            <Form.Item label="分组名称" name="group_name" rules={[{ required: true, message: '请输入分组名称' }]}>
-              <Input />
-            </Form.Item>
-            <Form.Item label="分组简介" name="group_desc">
-              <Input.TextArea rows={4} />
-            </Form.Item>
-            <Form.Item label="接口自定义字段">
-              <Space align="start">
-                <Form.Item noStyle name="custom_field1_name">
-                  <Input placeholder="请输入自定义字段名称" status={customFieldRule ? 'error' : ''} style={{ width: 260 }} />
-                </Form.Item>
-                <Tooltip title="可以在接口中添加额外字段数据">
-                  <QuestionCircleOutlined style={{ color: '#8c8c8c', fontSize: 14, marginTop: 10 }} />
-                </Tooltip>
-                <Form.Item noStyle name="custom_field1_enable" valuePropName="checked">
-                  <Switch checkedChildren="开" unCheckedChildren="关" />
-                </Form.Item>
-              </Space>
-              {customFieldRule && <div style={{ color: 'red', marginTop: 8 }}>自定义字段名称不能为空</div>}
-            </Form.Item>
-            <Button type="primary" htmlType="submit" loading={updateGroupState.isLoading}>保存设置</Button>
-          </Form>
-          {canDeleteGroup && (
-            <div className="group-danger-zone">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 16 }}><ExclamationCircleOutlined style={{ color: '#f5222d', marginRight: 8 }} />危险操作</span>
-                <Button onClick={() => setShowDangerOptions(v => !v)}>
-                  {showDangerOptions ? '收起' : '查看'} {showDangerOptions ? <UpOutlined /> : <DownOutlined />}
-                </Button>
-              </div>
-              {showDangerOptions && (
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ marginBottom: 16 }}>分组删除后将移除分组下所有项目及接口，请谨慎操作。仅管理员可执行该操作。</div>
-                  <Button danger onClick={handleDeleteGroup} loading={delGroupState.isLoading}>删除分组</Button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <ProjectConsoleSettingTab
+          form={settingGroupForm}
+          selectedGroupName={String(selectedGroup?.group_name || '')}
+          customFieldRule={customFieldRule}
+          updateLoading={updateGroupState.isLoading}
+          canDeleteGroup={canDeleteGroup}
+          showDangerOptions={showDangerOptions}
+          dangerConfirmName={dangerConfirmName}
+          dangerConfirmMatched={dangerConfirmName.trim() === String(selectedGroup?.group_name || '').trim()}
+          deleteLoading={delGroupState.isLoading}
+          onSave={values => void handleSaveGroupSettings(values)}
+          onToggleDanger={() => setShowDangerOptions(v => !v)}
+          onDangerConfirmNameChange={setDangerConfirmName}
+          onDeleteGroup={() => void handleDeleteGroup()}
+        />
       )
     });
   }
@@ -789,88 +631,52 @@ export function ProjectConsolePage() {
     <AppShell className="legacy-project-console-page">
       <PageHeader
         title="项目控制台"
-        subtitle="统一管理分组、项目、成员与分组设置。"
+        subtitle={`${selectedGroup?.group_name || '当前分组'} · ${projectRows.length} 个项目 · ${groups.length} 个分组`}
+        actions={
+          <Space>
+            <Button onClick={openCreateGroupModal}>新建分组</Button>
+            {canCreateProject ? (
+              <Button type="primary" onClick={() => navigate('/add-project')}>
+                新建项目
+              </Button>
+            ) : null}
+          </Space>
+        }
       />
 
       <div className="projectGround">
         <Layout className="legacy-project-console-layout">
           <Sider className="legacy-project-console-sider" width={300}>
-          <div className="m-group">
-            {guideVisible && guide.step === 0 ? <div className="legacy-study-mask" /> : null}
-            <div className="group-bar">
-              <div className="curr-group">
-                <div className="curr-group-name">
-                  <span className="name">{selectedGroup?.type === 'private' ? '个人空间' : selectedGroup?.group_name || '项目分组'}</span>
-                  <Tooltip title="添加分组">
-                    <a className="editSet" onClick={() => {
-                      createGroupForm.resetFields();
-                      setOwnerUserOptions([]);
-                      setCreateGroupOpen(true);
-                    }}>
-                      <FolderAddOutlined className="btn" />
-                    </a>
-                  </Tooltip>
-                </div>
-                <div className="curr-group-desc">简介: {selectedGroup?.group_desc || ''}</div>
-              </div>
-              <div className="group-operate">
-                <div className="search">
-                  <Input.Search
-                    value={groupKeyword}
-                    onChange={event => setGroupKeyword(event.target.value)}
-                    placeholder="搜索分类"
-                  />
-                </div>
-              </div>
-              {groupListQuery.isLoading && groups.length === 0 && (
-                <Spin style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }} />
-              )}
-              <Menu
-                className="group-list"
-                mode="inline"
-                selectedKeys={[String(groupId)]}
-                items={filteredGroups.map(group => {
-                  const gid = Number(group._id);
-                  const isPrivate = group.type === 'private';
-                  const labelNode = isPrivate ? '个人空间' : group.group_name;
-                  return {
-                    key: String(gid),
-                    className: 'group-item',
-                    icon: isPrivate ? <UserOutlined /> : <FolderOpenOutlined />,
-                    label:
-                      isPrivate && gid === groupId && guideVisible && guide.step === 0 ? (
-                        <Popover
-                          placement="right"
-                          open
-                          title={personalSpaceTip}
-                          content={<LegacyGuideActions onNext={guide.next} onExit={guide.finish} />}
-                          overlayClassName="legacy-guide-popover"
-                        >
-                          <span>{labelNode}</span>
-                        </Popover>
-                      ) : (
-                        labelNode
-                      ),
-                    onClick: () => {
-                      setGroupId(gid);
-                      setActiveTab('projects');
-                      navigate(`/group/${gid}`, { replace: true });
-                    }
-                  };
-                })}
-              />
-            </div>
-          </div>
+            <ProjectConsoleSidebar
+              guideVisible={guideVisible}
+              guideStep={guide.step}
+              personalSpaceTip={personalSpaceTip}
+              selectedGroupType={selectedGroup?.type}
+              selectedGroupName={selectedGroup?.group_name}
+              selectedGroupDesc={selectedGroup?.group_desc}
+              groupKeyword={groupKeyword}
+              onGroupKeywordChange={setGroupKeyword}
+              loading={groupListQuery.isLoading}
+              groups={filteredGroups}
+              selectedGroupId={groupId}
+              onSelectGroup={handleSelectGroup}
+              onOpenCreateGroup={openCreateGroupModal}
+              onGuideNext={guide.next}
+              onGuideExit={guide.finish}
+            />
           </Sider>
 
           <Layout>
             <Content className="legacy-project-console-content">
               <Tabs
                 type="card"
-                className="m-tab tabs-large"
-                style={{ height: '100%' }}
+                className="m-tab tabs-large legacy-project-console-tabs"
                 activeKey={activeTab}
-                onChange={key => setActiveTab(key as any)}
+                onChange={key => {
+                  if (isConsoleTabKey(key)) {
+                    setActiveTab(key);
+                  }
+                }}
                 items={tabItems}
               />
             </Content>
@@ -878,111 +684,46 @@ export function ProjectConsolePage() {
         </Layout>
       </div>
 
-      <Modal
-        title="添加分组"
-        open={createGroupOpen}
-        onCancel={() => setCreateGroupOpen(false)}
-        onOk={() => createGroupForm.submit()}
-        confirmLoading={addGroupState.isLoading}
-        okText="创建"
-        className="add-group-modal"
-      >
-        <Form<CreateGroupForm> form={createGroupForm} layout="vertical" onFinish={handleCreateGroup}>
-          <Row gutter={6} className="modal-input">
-            <Col span={5}><div className="label">分组名：</div></Col>
-            <Col span={15}>
-              <Form.Item name="group_name" rules={[{ required: true, message: '请输入分组名称' }]} noStyle>
-                <Input placeholder="请输入分组名称" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={6} className="modal-input">
-            <Col span={5}><div className="label">简介：</div></Col>
-            <Col span={15}>
-              <Form.Item name="group_desc" noStyle>
-                <Input.TextArea rows={3} placeholder="请输入分组描述" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={6} className="modal-input">
-            <Col span={5}><div className="label">组长：</div></Col>
-            <Col span={15}>
-              <Form.Item name="owner_uids" noStyle>
-                <Select<number>
-                  mode="multiple"
-                  placeholder="输入用户名搜索并选择"
-                  options={ownerUserOptions}
-                  showSearch
-                  filterOption={false}
-                  onSearch={value => { void handleSearchOwnerUsers(value); }}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={6} className="modal-input">
-            <Col span={5}></Col>
-            <Col span={15}>
-              <Form.Item name="owner_uids_text" noStyle>
-                <Input placeholder="多个 UID 用逗号分隔，例如：2,3,4" style={{ marginTop: 8 }} />
-              </Form.Item>
-            </Col>
-          </Row>
-        </Form>
-      </Modal>
-
-      <Modal
-        title={copyProjectTarget ? `复制项目 ${copyProjectTarget.name}` : '复制项目'}
-        open={copyModalOpen}
-        onCancel={() => { setCopyModalOpen(false); setCopyProjectTarget(null); }}
-        onOk={() => copyForm.submit()}
-        okText="确认"
-        confirmLoading={copyProjectState.isLoading}
-      >
-        <div style={{ marginTop: '10px', fontSize: '13px', lineHeight: '25px' }}>
-          <Alert
-            message={`该操作将会复制 ${copyProjectTarget?.name} 下的所有接口集合，但不包括测试集合中的接口`}
-            type="info"
-          />
-          <div style={{ marginTop: '16px' }}>
-            <p><b>项目名称:</b></p>
-            <Form<CopyForm> form={copyForm} layout="vertical" onFinish={handleCopyProject}>
-              <Form.Item name="project_name" rules={[{ required: true, message: '请输入新项目名称' }]} noStyle>
-                <Input placeholder="项目名称" />
-              </Form.Item>
-            </Form>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        title="添加成员"
-        open={addMemberOpen}
-        onCancel={() => setAddMemberOpen(false)}
-        onOk={() => void handleAddGroupMember()}
-        okText="添加"
-        confirmLoading={addGroupMemberState.isLoading}
-      >
-        <Form layout="vertical">
-          <Form.Item label="按用户名搜索并选择">
-            <Select<number[]>
-              mode="multiple"
-              value={memberSelectedUids}
-              options={memberUserOptions}
-              placeholder="输入用户名搜索并选择成员"
-              showSearch
-              filterOption={false}
-              onSearch={value => { void handleSearchMemberUsers(value); }}
-              onChange={values => setMemberSelectedUids(Array.isArray(values) ? values : [])}
-            />
-          </Form.Item>
-          <Form.Item label="UID 列表">
-            <Input value={memberUidInput} onChange={e => setMemberUidInput(e.target.value)} placeholder="多个 UID 用逗号分隔，例如：2,3,4" />
-          </Form.Item>
-          <Form.Item label="权限">
-            <Select<GroupMemberRole> value={memberRoleInput} onChange={setMemberRoleInput} options={[{ value: 'owner', label: '组长' }, { value: 'dev', label: '开发者' }, { value: 'guest', label: '访客' }]} />
-          </Form.Item>
-        </Form>
-      </Modal>
+      <ProjectConsoleModals
+        createGroupOpen={createGroupOpen}
+        createGroupLoading={addGroupState.isLoading}
+        createGroupForm={createGroupForm}
+        ownerUserOptions={ownerUserOptions}
+        onSearchOwnerUsers={value => {
+          void handleSearchOwnerUsers(value);
+        }}
+        onCancelCreateGroup={() => setCreateGroupOpen(false)}
+        onSubmitCreateGroup={values => {
+          void handleCreateGroup(values);
+        }}
+        copyModalOpen={copyModalOpen}
+        copyModalLoading={copyProjectState.isLoading}
+        copyProjectName={copyProjectTarget?.name}
+        copyForm={copyForm}
+        onCancelCopyModal={() => {
+          setCopyModalOpen(false);
+          setCopyProjectTarget(null);
+        }}
+        onSubmitCopy={values => {
+          void handleCopyProject(values);
+        }}
+        addMemberOpen={addMemberOpen}
+        addMemberLoading={addGroupMemberState.isLoading}
+        memberSelectedUids={memberSelectedUids}
+        memberUserOptions={memberUserOptions}
+        memberUidInput={memberUidInput}
+        memberRoleInput={memberRoleInput}
+        onSearchMemberUsers={value => {
+          void handleSearchMemberUsers(value);
+        }}
+        onMemberSelectedUidsChange={setMemberSelectedUids}
+        onMemberUidInputChange={setMemberUidInput}
+        onMemberRoleInputChange={setMemberRoleInput}
+        onCancelAddMember={() => setAddMemberOpen(false)}
+        onSubmitAddMember={() => {
+          void handleAddGroupMember();
+        }}
+      />
     </AppShell>
   );
 }

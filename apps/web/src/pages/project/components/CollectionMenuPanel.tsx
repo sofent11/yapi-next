@@ -1,4 +1,4 @@
-import { Button, Input, Space, Tag, Tooltip } from 'antd';
+import { Button, Empty, Input, Space, Tag, Tooltip, Typography } from 'antd';
 import type { KeyboardEvent } from 'react';
 import {
   CopyOutlined,
@@ -12,6 +12,7 @@ import {
   SearchOutlined
 } from '@ant-design/icons';
 import { FilterBar } from '../../../components/layout';
+const { Text } = Typography;
 
 type CollectionCaseRow = {
   _id?: string | number;
@@ -57,8 +58,9 @@ type CollectionMenuPanelProps = {
 
 export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
   const keywordMode = props.colKeyword.trim().length > 0;
+  const totalCases = props.colDisplayRows.reduce((sum, col) => sum + (col.caseList?.length || 0), 0);
   const triggerWithKeyboard = (
-    event: KeyboardEvent<HTMLSpanElement>,
+    event: KeyboardEvent<HTMLElement>,
     handler: () => void
   ) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -93,7 +95,24 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
           }
         />
       </div>
+      <div className="legacy-interface-menu-summary">
+        <Text type="secondary">
+          {keywordMode ? '筛选结果：' : ''}
+          {props.colDisplayRows.length} 个集合，{totalCases} 个用例
+        </Text>
+      </div>
       <div className="legacy-interface-menu-list">
+        {props.colDisplayRows.length === 0 ? (
+          <div className="legacy-interface-menu-empty">
+            <Empty description={keywordMode ? '未找到匹配的测试集合' : '暂无测试集合'}>
+              {!keywordMode && props.canEdit ? (
+                <Button type="primary" icon={<PlusOutlined />} onClick={props.onOpenAddCol}>
+                  新建集合
+                </Button>
+              ) : null}
+            </Empty>
+          </div>
+        ) : null}
         {props.colDisplayRows.map(col => {
           const colId = Number(col._id || 0);
           const activeCol = props.selectedColId === colId && (props.action === 'col' || props.action === 'case');
@@ -114,9 +133,12 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                 props.onDropCol(colId);
               }}
             >
-              <button
-                type="button"
+              <div
                 className={`legacy-interface-cat-title${activeCol ? ' active' : ''}`}
+                role="button"
+                tabIndex={0}
+                aria-expanded={expanded}
+                aria-current={activeCol ? 'page' : undefined}
                 draggable={props.colDragEnabled}
                 onDragStart={event => {
                   if (!props.colDragEnabled) return;
@@ -125,9 +147,11 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                 }}
                 onDragEnd={props.onDragEnd}
                 onClick={() => props.onNavigateCol(colId)}
+                onKeyDown={event => triggerWithKeyboard(event, () => props.onNavigateCol(colId))}
               >
                 <span className="legacy-interface-cat-main">
-                  <span
+                  <button
+                    type="button"
                     className="legacy-interface-cat-toggle"
                     onClick={event => {
                       event.preventDefault();
@@ -135,87 +159,79 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                       if (keywordMode) return;
                       props.onToggleExpandCol(colId);
                     }}
+                    aria-label={expanded ? '收起集合' : '展开集合'}
+                    aria-expanded={expanded}
                   >
                     {expanded ? <DownOutlined /> : <RightOutlined />}
-                  </span>
-                  <FolderOpenOutlined style={{ color: '#617184' }} />
+                  </button>
+                  <FolderOpenOutlined className="legacy-interface-cat-folder" />
                   <span className="legacy-interface-cat-name">{String(col.name || '')}</span>
                 </span>
                 <Space size={4} className="legacy-interface-cat-actions">
                   {props.canEdit ? (
                     <>
-                      <span
+                      <button
+                        type="button"
                         className="legacy-interface-icon-btn"
-                        role="button"
-                        tabIndex={0}
                         onClick={event => {
                           event.preventDefault();
                           event.stopPropagation();
                           props.onDeleteCol(colId);
                         }}
-                        onKeyDown={event =>
-                          triggerWithKeyboard(event, () => props.onDeleteCol(colId))
-                        }
+                        aria-label="删除集合"
                       >
                         <DeleteOutlined />
-                      </span>
-                      <span
+                      </button>
+                      <button
+                        type="button"
                         className="legacy-interface-icon-btn"
-                        role="button"
-                        tabIndex={0}
                         onClick={event => {
                           event.preventDefault();
                           event.stopPropagation();
                           props.onEditCol(col);
                         }}
-                        onKeyDown={event =>
-                          triggerWithKeyboard(event, () => props.onEditCol(col))
-                        }
+                        aria-label="编辑集合"
                       >
                         <EditOutlined />
-                      </span>
-                      <span
+                      </button>
+                      <button
+                        type="button"
                         className="legacy-interface-icon-btn"
-                        role="button"
-                        tabIndex={0}
                         onClick={event => {
                           event.preventDefault();
                           event.stopPropagation();
                           props.onImportCol(colId);
                         }}
-                        onKeyDown={event =>
-                          triggerWithKeyboard(event, () => props.onImportCol(colId))
-                        }
+                        aria-label="导入接口"
                       >
                         <ImportOutlined />
-                      </span>
-                      <span
+                      </button>
+                      <button
+                        type="button"
                         className="legacy-interface-icon-btn"
-                        role="button"
-                        tabIndex={0}
                         onClick={event => {
                           event.preventDefault();
                           event.stopPropagation();
                           props.onCopyCol(col);
                         }}
-                        onKeyDown={event =>
-                          triggerWithKeyboard(event, () => props.onCopyCol(col))
-                        }
+                        aria-label="复制集合"
                       >
                         <CopyOutlined />
-                      </span>
+                      </button>
                     </>
                   ) : null}
                   <Tag>{caseList.length}</Tag>
                 </Space>
-              </button>
+              </div>
               {(expanded ? caseList : []).map(item => {
                 const id = String(item._id || '');
                 return (
-                  <button
+                  <div
                     key={`case-${id}`}
-                    type="button"
                     className={`legacy-interface-item${props.action === 'case' && props.caseId === id ? ' active' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-current={props.action === 'case' && props.caseId === id ? 'page' : undefined}
                     draggable={props.colDragEnabled}
                     onDragStart={event => {
                       if (!props.colDragEnabled) return;
@@ -234,6 +250,7 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                       props.onDropCase(colId, id);
                     }}
                     onClick={() => props.onNavigateCase(id)}
+                    onKeyDown={event => triggerWithKeyboard(event, () => props.onNavigateCase(id))}
                   >
                     <Tag color="blue">CASE</Tag>
                     <Tooltip title={String(item.path || '')}>
@@ -241,39 +258,33 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                     </Tooltip>
                     {props.canEdit ? (
                       <Space size={4} className="legacy-interface-item-actions">
-                        <span
+                        <button
+                          type="button"
                           className="legacy-interface-icon-btn"
-                          role="button"
-                          tabIndex={0}
                           onClick={event => {
                             event.preventDefault();
                             event.stopPropagation();
                             props.onDeleteCase(id);
                           }}
-                          onKeyDown={event =>
-                            triggerWithKeyboard(event, () => props.onDeleteCase(id))
-                          }
+                          aria-label="删除用例"
                         >
                           <DeleteOutlined />
-                        </span>
-                        <span
+                        </button>
+                        <button
+                          type="button"
                           className="legacy-interface-icon-btn"
-                          role="button"
-                          tabIndex={0}
                           onClick={event => {
                             event.preventDefault();
                             event.stopPropagation();
                             props.onCopyCase(id);
                           }}
-                          onKeyDown={event =>
-                            triggerWithKeyboard(event, () => props.onCopyCase(id))
-                          }
+                          aria-label="复制用例"
                         >
                           <CopyOutlined />
-                        </span>
+                        </button>
                       </Space>
                     ) : null}
-                  </button>
+                  </div>
                 );
               })}
             </div>

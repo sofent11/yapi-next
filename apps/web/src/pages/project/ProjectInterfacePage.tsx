@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Card, Form, Modal, Tabs, message } from 'antd';
+import { Form, Modal, message } from 'antd';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import json5 from 'json5';
 import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
@@ -38,23 +38,20 @@ import {
   useUpdateInterfaceMutation
 } from '../../services/yapi-api';
 import { webPlugins, type InterfaceTabItem } from '../../plugins';
-import { LegacyErrMsg } from '../../components/LegacyErrMsg';
 import { legacyNameValidator } from '../../utils/legacy-validation';
+import { getHttpMethodBadgeClassName } from '../../utils/http-method';
 import { safeApiRequest } from '../../utils/safe-request';
 import { AutoTestResultModals } from './components/AutoTestResultModals';
-import { CaseDetailPanel } from './components/CaseDetailPanel';
+import { InterfaceApiContent } from './components/InterfaceApiContent';
 import { CollectionModals } from './components/CollectionModals';
 import { CollectionMenuPanel } from './components/CollectionMenuPanel';
-import { CollectionOverviewPanel } from './components/CollectionOverviewPanel';
+import { InterfaceCollectionContent } from './components/InterfaceCollectionContent';
 import { InterfaceCoreModals } from './components/InterfaceCoreModals';
-import { InterfaceEditTab } from './components/InterfaceEditTab';
-import { InterfaceListPanel } from './components/InterfaceListPanel';
 import { InterfaceMenuPanel } from './components/InterfaceMenuPanel';
-import { InterfaceRunTab } from './components/InterfaceRunTab';
-import { InterfaceViewTab } from './components/InterfaceViewTab';
 import { InterfaceWorkspaceLayout } from './components/InterfaceWorkspaceLayout';
+import type { CaseDetailData, CollectionCaseRow, CollectionRow } from './components/collection-types';
 
-const STABLE_EMPTY_ARRAY: any[] = [];
+const STABLE_EMPTY_ARRAY: unknown[] = [];
 const TREE_CATEGORY_LIMIT = 1000;
 const TREE_NODE_PAGE_LIMIT = 200;
 const INTERFACE_LIST_PAGE_LIMIT = 200;
@@ -169,6 +166,8 @@ type AutoTestResultItem = {
   res_header?: unknown;
   res_body?: unknown;
   params?: Record<string, unknown>;
+  interface_id?: number;
+  interfaceId?: number;
 };
 
 type AutoTestReport = {
@@ -325,21 +324,6 @@ type SchemaRow = {
   other: string;
   children?: SchemaRow[];
 };
-const METHOD_STYLE: Record<string, { color: string; background: string }> = {
-  GET: { color: '#00a854', background: '#cfefdf' },
-  POST: { color: '#108ee9', background: '#d2ebff' },
-  PUT: { color: '#f0ad4e', background: '#fff3d9' },
-  DELETE: { color: '#ff4d4f', background: '#ffe0e0' },
-  PATCH: { color: '#722ed1', background: '#efe3ff' },
-  HEAD: { color: '#13c2c2', background: '#d8f7f7' },
-  OPTIONS: { color: '#595959', background: '#ededed' }
-};
-
-function methodStyle(method?: string) {
-  const key = String(method || 'GET').toUpperCase();
-  return METHOD_STYLE[key] || METHOD_STYLE.GET;
-}
-
 function statusLabel(status?: string): string {
   return status === 'done' ? '已完成' : '未完成';
 }
@@ -1010,8 +994,8 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   );
   const catRows = (catMenuQuery.data?.data || STABLE_EMPTY_ARRAY) as Array<{ _id: number; name: string; desc?: string }>;
   const currentInterface = (detailQuery.data?.data || null) as LegacyInterfaceDTO | null;
-  const colRows = (colListQuery.data?.data || STABLE_EMPTY_ARRAY) as any[];
-  const caseRows = (caseListQuery.data?.data || STABLE_EMPTY_ARRAY) as any[];
+  const colRows = (colListQuery.data?.data || STABLE_EMPTY_ARRAY) as CollectionRow[];
+  const caseRows = (caseListQuery.data?.data || STABLE_EMPTY_ARRAY) as CollectionCaseRow[];
   const canEdit = /(admin|owner|dev)/.test(String(props.projectRole || ''));
   const callApi = useCallback(
     <T extends { errcode?: number; errmsg?: string }>(request: Promise<T>, fallback: string) =>
@@ -1118,7 +1102,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     };
     webPlugins.applyInterfaceTabs(tabs, {
       projectId: props.projectId,
-      interfaceData: (currentInterface as unknown as Record<string, unknown>) || {}
+      interfaceData: toRecord(currentInterface)
     });
     return tabs;
   }, [currentInterface, props.projectId]);
@@ -1306,7 +1290,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       if (!keyword) {
         return { ...col, caseList: sourceCaseList };
       }
-      const filteredCaseList = sourceCaseList.filter((item: any) => {
+      const filteredCaseList = sourceCaseList.filter((item: CollectionCaseRow) => {
         const name = String(item.casename || '').toLowerCase();
         const path = String(item.path || '').toLowerCase();
         return name.includes(keyword) || path.includes(keyword);
@@ -1987,7 +1971,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         switch_notice: values.switch_notice === true,
         api_opened: values.api_opened === true,
         token: props.token
-      } as any).unwrap(),
+      }).unwrap(),
       '保存失败'
     );
     if (!response) return;
@@ -2093,10 +2077,11 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   }
 
   function openEditCatModal(cat: InterfaceTreeNode) {
+    const source = toRecord(cat);
     const catData = {
       _id: Number(cat._id || 0),
       name: String(cat.name || ''),
-      desc: String((cat as unknown as Record<string, unknown>).desc || '')
+      desc: String(source.desc || '')
     };
     setEditingCat(catData);
     editCatForm.setFieldsValue({
@@ -2280,6 +2265,16 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     }
   }
 
+  function formatJsonText(text: string, label: string): string | null {
+    try {
+      const parsed = parseJsonText(text, label);
+      return JSON.stringify(parsed, null, 2);
+    } catch (err) {
+      message.error((err as Error).message || `${label} 格式错误`);
+      return null;
+    }
+  }
+
   async function copyText(text: string, successText: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -2399,6 +2394,24 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       void buildResponsePreviewText();
     }
     setResEditorTab(next === 'preview' ? 'preview' : 'tpl');
+  }
+
+  function handleFormatRunQuery() {
+    const formatted = formatJsonText(runQuery, 'Query 参数');
+    if (formatted == null) return;
+    setRunQuery(formatted);
+  }
+
+  function handleFormatRunHeaders() {
+    const formatted = formatJsonText(runHeaders, 'Header 参数');
+    if (formatted == null) return;
+    setRunHeaders(formatted);
+  }
+
+  function handleFormatRunBody() {
+    const formatted = formatJsonText(runBody, 'Body 参数');
+    if (formatted == null) return;
+    setRunBody(formatted);
   }
 
   async function handleRun() {
@@ -2940,17 +2953,15 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         const body = beforePayload.body;
         requestBody = typeof body === 'string' ? body : JSON.stringify(body);
       }
-      if (!focusCaseId && Array.isArray(caseRows) && caseRows.length > 0) {
+      if (!focusCaseId && caseRows.length > 0) {
         await Promise.all(
           caseRows.map(async row => {
-            const rowCaseId = String((row as Record<string, unknown>)._id || (row as Record<string, unknown>).id || '');
-            const rowInterfaceId = Number(
-              (row as Record<string, unknown>).interface_id || (row as Record<string, unknown>).interfaceId || 0
-            );
+            const rowCaseId = String(row._id || row.id || '');
+            const rowInterfaceId = Number(row.interface_id || row.interfaceId || 0);
             await webPlugins.runBeforeCollectionRequest(
               {
-                method: String((row as Record<string, unknown>).method || 'GET').toUpperCase(),
-                url: String((row as Record<string, unknown>).path || ''),
+                method: String(row.method || 'GET').toUpperCase(),
+                url: String(row.path || ''),
                 colId: selectedColId,
                 type: 'col',
                 caseId: rowCaseId,
@@ -2986,19 +2997,15 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         ? await Promise.all(
             normalizedList.map(async item => {
               if (String(item.id || '') !== String(focusCaseId)) {
-                return item as AutoTestResultItem;
+                return item;
               }
               const pluginResult = await webPlugins.runAfterRequest(
-                { ...(item as unknown as Record<string, unknown>) },
+                { ...item },
                 {
                   type: 'case',
                   projectId: props.projectId,
                   caseId: String(item.id || ''),
-                  interfaceId: Number(
-                    (item as unknown as Record<string, unknown>).interface_id ||
-                      (item as unknown as Record<string, unknown>).interfaceId ||
-                      0
-                  )
+                  interfaceId: Number(item.interface_id || item.interfaceId || 0)
                 }
               );
               return {
@@ -3010,16 +3017,12 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         : await Promise.all(
             normalizedList.map(async item => {
               const pluginResult = await webPlugins.runAfterCollectionRequest(
-                { ...(item as unknown as Record<string, unknown>) },
+                { ...item },
                 {
                   type: 'col',
                   projectId: props.projectId,
                   caseId: String(item.id || ''),
-                  interfaceId: Number(
-                    (item as unknown as Record<string, unknown>).interface_id ||
-                      (item as unknown as Record<string, unknown>).interfaceId ||
-                      0
-                  )
+                  interfaceId: Number(item.interface_id || item.interfaceId || 0)
                 }
               );
               return {
@@ -3046,7 +3049,25 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     }
   }
 
-  async function handleRunCaseRequest(detail: Record<string, unknown>) {
+  function handleFormatCaseRunQuery() {
+    const formatted = formatJsonText(caseRunQuery, 'Query 参数');
+    if (formatted == null) return;
+    setCaseRunQuery(formatted);
+  }
+
+  function handleFormatCaseRunHeaders() {
+    const formatted = formatJsonText(caseRunHeaders, 'Header 参数');
+    if (formatted == null) return;
+    setCaseRunHeaders(formatted);
+  }
+
+  function handleFormatCaseRunBody() {
+    const formatted = formatJsonText(caseRunBody, 'Body 参数');
+    if (formatted == null) return;
+    setCaseRunBody(formatted);
+  }
+
+  async function handleRunCaseRequest(detail: CaseDetailData) {
     let queryData: unknown;
     let headerData: unknown;
     let bodyData: unknown;
@@ -3126,7 +3147,17 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
     }
   }
 
-  function openCommonSettingModal(col: Record<string, unknown> | undefined) {
+  function getCurrentCaseReportById(targetCaseId: string): AutoTestResultItem | null {
+    const caseKey = String(targetCaseId || '');
+    if (!caseKey) return null;
+    const autoDetailKey = String(autoTestDetailItem?.id || '');
+    if (autoDetailKey && autoDetailKey === caseKey) {
+      return autoTestDetailItem;
+    }
+    return autoTestResultMap.get(caseKey) || null;
+  }
+
+  function openCommonSettingModal(col: CollectionRow | undefined) {
     const source = toRecord(col);
     const checkResponseField = toRecord(source.checkResponseField);
     const checkScript = toRecord(source.checkScript);
@@ -3268,8 +3299,8 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
       return;
     }
 
-    const col = colDisplayRows.find((item: any) => Number(item._id || 0) === targetColId);
-    const sourceCases = (col?.caseList || []).map((item: any) => ({ ...item, _id: String(item._id || '') }));
+    const col = colDisplayRows.find((item: CollectionRow) => Number(item._id || 0) === targetColId);
+    const sourceCases = (col?.caseList || []).map(item => ({ ...item, _id: String(item._id || '') }));
     if (sourceCases.length === 0) return;
     const reordered = reorderByCaseId(sourceCases, drag.caseId, targetCaseId);
     const payload = buildCaseIndexPayload(reordered).map(item => ({
@@ -3324,7 +3355,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         onNavigateInterface={ifaceId => navigateWithGuard(`/project/${props.projectId}/interface/api/${ifaceId}`)}
         onCopyInterface={item => void copyInterfaceRow(item)}
         onDeleteInterface={confirmDeleteInterface}
-        methodStyle={methodStyle}
+        methodClassName={getHttpMethodBadgeClassName}
       />
     );
   }
@@ -3361,312 +3392,155 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
   }
 
   function renderApiContent() {
-    if (interfaceId <= 0) {
-      return (
-        <Card>
-          <InterfaceListPanel
-            basepath={props.basepath}
-            canEdit={canEdit}
-            currentCat={currentCat}
-            currentCatName={currentCatName}
-            filteredList={filteredList}
-            currentListLoading={currentListLoading}
-            listKeyword={listKeyword}
-            statusFilter={statusFilter}
-            listPage={listPage}
-            catOptions={catSelectOptions}
-            hasCategories={catRows.length > 0}
-            onListKeywordChange={setListKeyword}
-            onStatusFilterChange={setStatusFilter}
-            onListPageChange={setListPage}
-            onOpenAddInterface={() => openAddInterfaceModal()}
-            onOpenAddCat={openAddCatModal}
-            onOpenEditCat={openEditCatModal}
-            onNavigateInterface={id => navigateWithGuard(`/project/${props.projectId}/interface/api/${id}`)}
-            onUpdateStatus={handleInterfaceListStatusChange}
-            onUpdateCategory={handleInterfaceListCatChange}
-            onCopyInterface={copyInterfaceRow}
-            onDeleteInterface={confirmDeleteInterface}
-            methodStyle={methodStyle}
-          />
-        </Card>
-      );
-    }
-
-    if (detailQuery.isLoading) {
-      return <Card loading />;
-    }
-
-    if (!currentInterface) {
-      return <LegacyErrMsg type="noInterface" />;
-    }
-
-    const method = String(currentInterface.method || 'GET').toUpperCase();
-    const fullPath = `${props.basepath || ''}${currentInterface.path || ''}`;
-    const editValues = (watchedValues || {}) as EditForm;
-    const editBodyType = editValues.req_body_type || 'form';
-    const mockUrl =
-      typeof window === 'undefined'
-        ? ''
-        : `${window.location.protocol}//${window.location.host}/mock/${props.projectId}${fullPath}`;
-    const reqParamsRows = normalizeParamRows(currentInterface.req_params);
-    const reqHeadersRows = normalizeParamRows(currentInterface.req_headers);
-    const reqQueryRows = normalizeParamRows(currentInterface.req_query);
-    const reqBodyFormRows = normalizeParamRows(currentInterface.req_body_form);
-    const paramColumns = [
-      { title: '参数名称', dataIndex: 'name', key: 'name', width: 180 },
-      { title: '是否必须', dataIndex: 'required', key: 'required', width: 120 },
-      { title: '示例', dataIndex: 'example', key: 'example', width: 180 },
-      {
-        title: '备注',
-        dataIndex: 'desc',
-        key: 'desc',
-        render: (value: string) => <span className="legacy-multiline">{value || '-'}</span>
-      }
-    ];
-    const bodyParamColumns = [
-      { title: '参数名称', dataIndex: 'name', key: 'name', width: 180 },
-      {
-        title: '参数类型',
-        dataIndex: 'type',
-        key: 'type',
-        width: 120,
-        render: (value: string) => (value ? value : '-')
-      },
-      { title: '是否必须', dataIndex: 'required', key: 'required', width: 120 },
-      { title: '示例', dataIndex: 'example', key: 'example', width: 180 },
-      {
-        title: '备注',
-        dataIndex: 'desc',
-        key: 'desc',
-        render: (value: string) => <span className="legacy-multiline">{value || '-'}</span>
-      }
-    ];
-    const schemaRowsRequest =
-      String(currentInterface.req_body_type || '').toLowerCase() === 'json' &&
-        currentInterface.req_body_is_json_schema
-        ? buildSchemaRows(String(currentInterface.req_body_other || ''))
-        : [];
-    const schemaRowsResponse =
-      String(currentInterface.res_body_type || 'json').toLowerCase() === 'json' &&
-        currentInterface.res_body_is_json_schema
-        ? buildSchemaRows(String(currentInterface.res_body || ''))
-        : [];
-    const schemaColumns = [
-      { title: '名称', dataIndex: 'name', key: 'name', width: 220 },
-      { title: '类型', dataIndex: 'type', key: 'type', width: 120 },
-      { title: '是否必须', dataIndex: 'required', key: 'required', width: 100 },
-      { title: '默认值', dataIndex: 'defaultValue', key: 'defaultValue', width: 140 },
-      {
-        title: '备注',
-        dataIndex: 'desc',
-        key: 'desc',
-        render: (value: string) => <span className="legacy-multiline">{value || '-'}</span>
-      },
-      {
-        title: '其他信息',
-        dataIndex: 'other',
-        key: 'other',
-        render: (value: string) => <span className="legacy-multiline">{value || '-'}</span>
-      }
-    ];
-
     return (
-      <Card>
-        <Tabs
-          type="card"
-          className="legacy-interface-content-tabs"
-          activeKey={tab}
-          onChange={key => handleSwitch(key)}
-          items={Object.keys(interfaceTabs).map(key => {
-            const tabItem = interfaceTabs[key];
-            if (key === 'view') {
-              return {
-                key,
-                label: tabItem.name,
-                children: (
-                  <InterfaceViewTab
-                    currentInterface={currentInterface as LegacyInterfaceDTO & Record<string, unknown>}
-                    method={method}
-                    fullPath={fullPath}
-                    mockUrl={mockUrl}
-                    projectIsMockOpen={props.projectIsMockOpen}
-                    projectStrict={props.projectStrict}
-                    customField={props.customField}
-                    reqParamsRows={reqParamsRows as unknown as Array<Record<string, unknown>>}
-                    reqHeadersRows={reqHeadersRows as unknown as Array<Record<string, unknown>>}
-                    reqQueryRows={reqQueryRows as unknown as Array<Record<string, unknown>>}
-                    reqBodyFormRows={reqBodyFormRows as unknown as Array<Record<string, unknown>>}
-                    schemaRowsRequest={schemaRowsRequest as unknown as Array<Record<string, unknown>>}
-                    schemaRowsResponse={schemaRowsResponse as unknown as Array<Record<string, unknown>>}
-                    paramColumns={paramColumns}
-                    bodyParamColumns={bodyParamColumns}
-                    schemaColumns={schemaColumns}
-                    methodStyle={methodStyle}
-                    statusLabel={statusLabel}
-                    formatUnixTime={formatUnixTime}
-                    mockFlagText={mockFlagText}
-                    onCopyText={(text, successText) => void copyText(text, successText)}
-                  />
-                )
-              };
-            }
-            if (key === 'edit') {
-              return {
-                key,
-                label: tabItem.name,
-                children: (
-                  <InterfaceEditTab
-                    editConflictState={editConflictState}
-                    form={form}
-                    catRows={catRows.map(item => ({ _id: Number(item._id || 0), name: String(item.name || '') }))}
-                    runMethods={RUN_METHODS}
-                    supportsRequestBody={supportsRequestBody}
-                    reqRadioType={reqRadioType}
-                    onReqRadioTypeChange={setReqRadioType}
-                    basepath={props.basepath}
-                    normalizePathInput={normalizePathInput}
-                    projectTagOptions={projectTagOptions}
-                    onOpenTagSetting={openTagSettingModal}
-                    customField={props.customField}
-                    sanitizeReqQuery={sanitizeReqQuery}
-                    sanitizeReqHeaders={sanitizeReqHeaders}
-                    sanitizeReqBodyForm={sanitizeReqBodyForm}
-                    onOpenBulkImport={openBulkImport}
-                    httpRequestHeaders={HTTP_REQUEST_HEADER}
-                    editBodyType={editBodyType}
-                    projectIsJson5={props.projectIsJson5}
-                    reqSchemaEditorMode={reqSchemaEditorMode}
-                    onReqSchemaEditorModeChange={setReqSchemaEditorMode}
-                    watchedReqBodyOther={watchedReqBodyOther}
-                    editValues={editValues as Record<string, any>}
-                    resEditorTab={resEditorTab}
-                    onResponseEditorTabChange={handleResponseEditorTabChange}
-                    resSchemaEditorMode={resSchemaEditorMode}
-                    onResSchemaEditorModeChange={setResSchemaEditorMode}
-                    watchedResBody={watchedResBody}
-                    resPreviewText={resPreviewText}
-                    onSave={() => void handleSave()}
-                    saving={updateState.isLoading}
-                  />
-                )
-              };
-            }
-            if (key === 'run') {
-              return {
-                key,
-                label: tabItem.name,
-                children: (
-                  <InterfaceRunTab
-                    runMethod={runMethod}
-                    runPath={runPath}
-                    runQuery={runQuery}
-                    runHeaders={runHeaders}
-                    runBody={runBody}
-                    runResponse={runResponse}
-                    runLoading={runLoading}
-                    runMethods={RUN_METHODS}
-                    onSetRunMethod={setRunMethod}
-                    onSetRunPath={setRunPath}
-                    onSetRunQuery={setRunQuery}
-                    onSetRunHeaders={setRunHeaders}
-                    onSetRunBody={setRunBody}
-                    onRun={() => void handleRun()}
-                    onClearResponse={() => setRunResponse('')}
-                  />
-                )
-              };
-            }
-            const CustomTab = tabItem.component;
-            if (!CustomTab) return null;
-            return {
-              key,
-              label: tabItem.name,
-              children: (
-                <CustomTab
-                  projectId={props.projectId}
-                  interfaceData={currentInterface as unknown as Record<string, unknown>}
-                />
-              )
-            };
-          }).filter(Boolean) as any}
-        />
-      </Card>
+      <InterfaceApiContent
+        projectId={props.projectId}
+        interfaceId={interfaceId}
+        detailLoading={detailQuery.isLoading}
+        currentInterface={currentInterface}
+        basepath={props.basepath}
+        canEdit={canEdit}
+        currentCat={currentCat}
+        currentCatName={currentCatName}
+        filteredList={filteredList}
+        currentListLoading={currentListLoading}
+        listKeyword={listKeyword}
+        statusFilter={statusFilter}
+        listPage={listPage}
+        catOptions={catSelectOptions}
+        hasCategories={catRows.length > 0}
+        onListKeywordChange={setListKeyword}
+        onStatusFilterChange={setStatusFilter}
+        onResetFilters={() => {
+          setListKeyword('');
+          setStatusFilter('all');
+          setListPage(1);
+        }}
+        onListPageChange={setListPage}
+        onOpenAddInterface={openAddInterfaceModal}
+        onOpenAddCat={openAddCatModal}
+        onOpenEditCat={openEditCatModal}
+        onNavigateInterface={id => navigateWithGuard(`/project/${props.projectId}/interface/api/${id}`)}
+        onUpdateStatus={handleInterfaceListStatusChange}
+        onUpdateCategory={handleInterfaceListCatChange}
+        onCopyInterface={copyInterfaceRow}
+        onDeleteInterface={confirmDeleteInterface}
+        methodClassName={getHttpMethodBadgeClassName}
+        tab={tab}
+        interfaceTabs={interfaceTabs}
+        onSwitchTab={handleSwitch}
+        projectIsMockOpen={props.projectIsMockOpen}
+        projectStrict={props.projectStrict}
+        customField={props.customField}
+        normalizeParamRows={normalizeParamRows}
+        buildSchemaRows={buildSchemaRows}
+        statusLabel={statusLabel}
+        formatUnixTime={formatUnixTime}
+        mockFlagText={mockFlagText}
+        onCopyText={(text, successText) => void copyText(text, successText)}
+        editConflictState={editConflictState}
+        form={form}
+        catRows={catRows.map(item => ({ _id: Number(item._id || 0), name: String(item.name || '') }))}
+        runMethods={RUN_METHODS}
+        supportsRequestBody={supportsRequestBody}
+        reqRadioType={reqRadioType}
+        onReqRadioTypeChange={setReqRadioType}
+        normalizePathInput={normalizePathInput}
+        projectTagOptions={projectTagOptions}
+        onOpenTagSetting={openTagSettingModal}
+        sanitizeReqQuery={sanitizeReqQuery}
+        sanitizeReqHeaders={sanitizeReqHeaders}
+        sanitizeReqBodyForm={sanitizeReqBodyForm}
+        onOpenBulkImport={openBulkImport}
+        httpRequestHeaders={HTTP_REQUEST_HEADER}
+        projectIsJson5={props.projectIsJson5}
+        reqSchemaEditorMode={reqSchemaEditorMode}
+        onReqSchemaEditorModeChange={setReqSchemaEditorMode}
+        watchedReqBodyOther={watchedReqBodyOther}
+        editValues={(watchedValues || {}) as Record<string, unknown>}
+        resEditorTab={resEditorTab}
+        onResponseEditorTabChange={handleResponseEditorTabChange}
+        resSchemaEditorMode={resSchemaEditorMode}
+        onResSchemaEditorModeChange={setResSchemaEditorMode}
+        watchedResBody={watchedResBody}
+        resPreviewText={resPreviewText}
+        onSave={() => void handleSave()}
+        saving={updateState.isLoading}
+        runMethod={runMethod}
+        runPath={runPath}
+        runQuery={runQuery}
+        runHeaders={runHeaders}
+        runBody={runBody}
+        runResponse={runResponse}
+        runLoading={runLoading}
+        onSetRunMethod={setRunMethod}
+        onSetRunPath={setRunPath}
+        onSetRunQuery={setRunQuery}
+        onSetRunHeaders={setRunHeaders}
+        onSetRunBody={setRunBody}
+        onRun={() => void handleRun()}
+        onFormatRunQuery={handleFormatRunQuery}
+        onFormatRunHeaders={handleFormatRunHeaders}
+        onFormatRunBody={handleFormatRunBody}
+        onCopyRunQuery={() => void copyText(runQuery, 'Query 参数已复制')}
+        onCopyRunHeaders={() => void copyText(runHeaders, 'Header 参数已复制')}
+        onCopyRunBody={() => void copyText(runBody, 'Body 参数已复制')}
+        onClearRunQuery={() => setRunQuery('{}')}
+        onClearRunHeaders={() => setRunHeaders('{}')}
+        onClearRunBody={() => setRunBody('{}')}
+        onCopyRunResponse={() => void copyText(runResponse, '响应结果已复制')}
+        onClearResponse={() => setRunResponse('')}
+      />
     );
   }
 
   function renderCollectionContent() {
-    if (action === 'col') {
-      if (selectedColId <= 0) {
-        return <LegacyErrMsg title="请选择测试集合" desc="先在左侧选择一个测试集合。" />;
-      }
-      const currentCol = colRows.find(item => Number(item._id) === selectedColId);
-      return (
-        <CollectionOverviewPanel
-          selectedColId={selectedColId}
-          currentCol={currentCol || null}
-          canEdit={canEdit}
-          autoTestRunning={autoTestRunning}
-          autoTestReport={autoTestReport}
-          autoTestRows={autoTestRows}
-          caseRows={caseRows}
-          caseListLoading={caseListQuery.isLoading}
-          caseEnvProjects={caseEnvProjects}
-          selectedRunEnvByProject={selectedRunEnvByProject}
-          autoTestResultMap={autoTestResultMap}
-          onSetRunEnv={(projectId, envName) =>
-            setSelectedRunEnvByProject(prev => ({
-              ...prev,
-              [projectId]: envName
-            }))
-          }
-          onOpenAddCase={() => setAddCaseOpen(true)}
-          onOpenImportInterface={() => openImportInterfaceModal(selectedColId)}
-          onOpenEditCollection={() => openColModal('edit', currentCol)}
-          onOpenCommonSetting={() => openCommonSettingModal(currentCol as Record<string, unknown>)}
-          onRunAutoTest={() => void runAutoTestInPage()}
-          onViewReport={() => openAutoTest('html')}
-          onDownloadReport={() => openAutoTest('html', true)}
-          onOpenReportModal={() => setAutoTestModalOpen(true)}
-          onOpenReportDetail={item => {
-            setAutoTestDetailItem(item);
-            setAutoTestModalOpen(false);
-          }}
-          onNavigateCase={nextCaseId => navigateWithGuard(`/project/${props.projectId}/interface/case/${nextCaseId}`)}
-          onRunCaseTest={nextCaseId => void runAutoTestInPage(nextCaseId)}
-          onCopyCase={nextCaseId => void handleCopyCase(nextCaseId)}
-          onDeleteCase={nextCaseId => confirmDeleteCase(nextCaseId)}
-        />
-      );
-    }
-
-    if (!caseId) {
-      return <LegacyErrMsg title="请选择测试用例" desc="先在左侧选择一个测试用例。" />;
-    }
-
-    if (caseDetailQuery.isLoading) {
-      return <Card loading />;
-    }
-
-    const detail = (caseDetailQuery.data?.data || {}) as Record<string, unknown>;
-    if (!detail || Object.keys(detail).length === 0) {
-      return <LegacyErrMsg title="测试用例不存在" desc="该用例可能已被删除，请重新选择。" />;
-    }
-    const currentCaseReport = autoTestDetailItem && String(autoTestDetailItem.id || '') === String(caseId || '')
-      ? autoTestDetailItem
-      : autoTestResultMap.get(String(caseId || '')) || null;
-
+    const caseDetailData = (caseDetailQuery.data?.data || {}) as CaseDetailData;
     return (
-      <CaseDetailPanel
+      <InterfaceCollectionContent
+        action={action}
         projectId={props.projectId}
-        detail={detail}
+        selectedColId={selectedColId}
+        colRows={colRows}
         canEdit={canEdit}
         autoTestRunning={autoTestRunning}
-        saveLoading={upColCaseState.isLoading}
+        autoTestReport={autoTestReport}
+        autoTestRows={autoTestRows}
+        caseRows={caseRows}
+        caseListLoading={caseListQuery.isLoading}
+        caseEnvProjects={caseEnvProjects}
+        selectedRunEnvByProject={selectedRunEnvByProject}
+        autoTestResultMap={autoTestResultMap}
+        onSetRunEnv={(projectId, envName) =>
+          setSelectedRunEnvByProject(prev => ({
+            ...prev,
+            [projectId]: envName
+          }))
+        }
+        onOpenAddCase={() => setAddCaseOpen(true)}
+        onOpenImportInterface={() => openImportInterfaceModal(selectedColId)}
+        onOpenEditCollection={currentCol => openColModal('edit', currentCol || undefined)}
+        onOpenCommonSetting={currentCol => openCommonSettingModal(currentCol || undefined)}
+        onRunAutoTestInCollection={() => void runAutoTestInPage()}
+        onViewReport={() => openAutoTest('html')}
+        onDownloadReport={() => openAutoTest('html', true)}
+        onOpenReportModal={() => setAutoTestModalOpen(true)}
+        onOpenReportDetail={item => {
+          setAutoTestDetailItem(item);
+          setAutoTestModalOpen(false);
+        }}
+        onNavigateCase={nextCaseId => navigateWithGuard(`/project/${props.projectId}/interface/case/${nextCaseId}`)}
+        onRunCaseTest={nextCaseId => void runAutoTestInPage(nextCaseId)}
+        onCopyCase={nextCaseId => void handleCopyCase(nextCaseId)}
+        onDeleteCase={nextCaseId => confirmDeleteCase(nextCaseId)}
+        caseId={caseId}
+        caseDetailLoading={caseDetailQuery.isLoading}
+        caseDetailData={caseDetailData}
+        autoTestDetailItem={autoTestDetailItem}
+        upColCaseLoading={upColCaseState.isLoading}
         caseForm={caseForm}
         caseEnvOptions={caseEnvOptions}
         runMethods={RUN_METHODS}
-        currentCaseReport={currentCaseReport}
         caseRunMethod={caseRunMethod}
         caseRunPath={caseRunPath}
         caseRunQuery={caseRunQuery}
@@ -3680,13 +3554,33 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         onSetCaseRunQuery={setCaseRunQuery}
         onSetCaseRunHeaders={setCaseRunHeaders}
         onSetCaseRunBody={setCaseRunBody}
-        onRunAutoTest={() => void runAutoTestInPage(caseId)}
+        onFormatCaseRunQuery={handleFormatCaseRunQuery}
+        onFormatCaseRunHeaders={handleFormatCaseRunHeaders}
+        onFormatCaseRunBody={handleFormatCaseRunBody}
+        onCopyCaseRunQuery={() => void copyText(caseRunQuery, 'Query 参数已复制')}
+        onCopyCaseRunHeaders={() => void copyText(caseRunHeaders, 'Header 参数已复制')}
+        onCopyCaseRunBody={() => void copyText(caseRunBody, 'Body 参数已复制')}
+        onCopyCaseRunResponse={() => void copyText(caseRunResponse, '调试响应已复制')}
+        onCopyCaseResult={() => {
+          const report = getCurrentCaseReportById(caseId);
+          if (!report) {
+            message.warning('暂无测试结果可复制');
+            return;
+          }
+          void copyText(stringifyPretty(report), '测试结果已复制');
+        }}
+        onClearCaseRunQuery={() => setCaseRunQuery('{}')}
+        onClearCaseRunHeaders={() => setCaseRunHeaders('{}')}
+        onClearCaseRunBody={() => setCaseRunBody('{}')}
+        onClearCaseRunResponse={() => setCaseRunResponse('')}
+        onRunAutoTestInCase={() => void runAutoTestInPage(caseId)}
         onNavigateCollection={() => navigateWithGuard(`/project/${props.projectId}/interface/col/${selectedColId || ''}`)}
-        onNavigateInterface={() => navigateWithGuard(`/project/${props.projectId}/interface/api/${Number(detail.interface_id || 0)}`)}
-        onCopyCase={() => void handleCopyCase(caseId)}
-        onDeleteCase={() => confirmDeleteCase(caseId)}
+        onNavigateInterface={interfaceId =>
+          navigateWithGuard(`/project/${props.projectId}/interface/api/${interfaceId}`)}
+        onCopyCurrentCase={() => void handleCopyCase(caseId)}
+        onDeleteCurrentCase={() => confirmDeleteCase(caseId)}
         onSaveCase={() => void handleSaveCase()}
-        onRunCaseRequest={() => void handleRunCaseRequest(detail)}
+        onRunCaseRequest={detail => void handleRunCaseRequest(detail)}
       />
     );
   }
@@ -3799,7 +3693,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         onConfirmImportInterfaces={() => {
           void handleImportInterfaces();
         }}
-        methodStyle={methodStyle}
+        methodClassName={getHttpMethodBadgeClassName}
         addCaseOpen={addCaseOpen}
         addCaseForm={addCaseForm}
         addCaseLoading={addColCaseState.isLoading}
@@ -3827,7 +3721,7 @@ export function ProjectInterfacePage(props: ProjectInterfacePageProps) {
         report={autoTestReport}
         rows={autoTestRows}
         onOpenDetail={item => setAutoTestDetailItem(item)}
-        methodStyle={methodStyle}
+        methodClassName={getHttpMethodBadgeClassName}
       />
     </>
   );

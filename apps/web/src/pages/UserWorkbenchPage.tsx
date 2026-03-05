@@ -116,6 +116,19 @@ export function UserWorkbenchPage() {
     })) as Array<UserProfile & { key: number }>;
   }, [userListQuery.data]);
 
+  async function copyToClipboard(text: string, label: string) {
+    if (!text.trim()) {
+      message.warning(`${label}为空`);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success(`${label}已复制`);
+    } catch (_err) {
+      message.error('复制失败，请手动复制');
+    }
+  }
+
   async function handleLogin() {
     const response = await callApi(login({ email, password }).unwrap(), '登录失败');
     if (!response) return;
@@ -248,9 +261,9 @@ export function UserWorkbenchPage() {
   }
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Space direction="vertical" size={16} className="legacy-workspace-stack">
       <Card title="用户兼容接口工作台">
-        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+        <Paragraph type="secondary" className="legacy-workspace-paragraph-compact">
           覆盖 user 迁移后的核心接口：登录/注册、列表/查找/搜索、资料更新、改密、头像、第三方登录与上下文查询。
         </Paragraph>
       </Card>
@@ -299,7 +312,7 @@ export function UserWorkbenchPage() {
       </Card>
 
       <Card title="用户列表 / 查找 / 搜索">
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+        <Space direction="vertical" className="legacy-workspace-stack" size={12}>
           <Space>
             <Button onClick={() => userListQuery.refetch()} disabled={!isLoggedIn}>
               刷新列表
@@ -316,6 +329,7 @@ export function UserWorkbenchPage() {
             loading={userListQuery.isLoading}
             dataSource={userRows}
             pagination={false}
+            locale={{ emptyText: isLoggedIn ? '暂无用户数据' : '登录后可查看用户列表' }}
             columns={[
               {
                 title: 'UID',
@@ -333,7 +347,7 @@ export function UserWorkbenchPage() {
           <Row gutter={12}>
             <Col span={8}>
               <InputNumber
-                style={{ width: '100%' }}
+                className="legacy-workspace-control"
                 min={1}
                 value={targetUid}
                 onChange={value => setTargetUid(Number(value || 0))}
@@ -346,7 +360,7 @@ export function UserWorkbenchPage() {
                   find
                 </Button>
                 <Input
-                  style={{ minWidth: 220 }}
+                  className="legacy-workspace-field-min220"
                   value={searchKeyword}
                   onChange={event => setSearchKeyword(event.target.value)}
                   placeholder="search keyword"
@@ -360,10 +374,48 @@ export function UserWorkbenchPage() {
 
           <Row gutter={12}>
             <Col span={12}>
-              <Input.TextArea rows={8} value={findResultText} readOnly placeholder="find result" />
+              <Space direction="vertical" className="legacy-workspace-stack" size={8}>
+                <Space className="legacy-workspace-result-head" align="center">
+                  <span>find result</span>
+                  <Space className="legacy-workspace-result-actions" size={8}>
+                    <Button
+                      size="small"
+                      disabled={!findResultText.trim()}
+                      onClick={() => {
+                        void copyToClipboard(findResultText, 'find result');
+                      }}
+                    >
+                      复制
+                    </Button>
+                    <Button size="small" disabled={!findResultText.trim()} onClick={() => setFindResultText('')}>
+                      清空
+                    </Button>
+                  </Space>
+                </Space>
+                <Input.TextArea rows={8} value={findResultText} readOnly placeholder="find result" />
+              </Space>
             </Col>
             <Col span={12}>
-              <Input.TextArea rows={8} value={searchResultText} readOnly placeholder="search result" />
+              <Space direction="vertical" className="legacy-workspace-stack" size={8}>
+                <Space className="legacy-workspace-result-head" align="center">
+                  <span>search result</span>
+                  <Space className="legacy-workspace-result-actions" size={8}>
+                    <Button
+                      size="small"
+                      disabled={!searchResultText.trim()}
+                      onClick={() => {
+                        void copyToClipboard(searchResultText, 'search result');
+                      }}
+                    >
+                      复制
+                    </Button>
+                    <Button size="small" disabled={!searchResultText.trim()} onClick={() => setSearchResultText('')}>
+                      清空
+                    </Button>
+                  </Space>
+                </Space>
+                <Input.TextArea rows={8} value={searchResultText} readOnly placeholder="search result" />
+              </Space>
             </Col>
           </Row>
         </Space>
@@ -372,9 +424,9 @@ export function UserWorkbenchPage() {
       <Row gutter={16}>
         <Col span={12}>
           <Card title="用户修改 / 改密 / 删除">
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
               <InputNumber
-                style={{ width: '100%' }}
+                className="legacy-workspace-control"
                 min={1}
                 value={targetUid}
                 onChange={value => setTargetUid(Number(value || 0))}
@@ -428,7 +480,7 @@ export function UserWorkbenchPage() {
 
         <Col span={12}>
           <Card title="头像 / 上下文 / 三方登录">
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
               <Space>
                 <InputNumber
                   min={1}
@@ -450,7 +502,7 @@ export function UserWorkbenchPage() {
               <img
                 alt="avatar-preview"
                 src={`/api/user/avatar?uid=${avatarUid || ''}&_ts=${avatarVersion}`}
-                style={{ width: 72, height: 72, borderRadius: 8, border: '1px solid #d9d9d9' }}
+                className="legacy-user-avatar-preview"
               />
 
               <Row gutter={8}>
@@ -473,7 +525,7 @@ export function UserWorkbenchPage() {
                 <Col span={8}>
                   <Select<'interface' | 'project' | 'group'>
                     value={projectContextType}
-                    style={{ width: '100%' }}
+                    className="legacy-workspace-control"
                     onChange={setProjectContextType}
                     options={[
                       { value: 'interface', label: 'interface' },
@@ -484,7 +536,7 @@ export function UserWorkbenchPage() {
                 </Col>
                 <Col span={8}>
                   <InputNumber
-                    style={{ width: '100%' }}
+                    className="legacy-workspace-control"
                     min={1}
                     value={projectContextId}
                     onChange={value => setProjectContextId(Number(value || 0))}
@@ -493,7 +545,7 @@ export function UserWorkbenchPage() {
                 </Col>
                 <Col span={8}>
                   <Button
-                    style={{ width: '100%' }}
+                    className="legacy-workspace-control"
                     onClick={handleProjectContext}
                     loading={projectContextQuery.isFetching}
                   >
@@ -501,6 +553,27 @@ export function UserWorkbenchPage() {
                   </Button>
                 </Col>
               </Row>
+              <Space className="legacy-workspace-result-head" align="center">
+                <span>project context result</span>
+                <Space className="legacy-workspace-result-actions" size={8}>
+                  <Button
+                    size="small"
+                    disabled={!projectContextText.trim()}
+                    onClick={() => {
+                      void copyToClipboard(projectContextText, 'project context result');
+                    }}
+                  >
+                    复制
+                  </Button>
+                  <Button
+                    size="small"
+                    disabled={!projectContextText.trim()}
+                    onClick={() => setProjectContextText('')}
+                  >
+                    清空
+                  </Button>
+                </Space>
+              </Space>
               <Input.TextArea rows={8} readOnly value={projectContextText} placeholder="project context result" />
             </Space>
           </Card>

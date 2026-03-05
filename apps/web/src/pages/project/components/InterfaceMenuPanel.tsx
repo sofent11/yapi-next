@@ -1,5 +1,5 @@
-import { Button, Input, Space, Tag, Tooltip } from 'antd';
-import type { CSSProperties, KeyboardEvent } from 'react';
+import { Button, Empty, Input, Space, Tag, Tooltip, Typography } from 'antd';
+import type { KeyboardEvent } from 'react';
 import {
   CopyOutlined,
   DeleteOutlined,
@@ -11,6 +11,8 @@ import {
 } from '@ant-design/icons';
 import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
 import { FilterBar } from '../../../components/layout';
+
+const { Text } = Typography;
 
 type InterfaceMenuPanelProps = {
   menuKeyword: string;
@@ -40,13 +42,17 @@ type InterfaceMenuPanelProps = {
   onNavigateInterface: (interfaceId: number) => void;
   onCopyInterface: (row: LegacyInterfaceDTO) => void;
   onDeleteInterface: (interfaceId: number) => void;
-  methodStyle: (method?: string) => CSSProperties;
+  methodClassName: (method?: string) => string;
 };
 
 export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
   const keywordMode = props.menuKeyword.trim().length > 0;
+  const totalInterfaceCount = props.menuDisplayRows.reduce(
+    (sum, cat) => sum + Number(cat.interface_count || cat.list?.length || 0),
+    0
+  );
   const triggerWithKeyboard = (
-    event: KeyboardEvent<HTMLSpanElement>,
+    event: KeyboardEvent<HTMLElement>,
     handler: () => void
   ) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -98,7 +104,21 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
           }
         />
       </div>
+      <div className="legacy-interface-menu-summary">
+        <Text type="secondary">
+          {keywordMode ? '筛选结果：' : ''}
+          {props.menuDisplayRows.length} 个分类，{totalInterfaceCount} 个接口
+        </Text>
+      </div>
       <div className="legacy-interface-menu-list">
+        {props.menuDisplayRows.length === 0 ? (
+          <div className="legacy-interface-menu-empty">
+            <Empty
+              description={keywordMode ? '未找到匹配的接口分类或接口' : '暂无接口分类'}
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
+          </div>
+        ) : null}
         {props.menuDisplayRows.map(cat => {
           const catIdNum = Number(cat._id || 0);
           const expanded = keywordMode || props.expandedCatIds.includes(catIdNum);
@@ -121,9 +141,12 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
                 props.onDropCat(catIdNum);
               }}
             >
-              <button
-                type="button"
+              <div
                 className={`legacy-interface-cat-title${props.catId === catIdNum ? ' active' : ''}`}
+                role="button"
+                tabIndex={0}
+                aria-expanded={expanded}
+                aria-current={props.catId === catIdNum ? 'page' : undefined}
                 draggable={props.menuDragEnabled}
                 onDragStart={event => {
                   if (!props.menuDragEnabled) return;
@@ -132,9 +155,11 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
                 }}
                 onDragEnd={props.onDragEnd}
                 onClick={() => props.onNavigateCat(catIdNum)}
+                onKeyDown={event => triggerWithKeyboard(event, () => props.onNavigateCat(catIdNum))}
               >
                 <span className="legacy-interface-cat-main">
-                  <span
+                  <button
+                    type="button"
                     className="legacy-interface-cat-toggle"
                     onClick={event => {
                       event.preventDefault();
@@ -146,72 +171,65 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
                       }
                       props.onToggleExpandCat(catIdNum);
                     }}
+                    aria-label={expanded ? '收起分类' : '展开分类'}
+                    aria-expanded={expanded}
                   >
                     {expanded ? <DownOutlined /> : <RightOutlined />}
-                  </span>
+                  </button>
                   <span className="legacy-interface-cat-name">{cat.name}</span>
                 </span>
                 <Space size={4} className="legacy-interface-cat-actions">
                   {props.canEdit ? (
                     <>
-                      <span
+                      <button
+                        type="button"
                         className="legacy-interface-icon-btn"
-                        role="button"
-                        tabIndex={0}
                         onClick={event => {
                           event.preventDefault();
                           event.stopPropagation();
                           props.onOpenAddInterfaceInCat(catIdNum);
                         }}
-                        onKeyDown={event =>
-                          triggerWithKeyboard(event, () => props.onOpenAddInterfaceInCat(catIdNum))
-                        }
+                        aria-label="在分类下新增接口"
                       >
                         <PlusOutlined />
-                      </span>
-                      <span
+                      </button>
+                      <button
+                        type="button"
                         className="legacy-interface-icon-btn"
-                        role="button"
-                        tabIndex={0}
                         onClick={event => {
                           event.preventDefault();
                           event.stopPropagation();
                           props.onEditCat(cat);
                         }}
-                        onKeyDown={event =>
-                          triggerWithKeyboard(event, () => props.onEditCat(cat))
-                        }
+                        aria-label="编辑分类"
                       >
                         <EditOutlined />
-                      </span>
-                      <span
+                      </button>
+                      <button
+                        type="button"
                         className="legacy-interface-icon-btn"
-                        role="button"
-                        tabIndex={0}
                         onClick={event => {
                           event.preventDefault();
                           event.stopPropagation();
                           props.onDeleteCat(cat);
                         }}
-                        onKeyDown={event =>
-                          triggerWithKeyboard(event, () => props.onDeleteCat(cat))
-                        }
+                        aria-label="删除分类"
                       >
                         <DeleteOutlined />
-                      </span>
+                      </button>
                     </>
                   ) : null}
                   <Tag>{cat.interface_count || cat.list?.length || 0}</Tag>
                 </Space>
-              </button>
+              </div>
 
               {shouldShowInterfaces && visibleInterfaces.length === 0 && catLoading ? (
-                <div style={{ padding: '6px 12px', color: '#8c8c8c', fontSize: 12 }}>
+                <div className="legacy-interface-tip">
                   加载接口中...
                 </div>
               ) : null}
               {shouldShowInterfaces && visibleInterfaces.length === 0 && !catLoading ? (
-                <div style={{ padding: '6px 12px', color: '#8c8c8c', fontSize: 12 }}>
+                <div className="legacy-interface-tip">
                   暂无接口
                 </div>
               ) : null}
@@ -219,10 +237,12 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
               {visibleInterfaces.map(item => {
                 const interfaceId = Number(item._id || 0);
                 return (
-                  <button
+                  <div
                     key={`iface-${item._id}`}
-                    type="button"
                     className={`legacy-interface-item${props.interfaceId === interfaceId ? ' active' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-current={props.interfaceId === interfaceId ? 'page' : undefined}
                     draggable={props.menuDragEnabled}
                     onDragStart={event => {
                       if (!props.menuDragEnabled) return;
@@ -241,11 +261,9 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
                       props.onDropInterface(catIdNum, interfaceId);
                     }}
                     onClick={() => props.onNavigateInterface(interfaceId)}
+                    onKeyDown={event => triggerWithKeyboard(event, () => props.onNavigateInterface(interfaceId))}
                   >
-                    <span
-                      className="legacy-method-pill"
-                      style={props.methodStyle(item.method)}
-                    >
+                    <span className={props.methodClassName(item.method)}>
                       {String(item.method || 'GET').toUpperCase()}
                     </span>
                     <Tooltip title={item.path}>
@@ -255,39 +273,33 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
                     </Tooltip>
                     {props.canEdit ? (
                       <Space size={4} className="legacy-interface-item-actions">
-                        <span
+                        <button
+                          type="button"
                           className="legacy-interface-icon-btn"
-                          role="button"
-                          tabIndex={0}
                           onClick={event => {
                             event.preventDefault();
                             event.stopPropagation();
                             props.onCopyInterface(item);
                           }}
-                          onKeyDown={event =>
-                            triggerWithKeyboard(event, () => props.onCopyInterface(item))
-                          }
+                          aria-label="复制接口"
                         >
                           <CopyOutlined />
-                        </span>
-                        <span
+                        </button>
+                        <button
+                          type="button"
                           className="legacy-interface-icon-btn"
-                          role="button"
-                          tabIndex={0}
                           onClick={event => {
                             event.preventDefault();
                             event.stopPropagation();
                             props.onDeleteInterface(interfaceId);
                           }}
-                          onKeyDown={event =>
-                            triggerWithKeyboard(event, () => props.onDeleteInterface(interfaceId))
-                          }
+                          aria-label="删除接口"
                         >
                           <DeleteOutlined />
-                        </span>
+                        </button>
                       </Space>
                     ) : null}
-                  </button>
+                  </div>
                 );
               })}
             </div>

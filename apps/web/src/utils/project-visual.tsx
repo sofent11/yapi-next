@@ -66,6 +66,8 @@ export const PROJECT_COLOR_OPTIONS = [
   'purple'
 ] as const;
 
+const HEX_COLOR_REGEXP = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
 export const PROJECT_ICON_OPTIONS = [
   'code-o',
   'swap',
@@ -160,11 +162,26 @@ export function resolveProjectColor(rawColor: string | undefined, seed = ''): st
   if (rawColor && PROJECT_COLOR_MAP[rawColor]) {
     return PROJECT_COLOR_MAP[rawColor];
   }
-  if (rawColor && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(rawColor)) {
+  if (rawColor && HEX_COLOR_REGEXP.test(rawColor)) {
     return rawColor;
   }
   void seed;
   return PROJECT_COLOR_MAP.blue;
+}
+
+export function resolveProjectColorKey(rawColor: string | undefined): string | null {
+  if (!rawColor) {
+    return 'blue';
+  }
+  if (PROJECT_COLOR_MAP[rawColor]) {
+    return rawColor;
+  }
+  if (!HEX_COLOR_REGEXP.test(rawColor)) {
+    return null;
+  }
+  const normalized = rawColor.toLowerCase();
+  const match = Object.entries(PROJECT_COLOR_MAP).find(([, value]) => value.toLowerCase() === normalized);
+  return match ? match[0] : null;
 }
 
 export function renderProjectIcon(icon: string | undefined): ReactNode {

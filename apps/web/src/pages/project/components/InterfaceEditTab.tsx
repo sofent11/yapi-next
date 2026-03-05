@@ -1,15 +1,32 @@
 import { Alert, AutoComplete, Button, Card, Form, Input, Radio, Select, Space, Switch, Tabs, Tooltip, Typography } from 'antd';
+import type { FormInstance } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { SectionCard } from '../../../components/layout';
+import { getHttpMethodBadgeClassName } from '../../../utils/http-method';
 import { legacyNameValidator } from '../../../utils/legacy-validation';
 import { SchemaModeEditor } from './SchemaModeEditor';
 
 const { Text } = Typography;
 
+export type InterfaceEditConflictState = {
+  status: 'idle' | 'loading' | 'ready' | 'error' | 'locked';
+  uid?: number;
+  username?: string;
+};
+
+type InterfaceEditFormValues = {
+  method?: string;
+  req_body_type?: string;
+  req_body_is_json_schema?: boolean;
+  res_body_type?: string;
+  res_body_is_json_schema?: boolean;
+  [key: string]: unknown;
+};
+
 type InterfaceEditTabProps = {
-  editConflictState: { status: string; uid?: number; username?: string };
-  form: any;
+  editConflictState: InterfaceEditConflictState;
+  form: FormInstance<InterfaceEditFormValues>;
   catRows: Array<{ _id: number; name: string }>;
   runMethods: readonly string[];
   supportsRequestBody: (method?: string) => boolean;
@@ -30,9 +47,9 @@ type InterfaceEditTabProps = {
   reqSchemaEditorMode: 'text' | 'visual';
   onReqSchemaEditorModeChange: (mode: 'text' | 'visual') => void;
   watchedReqBodyOther: unknown;
-  editValues: Record<string, any>;
+  editValues: Record<string, unknown>;
   resEditorTab: 'tpl' | 'preview';
-  onResponseEditorTabChange: (nextTab: string) => void;
+  onResponseEditorTabChange: (nextTab: 'tpl' | 'preview') => void;
   resSchemaEditorMode: 'text' | 'visual';
   onResSchemaEditorModeChange: (mode: 'text' | 'visual') => void;
   watchedResBody: unknown;
@@ -42,6 +59,11 @@ type InterfaceEditTabProps = {
 };
 
 export function InterfaceEditTab(props: InterfaceEditTabProps) {
+  const methodSelectOptions = props.runMethods.map(item => ({
+    value: item,
+    label: <span className={getHttpMethodBadgeClassName(item)}>{item}</span>
+  }));
+
   return (
     <div className="interface-edit">
       {props.editConflictState.status === 'loading' ? (
@@ -63,13 +85,13 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
         <>
           {props.editConflictState.status === 'error' ? (
             <Alert
-              style={{ marginBottom: 16 }}
+              className="legacy-edit-conflict-alert"
               type="warning"
               showIcon
               message="多人编辑冲突检测暂时不可用，请稍后重试。"
             />
           ) : null}
-          <Form<any> form={props.form} layout="vertical">
+          <Form<InterfaceEditFormValues> form={props.form} layout="vertical">
             <SectionCard title="基本设置" className="panel-sub legacy-edit-section">
               <Form.Item label="接口名称" name="title" rules={[{ required: true, validator: legacyNameValidator('接口') }]}>
                 <Input />
@@ -94,17 +116,17 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                         </div>
                       }
                     >
-                      <span style={{ color: '#8a94a6', cursor: 'pointer' }}>?</span>
+                      <span className="legacy-edit-help-trigger">?</span>
                     </Tooltip>
                   </span>
                 }
                 required
               >
-                <Space.Compact style={{ width: '100%' }}>
+                <Space.Compact className="legacy-edit-path-compact">
                   <Form.Item name="method" noStyle>
                     <Select
-                      style={{ width: 140 }}
-                      options={props.runMethods.map(item => ({ label: item, value: item }))}
+                      className="legacy-edit-method-select"
+                      options={methodSelectOptions}
                       onChange={(nextMethod: string) => {
                         if (!props.supportsRequestBody(nextMethod) && props.reqRadioType === 'req-body') {
                           props.onReqRadioTypeChange('req-query');
@@ -113,7 +135,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                     />
                   </Form.Item>
                   <Tooltip title="接口基本路径，可在项目设置里修改">
-                    <Input disabled value={props.basepath || ''} style={{ width: 220 }} />
+                    <Input disabled value={props.basepath || ''} className="legacy-edit-basepath-input" />
                   </Tooltip>
                   <Form.Item name="path" noStyle rules={[{ required: true, message: '请输入接口路径' }]}>
                     <Input
@@ -127,24 +149,24 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
               </Form.Item>
               <Form.List name="req_params">
                 {fields => (
-                  <Space direction="vertical" style={{ width: '100%' }}>
+                  <Space direction="vertical" className="legacy-edit-full-width-stack">
                     {fields.length > 0 ? <Text strong>路径参数</Text> : null}
                     {fields.map(field => (
-                      <Space key={field.key} align="start" wrap style={{ width: '100%' }}>
-                        <Form.Item label={field.name === 0 ? '参数名' : ''} name={[field.name, 'name']} style={{ width: 220 }}>
+                      <Space key={field.key} align="start" wrap className="legacy-edit-row-wrap">
+                        <Form.Item label={field.name === 0 ? '参数名' : ''} name={[field.name, 'name']} className="legacy-edit-field-w220">
                           <Input disabled />
                         </Form.Item>
                         <Form.Item
                           label={field.name === 0 ? '示例' : ''}
                           name={[field.name, 'example']}
-                          style={{ minWidth: 220, flex: 1 }}
+                          className="legacy-edit-field-min220-flex"
                         >
                           <Input />
                         </Form.Item>
                         <Form.Item
                           label={field.name === 0 ? '备注' : ''}
                           name={[field.name, 'desc']}
-                          style={{ minWidth: 260, flex: 1 }}
+                          className="legacy-edit-field-min260-flex"
                         >
                           <Input />
                         </Form.Item>
@@ -153,8 +175,8 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                   </Space>
                 )}
               </Form.List>
-              <Space wrap style={{ width: '100%' }}>
-                <Form.Item label="状态" name="status" style={{ minWidth: 140 }}>
+              <Space wrap className="legacy-edit-row-wrap">
+                <Form.Item label="状态" name="status" className="legacy-edit-field-min140">
                   <Select
                     options={[
                       { label: '已完成', value: 'done' },
@@ -171,7 +193,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                   popupRender={menu => (
                     <div>
                       {menu}
-                      <div style={{ padding: '8px 12px' }}>
+                      <div className="legacy-edit-tag-setting-entry">
                         <Button type="link" size="small" onClick={props.onOpenTagSetting}>
                           Tag 设置
                         </Button>
@@ -191,15 +213,15 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
               <Radio.Group
                 value={props.reqRadioType}
                 onChange={event => props.onReqRadioTypeChange(event.target.value)}
-                style={{ marginBottom: 12 }}
+                className="legacy-edit-type-switch"
               >
                 {props.supportsRequestBody(props.form.getFieldValue('method')) ? <Radio.Button value="req-body">Body</Radio.Button> : null}
                 <Radio.Button value="req-query">Query</Radio.Button>
                 <Radio.Button value="req-headers">Headers</Radio.Button>
               </Radio.Group>
 
-              <div style={{ display: props.reqRadioType === 'req-query' ? 'block' : 'none' }}>
-                <Space style={{ marginBottom: 10 }}>
+              <div className={props.reqRadioType === 'req-query' ? 'legacy-edit-pane-visible' : 'legacy-edit-pane-hidden'}>
+                <Space className="legacy-edit-list-toolbar">
                   <Button
                     size="small"
                     type="primary"
@@ -216,31 +238,31 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                 </Space>
                 <Form.List name="req_query">
                   {(fields, { remove }) => (
-                    <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space direction="vertical" className="legacy-edit-full-width-stack">
                       {fields.map(field => (
-                        <Space key={field.key} align="start" wrap style={{ width: '100%' }}>
-                          <Form.Item label={field.name === 0 ? '参数名' : ''} name={[field.name, 'name']} style={{ width: 180 }}>
+                        <Space key={field.key} align="start" wrap className="legacy-edit-row-wrap">
+                          <Form.Item label={field.name === 0 ? '参数名' : ''} name={[field.name, 'name']} className="legacy-edit-field-w180">
                             <Input placeholder="name" />
                           </Form.Item>
                           <Form.Item
                             label={field.name === 0 ? '必需' : ''}
                             name={[field.name, 'required']}
                             initialValue="1"
-                            style={{ width: 100 }}
+                            className="legacy-edit-field-w100"
                           >
                             <Select options={[{ label: '必需', value: '1' }, { label: '非必需', value: '0' }]} />
                           </Form.Item>
                           <Form.Item
                             label={field.name === 0 ? '示例' : ''}
                             name={[field.name, 'example']}
-                            style={{ minWidth: 180, flex: 1 }}
+                            className="legacy-edit-field-min180-flex"
                           >
                             <Input />
                           </Form.Item>
                           <Form.Item
                             label={field.name === 0 ? '备注' : ''}
                             name={[field.name, 'desc']}
-                            style={{ minWidth: 220, flex: 1 }}
+                            className="legacy-edit-field-min220-flex"
                           >
                             <Input />
                           </Form.Item>
@@ -252,8 +274,8 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                 </Form.List>
               </div>
 
-              <div style={{ display: props.reqRadioType === 'req-headers' ? 'block' : 'none' }}>
-                <Space style={{ marginBottom: 10 }}>
+              <div className={props.reqRadioType === 'req-headers' ? 'legacy-edit-pane-visible' : 'legacy-edit-pane-hidden'}>
+                <Space className="legacy-edit-list-toolbar">
                   <Button
                     size="small"
                     type="primary"
@@ -267,10 +289,10 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                 </Space>
                 <Form.List name="req_headers">
                   {(fields, { remove }) => (
-                    <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space direction="vertical" className="legacy-edit-full-width-stack">
                       {fields.map(field => (
-                        <Space key={field.key} align="start" wrap style={{ width: '100%' }}>
-                          <Form.Item label={field.name === 0 ? '参数名' : ''} name={[field.name, 'name']} style={{ width: 180 }}>
+                        <Space key={field.key} align="start" wrap className="legacy-edit-row-wrap">
+                          <Form.Item label={field.name === 0 ? '参数名' : ''} name={[field.name, 'name']} className="legacy-edit-field-w180">
                             <AutoComplete
                               options={props.httpRequestHeaders.map(item => ({ label: item, value: item }))}
                               filterOption={(inputValue, option) =>
@@ -281,28 +303,28 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                               placeholder="name"
                             />
                           </Form.Item>
-                          <Form.Item label={field.name === 0 ? '参数值' : ''} name={[field.name, 'value']} style={{ width: 200 }}>
+                          <Form.Item label={field.name === 0 ? '参数值' : ''} name={[field.name, 'value']} className="legacy-edit-field-w200">
                             <Input placeholder="value" />
                           </Form.Item>
                           <Form.Item
                             label={field.name === 0 ? '必需' : ''}
                             name={[field.name, 'required']}
                             initialValue="1"
-                            style={{ width: 100 }}
+                            className="legacy-edit-field-w100"
                           >
                             <Select options={[{ label: '必需', value: '1' }, { label: '非必需', value: '0' }]} />
                           </Form.Item>
                           <Form.Item
                             label={field.name === 0 ? '示例' : ''}
                             name={[field.name, 'example']}
-                            style={{ minWidth: 140, flex: 1 }}
+                            className="legacy-edit-field-min140-flex"
                           >
                             <Input />
                           </Form.Item>
                           <Form.Item
                             label={field.name === 0 ? '备注' : ''}
                             name={[field.name, 'desc']}
-                            style={{ minWidth: 180, flex: 1 }}
+                            className="legacy-edit-field-min180-flex"
                           >
                             <Input />
                           </Form.Item>
@@ -314,7 +336,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                 </Form.List>
               </div>
 
-              <div style={{ display: props.reqRadioType === 'req-body' ? 'block' : 'none' }}>
+              <div className={props.reqRadioType === 'req-body' ? 'legacy-edit-pane-visible' : 'legacy-edit-pane-hidden'}>
                 <Form.Item label="Body 类型" name="req_body_type">
                   <Radio.Group>
                     <Radio value="form">form</Radio>
@@ -326,7 +348,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
 
                 {props.editBodyType === 'form' ? (
                   <>
-                    <Space style={{ marginBottom: 10 }}>
+                    <Space className="legacy-edit-list-toolbar">
                       <Button
                         size="small"
                         type="primary"
@@ -346,17 +368,17 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                     </Space>
                     <Form.List name="req_body_form">
                       {(fields, { remove }) => (
-                        <Space direction="vertical" style={{ width: '100%' }}>
+                        <Space direction="vertical" className="legacy-edit-full-width-stack">
                           {fields.map(field => (
-                            <Space key={field.key} align="start" wrap style={{ width: '100%' }}>
-                              <Form.Item label={field.name === 0 ? '参数名' : ''} name={[field.name, 'name']} style={{ width: 180 }}>
+                            <Space key={field.key} align="start" wrap className="legacy-edit-row-wrap">
+                              <Form.Item label={field.name === 0 ? '参数名' : ''} name={[field.name, 'name']} className="legacy-edit-field-w180">
                                 <Input />
                               </Form.Item>
                               <Form.Item
                                 label={field.name === 0 ? '类型' : ''}
                                 name={[field.name, 'type']}
                                 initialValue="text"
-                                style={{ width: 100 }}
+                                className="legacy-edit-field-w100"
                               >
                                 <Select options={[{ label: 'text', value: 'text' }, { label: 'file', value: 'file' }]} />
                               </Form.Item>
@@ -364,21 +386,21 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                                 label={field.name === 0 ? '必需' : ''}
                                 name={[field.name, 'required']}
                                 initialValue="1"
-                                style={{ width: 100 }}
+                                className="legacy-edit-field-w100"
                               >
                                 <Select options={[{ label: '必需', value: '1' }, { label: '非必需', value: '0' }]} />
                               </Form.Item>
                               <Form.Item
                                 label={field.name === 0 ? '示例' : ''}
                                 name={[field.name, 'example']}
-                                style={{ minWidth: 160, flex: 1 }}
+                                className="legacy-edit-field-min160-flex"
                               >
                                 <Input />
                               </Form.Item>
                               <Form.Item
                                 label={field.name === 0 ? '备注' : ''}
                                 name={[field.name, 'desc']}
-                                style={{ minWidth: 180, flex: 1 }}
+                                className="legacy-edit-field-min180-flex"
                               >
                                 <Input />
                               </Form.Item>
@@ -411,7 +433,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                         <Alert
                           type="info"
                           showIcon
-                          style={{ marginBottom: 12 }}
+                          className="legacy-edit-json-alert"
                           message="基于 Json5，参数描述信息可以使用注释方式编写。"
                         />
                         <Form.Item label="Body 内容" name="req_body_other">
@@ -442,6 +464,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
               </Form.Item>
               {String(props.editValues.res_body_type || 'json') === 'json' ? (
                 <Tabs
+                  className="legacy-edit-response-tabs"
                   activeKey={props.resEditorTab}
                   onChange={props.onResponseEditorTabChange}
                   items={[
@@ -468,10 +491,10 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                               <Alert
                                 type="info"
                                 showIcon
-                                style={{ marginBottom: 12 }}
+                                className="legacy-edit-json-alert"
                                 message="基于 mockjs 和 json5，参数描述信息可以使用注释方式编写。"
                               />
-                              <Form.Item label="返回内容" name="res_body" style={{ marginBottom: 0 }}>
+                              <Form.Item label="返回内容" name="res_body" className="legacy-edit-zero-margin">
                                 <Input.TextArea rows={12} />
                               </Form.Item>
                             </>
@@ -525,9 +548,10 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
               </Form.Item>
             </SectionCard>
 
-            <div className="legacy-edit-footer">
+            <div className="legacy-edit-footer legacy-edit-footer-sticky">
+              <Text type="secondary">修改后请保存，离开页面时会拦截未保存变更。</Text>
               <Button type="primary" onClick={props.onSave} loading={props.saving}>
-                保存
+                保存接口
               </Button>
             </div>
           </Form>

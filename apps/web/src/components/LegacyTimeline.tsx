@@ -150,7 +150,7 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
   }, [interfaces]);
 
   return (
-    <section className="legacy-timeline-wrap">
+    <section className="legacy-timeline-wrap legacy-timeline-shell">
       {props.showApiFilter && props.type === 'project' ? (
         <div className="legacy-timeline-filter">
           <Space wrap>
@@ -165,12 +165,9 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
                 if (!row) return false;
                 const q = input.toLowerCase();
                 if (!q) return true;
-                return (
-                  row.label.toLowerCase().includes(q) ||
-                  String((row as unknown as { searchText?: string }).searchText || '').includes(q)
-                );
+                return row.label.toLowerCase().includes(q) || row.searchText.includes(q);
               }}
-              style={{ width: 420, maxWidth: '100%' }}
+              className="legacy-timeline-api-select"
             />
           </Space>
         </div>
@@ -194,9 +191,9 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
               children: (
                 <div className="legacy-timeline-item">
                   <div className="legacy-log-head">
-                    <span className="legacy-logo-timeago">{formatTimeAgo(Number(item.add_time || 0))}</span>
-                    <span className="legacy-log-type">{typeLabel(rowType)}动态</span>
+                    <span className="legacy-log-type legacy-log-chip">{typeLabel(rowType)}动态</span>
                     <span className="legacy-log-time">{formatTime(Number(item.add_time || 0))}</span>
+                    <span className="legacy-logo-timeago">{formatTimeAgo(Number(item.add_time || 0))}</span>
                   </div>
                   <span
                     className="legacy-log-content"

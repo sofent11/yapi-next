@@ -1,19 +1,32 @@
 import { Form, Input, Modal, Select, Space, Typography } from 'antd';
+import type { FormInstance } from 'antd';
 import { legacyNameValidator } from '../../../utils/legacy-validation';
 
 const { Text } = Typography;
+
+type AddInterfaceModalForm = {
+  title: string;
+  path: string;
+  method: string;
+  catid: number;
+};
+
+type CategoryModalForm = {
+  name: string;
+  desc?: string;
+};
 
 type InterfaceCoreModalsProps = {
   confirmOpen: boolean;
   onCancelConfirm: () => void;
   onConfirmLeave: () => void;
   addInterfaceOpen: boolean;
-  addInterfaceForm: any;
+  addInterfaceForm: FormInstance<AddInterfaceModalForm>;
   addInterfaceLoading: boolean;
   runMethods: readonly string[];
   catRows: Array<{ _id?: number; name?: string }>;
   onCancelAddInterface: () => void;
-  onSubmitAddInterface: (values: { title: string; path: string; method: string; catid: number }) => void;
+  onSubmitAddInterface: (values: AddInterfaceModalForm) => void;
   tagSettingOpen: boolean;
   tagSettingInput: string;
   tagSettingLoading: boolean;
@@ -26,15 +39,15 @@ type InterfaceCoreModalsProps = {
   onCancelBulk: () => void;
   onConfirmBulk: () => void;
   addCatOpen: boolean;
-  addCatForm: any;
+  addCatForm: FormInstance<CategoryModalForm>;
   addCatLoading: boolean;
   onCancelAddCat: () => void;
-  onSubmitAddCat: (values: { name: string; desc?: string }) => void;
+  onSubmitAddCat: (values: CategoryModalForm) => void;
   editCatOpen: boolean;
-  editCatForm: any;
+  editCatForm: FormInstance<CategoryModalForm>;
   editCatLoading: boolean;
   onCancelEditCat: () => void;
-  onSubmitEditCat: (values: { name: string; desc?: string }) => void;
+  onSubmitEditCat: (values: CategoryModalForm) => void;
 };
 
 export function InterfaceCoreModals(props: InterfaceCoreModalsProps) {
@@ -60,7 +73,7 @@ export function InterfaceCoreModals(props: InterfaceCoreModalsProps) {
         okText="确认"
         cancelText="取消"
       >
-        <Form<any>
+        <Form<AddInterfaceModalForm>
           form={props.addInterfaceForm}
           layout="vertical"
           onFinish={values => void props.onSubmitAddInterface(values)}
@@ -97,7 +110,7 @@ export function InterfaceCoreModals(props: InterfaceCoreModalsProps) {
         confirmLoading={props.tagSettingLoading}
         okText="保存"
       >
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space direction="vertical" className="legacy-interface-modal-stack">
           <Text type="secondary">每行一个 Tag 名称，保存后会更新当前项目 Tag 列表。</Text>
           <Input.TextArea
             rows={8}
@@ -116,7 +129,7 @@ export function InterfaceCoreModals(props: InterfaceCoreModalsProps) {
         okText="导入"
         cancelText="取消"
       >
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space direction="vertical" className="legacy-interface-modal-stack">
           <Text type="secondary">每行一个 `name:example`，例如 `id:1`。</Text>
           <Input.TextArea
             rows={10}
@@ -138,7 +151,7 @@ export function InterfaceCoreModals(props: InterfaceCoreModalsProps) {
         okText="确认"
         cancelText="取消"
       >
-        <Form<any>
+        <Form<CategoryModalForm>
           form={props.addCatForm}
           layout="vertical"
           onFinish={values => void props.onSubmitAddCat(values)}
@@ -163,7 +176,7 @@ export function InterfaceCoreModals(props: InterfaceCoreModalsProps) {
         okText="确认"
         cancelText="取消"
       >
-        <Form<any>
+        <Form<CategoryModalForm>
           form={props.editCatForm}
           layout="vertical"
           onFinish={values => void props.onSubmitEditCat(values)}

@@ -727,11 +727,11 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
         const hasChildren = (childrenMap.get(row.id) || []).length > 0;
         const expanded = !collapsedIds.has(row.id);
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: row.depth * 18 }}>
+          <div className="legacy-schema-editor-tree-row" style={{ paddingLeft: row.depth * 18 }}>
             <Button
               type="text"
               size="small"
-              style={{ width: 20, height: 20, padding: 0 }}
+              className="legacy-schema-editor-toggle-btn"
               icon={hasChildren ? (expanded ? <DownOutlined /> : <RightOutlined />) : <span />}
               onClick={() => hasChildren && toggleRowCollapse(row.id)}
             />
@@ -765,7 +765,7 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
       render: (_, row) => (
         <Select<SchemaFieldType>
           value={row.type}
-          style={{ width: '100%' }}
+          className="legacy-workspace-control"
           options={FIELD_TYPES}
           onChange={value => patchRow(row.id, { type: value })}
         />
@@ -817,40 +817,35 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
   ];
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }}>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '260px 88px 140px 180px 220px auto',
-          gap: 8,
-          alignItems: 'center'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Button
-            type="text"
-            size="small"
-            style={{ width: 20, height: 20, padding: 0 }}
-            icon={rootCollapsed ? <RightOutlined /> : <DownOutlined />}
-            onClick={() => setRootCollapsed(value => !value)}
-          />
-          <Input value="root" readOnly />
+    <Space direction="vertical" className="legacy-workspace-stack legacy-schema-editor">
+      <div className="legacy-schema-editor-head-wrap">
+        <div className="legacy-schema-editor-head-grid">
+          <div className="legacy-schema-editor-head-name">
+            <Button
+              type="text"
+              size="small"
+              className="legacy-schema-editor-toggle-btn"
+              icon={rootCollapsed ? <RightOutlined /> : <DownOutlined />}
+              onClick={() => setRootCollapsed(value => !value)}
+            />
+            <Input value="root" readOnly />
+          </div>
+          <Switch size="small" checked={false} disabled />
+          <Select value="object" disabled options={[{ value: 'object', label: 'object' }]} />
+          <Input value="mock" disabled />
+          <Input value="description" disabled />
+          <Space size={0}>
+            <Tooltip title="导入 JSON 生成 Schema">
+              <Button type="text" icon={<UploadOutlined />} onClick={openImportJsonModal} />
+            </Tooltip>
+            <Tooltip title="查看/编辑 Schema 文件">
+              <Button type="text" icon={<FileTextOutlined />} onClick={openSchemaModal} />
+            </Tooltip>
+            <Tooltip title="添加子节点">
+              <Button type="text" icon={<PlusOutlined />} onClick={addTopRow} />
+            </Tooltip>
+          </Space>
         </div>
-        <Switch size="small" checked={false} disabled />
-        <Select value="object" disabled options={[{ value: 'object', label: 'object' }]} />
-        <Input value="mock" disabled />
-        <Input value="description" disabled />
-        <Space size={0}>
-          <Tooltip title="导入 JSON 生成 Schema">
-            <Button type="text" icon={<UploadOutlined />} onClick={openImportJsonModal} />
-          </Tooltip>
-          <Tooltip title="查看/编辑 Schema 文件">
-            <Button type="text" icon={<FileTextOutlined />} onClick={openSchemaModal} />
-          </Tooltip>
-          <Tooltip title="添加子节点">
-            <Button type="text" icon={<PlusOutlined />} onClick={addTopRow} />
-          </Tooltip>
-        </Space>
       </div>
 
       {parseError ? <Text type="danger">当前 schema 解析失败: {parseError}</Text> : null}
@@ -904,7 +899,7 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
         <Text type="secondary">粘贴正常 JSON（示例数据），将自动转换为 JSON Schema。</Text>
         <Input.TextArea
           rows={14}
-          style={{ marginTop: 12 }}
+          className="legacy-schema-editor-import-input"
           value={importJsonDraft}
           onChange={event => setImportJsonDraft(event.target.value)}
           placeholder='{\n  "code": 0,\n  "message": "ok",\n  "data": { "records": [] }\n}'

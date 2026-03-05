@@ -20,6 +20,24 @@ type RegisterFormValues = {
   username?: string;
 };
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const EMAIL_RULES = [
+  { required: true, message: '请输入邮箱!' },
+  {
+    validator: (_: unknown, value: unknown) => {
+      const email = String(value || '').trim();
+      if (!email) {
+        return Promise.reject(new Error('请输入邮箱!'));
+      }
+      if (!EMAIL_PATTERN.test(email)) {
+        return Promise.reject(new Error('请输入正确的邮箱地址!'));
+      }
+      return Promise.resolve();
+    }
+  }
+] as const;
+
 function normalizeRedirect(target: string | null): string {
   if (!target || !target.startsWith('/')) return '/group';
   if (target.startsWith('/login')) return '/group';
@@ -103,37 +121,32 @@ export function LoginPage() {
                         >
                           <Form.Item
                             name="email"
-                            rules={[
-                              { required: true, message: '请输入正确的email!', pattern: /^\\w+([\\.-]?\\w+)*@\\w+([\\.-]?\\w+)*(\\.\\w{1,})+$/ }
-                            ]}
-                            style={{ marginBottom: '16px' }}
+                            rules={EMAIL_RULES}
                           >
                             <Input
-                              prefix={<MailOutlined style={{ fontSize: 13 }} />}
+                              prefix={<MailOutlined className="login-form-icon" />}
                               placeholder="Email"
                               autoComplete="email"
-                              style={{ height: '42px' }}
+                              className="login-form-input"
                             />
                           </Form.Item>
                           <Form.Item
                             name="password"
                             rules={[{ required: true, message: '请输入密码!' }]}
-                            style={{ marginBottom: '16px' }}
                           >
                             <Input.Password
-                              prefix={<LockOutlined style={{ fontSize: 13 }} />}
+                              prefix={<LockOutlined className="login-form-icon" />}
                               placeholder="Password"
                               autoComplete="current-password"
-                              style={{ height: '42px' }}
+                              className="login-form-input"
                             />
                           </Form.Item>
-                          <Form.Item style={{ marginBottom: '16px' }}>
+                          <Form.Item>
                             <Button
                               type="primary"
                               htmlType="submit"
                               className="login-form-button"
                               loading={loginState.isLoading}
-                              style={{ height: '42px' }}
                             >
                               登录
                             </Button>
@@ -160,54 +173,48 @@ export function LoginPage() {
                           <Form.Item
                             name="username"
                             rules={[{ required: true, message: '请输入用户名!' }]}
-                            style={{ marginBottom: '16px' }}
                           >
                             <Input
-                              prefix={<UserOutlined style={{ fontSize: 13 }} />}
+                              prefix={<UserOutlined className="login-form-icon" />}
                               placeholder="Username"
-                              style={{ height: '42px' }}
+                              className="login-form-input"
                             />
                           </Form.Item>
                           <Form.Item
                             name="email"
-                            rules={[
-                              { required: true, message: '请输入email!', pattern: /^\\w+([\\.-]?\\w+)*@\\w+([\\.-]?\\w+)*(\\.\\w{1,})+$/ }
-                            ]}
-                            style={{ marginBottom: '16px' }}
+                            rules={EMAIL_RULES}
                           >
                             <Input
-                              prefix={<MailOutlined style={{ fontSize: 13 }} />}
+                              prefix={<MailOutlined className="login-form-icon" />}
                               placeholder="Email"
                               autoComplete="email"
-                              style={{ height: '42px' }}
+                              className="login-form-input"
                             />
                           </Form.Item>
                           <Form.Item
                             name="password"
                             rules={[{ required: true, message: '请输入密码!' }]}
-                            style={{ marginBottom: '16px' }}
                           >
                             <Input.Password
-                              prefix={<LockOutlined style={{ fontSize: 13 }} />}
+                              prefix={<LockOutlined className="login-form-icon" />}
                               placeholder="Password"
                               autoComplete="new-password"
-                              style={{ height: '42px' }}
+                              className="login-form-input"
                             />
                           </Form.Item>
-                          <Form.Item style={{ marginBottom: '16px' }}>
+                          <Form.Item>
                             <Button
                               type="primary"
                               htmlType="submit"
                               className="login-form-button"
                               loading={registerState.isLoading}
-                              style={{ height: '42px' }}
                             >
                               注册
                             </Button>
                           </Form.Item>
                         </Form>
                       ) : (
-                        <div style={{ minHeight: 200, padding: 20 }}>
+                        <div className="login-register-disabled">
                           <Alert type="warning" showIcon message="管理员已禁止注册，请联系管理员" />
                         </div>
                       )

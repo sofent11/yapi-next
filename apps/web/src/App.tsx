@@ -174,7 +174,7 @@ export function App() {
             closable
             type="warning"
             message="YApi 的接口测试等功能仅支持 Chrome 浏览器，请使用 Chrome 浏览器获得完整功能。"
-            style={{ zIndex: 9 }}
+            className="legacy-browser-hint"
           />
         ) : null}
         <Suspense fallback={<LoadingView />}>
@@ -209,7 +209,7 @@ export function App() {
             closable
             type="warning"
             message="YApi 的接口测试等功能仅支持 Chrome 浏览器，请使用 Chrome 浏览器获得完整功能。"
-            style={{ zIndex: 9 }}
+            className="legacy-browser-hint"
           />
         ) : null}
         <Content className="legacy-content-wrap">

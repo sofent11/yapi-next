@@ -1,30 +1,20 @@
 import { Alert, AutoComplete, Button, Card, Descriptions, Form, Input, Select, Space, Switch, Tag, Typography } from 'antd';
-import { CopyOutlined, DeleteOutlined } from '@ant-design/icons';
+import type { FormInstance } from 'antd';
+import { ClearOutlined, CopyOutlined, DeleteOutlined, FormatPainterOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { FilterBar, SectionCard } from '../../../components/layout';
+import { getHttpMethodBadgeClassName, normalizeHttpMethod } from '../../../utils/http-method';
+import type { AutoTestResultRow, CaseDetailData, CaseEditFormValues } from './collection-types';
 
 const { Text } = Typography;
 
-type AutoTestResultRow = {
-  id: string;
-  name: string;
-  path: string;
-  code: number;
-  status?: number | null;
-  statusText?: string;
-  validRes?: Array<{ message?: string }>;
-  params?: unknown;
-  res_header?: unknown;
-  res_body?: unknown;
-};
-
 type CaseDetailPanelProps = {
   projectId: number;
-  detail: Record<string, unknown>;
+  detail: CaseDetailData;
   canEdit: boolean;
   autoTestRunning: boolean;
   saveLoading: boolean;
-  caseForm: any;
+  caseForm: FormInstance<CaseEditFormValues>;
   caseEnvOptions: Array<{ label: string; value: string }>;
   runMethods: readonly string[];
   currentCaseReport: AutoTestResultRow | null;
@@ -41,6 +31,18 @@ type CaseDetailPanelProps = {
   onSetCaseRunQuery: (value: string) => void;
   onSetCaseRunHeaders: (value: string) => void;
   onSetCaseRunBody: (value: string) => void;
+  onFormatCaseRunQuery: () => void;
+  onFormatCaseRunHeaders: () => void;
+  onFormatCaseRunBody: () => void;
+  onCopyCaseRunQuery: () => void;
+  onCopyCaseRunHeaders: () => void;
+  onCopyCaseRunBody: () => void;
+  onCopyCaseRunResponse: () => void;
+  onCopyCaseResult: () => void;
+  onClearCaseRunQuery: () => void;
+  onClearCaseRunHeaders: () => void;
+  onClearCaseRunBody: () => void;
+  onClearCaseRunResponse: () => void;
   onRunAutoTest: () => void;
   onNavigateCollection: () => void;
   onNavigateInterface: () => void;
@@ -52,10 +54,14 @@ type CaseDetailPanelProps = {
 
 export function CaseDetailPanel(props: CaseDetailPanelProps) {
   const interfaceId = Number(props.detail.interface_id || 0);
+  const methodOptions = props.runMethods.map(item => ({
+    value: item,
+    label: <span className={getHttpMethodBadgeClassName(item)}>{item}</span>
+  }));
   return (
     <Card>
       <FilterBar
-        className="legacy-interface-list-toolbar"
+        className="legacy-interface-list-toolbar legacy-case-toolbar"
         left={<Text strong>{String(props.detail.casename || '测试用例')}</Text>}
         right={
           <Space size={8} wrap>
@@ -86,23 +92,25 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
           </Space>
         }
       />
-      <Form<any> form={props.caseForm} layout="vertical">
+      <Form<CaseEditFormValues> form={props.caseForm} layout="vertical">
         <Descriptions bordered size="small" column={1}>
           <Descriptions.Item label="接口">
             <Space>
-              <Tag>{String(props.detail.method || '-')}</Tag>
+              <span className={getHttpMethodBadgeClassName(props.detail.method)}>
+                {normalizeHttpMethod(String(props.detail.method || 'GET'))}
+              </span>
               <span>{String(props.detail.path || props.detail.title || '-')}</span>
               {interfaceId > 0 ? <Link to={`/project/${props.projectId}/interface/api/${interfaceId}`}>查看接口</Link> : null}
             </Space>
           </Descriptions.Item>
         </Descriptions>
 
-        <div style={{ marginTop: 12 }}>
+        <div className="legacy-case-form-main">
           <Form.Item label="用例名称" name="casename" rules={[{ required: true, message: '请输入用例名称' }]}>
             <Input disabled={!props.canEdit} />
           </Form.Item>
-          <Space style={{ width: '100%' }} align="start">
-            <Form.Item label="环境" name="case_env" style={{ minWidth: 260, flex: 1 }}>
+          <Space className="legacy-case-form-meta-row" align="start">
+            <Form.Item label="环境" name="case_env" className="legacy-case-form-env-item">
               <AutoComplete
                 options={props.caseEnvOptions}
                 disabled={!props.canEdit}
@@ -114,10 +122,10 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
                 }
               />
             </Form.Item>
-            <Form.Item label="启用脚本" name="enable_script" valuePropName="checked" style={{ width: 120 }}>
+            <Form.Item label="启用脚本" name="enable_script" valuePropName="checked" className="legacy-case-form-switch-item">
               <Switch disabled={!props.canEdit} checkedChildren="开" unCheckedChildren="关" />
             </Form.Item>
-            <Form.Item label="Body 类型" name="req_body_type" style={{ width: 180 }}>
+            <Form.Item label="Body 类型" name="req_body_type" className="legacy-case-form-bodytype-item">
               <Select
                 disabled={!props.canEdit}
                 options={[
@@ -149,8 +157,16 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
         </div>
       </Form>
       <SectionCard title="测试结果" className="legacy-case-section">
+        <div className="legacy-case-section-head">
+          <Text strong>最近一次测试结果</Text>
+          <Space size={4}>
+            <Button size="small" icon={<CopyOutlined />} onClick={props.onCopyCaseResult} disabled={!props.currentCaseReport}>
+              复制结果
+            </Button>
+          </Space>
+        </div>
         {props.currentCaseReport ? (
-          <Space direction="vertical" style={{ width: '100%' }} size={10}>
+          <Space direction="vertical" className="legacy-case-result-stack" size={10}>
             <Space wrap>
               <Tag
                 color={
@@ -177,7 +193,7 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
                 readOnly
                 value={
                   Array.isArray(props.currentCaseReport.validRes) && props.currentCaseReport.validRes.length > 0
-                    ? props.currentCaseReport.validRes.map((item: any) => String(item.message || '')).join('\n')
+                    ? props.currentCaseReport.validRes.map(item => String(item.message || '')).join('\n')
                     : '无'
                 }
               />
@@ -202,31 +218,80 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
         )}
       </SectionCard>
       <SectionCard title="调试请求" className="legacy-case-section">
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Space wrap style={{ width: '100%' }}>
+        <Space direction="vertical" className="legacy-case-debug-stack">
+          <Space wrap className="legacy-case-debug-toolbar">
             <Select
               value={props.caseRunMethod}
               onChange={props.onSetCaseRunMethod}
-              style={{ width: 120 }}
-              options={props.runMethods.map(item => ({ label: item, value: item }))}
+              className="legacy-case-debug-method-select"
+              options={methodOptions}
             />
             <Input
               value={props.caseRunPath}
               onChange={event => props.onSetCaseRunPath(event.target.value)}
-              style={{ minWidth: 260, flex: 1 }}
+              className="legacy-case-debug-path-input"
             />
             <Button type="primary" loading={props.caseRunLoading} onClick={props.onRunCaseRequest}>
               发送请求
             </Button>
           </Space>
           <Alert type="info" showIcon message="调试请求参数需使用 JSON 格式" />
-          <Text strong>Query</Text>
+          <div className="legacy-run-section-head">
+            <Text strong>Query</Text>
+            <Space size={4} className="legacy-run-section-actions">
+              <Button size="small" icon={<FormatPainterOutlined />} onClick={props.onFormatCaseRunQuery}>
+                格式化
+              </Button>
+              <Button size="small" icon={<CopyOutlined />} onClick={props.onCopyCaseRunQuery}>
+                复制
+              </Button>
+              <Button size="small" icon={<ClearOutlined />} onClick={props.onClearCaseRunQuery}>
+                清空
+              </Button>
+            </Space>
+          </div>
           <Input.TextArea rows={4} value={props.caseRunQuery} onChange={event => props.onSetCaseRunQuery(event.target.value)} />
-          <Text strong>Headers</Text>
+          <div className="legacy-run-section-head">
+            <Text strong>Headers</Text>
+            <Space size={4} className="legacy-run-section-actions">
+              <Button size="small" icon={<FormatPainterOutlined />} onClick={props.onFormatCaseRunHeaders}>
+                格式化
+              </Button>
+              <Button size="small" icon={<CopyOutlined />} onClick={props.onCopyCaseRunHeaders}>
+                复制
+              </Button>
+              <Button size="small" icon={<ClearOutlined />} onClick={props.onClearCaseRunHeaders}>
+                清空
+              </Button>
+            </Space>
+          </div>
           <Input.TextArea rows={4} value={props.caseRunHeaders} onChange={event => props.onSetCaseRunHeaders(event.target.value)} />
-          <Text strong>Body</Text>
+          <div className="legacy-run-section-head">
+            <Text strong>Body</Text>
+            <Space size={4} className="legacy-run-section-actions">
+              <Button size="small" icon={<FormatPainterOutlined />} onClick={props.onFormatCaseRunBody}>
+                格式化
+              </Button>
+              <Button size="small" icon={<CopyOutlined />} onClick={props.onCopyCaseRunBody}>
+                复制
+              </Button>
+              <Button size="small" icon={<ClearOutlined />} onClick={props.onClearCaseRunBody}>
+                清空
+              </Button>
+            </Space>
+          </div>
           <Input.TextArea rows={6} value={props.caseRunBody} onChange={event => props.onSetCaseRunBody(event.target.value)} />
-          <Text strong>响应</Text>
+          <div className="legacy-run-section-head">
+            <Text strong>响应</Text>
+            <Space size={4} className="legacy-run-section-actions">
+              <Button size="small" icon={<CopyOutlined />} onClick={props.onCopyCaseRunResponse} disabled={!props.caseRunResponse}>
+                复制
+              </Button>
+              <Button size="small" icon={<ClearOutlined />} onClick={props.onClearCaseRunResponse} disabled={!props.caseRunResponse}>
+                清空
+              </Button>
+            </Space>
+          </div>
           <Input.TextArea rows={10} value={props.caseRunResponse} readOnly placeholder="点击“发送请求”后显示结果" />
         </Space>
       </SectionCard>

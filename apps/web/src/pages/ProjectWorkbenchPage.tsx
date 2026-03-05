@@ -53,6 +53,7 @@ import {
   useUpdateInterfaceCatMutation,
   useUpdateInterfaceMutation
 } from '../services/yapi-api';
+import { getHttpMethodBadgeClassName } from '../utils/http-method';
 import { safeApiRequest } from '../utils/safe-request';
 
 const { Paragraph } = Typography;
@@ -62,6 +63,14 @@ function toJsonText(input: unknown): string {
     return JSON.stringify(input, null, 2);
   } catch (_err) {
     return '[]';
+  }
+}
+
+function formatJsonInput(text: string): string | null {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch (_err) {
+    return null;
   }
 }
 
@@ -233,6 +242,23 @@ export function ProjectWorkbenchPage() {
     const list = interfaceListQuery.data?.data?.list || [];
     return list.map(item => ({ ...item, key: item._id })) as Array<LegacyInterfaceDTO & { key?: number }>;
   }, [interfaceListQuery.data]);
+  const interfaceMethodOptions = (['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const).map(item => ({
+    value: item,
+    label: <span className={getHttpMethodBadgeClassName(item)}>{item}</span>
+  }));
+
+  async function copyToClipboard(text: string, label: string) {
+    if (!text.trim()) {
+      message.warning(`${label}为空`);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success(`${label}已复制`);
+    } catch (_err) {
+      message.error('复制失败，请手动复制');
+    }
+  }
 
   async function handleLogin() {
     const response = await callApi(login({ email, password }).unwrap(), '登录失败');
@@ -400,6 +426,26 @@ export function ProjectWorkbenchPage() {
     if (!response) return;
     setSwaggerPreviewText(toJsonText(response.data || {}));
     message.success('Swagger 数据已拉取');
+  }
+
+  function handleFormatEnvJson() {
+    const formatted = formatJsonInput(envText);
+    if (!formatted) {
+      message.error('环境配置 JSON 非法，无法格式化');
+      return;
+    }
+    setEnvText(formatted);
+    message.success('环境配置 JSON 已格式化');
+  }
+
+  function handleFormatTagJson() {
+    const formatted = formatJsonInput(tagText);
+    if (!formatted) {
+      message.error('标签 JSON 非法，无法格式化');
+      return;
+    }
+    setTagText(formatted);
+    message.success('标签 JSON 已格式化');
   }
 
   async function handleUpdateEnv() {
@@ -662,7 +708,7 @@ export function ProjectWorkbenchPage() {
   }
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Space direction="vertical" size={16} className="legacy-workspace-stack">
       <Card title="用户登录与会话状态">
         <Row gutter={16}>
           <Col span={12}>
@@ -701,10 +747,10 @@ export function ProjectWorkbenchPage() {
       </Card>
 
       <Card title="分组与项目">
-        <Space style={{ marginBottom: 12 }}>
+        <Space className="legacy-workspace-toolbar">
           <span>分组</span>
           <Select<number>
-            style={{ minWidth: 220 }}
+            className="legacy-workspace-select-min220"
             value={groupId > 0 ? groupId : undefined}
             onChange={value => setGroupId(value)}
             options={groups.map(group => ({
@@ -724,7 +770,7 @@ export function ProjectWorkbenchPage() {
           </Button>
         </Space>
 
-        <Row gutter={12} style={{ marginBottom: 12 }}>
+        <Row gutter={12} className="legacy-workspace-row-gap">
           <Col span={6}>
             <Input
               value={newProjectName}
@@ -743,7 +789,7 @@ export function ProjectWorkbenchPage() {
           </Col>
           <Col span={4}>
             <Select<'public' | 'private'>
-              style={{ width: '100%' }}
+              className="legacy-workspace-control"
               value={newProjectType}
               onChange={value => setNewProjectType(value)}
               disabled={!isLoggedIn || groupId <= 0}
@@ -774,7 +820,7 @@ export function ProjectWorkbenchPage() {
           </Col>
         </Row>
 
-        <Row gutter={12} style={{ marginBottom: 12 }}>
+        <Row gutter={12} className="legacy-workspace-row-gap">
           <Col span={6}>
             <Input
               value={copyProjectName}
@@ -793,7 +839,7 @@ export function ProjectWorkbenchPage() {
           </Col>
           <Col span={4}>
             <Select<'public' | 'private'>
-              style={{ width: '100%' }}
+              className="legacy-workspace-control"
               value={copyProjectType}
               onChange={value => setCopyProjectType(value)}
               disabled={!isLoggedIn || groupId <= 0 || selectedProjectId <= 0}
@@ -822,6 +868,7 @@ export function ProjectWorkbenchPage() {
           }
           dataSource={projectRows}
           pagination={false}
+          locale={{ emptyText: groupId > 0 ? '该分组暂无项目' : '请先选择分组' }}
           columns={[
             { title: '项目ID', dataIndex: '_id', width: 100 },
             { title: '名称', dataIndex: 'name' },
@@ -880,6 +927,7 @@ export function ProjectWorkbenchPage() {
           loading={followListQuery.isLoading}
           dataSource={followRows}
           pagination={false}
+          locale={{ emptyText: '暂无关注项目' }}
           columns={[
             { title: '项目ID', dataIndex: 'projectid', width: 100 },
             { title: '项目名', dataIndex: 'projectname' },
@@ -908,7 +956,7 @@ export function ProjectWorkbenchPage() {
       </Card>
 
       <Card title={`项目详情 ${selectedProjectId > 0 ? `(ID=${selectedProjectId})` : ''}`}>
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+        <Space direction="vertical" className="legacy-workspace-stack" size={12}>
           <Space>
             <Button onClick={() => projectDetailQuery.refetch()} disabled={selectedProjectId <= 0}>
               刷新详情
@@ -953,7 +1001,7 @@ export function ProjectWorkbenchPage() {
               </Descriptions.Item>
             </Descriptions>
           ) : (
-            <Paragraph type="secondary" style={{ margin: 0 }}>
+            <Paragraph type="secondary" className="legacy-workspace-paragraph-compact">
               {projectDetailQuery.data?.errmsg || '请选择项目查看详情'}
             </Paragraph>
           )}
@@ -961,7 +1009,7 @@ export function ProjectWorkbenchPage() {
       </Card>
 
       <Card title="项目配置编辑">
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+        <Space direction="vertical" className="legacy-workspace-stack" size={12}>
           <Row gutter={12}>
             <Col span={6}>
               <Input
@@ -1029,6 +1077,20 @@ export function ProjectWorkbenchPage() {
             placeholder='[{"name":"local","domain":"http://127.0.0.1"}]'
             disabled={selectedProjectId <= 0}
           />
+          <Space className="legacy-workspace-result-actions" size={8}>
+            <Button size="small" onClick={handleFormatEnvJson} disabled={selectedProjectId <= 0 || !envText.trim()}>
+              格式化 JSON
+            </Button>
+            <Button
+              size="small"
+              disabled={!envText.trim()}
+              onClick={() => {
+                void copyToClipboard(envText, '环境配置');
+              }}
+            >
+              复制
+            </Button>
+          </Space>
           <Button
             onClick={handleUpdateEnv}
             loading={updateProjectEnvState.isLoading}
@@ -1044,6 +1106,20 @@ export function ProjectWorkbenchPage() {
             placeholder='[{"name":"订单","desc":"订单域"}]'
             disabled={selectedProjectId <= 0}
           />
+          <Space className="legacy-workspace-result-actions" size={8}>
+            <Button size="small" onClick={handleFormatTagJson} disabled={selectedProjectId <= 0 || !tagText.trim()}>
+              格式化 JSON
+            </Button>
+            <Button
+              size="small"
+              disabled={!tagText.trim()}
+              onClick={() => {
+                void copyToClipboard(tagText, '标签配置');
+              }}
+            >
+              复制
+            </Button>
+          </Space>
           <Button
             onClick={handleUpdateTag}
             loading={updateProjectTagState.isLoading}
@@ -1055,7 +1131,7 @@ export function ProjectWorkbenchPage() {
       </Card>
 
       <Card title="项目成员管理">
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+        <Space direction="vertical" className="legacy-workspace-stack" size={12}>
           <Row gutter={12}>
             <Col span={10}>
               <Input
@@ -1067,7 +1143,7 @@ export function ProjectWorkbenchPage() {
             </Col>
             <Col span={6}>
               <Select<'owner' | 'dev' | 'guest'>
-                style={{ width: '100%' }}
+                className="legacy-workspace-control"
                 value={memberRole}
                 onChange={value => setMemberRole(value)}
                 disabled={selectedProjectId <= 0}
@@ -1100,7 +1176,7 @@ export function ProjectWorkbenchPage() {
             </Col>
             <Col span={4}>
               <Select<boolean>
-                style={{ width: '100%' }}
+                className="legacy-workspace-control"
                 value={memberNotice}
                 onChange={value => setMemberNotice(value)}
                 disabled={selectedProjectId <= 0}
@@ -1147,6 +1223,7 @@ export function ProjectWorkbenchPage() {
             loading={projectMemberListQuery.isLoading}
             dataSource={projectMemberListQuery.data?.data || []}
             pagination={false}
+            locale={{ emptyText: selectedProjectId > 0 ? '暂无项目成员' : '请先选择项目' }}
             columns={[
               { title: 'UID', dataIndex: 'uid', width: 90 },
               { title: '用户名', dataIndex: 'username' },
@@ -1158,8 +1235,8 @@ export function ProjectWorkbenchPage() {
       </Card>
 
       <Card title="项目搜索（project/search）">
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          <Space style={{ width: '100%' }}>
+        <Space direction="vertical" className="legacy-workspace-stack" size={12}>
+          <Space className="legacy-workspace-inline-full">
             <Input
               value={searchKeyword}
               onChange={e => setSearchKeyword(e.target.value)}
@@ -1169,13 +1246,30 @@ export function ProjectWorkbenchPage() {
               搜索
             </Button>
           </Space>
+          <Space className="legacy-workspace-result-head" align="center">
+            <span>搜索结果 JSON</span>
+            <Space className="legacy-workspace-result-actions" size={8}>
+              <Button
+                size="small"
+                disabled={!searchResultText.trim()}
+                onClick={() => {
+                  void copyToClipboard(searchResultText, '项目搜索结果');
+                }}
+              >
+                复制
+              </Button>
+              <Button size="small" disabled={!searchResultText.trim()} onClick={() => setSearchResultText('')}>
+                清空
+              </Button>
+            </Space>
+          </Space>
           <Input.TextArea rows={8} value={searchResultText} readOnly placeholder="搜索结果 JSON" />
         </Space>
       </Card>
 
       <Card title="Swagger URL 拉取（project/swagger_url）">
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          <Space style={{ width: '100%' }}>
+        <Space direction="vertical" className="legacy-workspace-stack" size={12}>
+          <Space className="legacy-workspace-inline-full">
             <Input
               value={swaggerUrl}
               onChange={e => setSwaggerUrl(e.target.value)}
@@ -1185,16 +1279,33 @@ export function ProjectWorkbenchPage() {
               拉取
             </Button>
           </Space>
+          <Space className="legacy-workspace-result-head" align="center">
+            <span>Swagger 数据预览</span>
+            <Space className="legacy-workspace-result-actions" size={8}>
+              <Button
+                size="small"
+                disabled={!swaggerPreviewText.trim()}
+                onClick={() => {
+                  void copyToClipboard(swaggerPreviewText, 'Swagger 预览');
+                }}
+              >
+                复制
+              </Button>
+              <Button size="small" disabled={!swaggerPreviewText.trim()} onClick={() => setSwaggerPreviewText('')}>
+                清空
+              </Button>
+            </Space>
+          </Space>
           <Input.TextArea rows={8} value={swaggerPreviewText} readOnly placeholder="Swagger 数据预览" />
         </Space>
       </Card>
 
       <Card title="接口分类管理">
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+        <Space direction="vertical" className="legacy-workspace-stack" size={12}>
           <Row gutter={12}>
             <Col span={6}>
               <Select
-                style={{ width: '100%' }}
+                className="legacy-workspace-control"
                 value={catIdAction || undefined}
                 onChange={value => setCatIdAction(String(value))}
                 disabled={selectedProjectId <= 0}
@@ -1259,6 +1370,7 @@ export function ProjectWorkbenchPage() {
             loading={catMenuQuery.isLoading}
             dataSource={catRows}
             pagination={false}
+            locale={{ emptyText: selectedProjectId > 0 ? '暂无接口分类' : '请先选择项目' }}
             columns={[
               { title: '分类ID', dataIndex: '_id', width: 100 },
               { title: '名称', dataIndex: 'name' },
@@ -1270,7 +1382,7 @@ export function ProjectWorkbenchPage() {
       </Card>
 
       <Card title="接口管理（兼容接口 CRUD）">
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+        <Space direction="vertical" className="legacy-workspace-stack" size={12}>
           <Row gutter={12}>
             <Col span={4}>
               <Input
@@ -1298,17 +1410,11 @@ export function ProjectWorkbenchPage() {
             </Col>
             <Col span={3}>
               <Select<'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'>
-                style={{ width: '100%' }}
+                className="legacy-workspace-control"
                 value={interfaceMethod}
                 onChange={value => setInterfaceMethod(value)}
                 disabled={selectedProjectId <= 0}
-                options={[
-                  { value: 'GET', label: 'GET' },
-                  { value: 'POST', label: 'POST' },
-                  { value: 'PUT', label: 'PUT' },
-                  { value: 'DELETE', label: 'DELETE' },
-                  { value: 'PATCH', label: 'PATCH' }
-                ]}
+                options={interfaceMethodOptions}
               />
             </Col>
             <Col span={5}>
@@ -1347,10 +1453,20 @@ export function ProjectWorkbenchPage() {
             loading={interfaceListQuery.isLoading}
             dataSource={interfaceRows}
             pagination={false}
+            locale={{ emptyText: selectedProjectId > 0 ? '暂无接口数据' : '请先选择项目' }}
             columns={[
               { title: '接口ID', dataIndex: '_id', width: 90 },
               { title: '标题', dataIndex: 'title' },
-              { title: '方法', dataIndex: 'method', width: 90 },
+              {
+                title: '方法',
+                dataIndex: 'method',
+                width: 100,
+                render: (value: string) => (
+                  <span className={getHttpMethodBadgeClassName(value || 'GET')}>
+                    {String(value || 'GET').toUpperCase()}
+                  </span>
+                )
+              },
               { title: '路径', dataIndex: 'path' },
               { title: '分类', dataIndex: 'catid', width: 90 },
               { title: '状态', dataIndex: 'status', width: 100 }

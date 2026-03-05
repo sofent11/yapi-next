@@ -820,14 +820,14 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
               placeholder="请选择导入数据的方式"
               value={importMethod}
               onChange={setImportMethod}
-              style={{ width: '100%' }}
+              className="legacy-workspace-control"
               options={mergedImportOptions}
             />
           </div>
 
           <div className="catidSelect">
             <Select<number>
-              style={{ width: '100%' }}
+              className="legacy-workspace-control"
               placeholder="请选择数据导入的默认分类"
               value={defaultCatId > 0 ? defaultCatId : undefined}
               onChange={value => setDefaultCatId(Number(value || 0))}
@@ -845,13 +845,13 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
               <Tooltip
                 title={
                   <div>
-                    <h3 style={{ color: 'white' }}>普通模式</h3>
+                    <h3 className="legacy-data-tooltip-title">普通模式</h3>
                     <p>不导入已存在的接口</p>
                     <br />
-                    <h3 style={{ color: 'white' }}>智能合并</h3>
+                    <h3 className="legacy-data-tooltip-title">智能合并</h3>
                     <p>合并已存在接口的返回结构，适合保留手工维护内容。</p>
                     <br />
-                    <h3 style={{ color: 'white' }}>完全覆盖</h3>
+                    <h3 className="legacy-data-tooltip-title">完全覆盖</h3>
                     <p>使用新文档覆盖旧定义，适合后端主导接口结构的场景。</p>
                   </div>
                 }
@@ -864,7 +864,7 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
             <Select<SyncMode>
               value={syncMode}
               onChange={setSyncMode}
-              style={{ width: '100%' }}
+              className="legacy-workspace-control"
               options={[
                 { value: 'normal', label: '普通模式' },
                 { value: 'good', label: '智能合并' },
@@ -953,12 +953,12 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
                 </Button>
               </Space>
               {importMethodDesc ? (
-                <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+                <Paragraph type="secondary" className="legacy-workspace-paragraph-top-compact">
                   {importMethodDesc}
                 </Paragraph>
               ) : null}
               {importFileName ? (
-                <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>
+                <Typography.Paragraph type="secondary" className="legacy-workspace-paragraph-top">
                   {importFileName}
                 </Typography.Paragraph>
               ) : null}
@@ -987,7 +987,7 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
               placeholder="请选择导出数据的方式"
               value={exportMethod}
               onChange={setExportMethod}
-              style={{ width: '100%' }}
+              className="legacy-workspace-control"
               options={mergedExportOptions}
             />
           </div>

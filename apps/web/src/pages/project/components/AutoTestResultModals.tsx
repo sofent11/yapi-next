@@ -1,4 +1,5 @@
-import { Alert, Button, Descriptions, Input, Modal, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Descriptions, Input, Modal, Space, Table, Tag, Typography, message } from 'antd';
+import { CopyOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
@@ -35,7 +36,7 @@ type AutoTestResultModalsProps = {
   report: AutoTestReport | null;
   rows: AutoTestResultItem[];
   onOpenDetail: (item: AutoTestResultItem) => void;
-  methodStyle: (method?: string) => { color: string; background: string };
+  methodClassName: (method?: string) => string;
 };
 
 function stringifyPretty(value: unknown): string {
@@ -48,6 +49,22 @@ function stringifyPretty(value: unknown): string {
 }
 
 export function AutoTestResultModals(props: AutoTestResultModalsProps) {
+  const reportSummaryText = [
+    `总数: ${Number(props.report?.message?.len || props.rows.length || 0)}`,
+    `通过: ${Number(props.report?.message?.successNum || 0)}`,
+    `失败: ${Number(props.report?.message?.failedNum || 0)}`,
+    `耗时: ${String(props.report?.runTime || '-')}`
+  ].join('\n');
+
+  async function copyText(text: string, successText: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success(successText);
+    } catch (_err) {
+      message.error('复制失败，请手动复制');
+    }
+  }
+
   return (
     <>
       <Modal
@@ -61,7 +78,7 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
         ]}
         onCancel={props.onCloseReport}
       >
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+        <Space direction="vertical" className="legacy-report-modal-stack" size={12}>
           <Alert
             type="info"
             showIcon
@@ -72,14 +89,29 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
                 <span>通过: {Number(props.report?.message?.successNum || 0)}</span>
                 <span>失败: {Number(props.report?.message?.failedNum || 0)}</span>
                 <span>耗时: {String(props.report?.runTime || '-')}</span>
+                <Button
+                  size="small"
+                  icon={<CopyOutlined />}
+                  onClick={() => void copyText(reportSummaryText, '报告摘要已复制')}
+                >
+                  复制摘要
+                </Button>
               </Space>
             }
           />
           <Table<AutoTestResultItem>
+            className="legacy-report-table"
             rowKey={row => String(row.id || `${row.method || 'GET'}:${row.path || ''}`)}
             size="small"
             pagination={{ pageSize: 10 }}
             dataSource={props.rows}
+            rowClassName={row =>
+              row.code === 0 ? 'legacy-report-row-pass' : row.code === 1 ? 'legacy-report-row-fail' : 'legacy-report-row-error'
+            }
+            onRow={row => ({
+              onClick: () => props.onOpenDetail(row)
+            })}
+            locale={{ emptyText: '暂无可展示的测试结果' }}
             columns={[
               {
                 title: '用例',
@@ -90,7 +122,7 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
                 title: '接口',
                 render: (_, row) => (
                   <Space size={8}>
-                    <span className="legacy-method-pill" style={props.methodStyle(row.method || 'GET')}>
+                    <span className={props.methodClassName(row.method || 'GET')}>
                       {String(row.method || 'GET').toUpperCase()}
                     </span>
                     <span>{row.path || '-'}</span>
@@ -129,7 +161,13 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
                 title: '操作',
                 width: 90,
                 render: (_, row) => (
-                  <Button size="small" onClick={() => props.onOpenDetail(row)}>
+                  <Button
+                    size="small"
+                    onClick={event => {
+                      event.stopPropagation();
+                      props.onOpenDetail(row);
+                    }}
+                  >
                     详情
                   </Button>
                 )
@@ -151,7 +189,17 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
         ]}
       >
         {props.detailItem ? (
-          <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <Space direction="vertical" className="legacy-report-detail-stack" size={12}>
+            <div className="legacy-run-section-head">
+              <Text strong>基础信息</Text>
+              <Button
+                size="small"
+                icon={<CopyOutlined />}
+                onClick={() => void copyText(stringifyPretty(props.detailItem), '测试详情已复制')}
+              >
+                复制全部
+              </Button>
+            </div>
             <Descriptions bordered size="small" column={1}>
               <Descriptions.Item label="用例ID">{props.detailItem.id || '-'}</Descriptions.Item>
               <Descriptions.Item label="接口地址">
@@ -165,17 +213,58 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
                 {props.detailItem.code === 0 ? '通过' : props.detailItem.code === 1 ? '失败' : '异常'}
               </Descriptions.Item>
             </Descriptions>
-            <Text strong>校验信息</Text>
+            <div className="legacy-run-section-head">
+              <Text strong>校验信息</Text>
+              <Button
+                size="small"
+                icon={<CopyOutlined />}
+                onClick={() =>
+                  void copyText(
+                    (props.detailItem.validRes || []).map(item => item?.message || '').join('\n') || '-',
+                    '校验信息已复制'
+                  )
+                }
+              >
+                复制
+              </Button>
+            </div>
             <Input.TextArea
               rows={5}
               readOnly
               value={(props.detailItem.validRes || []).map(item => item?.message || '').join('\n') || '-'}
             />
-            <Text strong>请求参数</Text>
+            <div className="legacy-run-section-head">
+              <Text strong>请求参数</Text>
+              <Button
+                size="small"
+                icon={<CopyOutlined />}
+                onClick={() => void copyText(stringifyPretty(props.detailItem.params), '请求参数已复制')}
+              >
+                复制
+              </Button>
+            </div>
             <Input.TextArea rows={6} readOnly value={stringifyPretty(props.detailItem.params)} />
-            <Text strong>响应头</Text>
+            <div className="legacy-run-section-head">
+              <Text strong>响应头</Text>
+              <Button
+                size="small"
+                icon={<CopyOutlined />}
+                onClick={() => void copyText(stringifyPretty(props.detailItem.res_header), '响应头已复制')}
+              >
+                复制
+              </Button>
+            </div>
             <Input.TextArea rows={6} readOnly value={stringifyPretty(props.detailItem.res_header)} />
-            <Text strong>响应体</Text>
+            <div className="legacy-run-section-head">
+              <Text strong>响应体</Text>
+              <Button
+                size="small"
+                icon={<CopyOutlined />}
+                onClick={() => void copyText(stringifyPretty(props.detailItem.res_body), '响应体已复制')}
+              >
+                复制
+              </Button>
+            </div>
             <Input.TextArea rows={10} readOnly value={stringifyPretty(props.detailItem.res_body)} />
           </Space>
         ) : null}

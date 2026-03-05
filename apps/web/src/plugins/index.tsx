@@ -587,7 +587,7 @@ function StatisticsPluginPage() {
   );
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }} size={16}>
+    <Space direction="vertical" className="legacy-workspace-stack" size={16}>
       {loading ? (
         <Card>
           <Space>
@@ -1131,7 +1131,7 @@ function AdvancedMockPluginTab(props: { projectId: number; interfaceData: Record
   }
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }} size={12}>
+    <Space direction="vertical" className="legacy-workspace-stack" size={12}>
       {loading && loadedId !== interfaceId ? (
         <Space>
           <Spin size="small" />
@@ -1151,7 +1151,7 @@ function AdvancedMockPluginTab(props: { projectId: number; interfaceData: Record
             key: 'case',
             label: '期望',
             children: (
-              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+              <Space direction="vertical" className="legacy-workspace-stack" size={12}>
                 <Space>
                   <Button type="primary" onClick={() => void handleOpenCaseModal()}>
                     添加期望
@@ -1172,7 +1172,7 @@ function AdvancedMockPluginTab(props: { projectId: number; interfaceData: Record
             key: 'script',
             label: '脚本',
             children: (
-              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+              <Space direction="vertical" className="legacy-workspace-stack" size={12}>
                 <Space align="center">
                   <Text>是否启用</Text>
                   <Switch checked={enable} onChange={setEnable} />
@@ -1205,7 +1205,7 @@ function AdvancedMockPluginTab(props: { projectId: number; interfaceData: Record
         destroyOnHidden
       >
         {casePreparing ? (
-          <div style={{ padding: '24px 0' }}>
+          <div className="legacy-plugin-loading-block">
             <Spin />
           </div>
         ) : (
@@ -1228,12 +1228,17 @@ function AdvancedMockPluginTab(props: { projectId: number; interfaceData: Record
             <Form.Item label="期望名称" name="name" rules={[{ required: true, message: '请输入期望名称' }]}>
               <Input placeholder="请输入期望名称" />
             </Form.Item>
-            <Space style={{ width: '100%' }} align="start">
-              <Form.Item label="IP 过滤开关" name="ip_enable" valuePropName="checked" style={{ minWidth: 140 }}>
+            <Space className="legacy-plugin-row-start" align="start">
+              <Form.Item
+                label="IP 过滤开关"
+                name="ip_enable"
+                valuePropName="checked"
+                className="legacy-plugin-ip-switch-item"
+              >
                 <Switch />
               </Form.Item>
               <Form.Item
-                style={{ flex: 1 }}
+                className="legacy-plugin-ip-address-item"
                 label="IP 地址"
                 name="ip"
                 rules={[
@@ -1268,17 +1273,17 @@ function AdvancedMockPluginTab(props: { projectId: number; interfaceData: Record
             {watchParamsMode === 'form' ? (
               <Form.List name="params_rows">
                 {(fields, { add, remove }) => (
-                  <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                  <Space direction="vertical" className="legacy-workspace-stack" size={8}>
                     {fields.map(field => (
-                      <Space key={field.key} style={{ display: 'flex' }} align="baseline">
+                      <Space key={field.key} className="legacy-plugin-field-row" align="baseline">
                         <Form.Item
                           name={[field.name, 'name']}
                           rules={[{ required: true, message: '参数名不能为空' }]}
-                          style={{ width: 280 }}
+                          className="legacy-plugin-field-w280"
                         >
                           <Input placeholder="参数名" />
                         </Form.Item>
-                        <Form.Item name={[field.name, 'value']} style={{ width: 360 }}>
+                        <Form.Item name={[field.name, 'value']} className="legacy-plugin-field-w360">
                           <Input placeholder="参数值" />
                         </Form.Item>
                         <Button danger onClick={() => remove(field.name)}>
@@ -1297,27 +1302,27 @@ function AdvancedMockPluginTab(props: { projectId: number; interfaceData: Record
                 <Input.TextArea rows={6} placeholder='例如: {"status":"ready"}' />
               </Form.Item>
             )}
-            <Space style={{ width: '100%' }} align="start">
-              <Form.Item label="HTTP Code" name="code" style={{ width: 220 }}>
+            <Space className="legacy-plugin-row-start" align="start">
+              <Form.Item label="HTTP Code" name="code" className="legacy-plugin-field-w220">
                 <Select
                   showSearch
                   options={ADV_MOCK_HTTP_CODES.map(code => ({ label: String(code), value: code }))}
                 />
               </Form.Item>
-              <Form.Item label="延时(ms)" name="delay" style={{ width: 220 }}>
-                <InputNumber min={0} precision={0} style={{ width: '100%' }} />
+              <Form.Item label="延时(ms)" name="delay" className="legacy-plugin-field-w220">
+                <InputNumber min={0} precision={0} className="legacy-workspace-control" />
               </Form.Item>
             </Space>
             <Form.Item label="HTTP 头">
               <Form.List name="headers">
                 {(fields, { add, remove }) => (
-                  <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                  <Space direction="vertical" className="legacy-workspace-stack" size={8}>
                     {fields.map(field => (
-                      <Space key={field.key} style={{ display: 'flex' }} align="baseline">
-                        <Form.Item name={[field.name, 'name']} style={{ width: 280 }}>
+                      <Space key={field.key} className="legacy-plugin-field-row" align="baseline">
+                        <Form.Item name={[field.name, 'name']} className="legacy-plugin-field-w280">
                           <Input placeholder="Header 名称" />
                         </Form.Item>
-                        <Form.Item name={[field.name, 'value']} style={{ width: 360 }}>
+                        <Form.Item name={[field.name, 'value']} className="legacy-plugin-field-w360">
                           <Input placeholder="Header 值" />
                         </Form.Item>
                         <Button danger onClick={() => remove(field.name)}>
@@ -1383,7 +1388,7 @@ function ServicesPluginPage(props: { projectId: number }) {
   const modernUrl = `${origin}/api/open/plugin/export-full?type=json&pid=${props.projectId}&status=all&token=${token}`;
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }}>
+    <Space direction="vertical" className="legacy-workspace-stack">
       {loading ? (
         <Space>
           <Spin size="small" />
@@ -1513,7 +1518,7 @@ function SwaggerAutoSyncPluginPage(props: { projectId: number }) {
   }
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }}>
+    <Space direction="vertical" className="legacy-workspace-stack">
       {loading ? (
         <Space>
           <Spin size="small" />
@@ -1614,7 +1619,7 @@ function ProjectWikiPluginPage() {
   }
 
   return (
-    <Space direction="vertical" style={{ width: '100%' }}>
+    <Space direction="vertical" className="legacy-workspace-stack">
       {loading ? (
         <Space>
           <Spin size="small" />
@@ -1634,7 +1639,7 @@ function ProjectWikiPluginPage() {
         </Button>
       </Space>
       <Card size="small" title="预览（纯文本）">
-        <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{markdown || '暂无内容'}</pre>
+        <pre className="legacy-plugin-pre">{markdown || '暂无内容'}</pre>
       </Card>
     </Space>
   );

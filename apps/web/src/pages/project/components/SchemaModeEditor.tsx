@@ -23,7 +23,7 @@ type SchemaModeEditorProps = {
 export function SchemaModeEditor(props: SchemaModeEditorProps) {
   return (
     <>
-      <Space style={{ marginBottom: 12 }}>
+      <Space className="legacy-schema-mode-toolbar">
         <Text strong>编辑模式</Text>
         <Radio.Group
           size="small"

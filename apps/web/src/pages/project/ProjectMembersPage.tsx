@@ -283,7 +283,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
                   return (
                     <Select<MemberRole>
                       value={(role as MemberRole) || 'dev'}
-                      className="select"
+                      className="select legacy-members-role-select"
                       onChange={async newRole => {
                         const response = await changeRole({
                           id: props.projectId,
@@ -302,7 +302,6 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
                         { value: 'dev', label: '开发者' },
                         { value: 'guest', label: '访客' }
                       ]}
-                      style={{ width: 148 }}
                     />
                   );
                 }
@@ -378,7 +377,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
         onOk={() => void handleAdd()}
         okButtonProps={{ loading: addState.isLoading }}
       >
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space direction="vertical" className="legacy-members-modal-stack">
           <Select
             mode="multiple"
             allowClear
@@ -393,7 +392,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
             placeholder="从分组成员中选择"
             options={groupMemberOptions}
             optionFilterProp="label"
-            style={{ width: '100%' }}
+            className="legacy-members-modal-select"
           />
           <Input
             value={memberUid}
@@ -408,7 +407,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
               { value: 'dev', label: '开发者' },
               { value: 'guest', label: '访客' }
             ]}
-            style={{ width: '100%' }}
+            className="legacy-members-modal-select"
           />
         </Space>
       </Modal>
@@ -423,7 +422,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
         onOk={() => void handleBatchImportMembers()}
         okText="导入"
       >
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space direction="vertical" className="legacy-members-modal-stack">
           <Text type="secondary">从同分组项目导入成员到当前项目。</Text>
           <Select<number>
             showSearch
@@ -432,7 +431,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
             loading={groupProjectListQuery.isFetching}
             onChange={value => setSelectedImportProjectId(value)}
             options={importProjectOptions}
-            style={{ width: '100%' }}
+            className="legacy-members-modal-select"
             optionFilterProp="label"
           />
         </Space>

@@ -7,6 +7,7 @@ import {
   Descriptions,
   Input,
   InputNumber,
+  Popconfirm,
   Row,
   Space,
   Table,
@@ -32,6 +33,19 @@ function toJsonText(input: unknown): string {
     return JSON.stringify(input, null, 2);
   } catch (_err) {
     return '{}';
+  }
+}
+
+async function copyToClipboard(text: string, label: string) {
+  if (!text.trim()) {
+    message.warning(`${label}为空`);
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    message.success(`${label}已复制`);
+  } catch (_err) {
+    message.error('复制失败，请手动复制');
   }
 }
 
@@ -191,9 +205,9 @@ export function UserConsolePage() {
   }
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Space direction="vertical" size={16} className="legacy-workspace-stack">
       <Card>
-        <Paragraph style={{ marginBottom: 8 }}>
+        <Paragraph className="legacy-workspace-paragraph-spaced">
           User Console：用户域业务页面（用户列表、搜索、资料更新、改密、删除、头像）。
         </Paragraph>
         <Tag color="green">当前用户：{statusQuery.data?.data?.username || statusQuery.data?.data?.email || '-'}</Tag>
@@ -202,7 +216,7 @@ export function UserConsolePage() {
       <Row gutter={16}>
         <Col span={14}>
           <Card title="用户列表与查询">
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
               <Space>
                 <Text>页码</Text>
                 <InputNumber min={1} value={page} onChange={value => setPage(Number(value || 1))} />
@@ -219,6 +233,7 @@ export function UserConsolePage() {
                 loading={userListQuery.isLoading}
                 dataSource={userRows}
                 pagination={false}
+                locale={{ emptyText: '暂无用户数据' }}
                 columns={[
                   {
                     title: 'UID',
@@ -243,7 +258,7 @@ export function UserConsolePage() {
                   查询用户
                 </Button>
                 <Input
-                  style={{ width: 220 }}
+                  className="legacy-workspace-field-min220"
                   value={searchKeyword}
                   onChange={event => setSearchKeyword(event.target.value)}
                   placeholder="搜索关键词"
@@ -255,10 +270,48 @@ export function UserConsolePage() {
 
               <Row gutter={12}>
                 <Col span={12}>
-                  <Input.TextArea rows={8} value={findText} readOnly placeholder="find result" />
+                  <Space direction="vertical" className="legacy-workspace-stack" size={8}>
+                    <Space className="legacy-workspace-result-head" align="center">
+                      <span>find result</span>
+                      <Space className="legacy-workspace-result-actions" size={8}>
+                        <Button
+                          size="small"
+                          disabled={!findText.trim()}
+                          onClick={() => {
+                            void copyToClipboard(findText, 'find result');
+                          }}
+                        >
+                          复制
+                        </Button>
+                        <Button size="small" disabled={!findText.trim()} onClick={() => setFindText('')}>
+                          清空
+                        </Button>
+                      </Space>
+                    </Space>
+                    <Input.TextArea rows={8} value={findText} readOnly placeholder="find result" />
+                  </Space>
                 </Col>
                 <Col span={12}>
-                  <Input.TextArea rows={8} value={searchText} readOnly placeholder="search result" />
+                  <Space direction="vertical" className="legacy-workspace-stack" size={8}>
+                    <Space className="legacy-workspace-result-head" align="center">
+                      <span>search result</span>
+                      <Space className="legacy-workspace-result-actions" size={8}>
+                        <Button
+                          size="small"
+                          disabled={!searchText.trim()}
+                          onClick={() => {
+                            void copyToClipboard(searchText, 'search result');
+                          }}
+                        >
+                          复制
+                        </Button>
+                        <Button size="small" disabled={!searchText.trim()} onClick={() => setSearchText('')}>
+                          清空
+                        </Button>
+                      </Space>
+                    </Space>
+                    <Input.TextArea rows={8} value={searchText} readOnly placeholder="search result" />
+                  </Space>
                 </Col>
               </Row>
             </Space>
@@ -267,7 +320,7 @@ export function UserConsolePage() {
 
         <Col span={10}>
           <Card title="用户操作">
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
               <Descriptions size="small" bordered column={1}>
                 <Descriptions.Item label="当前 UID">{currentUid || '-'}</Descriptions.Item>
                 <Descriptions.Item label="用户名">{statusQuery.data?.data?.username || '-'}</Descriptions.Item>
@@ -288,9 +341,28 @@ export function UserConsolePage() {
                 修改密码
               </Button>
 
-              <Button danger onClick={handleDeleteUser} loading={deleteUserState.isLoading}>
-                删除目标用户
-              </Button>
+              <div className="legacy-console-danger-zone legacy-user-console-danger-zone">
+                <div className="legacy-console-danger-head">
+                  <Text strong type="danger">危险操作</Text>
+                </div>
+                <div className="legacy-console-danger-content">
+                  <div className="legacy-console-danger-desc">
+                    删除用户后不可恢复，请先确认 UID 与账号身份。
+                  </div>
+                  <Popconfirm
+                    title="确认删除目标用户？"
+                    description="删除后无法恢复，请确认 UID 与账号身份。"
+                    okText="确认删除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true, loading: deleteUserState.isLoading }}
+                    onConfirm={() => {
+                      void handleDeleteUser();
+                    }}
+                  >
+                    <Button danger>删除目标用户</Button>
+                  </Popconfirm>
+                </div>
+              </div>
 
               <Text strong>头像上传</Text>
               <Space>
@@ -309,7 +381,7 @@ export function UserConsolePage() {
               <img
                 alt="avatar-preview"
                 src={`/api/user/avatar?uid=${avatarUid || currentUid || ''}&_ts=${avatarVersion}`}
-                style={{ width: 72, height: 72, borderRadius: 8, border: '1px solid #d9d9d9' }}
+                className="legacy-user-avatar-preview"
               />
             </Space>
           </Card>
