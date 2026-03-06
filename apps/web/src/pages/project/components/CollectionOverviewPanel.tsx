@@ -79,15 +79,15 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
 
   return (
     <Card withBorder radius="lg" padding="lg">
-      <Stack className="legacy-collection-overview-stack">
+      <Stack className="collection-overview-stack">
         <FilterBar
-          className="legacy-interface-list-toolbar legacy-collection-overview-toolbar"
+          className="interface-table-toolbar collection-overview-toolbar"
           left={
             <div className="min-w-0">
-              <Text fw={700} className="legacy-collection-overview-title">
+              <Text fw={700} className="collection-overview-title">
                 {props.currentCol?.name || `测试集合 ${props.selectedColId}`}
               </Text>
-              <Text c="dimmed" size="sm" className="legacy-collection-overview-desc">
+              <Text c="dimmed" size="sm" className="collection-overview-desc">
                 {props.currentCol?.desc || '暂无描述'}
               </Text>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -102,7 +102,7 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
           }
           right={
             props.canEdit ? (
-              <div className="legacy-collection-overview-actions flex flex-wrap gap-2">
+              <div className="collection-overview-actions flex flex-wrap gap-2">
                 <Button leftSection={<IconPlus size={16} />} onClick={props.onOpenAddCase}>
                   添加用例
                 </Button>
@@ -131,7 +131,7 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
 
         {props.caseEnvProjects.length > 0 ? (
           <FilterBar
-            className="legacy-interface-list-toolbar"
+            className="interface-table-toolbar"
             left={
               <div className="flex flex-wrap items-center gap-3">
                 <Text fw={600}>测试环境：</Text>
@@ -141,7 +141,7 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
                     <div key={`env-${projectId}`} className="flex flex-wrap items-center gap-2">
                       <Text size="sm">{item.name || `项目${projectId}`}</Text>
                       <Select
-                        className="legacy-collection-env-select"
+                        className="collection-env-select"
                         clearable
                         value={props.selectedRunEnvByProject[projectId] || null}
                         onChange={value => props.onSetRunEnv(projectId, value || '')}
@@ -179,7 +179,7 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
         ) : null}
 
         <div className="overflow-x-auto">
-          <Table striped highlightOnHover withTableBorder className="legacy-collection-case-table">
+          <Table striped highlightOnHover withTableBorder className="collection-case-table">
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>用例名称</Table.Th>
@@ -217,10 +217,10 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
                       className={
                         report
                           ? Number(report.code || -1) === 0
-                            ? 'legacy-collection-case-row-pass'
+                            ? 'collection-case-row-pass'
                             : Number(report.code || -1) === 1
-                              ? 'legacy-collection-case-row-fail'
-                              : 'legacy-collection-case-row-error'
+                              ? 'collection-case-row-fail'
+                              : 'collection-case-row-error'
                           : ''
                       }
                       onClick={() => props.onNavigateCase(caseId)}
@@ -228,7 +228,7 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
                       <Table.Td>
                         <button
                           type="button"
-                          className="legacy-interface-menu-link-btn"
+                          className="interface-link-button"
                           onClick={event => {
                             event.stopPropagation();
                             props.onNavigateCase(caseId);
@@ -242,7 +242,7 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
                           <span className={getHttpMethodBadgeClassName(row.method)}>
                             {normalizeHttpMethod(String(row.method || 'GET'))}
                           </span>
-                          <span className="legacy-interface-path-text">{String(row.path || row.title || '-')}</span>
+                          <span className="interface-path-text">{String(row.path || row.title || '-')}</span>
                         </div>
                       </Table.Td>
                       <Table.Td>{row.up_time ? new Date(Number(row.up_time) * 1000).toLocaleString() : '-'}</Table.Td>

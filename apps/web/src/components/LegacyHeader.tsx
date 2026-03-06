@@ -214,19 +214,19 @@ export function LegacyHeader(props: LegacyHeaderProps) {
   const inAddProject = location.pathname.startsWith('/add-project');
   const guideVisible = guide.active && !props.study;
   const tipFollow = (
-    <div className="legacy-guide-tip-title">
+    <div className="guide-tip-title">
       <h3><IconStar size={16} /> 关注</h3>
       <p>这里是你的专属收藏夹，便于你快速找到常用项目。</p>
     </div>
   );
   const tipAdd = (
-    <div className="legacy-guide-tip-title">
+    <div className="guide-tip-title">
       <h3><IconCirclePlus size={16} /> 新建项目</h3>
       <p>在任何页面都可以快速新建项目。</p>
     </div>
   );
   const tipDoc = (
-    <div className="legacy-guide-tip-title">
+    <div className="guide-tip-title">
       <h3>
         使用文档 <Badge color="orange">推荐</Badge>
       </h3>

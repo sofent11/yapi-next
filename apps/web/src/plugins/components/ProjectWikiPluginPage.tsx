@@ -73,7 +73,7 @@ export function ProjectWikiPluginPage() {
   }
 
   return (
-    <Stack className="legacy-workspace-stack">
+    <Stack className="workspace-stack">
       {loading ? (
         <div className="inline-flex items-center gap-2">
           <Loader size="sm" />
@@ -96,7 +96,7 @@ export function ProjectWikiPluginPage() {
         <Text fw={600} mb="sm">
           预览（纯文本）
         </Text>
-        <pre className="legacy-plugin-pre">{markdown || '暂无内容'}</pre>
+        <pre className="plugin-pre">{markdown || '暂无内容'}</pre>
       </Card>
     </Stack>
   );

@@ -1,0 +1,318 @@
+@layer components {
+  .workspace-stack {
+    @apply gap-4;
+  }
+
+  .workspace-control,
+  .workspace-control-top {
+    @apply min-w-[180px];
+  }
+
+  .workspace-control .mantine-Input-input,
+  .workspace-control .mantine-Select-input,
+  .workspace-control-top .mantine-Input-input,
+  .workspace-control-top .mantine-Select-input {
+    @apply h-11 rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
+  }
+
+  .workspace-field-top {
+    @apply pt-1;
+  }
+
+  .workspace-text-top,
+  .workspace-paragraph,
+  .workspace-paragraph-compact {
+    @apply text-sm text-slate-500;
+  }
+
+  .workspace-paragraph,
+  .workspace-paragraph-compact {
+    @apply leading-6;
+  }
+
+  .workspace-form-modal-stack {
+    @apply gap-4;
+  }
+
+  .workspace-form-modal-stack .mantine-Text-root:first-child {
+    @apply text-sm leading-6 text-slate-500;
+  }
+
+  .workspace-form-modal-stack .mantine-Input-input,
+  .workspace-form-modal-stack .mantine-Select-input,
+  .workspace-form-modal-stack .mantine-Textarea-input {
+    @apply rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
+  }
+
+  .interface-edit-section {
+    @apply rounded-[24px] border border-slate-200 bg-white shadow-sm;
+  }
+
+  .interface-edit-path,
+  .interface-edit-row {
+    @apply items-start;
+  }
+
+  .interface-edit-method-select .mantine-Input-input,
+  .interface-edit-basepath-input .mantine-Input-input {
+    @apply h-11 rounded-[14px] border-slate-300 text-sm;
+  }
+
+  .interface-edit-basepath-input .mantine-Input-input {
+    @apply bg-slate-100 text-slate-500;
+  }
+
+  .interface-edit-type-switch .mantine-SegmentedControl-root {
+    @apply rounded-[16px] bg-slate-100 p-1;
+  }
+
+  .interface-edit-type-switch .mantine-SegmentedControl-indicator {
+    @apply rounded-[12px] bg-white shadow-sm;
+  }
+
+  .interface-edit-type-switch .mantine-SegmentedControl-label {
+    @apply rounded-[12px] px-3 py-2 text-sm font-semibold text-slate-500;
+  }
+
+  .interface-edit-type-switch [data-active='true'] {
+    @apply text-slate-900;
+  }
+
+  .interface-edit-list-toolbar {
+    @apply items-center justify-between;
+  }
+
+  .interface-edit-json-alert,
+  .interface-edit-conflict-alert {
+    @apply rounded-[16px] border;
+  }
+
+  .interface-edit-json-alert {
+    @apply border-blue-100 bg-blue-50/80;
+  }
+
+  .interface-edit-conflict-alert {
+    @apply border-yellow-200 bg-yellow-50/80;
+  }
+
+  .interface-edit-response-tabs [role='tablist'] {
+    @apply border-b border-slate-200;
+  }
+
+  .interface-edit-response-tabs [role='tab'] {
+    @apply rounded-none border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-500;
+  }
+
+  .interface-edit-response-tabs [role='tab'][data-active='true'] {
+    @apply border-blue-500 text-slate-900;
+  }
+
+  .interface-edit-zero-margin {
+    @apply m-0;
+  }
+
+  .interface-edit-footer {
+    @apply rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-sm;
+  }
+
+  .interface-edit-footer-sticky {
+    @apply sticky bottom-3 z-20;
+  }
+
+  .http-method-pill {
+    @apply inline-flex h-6 min-w-[40px] items-center justify-center rounded-full px-2 text-[10px] font-semibold uppercase tracking-[0.08em];
+  }
+
+  .http-method-get {
+    @apply bg-emerald-100 text-emerald-700;
+  }
+
+  .http-method-post {
+    @apply bg-blue-100 text-blue-700;
+  }
+
+  .http-method-put,
+  .http-method-patch {
+    @apply bg-amber-100 text-amber-700;
+  }
+
+  .http-method-delete {
+    @apply bg-rose-100 text-rose-700;
+  }
+
+  .http-method-head,
+  .http-method-options {
+    @apply bg-slate-200 text-slate-700;
+  }
+
+  .schema-editor-mode-toolbar {
+    @apply rounded-[20px] border border-slate-200 bg-slate-50/80 px-4 py-4;
+  }
+
+  .schema-editor-mode-toolbar .mantine-RadioGroup-root {
+    @apply mt-1;
+  }
+
+  .schema-editor-mode-toolbar .mantine-Radio-radio {
+    @apply border-slate-300;
+  }
+
+  .schema-editor-alert {
+    @apply rounded-[18px] border-yellow-200 bg-yellow-50;
+  }
+
+  .schema-editor {
+    @apply rounded-[24px] border border-slate-200 bg-slate-50/60 p-4;
+  }
+
+  .schema-editor .mantine-Input-input,
+  .schema-editor .mantine-Select-input,
+  .schema-editor .mantine-Textarea-input {
+    @apply rounded-[14px] border-slate-300 bg-white text-sm text-slate-700 shadow-none;
+  }
+
+  .schema-editor .mantine-Input-input::placeholder,
+  .schema-editor .mantine-Select-input::placeholder,
+  .schema-editor .mantine-Textarea-input::placeholder {
+    @apply text-slate-400;
+  }
+
+  .schema-editor .mantine-Input-input:disabled,
+  .schema-editor .mantine-Select-input:disabled,
+  .schema-editor .mantine-Textarea-input:disabled {
+    @apply border-slate-200 bg-slate-100/90 text-slate-500 opacity-100;
+  }
+
+  .schema-editor .mantine-Switch-track {
+    @apply border-slate-300 bg-slate-200;
+  }
+
+  .schema-editor .mantine-Switch-thumb {
+    @apply border-white bg-white shadow-sm;
+  }
+
+  .schema-editor .mantine-Switch-track[data-checked='true'] {
+    @apply border-blue-500 bg-blue-500;
+  }
+
+  .schema-editor-head {
+    @apply rounded-[20px] border border-slate-200 bg-white px-4 py-4 shadow-sm;
+  }
+
+  .schema-editor-head-grid {
+    @apply grid min-w-[980px] grid-cols-[minmax(220px,260px)_88px_140px_180px_220px_150px] items-center gap-3;
+  }
+
+  .schema-editor-head-actions {
+    @apply justify-start;
+  }
+
+  .schema-editor-toggle-button {
+    @apply rounded-full text-slate-500 transition-all duration-150;
+  }
+
+  .schema-editor-toggle-button:hover:not(:disabled) {
+    @apply bg-slate-100 text-slate-900;
+  }
+
+  .schema-editor-toggle-button:disabled {
+    @apply opacity-40;
+  }
+
+  .schema-editor-root-name .mantine-Input-input {
+    @apply font-semibold text-slate-900;
+  }
+
+  .schema-editor-table-wrap {
+    @apply bg-white shadow-sm;
+  }
+
+  .schema-editor-table {
+    @apply min-w-[980px];
+  }
+
+  .schema-editor-table thead {
+    @apply bg-slate-100/80;
+  }
+
+  .schema-editor-table th {
+    @apply border-slate-200 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500;
+  }
+
+  .schema-editor-table td {
+    @apply border-slate-200 px-4 py-3 align-top;
+  }
+
+  .schema-editor-table tbody tr:hover {
+    @apply bg-slate-50/80;
+  }
+
+  .schema-editor-tree-row {
+    @apply min-w-0;
+  }
+
+  .schema-editor-tree-row .mantine-InputWrapper-root,
+  .schema-editor-tree-row .mantine-TextInput-root {
+    @apply min-w-0 flex-1;
+  }
+
+  .schema-editor-tree-row .mantine-Input-input {
+    @apply font-medium text-slate-800;
+  }
+
+  .schema-editor-row-actions .mantine-ActionIcon-root,
+  .schema-editor-head-actions .mantine-ActionIcon-root {
+    @apply h-9 w-9 rounded-full border border-transparent bg-white text-slate-500 transition-all duration-150;
+  }
+
+  .schema-editor-row-actions .mantine-ActionIcon-root:hover,
+  .schema-editor-head-actions .mantine-ActionIcon-root:hover {
+    @apply border-slate-200 bg-slate-50 text-slate-900 shadow-sm;
+  }
+
+  .schema-editor-row-actions .mantine-ActionIcon-root[data-disabled],
+  .schema-editor-head-actions .mantine-ActionIcon-root[data-disabled] {
+    @apply opacity-40;
+  }
+
+  .schema-editor-row-actions .mantine-ActionIcon-root[color='red'] {
+    @apply text-rose-500;
+  }
+
+  .schema-editor .workspace-control .mantine-Input-input,
+  .schema-editor .workspace-control .mantine-Select-input {
+    @apply min-w-[112px];
+  }
+
+  .schema-editor-import-input .mantine-Textarea-input {
+    @apply rounded-[16px] border-slate-300 bg-slate-50 font-mono text-[13px] leading-6 text-slate-800;
+  }
+
+  .schema-editor .mantine-Table-table {
+    @apply border-collapse;
+  }
+
+  .workspace-leave-confirm {
+    @apply gap-4;
+  }
+
+  .workspace-leave-confirm-note {
+    @apply rounded-[18px] border border-amber-100 bg-amber-50/70 px-4 py-3 text-[15px] leading-7 text-slate-600;
+  }
+
+  .workspace-leave-confirm-actions {
+    @apply pt-1;
+  }
+
+  .workspace-leave-confirm-actions > div {
+    @apply justify-end;
+  }
+
+  .workspace-leave-confirm-actions .mantine-Button-root {
+    @apply h-11 rounded-[14px] px-5 text-sm font-semibold;
+  }
+
+  .app-modal-title {
+    @apply text-[18px] font-semibold tracking-tight text-slate-900;
+  }
+}

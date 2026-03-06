@@ -44,8 +44,8 @@ function renderCell(record: ParamRow, column: Record<string, unknown>) {
 
 function renderParamTable(title: string, columns: ParamColumns, rows: ParamRow[]) {
   return (
-    <div className="legacy-view-block space-y-3">
-      <h3 className="legacy-view-subtitle text-base font-semibold text-slate-900">{title}</h3>
+    <div className="interface-view-block space-y-3">
+      <h3 className="interface-view-subtitle text-base font-semibold text-slate-900">{title}</h3>
       <div className="overflow-x-auto rounded-2xl border border-slate-200">
         <Table withTableBorder striped highlightOnHover>
           <Table.Thead>
@@ -98,11 +98,11 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
 
   return (
     <div className="caseContainer space-y-4">
-      <SectionCard title="基本信息" className="panel-view legacy-view-panel">
-        <div className="legacy-view-descriptions grid gap-4 md:grid-cols-2">
+      <SectionCard title="基本信息" className="panel-view interface-view-panel">
+        <div className="interface-view-descriptions grid gap-4 md:grid-cols-2">
           <InfoRow
             label="接口名称"
-            value={<span className="legacy-view-name" title={String(props.currentInterface.title || '-')}>{props.currentInterface.title || '-'}</span>}
+            value={<span className="interface-view-name" title={String(props.currentInterface.title || '-')}>{props.currentInterface.title || '-'}</span>}
           />
           <InfoRow
             label="创建人"
@@ -120,7 +120,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
           <InfoRow
             label="状态"
             value={
-              <span className={`legacy-status-tag ${props.currentInterface.status === 'done' ? 'done' : 'undone'}`}>
+              <span className={`status-chip ${props.currentInterface.status === 'done' ? 'done' : 'undone'}`}>
                 {props.statusLabel(props.currentInterface.status)}
               </span>
             }
@@ -146,9 +146,9 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
             label="接口路径"
             span
             value={
-              <div className="legacy-view-code-row flex flex-wrap items-center gap-2">
+              <div className="interface-view-code-row flex flex-wrap items-center gap-2">
                 <span className={`${props.methodClassName(props.method)} tag-method`}>{props.method}</span>
-                <code className="legacy-view-code">{props.fullPath}</code>
+                <code className="interface-view-code">{props.fullPath}</code>
                 <Tooltip label="复制路径">
                   <Button
                     size="compact-sm"
@@ -165,14 +165,14 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
             label="Mock地址"
             span
             value={
-              <div className="legacy-view-code-row flex flex-wrap items-center gap-2">
+              <div className="interface-view-code-row flex flex-wrap items-center gap-2">
                 {mockFlag ? <Text c="dimmed">{mockFlag}</Text> : null}
                 {props.mockUrl ? (
-                  <a href={props.mockUrl} target="_blank" rel="noopener noreferrer" className="legacy-view-link-btn">
+                  <a href={props.mockUrl} target="_blank" rel="noopener noreferrer" className="interface-view-link-button">
                     {props.mockUrl}
                   </a>
                 ) : (
-                  <span className="legacy-view-link">-</span>
+                  <span className="interface-view-link">-</span>
                 )}
                 {props.mockUrl ? (
                   <Tooltip label="复制Mock地址">
@@ -199,9 +199,9 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
       </SectionCard>
 
       {props.currentInterface.desc ? (
-        <SectionCard title="备注" className="legacy-view-section">
+        <SectionCard title="备注" className="interface-view-section">
           <div
-            className="legacy-view-remark"
+            className="interface-view-remark"
             dangerouslySetInnerHTML={{
               __html: sanitizeHtml(String(props.currentInterface.desc || ''))
             }}
@@ -210,21 +210,21 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
       ) : null}
 
       {hasRequestParams ? (
-        <SectionCard title="请求参数" className="legacy-view-section">
+        <SectionCard title="请求参数" className="interface-view-section">
           {props.reqParamsRows.length > 0 ? renderParamTable('路径参数', props.paramColumns, props.reqParamsRows) : null}
           {props.reqHeadersRows.length > 0 ? renderParamTable('Headers', props.paramColumns, props.reqHeadersRows) : null}
           {props.reqQueryRows.length > 0 ? renderParamTable('Query', props.paramColumns, props.reqQueryRows) : null}
           {props.reqBodyFormRows.length > 0 ? renderParamTable('Body(form)', props.bodyParamColumns, props.reqBodyFormRows) : null}
           {props.currentInterface.req_body_other ? (
-            <div className="legacy-view-block space-y-3">
-              <h3 className="legacy-view-subtitle text-base font-semibold text-slate-900">
+            <div className="interface-view-block space-y-3">
+              <h3 className="interface-view-subtitle text-base font-semibold text-slate-900">
                 Body({props.currentInterface.req_body_type || 'raw'})
               </h3>
               {props.schemaRowsRequest.length > 0 ? (
                 renderParamTable('请求 Schema', props.schemaColumns, props.schemaRowsRequest)
               ) : (
-                <div className="legacy-view-raw-block space-y-3">
-                  <div className="legacy-run-section-head flex items-center justify-between gap-3">
+                <div className="interface-view-raw-block space-y-3">
+                  <div className="workspace-section-head flex items-center justify-between gap-3">
                     <Text fw={700}>原始 Body</Text>
                     <Tooltip label="复制 Body 内容">
                       <Button
@@ -249,13 +249,13 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
       ) : null}
 
       {props.currentInterface.res_body ? (
-        <SectionCard title="返回数据" className="legacy-view-section">
-          <div className="legacy-view-block">
+        <SectionCard title="返回数据" className="interface-view-section">
+          <div className="interface-view-block">
             {props.schemaRowsResponse.length > 0 ? (
               renderParamTable('响应 Schema', props.schemaColumns, props.schemaRowsResponse)
             ) : (
-              <div className="legacy-view-raw-block space-y-3">
-                <div className="legacy-run-section-head flex items-center justify-between gap-3">
+              <div className="interface-view-raw-block space-y-3">
+                <div className="workspace-section-head flex items-center justify-between gap-3">
                   <Text fw={700}>原始响应</Text>
                   <Tooltip label="复制返回数据">
                     <Button

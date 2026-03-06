@@ -170,7 +170,7 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
       title: '备注',
       dataIndex: 'desc',
       key: 'desc',
-      render: (value: string) => <span className="legacy-multiline">{value || '-'}</span>
+      render: (value: string) => <span className="multiline-text">{value || '-'}</span>
     }
   ];
   const bodyParamColumns = [
@@ -188,7 +188,7 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
       title: '备注',
       dataIndex: 'desc',
       key: 'desc',
-      render: (value: string) => <span className="legacy-multiline">{value || '-'}</span>
+      render: (value: string) => <span className="multiline-text">{value || '-'}</span>
     }
   ];
   const schemaRowsRequest =
@@ -210,13 +210,13 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
       title: '备注',
       dataIndex: 'desc',
       key: 'desc',
-      render: (value: string) => <span className="legacy-multiline">{value || '-'}</span>
+      render: (value: string) => <span className="multiline-text">{value || '-'}</span>
     },
     {
       title: '其他信息',
       dataIndex: 'other',
       key: 'other',
-      render: (value: string) => <span className="legacy-multiline">{value || '-'}</span>
+      render: (value: string) => <span className="multiline-text">{value || '-'}</span>
     }
   ];
 

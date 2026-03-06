@@ -69,11 +69,11 @@ export function SettingTokenTab(props: ProjectSettingPageProps) {
   }
 
   return (
-    <SectionCard className="m-panel legacy-project-setting-card">
-      <Stack className="legacy-workspace-stack">
+    <SectionCard className="m-panel project-settings-card">
+      <Stack className="workspace-stack">
         <Alert
           color="blue"
-          className="legacy-setting-info-alert"
+          className="project-settings-info-alert"
           title="Token 用于 OpenAPI 与开放接口访问，请妥善保管并仅在可信环境中使用。"
         />
         <Text fw={700}>工具标识</Text>
@@ -92,11 +92,11 @@ export function SettingTokenTab(props: ProjectSettingPageProps) {
             刷新
           </Button>
         </div>
-        <Text fw={700} className="legacy-workspace-text-top">
+        <Text fw={700} className="workspace-text-top">
           Open 接口
         </Text>
         <Text c="dimmed">详细说明请查看 OpenAPI 文档，以下为常用接口：</Text>
-        <ul className="legacy-open-api-list">
+        <ul className="open-api-list">
           <li>/api/open/run_auto_test</li>
           <li>/api/open/import_data</li>
           <li>/api/interface/add</li>

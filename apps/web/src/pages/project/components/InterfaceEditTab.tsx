@@ -137,12 +137,12 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
       ) : (
         <>
           {props.editConflictState.status === 'error' ? (
-            <Alert className="legacy-edit-conflict-alert" color="yellow" title="多人编辑冲突检测暂时不可用，请稍后重试。" />
+            <Alert className="interface-edit-conflict-alert" color="yellow" title="多人编辑冲突检测暂时不可用，请稍后重试。" />
           ) : null}
 
           <RcForm<InterfaceEditFormValues> form={props.form}>
             <div className="flex flex-col gap-4">
-              <SectionCard title="基本设置" className="panel-sub legacy-edit-section">
+              <SectionCard title="基本设置" className="panel-sub interface-edit-section">
                 <div className="flex flex-col gap-4">
                   <Field<InterfaceEditFormValues> name="title" rules={[{ required: true, validator: legacyNameValidator('接口') }]}>
                     {(control, meta) => (
@@ -174,11 +174,11 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                         tip={'1. 支持动态路由，例如: /api/user/{id}\n2. 支持 ?controller=xxx 的 QueryRouter，普通 Query 参数请配置在 Query 区'}
                       />
                     </Text>
-                    <div className="legacy-edit-path-compact grid gap-3 md:grid-cols-[140px_180px_minmax(0,1fr)]">
+                    <div className="interface-edit-path grid gap-3 md:grid-cols-[140px_180px_minmax(0,1fr)]">
                       <Field<InterfaceEditFormValues> name="method">
                         {(control) => (
                           <Select
-                            className="legacy-edit-method-select"
+                            className="interface-edit-method-select"
                             value={control.value ? String(control.value) : null}
                             onChange={value => {
                               control.onChange(value || undefined);
@@ -191,7 +191,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                         )}
                       </Field>
                       <Tooltip label="接口基本路径，可在项目设置里修改">
-                        <TextInput readOnly value={props.basepath || ''} className="legacy-edit-basepath-input" />
+                        <TextInput readOnly value={props.basepath || ''} className="interface-edit-basepath-input" />
                       </Tooltip>
                       <Field<InterfaceEditFormValues> name="path" rules={[{ required: true, message: '请输入接口路径' }]}>
                         {(control, meta) => (
@@ -212,7 +212,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                       <div className="flex flex-col gap-3">
                         {fields.length > 0 ? <Text fw={600}>路径参数</Text> : null}
                         {fields.map(field => (
-                          <div key={field.key} className="legacy-edit-row-wrap grid gap-3 md:grid-cols-3">
+                          <div key={field.key} className="interface-edit-row grid gap-3 md:grid-cols-3">
                             <Field name={[field.name, 'name']}>
                               {(control) => (
                                 <TextInput
@@ -247,7 +247,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                     )}
                   </List>
 
-                  <div className="legacy-edit-row-wrap max-w-48">
+                  <div className="interface-edit-row max-w-48">
                     <Field<InterfaceEditFormValues> name="status">
                       {(control) => (
                         <Select
@@ -297,18 +297,18 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                 </div>
               </SectionCard>
 
-              <SectionCard title="请求参数设置" className="panel-sub legacy-edit-section">
+              <SectionCard title="请求参数设置" className="panel-sub interface-edit-section">
                 <div className="flex flex-col gap-4">
                   <SegmentedControl
                     value={props.reqRadioType}
                     onChange={value => props.onReqRadioTypeChange(value as 'req-body' | 'req-query' | 'req-headers')}
-                    className="legacy-edit-type-switch"
+                    className="interface-edit-type-switch"
                     data={reqPanelOptions}
                   />
 
                   {props.reqRadioType === 'req-query' ? (
                     <div className="flex flex-col gap-4">
-                      <div className="legacy-edit-list-toolbar flex flex-wrap gap-2">
+                      <div className="interface-edit-list-toolbar flex flex-wrap gap-2">
                         <Button
                           size="xs"
                           onClick={() => {
@@ -326,7 +326,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                         {(fields, { remove }) => (
                           <div className="flex flex-col gap-3">
                             {fields.map(field => (
-                              <div key={field.key} className="legacy-edit-row-wrap grid gap-3 md:grid-cols-[1.1fr_120px_1fr_1.2fr_80px]">
+                              <div key={field.key} className="interface-edit-row grid gap-3 md:grid-cols-[1.1fr_120px_1fr_1.2fr_80px]">
                                 <Field name={[field.name, 'name']}>
                                   {(control) => (
                                     <TextInput
@@ -379,7 +379,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
 
                   {props.reqRadioType === 'req-headers' ? (
                     <div className="flex flex-col gap-4">
-                      <div className="legacy-edit-list-toolbar flex flex-wrap gap-2">
+                      <div className="interface-edit-list-toolbar flex flex-wrap gap-2">
                         <Button
                           size="xs"
                           onClick={() => {
@@ -394,7 +394,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                         {(fields, { remove }) => (
                           <div className="flex flex-col gap-3">
                             {fields.map(field => (
-                              <div key={field.key} className="legacy-edit-row-wrap grid gap-3 md:grid-cols-[1.1fr_1fr_120px_1fr_1fr_80px]">
+                              <div key={field.key} className="interface-edit-row grid gap-3 md:grid-cols-[1.1fr_1fr_120px_1fr_1fr_80px]">
                                 <Field name={[field.name, 'name']}>
                                   {(control) => (
                                     <Autocomplete
@@ -478,7 +478,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
 
                       {props.editBodyType === 'form' ? (
                         <>
-                          <div className="legacy-edit-list-toolbar flex flex-wrap gap-2">
+                          <div className="interface-edit-list-toolbar flex flex-wrap gap-2">
                             <Button
                               size="xs"
                               onClick={() => {
@@ -499,7 +499,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                             {(fields, { remove }) => (
                               <div className="flex flex-col gap-3">
                                 {fields.map(field => (
-                                  <div key={field.key} className="legacy-edit-row-wrap grid gap-3 md:grid-cols-[1.1fr_120px_120px_1fr_1fr_80px]">
+                                  <div key={field.key} className="interface-edit-row grid gap-3 md:grid-cols-[1.1fr_120px_120px_1fr_1fr_80px]">
                                     <Field name={[field.name, 'name']}>
                                       {(control) => (
                                         <TextInput
@@ -587,7 +587,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                             />
                           ) : (
                             <>
-                              <Alert color="blue" className="legacy-edit-json-alert" title="基于 Json5，参数描述信息可以使用注释方式编写。" />
+                              <Alert color="blue" className="interface-edit-json-alert" title="基于 Json5，参数描述信息可以使用注释方式编写。" />
                               <Field<InterfaceEditFormValues> name="req_body_other">
                                 {(control) => (
                                   <Textarea
@@ -622,7 +622,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                 </div>
               </SectionCard>
 
-              <SectionCard title="返回数据设置" className="panel-sub legacy-edit-section">
+              <SectionCard title="返回数据设置" className="panel-sub interface-edit-section">
                 <div className="flex flex-col gap-4">
                   <Field<InterfaceEditFormValues> name="res_body_type">
                     {(control) => (
@@ -655,7 +655,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
 
                   {String(props.editValues.res_body_type || 'json') === 'json' ? (
                     <Tabs
-                      className="legacy-edit-response-tabs"
+                      className="interface-edit-response-tabs"
                       value={props.resEditorTab}
                       onChange={value => props.onResponseEditorTabChange((value as 'tpl' | 'preview') || 'tpl')}
                     >
@@ -678,13 +678,13 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                           />
                         ) : (
                           <>
-                            <Alert color="blue" className="legacy-edit-json-alert" title="基于 mockjs 和 json5，参数描述信息可以使用注释方式编写。" />
+                            <Alert color="blue" className="interface-edit-json-alert" title="基于 mockjs 和 json5，参数描述信息可以使用注释方式编写。" />
                             <Field<InterfaceEditFormValues> name="res_body">
                               {(control) => (
                                 <Textarea
                                   label="返回内容"
                                   minRows={12}
-                                  className="legacy-edit-zero-margin"
+                                  className="interface-edit-zero-margin"
                                   value={String(control.value ?? '')}
                                   onChange={event => control.onChange(event.currentTarget.value)}
                                 />
@@ -718,7 +718,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                 </div>
               </SectionCard>
 
-              <SectionCard title="备注" className="panel-sub legacy-edit-section">
+              <SectionCard title="备注" className="panel-sub interface-edit-section">
                 <Field<InterfaceEditFormValues> name="desc">
                   {(control) => (
                     <Textarea
@@ -731,7 +731,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                 </Field>
               </SectionCard>
 
-              <SectionCard title="其他" className="panel-sub legacy-edit-section">
+              <SectionCard title="其他" className="panel-sub interface-edit-section">
                 <div className="flex flex-col gap-4">
                   <Field<InterfaceEditFormValues> name="switch_notice" valuePropName="checked">
                     {(control) => (
@@ -764,7 +764,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                 </div>
               </SectionCard>
 
-              <div className="legacy-edit-footer legacy-edit-footer-sticky flex flex-wrap items-center justify-between gap-3">
+              <div className="interface-edit-footer interface-edit-footer-sticky flex flex-wrap items-center justify-between gap-3">
                 <Text c="dimmed">修改后请保存，离开页面时会拦截未保存变更。</Text>
                 <Button onClick={props.onSave} loading={props.saving}>
                   保存接口

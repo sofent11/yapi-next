@@ -45,10 +45,10 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
   const totalPages = Math.max(1, Math.ceil(props.filteredList.length / tablePageSize));
 
   return (
-    <div className="legacy-interface-list-wrap space-y-4">
+    <div className="interface-table-panel space-y-4">
       {props.currentCat ? (
         <Alert
-          className="legacy-interface-cat-alert"
+          className="interface-category-alert"
           color="blue"
           title={`接口分类：${props.currentCat.name}`}
         >
@@ -64,9 +64,9 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
       ) : null}
 
       <FilterBar
-        className="legacy-interface-list-toolbar"
+        className="interface-table-toolbar"
         left={
-          <div className="legacy-interface-list-toolbar-copy">
+          <div className="interface-table-toolbar-copy">
             <Text fw={700}>{props.currentCatName}</Text>
             <Text c="dimmed">{`${props.filteredList.length} 个接口`}</Text>
           </div>
@@ -78,13 +78,13 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
               onChange={event => props.onListKeywordChange(event.currentTarget.value)}
               placeholder="按名称或路径搜索接口…"
               leftSection={<IconSearch size={16} />}
-              className="legacy-interface-list-search min-w-[240px]"
+              className="interface-table-search min-w-[240px]"
               aria-label="搜索接口"
             />
             <Select
               value={props.statusFilter}
               onChange={value => props.onStatusFilterChange((value as 'all' | 'done' | 'undone') || 'all')}
-              className="legacy-interface-list-status-filter min-w-[150px]"
+              className="interface-table-status-filter min-w-[150px]"
               aria-label="按状态筛选接口"
               data={[
                 { value: 'all', label: '全部状态' },
@@ -131,13 +131,13 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
               {pagedFilteredList.map(row => (
                 <Table.Tr
                   key={Number(row._id || 0)}
-                  className={Number(row._id || 0) === props.activeInterfaceId ? 'legacy-interface-list-row-active' : undefined}
+                  className={Number(row._id || 0) === props.activeInterfaceId ? 'interface-table-row-active' : undefined}
                   onClick={() => props.onNavigateInterface(Number(row._id || 0))}
                 >
                   <Table.Td>
                     <button
                       type="button"
-                      className="legacy-interface-menu-link-btn"
+                      className="interface-link-button"
                       onClick={() => props.onNavigateInterface(Number(row._id || 0))}
                     >
                       {row.title}
@@ -150,16 +150,16 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
                       </span>
                       {row.api_opened ? (
                         <Tooltip label="开放接口">
-                          <span className="inline-flex"><IconEye size={16} className="legacy-opened-icon" /></span>
+                          <span className="inline-flex"><IconEye size={16} className="interface-opened-icon" /></span>
                         </Tooltip>
                       ) : null}
-                      <span className="legacy-interface-path-text">{`${props.basepath || ''}${row.path || ''}`}</span>
+                      <span className="interface-path-text">{`${props.basepath || ''}${row.path || ''}`}</span>
                     </div>
                   </Table.Td>
                   <Table.Td onClick={event => event.stopPropagation()}>
                     <Select
                       value={String(row.status || 'undone')}
-                      className="legacy-interface-status-select min-w-[120px]"
+                      className="interface-table-status-select min-w-[120px]"
                       disabled={!props.canEdit}
                       onChange={next => next && props.onUpdateStatus(Number(row._id || 0), next as 'done' | 'undone')}
                       data={[
@@ -171,7 +171,7 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
                   <Table.Td onClick={event => event.stopPropagation()}>
                     <Select
                       value={String(Number(row.catid || 0))}
-                      className="legacy-interface-catid-select min-w-[180px]"
+                      className="interface-table-category-select min-w-[180px]"
                       disabled={!props.canEdit}
                       onChange={nextCatId => nextCatId && props.onUpdateCategory(Number(row._id || 0), Number(nextCatId))}
                       data={props.catOptions.map(option => ({ label: option.label, value: String(option.value) }))}

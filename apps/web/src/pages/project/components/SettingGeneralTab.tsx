@@ -85,7 +85,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
   const projectIconKey = String(projectVisual.icon || 'code-o');
   const projectVisualColor = resolveProjectColor(projectColorKey, String(project?.name || props.projectId));
   const projectVisualColorKey = resolveProjectColorKey(projectColorKey);
-  const projectVisualColorClass = projectVisualColorKey ? `legacy-project-color-${projectVisualColorKey}` : '';
+  const projectVisualColorClass = projectVisualColorKey ? `project-color-${projectVisualColorKey}` : '';
 
   const mockUrl = useMemo(() => {
     if (!project?._id) return '-';
@@ -179,31 +179,31 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
   }
 
   return (
-    <SectionCard className="m-panel legacy-project-setting-card">
-      <div className="legacy-project-setting-head legacy-project-setting-head-card">
+    <SectionCard className="m-panel project-settings-card">
+      <div className="project-settings-hero project-settings-hero-card">
         <Popover width={360} position="bottom" shadow="md">
           <Popover.Target>
-            <button type="button" className="legacy-project-setting-logo-btn">
+            <button type="button" className="project-settings-logo-btn">
               <span
-                className={`legacy-project-setting-logo ${projectVisualColorClass}`.trim()}
+                className={`project-settings-logo ${projectVisualColorClass}`.trim()}
                 title="点击修改项目图标和颜色"
                 style={projectVisualColorClass ? undefined : { backgroundColor: projectVisualColor }}
               >
                 {renderProjectIcon(projectIconKey)}
               </span>
-              <span className="legacy-project-setting-logo-mask">点击修改</span>
+              <span className="project-settings-logo-mask">点击修改</span>
             </button>
           </Popover.Target>
-          <Popover.Dropdown className="legacy-project-visual-popover">
+          <Popover.Dropdown className="project-settings-visual-popover">
             <Stack gap="md">
               <div>
                 <Text fw={600} mb="xs">颜色</Text>
-                <div className="legacy-project-color-group flex flex-wrap gap-2">
+                <div className="project-settings-color-group flex flex-wrap gap-2">
                   {PROJECT_COLOR_OPTIONS.map(item => (
                     <button
                       key={item}
                       type="button"
-                      className={`legacy-project-color-option legacy-project-color-${item}`}
+                      className={`project-settings-color-option project-color-${item}`}
                       onClick={() => void handleChangeProjectColor(item)}
                       disabled={upsetState.isLoading}
                     >
@@ -214,12 +214,12 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
               </div>
               <div>
                 <Text fw={600} mb="xs">图标</Text>
-                <div className="legacy-project-icon-group flex flex-wrap gap-2">
+                <div className="project-settings-icon-group flex flex-wrap gap-2">
                   {PROJECT_ICON_OPTIONS.map(item => (
                     <button
                       key={item}
                       type="button"
-                      className="legacy-project-icon-option"
+                      className="project-settings-icon-option"
                       onClick={() => void handleChangeProjectIcon(item)}
                       disabled={upsetState.isLoading}
                     >
@@ -232,8 +232,8 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
           </Popover.Dropdown>
         </Popover>
 
-        <div className="legacy-project-setting-head-info">
-          <h2 className="legacy-project-setting-head-title">
+        <div className="project-settings-hero-info">
+          <h2 className="project-settings-hero-title">
             {(currentGroupName ? `${currentGroupName} / ` : '') + (project?.name || '')}
           </h2>
           <Text c="dimmed">点击图标可调整项目视觉样式，帮助团队更快识别项目。</Text>
@@ -241,12 +241,12 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
       </div>
       <Alert
         color="blue"
-        className="legacy-setting-info-alert"
+        className="project-settings-info-alert"
         title="这里维护项目基础信息、访问权限与行为开关，调整公开权限前请先确认协作范围。"
       />
-      <hr className="legacy-breakline" />
+      <hr className="project-settings-divider" />
 
-      <RcForm<ProjectForm> className="legacy-project-setting-form" form={projectForm} onFinish={handleSubmit}>
+      <RcForm<ProjectForm> className="project-settings-form" form={projectForm} onFinish={handleSubmit}>
         <Stack gap="md">
           <div className="form-item">
             <Text fw={500}>项目ID</Text>
@@ -361,7 +361,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
             {(control) => (
               <Radio.Group
                 label="权限"
-                className="legacy-project-permission-group"
+                className="project-settings-permission-group"
                 value={control.value || projectType}
                 onChange={value => {
                   setProjectType(value as 'public' | 'private');
@@ -376,7 +376,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
                         <span className="inline-flex items-center gap-1">
                           <IconLock size={16} /> 私有
                         </span>
-                        <div className="legacy-radio-desc">只有组长和项目开发者可以索引并查看项目信息</div>
+                        <div className="project-settings-radio-desc">只有组长和项目开发者可以索引并查看项目信息</div>
                       </div>
                     }
                   />
@@ -388,7 +388,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
                           <span className="inline-flex items-center gap-1">
                             <IconLockOpen size={16} /> 公开
                           </span>
-                          <div className="legacy-radio-desc">任何人都可以索引并查看项目信息</div>
+                          <div className="project-settings-radio-desc">任何人都可以索引并查看项目信息</div>
                         </div>
                       }
                     />
@@ -400,16 +400,16 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
         </Stack>
       </RcForm>
 
-      <div className="legacy-setting-actions">
+      <div className="project-settings-actions">
         <Button className="btn-save" size="md" onClick={() => void projectForm.submit()} loading={updateState.isLoading}>
           保存项目配置
         </Button>
       </div>
 
       {canDeleteProject ? (
-        <div className="legacy-danger-zone">
-          <div className="legacy-group-danger-header">
-            <div className="legacy-group-danger-title">
+        <div className="project-settings-danger-zone">
+          <div className="project-settings-danger-header">
+            <div className="project-settings-danger-title">
               <IconHelpCircle size={16} />
               危险操作
             </div>
@@ -417,8 +417,8 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
           <Card className="card-danger" withBorder>
             <div className="card-danger-content">
               <h3>删除项目</h3>
-              <p className="legacy-group-danger-desc">项目一旦删除，将无法恢复数据，请慎重操作。</p>
-              <p className="legacy-group-danger-desc">只有组长和管理员有权限删除项目。</p>
+              <p className="project-settings-danger-desc">项目一旦删除，将无法恢复数据，请慎重操作。</p>
+              <p className="project-settings-danger-desc">只有组长和管理员有权限删除项目。</p>
             </div>
             <Button color="red" variant="outline" className="card-danger-btn" onClick={() => setDeleteModalOpen(true)}>
               删除
@@ -435,7 +435,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
           setDeleteConfirmText('');
         }}
       >
-        <Stack className="legacy-workspace-stack">
+        <Stack className="workspace-stack">
           <Alert color="yellow" title="该操作会删除项目下所有接口与相关数据，且无法恢复。" />
           <Text>请输入项目名称以确认删除：</Text>
           <TextInput

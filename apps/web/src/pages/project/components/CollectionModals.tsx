@@ -16,6 +16,8 @@ import type { FormInstance } from 'rc-field-form';
 import { normalizeHttpMethod } from '../../../utils/http-method';
 import type { AddCaseFormValues, ColFormValues, CommonSettingFormValues } from './collection-types';
 
+const modalClassNames = { title: 'app-modal-title' };
+
 type ImportInterfaceRow = {
   key: string;
   id?: number;
@@ -104,7 +106,7 @@ export function CollectionModals(props: CollectionModalsProps) {
       const checked = selectedCount > 0 && selectedCount === leafKeys.length;
       const indeterminate = selectedCount > 0 && selectedCount < leafKeys.length;
       const current = (
-        <Table.Tr key={row.key} className={row.isCategory ? 'legacy-collection-import-category-row' : undefined}>
+        <Table.Tr key={row.key} className={row.isCategory ? 'collection-import-category-row' : undefined}>
           <Table.Td>
             <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 20}px` }}>
               <Checkbox
@@ -129,9 +131,9 @@ export function CollectionModals(props: CollectionModalsProps) {
             {row.isCategory ? (
               '-'
             ) : row.status === 'done' ? (
-              <span className="legacy-status-tag done">已完成</span>
+              <span className="status-chip done">已完成</span>
             ) : (
-              <span className="legacy-status-tag undone">未完成</span>
+              <span className="status-chip undone">未完成</span>
             )}
           </Table.Td>
         </Table.Tr>
@@ -146,6 +148,7 @@ export function CollectionModals(props: CollectionModalsProps) {
         title={props.colModalType === 'add' ? '添加测试集合' : '编辑测试集合'}
         opened={props.colModalOpen}
         onClose={props.onCancelColModal}
+        classNames={modalClassNames}
       >
         <RcForm<ColFormValues> form={props.colForm} onFinish={values => void props.onSubmitCol(values)}>
           <Stack>
@@ -183,13 +186,14 @@ export function CollectionModals(props: CollectionModalsProps) {
         opened={props.importModalOpen}
         onClose={props.onCancelImportModal}
         size="72rem"
+        classNames={modalClassNames}
       >
-        <Stack className="legacy-collection-modal-stack">
+        <Stack className="workspace-form-modal-stack">
           <div className="flex flex-wrap items-center gap-3">
             <Text>选择要导入的项目：</Text>
             <Select
               value={String(props.importProjectId > 0 ? props.importProjectId : props.currentProjectId)}
-              className="legacy-collection-import-project-select"
+              className="collection-import-project-select"
               data={props.importProjectOptions.map(item => ({
                 label: item.label,
                 value: String(item.value)
@@ -201,10 +205,10 @@ export function CollectionModals(props: CollectionModalsProps) {
               }}
             />
           </div>
-          <div className="legacy-collection-import-summary flex flex-wrap items-center gap-3">
+          <div className="collection-import-summary flex flex-wrap items-center gap-3">
             <Alert
               color="blue"
-              className="legacy-collection-import-summary-alert flex-1"
+              className="collection-import-summary-alert flex-1"
               title={`已选择 ${props.selectedImportInterfaceCount} 个接口`}
             />
             <Button
@@ -217,7 +221,7 @@ export function CollectionModals(props: CollectionModalsProps) {
             </Button>
           </div>
           <div className="overflow-x-auto">
-            <Table withTableBorder striped highlightOnHover className="legacy-collection-import-table">
+            <Table withTableBorder striped highlightOnHover className="collection-import-table">
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>接口名称</Table.Th>
@@ -253,13 +257,13 @@ export function CollectionModals(props: CollectionModalsProps) {
         </Stack>
       </Modal>
 
-      <Modal title="添加测试用例" opened={props.addCaseOpen} onClose={props.onCancelAddCase}>
+      <Modal title="添加测试用例" opened={props.addCaseOpen} onClose={props.onCancelAddCase} classNames={modalClassNames}>
         <RcForm<AddCaseFormValues> form={props.addCaseForm} onFinish={values => void props.onSubmitAddCase(values)}>
           <Stack>
             {props.caseInterfaceTruncated ? (
               <Alert
                 color="yellow"
-                className="legacy-collection-case-truncated-alert"
+                className="collection-case-truncated-alert"
                 title={`接口选项仅展示前 ${props.caseInterfaceOptions.length} 条，请通过左侧筛选或搜索后再添加。`}
               />
             ) : null}
@@ -314,12 +318,13 @@ export function CollectionModals(props: CollectionModalsProps) {
         opened={props.commonSettingOpen}
         onClose={props.onCancelCommonSetting}
         size="72rem"
+        classNames={modalClassNames}
       >
         <RcForm<CommonSettingFormValues> form={props.commonSettingForm}>
           <Stack>
             <Alert
               color="blue"
-              className="legacy-collection-common-setting-alert"
+              className="collection-common-setting-alert"
               title="执行顺序：先通用规则，再用例脚本。建议先配置字段校验，再补充脚本断言。"
             />
             <Field<CommonSettingFormValues> name="checkHttpCodeIs200" valuePropName="checked">
@@ -332,10 +337,10 @@ export function CollectionModals(props: CollectionModalsProps) {
                 />
               )}
             </Field>
-            <div className="legacy-collection-inline-setting-row">
+            <div className="collection-inline-setting-row">
               <Text fw={500}>检查返回 JSON 字段</Text>
               <Text c="dimmed" size="sm" mb="xs">例如检查 code 是否等于 0</Text>
-              <div className="legacy-collection-inline-setting-fields flex flex-wrap items-end gap-3">
+              <div className="collection-inline-setting-fields flex flex-wrap items-end gap-3">
                 <Field<CommonSettingFormValues> name="checkResponseFieldEnable" valuePropName="checked">
                   {(control) => (
                     <Switch
@@ -347,7 +352,7 @@ export function CollectionModals(props: CollectionModalsProps) {
                 <Field<CommonSettingFormValues> name="checkResponseFieldName">
                   {(control) => (
                     <TextInput
-                      className="legacy-collection-inline-input"
+                      className="collection-inline-input"
                       placeholder="字段名，如 code"
                       value={String(control.value ?? '')}
                       onChange={event => control.onChange(event.currentTarget.value)}
@@ -357,7 +362,7 @@ export function CollectionModals(props: CollectionModalsProps) {
                 <Field<CommonSettingFormValues> name="checkResponseFieldValue">
                   {(control) => (
                     <TextInput
-                      className="legacy-collection-inline-input"
+                      className="collection-inline-input"
                       placeholder="期望值，如 0"
                       value={String(control.value ?? '')}
                       onChange={event => control.onChange(event.currentTarget.value)}
@@ -376,10 +381,10 @@ export function CollectionModals(props: CollectionModalsProps) {
                 />
               )}
             </Field>
-            <div className="legacy-collection-inline-setting-row">
+            <div className="collection-inline-setting-row">
               <Text fw={500}>全局测试脚本</Text>
               <Text c="dimmed" size="sm" mb="xs">启用后每个 case 会先执行全局脚本，再执行 case 脚本</Text>
-              <div className="legacy-collection-script-switch-row flex flex-wrap items-center gap-3">
+              <div className="collection-script-switch-row flex flex-wrap items-center gap-3">
                 <Field<CommonSettingFormValues> name="checkScriptEnable" valuePropName="checked">
                   {(control) => (
                     <Switch

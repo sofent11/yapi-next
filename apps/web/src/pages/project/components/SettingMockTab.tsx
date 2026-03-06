@@ -49,12 +49,12 @@ export function SettingMockTab(props: ProjectSettingPageProps) {
   }
 
   return (
-    <SectionCard className="m-panel legacy-project-setting-card">
+    <SectionCard className="m-panel project-settings-card">
       <RcForm<MockForm> form={mockForm}>
         <Stack>
           <Alert
             color="blue"
-            className="legacy-setting-info-alert"
+            className="project-settings-info-alert"
             title="为整个项目统一定义 Mock 入口与全局脚本，适合需要稳定演示数据或联调兜底的场景。"
           />
           <Field<MockForm> name="is_mock_open" valuePropName="checked">
@@ -82,7 +82,7 @@ export function SettingMockTab(props: ProjectSettingPageProps) {
               </div>
             )}
           </Field>
-          <div className="legacy-setting-actions">
+          <div className="project-settings-actions">
             <Button className="btn-save" size="md" onClick={() => void handleSaveMock()} loading={updateState.isLoading}>
               保存 Mock 配置
             </Button>

@@ -71,7 +71,7 @@ function DetailSection(props: {
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="legacy-run-section-head flex items-center justify-between gap-3">
+      <div className="workspace-section-head flex items-center justify-between gap-3">
         <Text fw={600}>{props.title}</Text>
         <Button size="xs" variant="default" leftSection={<IconCopy size={14} />} onClick={props.onCopy}>
           复制
@@ -136,7 +136,7 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
           </Alert>
 
           <div className="overflow-x-auto">
-            <Table className="legacy-report-table" striped highlightOnHover withTableBorder>
+            <Table className="report-table" striped highlightOnHover withTableBorder>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>用例</Table.Th>
@@ -164,10 +164,10 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
                         key={String(row.id || `${row.method || 'GET'}:${row.path || ''}`)}
                         className={
                           row.code === 0
-                            ? 'legacy-report-row-pass'
+                            ? 'report-row-pass'
                             : row.code === 1
-                              ? 'legacy-report-row-fail'
-                              : 'legacy-report-row-error'
+                              ? 'report-row-fail'
+                              : 'report-row-error'
                         }
                         onClick={() => props.onOpenDetail(row)}
                       >
@@ -249,7 +249,7 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
       >
         {props.detailItem ? (
           <div className="flex flex-col gap-4">
-            <div className="legacy-run-section-head flex items-center justify-between gap-3">
+            <div className="workspace-section-head flex items-center justify-between gap-3">
               <Text fw={600}>基础信息</Text>
               <Button
                 size="xs"

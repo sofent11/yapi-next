@@ -49,12 +49,12 @@ export function SettingRequestTab(props: ProjectSettingPageProps) {
   }
 
   return (
-    <SectionCard className="m-panel legacy-project-setting-card">
+    <SectionCard className="m-panel project-settings-card">
       <RcForm<RequestForm> form={requestForm}>
         <Stack>
           <Alert
             color="blue"
-            className="legacy-setting-info-alert"
+            className="project-settings-info-alert"
             title="在请求发送前后执行全局脚本，适合统一注入 Header、鉴权或响应后处理。"
           />
           <Field<RequestForm> name="pre_script">
@@ -89,7 +89,7 @@ export function SettingRequestTab(props: ProjectSettingPageProps) {
               </div>
             )}
           </Field>
-          <div className="legacy-setting-actions">
+          <div className="project-settings-actions">
             <Button className="btn-save" size="md" onClick={() => void handleSaveRequest()} loading={updateState.isLoading}>
               保存请求配置
             </Button>

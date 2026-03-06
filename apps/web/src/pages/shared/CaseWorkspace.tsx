@@ -305,10 +305,10 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
   }
 
   return (
-    <div className="legacy-workspace-page legacy-case-workspace">
+    <div className="workspace-page case-workspace">
       <PageHeader title={props.title || 'Case Console'} subtitle={props.description} />
 
-      <SectionCard title="连接参数" className="legacy-workspace-card">
+      <SectionCard title="连接参数" className="workspace-card">
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
           <div>
             <Text mb={6}>Project ID</Text>
@@ -326,7 +326,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
       </SectionCard>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <SectionCard title="测试集合" className="legacy-workspace-card">
+        <SectionCard title="测试集合" className="workspace-card">
           <div className="space-y-3">
             <TextInput value={colName} onChange={event => setColName(event.currentTarget.value)} placeholder="测试集名称" />
             <TextInput value={colDesc} onChange={event => setColDesc(event.currentTarget.value)} placeholder="测试集描述" />
@@ -381,7 +381,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
           </div>
         </SectionCard>
 
-        <SectionCard title={`测试用例 ${selectedColId > 0 ? `(col_id=${selectedColId})` : ''}`} className="legacy-workspace-card">
+        <SectionCard title={`测试用例 ${selectedColId > 0 ? `(col_id=${selectedColId})` : ''}`} className="workspace-card">
           <div className="space-y-3">
             <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
               <NumberInput
@@ -419,7 +419,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
                     caseRows.map(row => (
                       <Table.Tr
                         key={row.key}
-                        className={selectedCaseId && row._id === selectedCaseId ? 'legacy-workspace-active-row' : undefined}
+                        className={selectedCaseId && row._id === selectedCaseId ? 'workspace-row-active' : undefined}
                       >
                         <Table.Td>{row._id}</Table.Td>
                         <Table.Td>{row.casename}</Table.Td>
@@ -458,7 +458,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <SectionCard title="run_script 验证" className="legacy-workspace-card">
+        <SectionCard title="run_script 验证" className="workspace-card">
           <div className="space-y-3">
             <Alert color="blue" title={`selected_case=${selectedCaseId || '-'} / interface_id=${caseInterfaceId || '-'}`} />
             <NumberInput
@@ -502,7 +502,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
           </div>
         </SectionCard>
 
-        <SectionCard title="Case 变量与环境视图" className="legacy-workspace-card">
+        <SectionCard title="Case 变量与环境视图" className="workspace-card">
           <div className="space-y-4">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-3">

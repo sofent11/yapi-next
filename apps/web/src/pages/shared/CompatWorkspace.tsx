@@ -247,10 +247,10 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
     testDeleteState.isLoading;
 
   return (
-    <div className="legacy-workspace-page legacy-compat-workspace">
+    <div className="workspace-page compat-workspace">
       <PageHeader title={props.title || 'Compat Console'} subtitle={props.description} />
 
-      <SectionCard title="参数设置" className="legacy-workspace-card">
+      <SectionCard title="参数设置" className="workspace-card">
         <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
           <div>
             <Text mb={6}>Project ID</Text>
@@ -272,7 +272,7 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
       </SectionCard>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <SectionCard title="Open 兼容接口" className="legacy-workspace-card">
+        <SectionCard title="Open 兼容接口" className="workspace-card">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Text fw={700}>/open/project_interface_data</Text>
@@ -303,7 +303,7 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
           </div>
         </SectionCard>
 
-        <SectionCard title="Log 兼容接口" className="legacy-workspace-card">
+        <SectionCard title="Log 兼容接口" className="workspace-card">
           <div className="space-y-3">
             <Button variant="default" onClick={handleLoadLogList} loading={logListState.isFetching}>
               查询 /log/list
@@ -344,7 +344,7 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <SectionCard title="Test 兼容接口" className="legacy-workspace-card">
+        <SectionCard title="Test 兼容接口" className="workspace-card">
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
               <Button variant="default" onClick={handleTestPost} loading={testLoading}>POST</Button>
@@ -364,7 +364,7 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
           </div>
         </SectionCard>
 
-        <SectionCard title="Interface 兼容补口" className="legacy-workspace-card">
+        <SectionCard title="Interface 兼容补口" className="workspace-card">
           <div className="space-y-3">
             <Select
               value={interUploadMode}

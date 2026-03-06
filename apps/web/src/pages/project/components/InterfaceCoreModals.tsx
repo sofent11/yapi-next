@@ -3,6 +3,8 @@ import RcForm, { Field } from 'rc-field-form';
 import type { FormInstance } from 'rc-field-form';
 import { legacyNameValidator } from '../../../utils/legacy-validation';
 
+const modalClassNames = { title: 'app-modal-title' };
+
 type AddInterfaceModalForm = {
   title: string;
   path: string;
@@ -77,7 +79,7 @@ function CategoryFormModal(props: {
   onSubmit: (values: CategoryModalForm) => void;
 }) {
   return (
-    <Modal title={props.title} opened={props.opened} onClose={props.onClose}>
+    <Modal title={props.title} opened={props.opened} onClose={props.onClose} classNames={modalClassNames}>
       <RcForm<CategoryModalForm> form={props.form} onFinish={props.onSubmit}>
         <Stack>
           <Field<CategoryModalForm> name="name" rules={[{ required: true, message: '请输入分类名称' }]}>
@@ -121,14 +123,18 @@ export function InterfaceCoreModals(props: InterfaceCoreModalsProps) {
 
   return (
     <>
-      <Modal title="你即将离开编辑页面" opened={props.confirmOpen} onClose={props.onCancelConfirm}>
-        <Stack>
-          <Text c="dimmed">离开页面会丢失当前编辑的内容，确定要离开吗？</Text>
-          <ModalActions onCancel={props.onCancelConfirm} onConfirm={props.onConfirmLeave} confirmText="确认离开" />
+      <Modal title="你即将离开编辑页面" opened={props.confirmOpen} onClose={props.onCancelConfirm} classNames={modalClassNames}>
+        <Stack className="workspace-leave-confirm">
+          <Text className="workspace-leave-confirm-note">
+            离开页面会丢失当前编辑的内容，确定要离开吗？
+          </Text>
+          <div className="workspace-leave-confirm-actions">
+            <ModalActions onCancel={props.onCancelConfirm} onConfirm={props.onConfirmLeave} confirmText="确认离开" />
+          </div>
         </Stack>
       </Modal>
 
-      <Modal title="新增接口" opened={props.addInterfaceOpen} onClose={props.onCancelAddInterface}>
+      <Modal title="新增接口" opened={props.addInterfaceOpen} onClose={props.onCancelAddInterface} classNames={modalClassNames}>
         <RcForm<AddInterfaceModalForm> form={props.addInterfaceForm} onFinish={props.onSubmitAddInterface}>
           <Stack>
             <Field<AddInterfaceModalForm>
@@ -187,8 +193,8 @@ export function InterfaceCoreModals(props: InterfaceCoreModalsProps) {
         </RcForm>
       </Modal>
 
-      <Modal title="Tag 设置" opened={props.tagSettingOpen} onClose={props.onCancelTagSetting}>
-        <Stack className="legacy-interface-modal-stack">
+      <Modal title="Tag 设置" opened={props.tagSettingOpen} onClose={props.onCancelTagSetting} classNames={modalClassNames}>
+        <Stack className="workspace-form-modal-stack">
           <Text c="dimmed">每行一个 Tag 名称，保存后会更新当前项目 Tag 列表。</Text>
           <Textarea
             minRows={8}
@@ -205,8 +211,8 @@ export function InterfaceCoreModals(props: InterfaceCoreModalsProps) {
         </Stack>
       </Modal>
 
-      <Modal title="批量添加参数" opened={props.bulkOpen} onClose={props.onCancelBulk}>
-        <Stack className="legacy-interface-modal-stack">
+      <Modal title="批量添加参数" opened={props.bulkOpen} onClose={props.onCancelBulk} classNames={modalClassNames}>
+        <Stack className="workspace-form-modal-stack">
           <Text c="dimmed">每行一个 `name:example`，例如 `id:1`。</Text>
           <Textarea
             minRows={10}

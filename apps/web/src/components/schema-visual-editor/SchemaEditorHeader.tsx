@@ -23,26 +23,26 @@ export function SchemaEditorHeader({
   onAddTopRow
 }: Props) {
   return (
-    <div className="legacy-schema-editor-head-wrap">
-      <div className="legacy-schema-editor-head-grid">
-        <div className="legacy-schema-editor-head-name flex items-center gap-2">
+    <div className="schema-editor-head">
+      <div className="schema-editor-head-grid">
+        <div className="schema-editor-head-name flex items-center gap-2">
           <ActionIcon
             variant="subtle"
             size="sm"
-            className="legacy-schema-editor-toggle-btn"
+            className="schema-editor-toggle-button"
             onClick={onToggleRootCollapse}
           >
             {rootCollapsed ? <IconChevronRight size={16} /> : <IconChevronDown size={16} />}
           </ActionIcon>
-          <TextInput value="root" readOnly />
+          <TextInput className="schema-editor-root-name" value="root" readOnly />
         </div>
         <div className="flex items-center">
-          <Switch size="sm" checked={false} disabled />
+          <Switch className="schema-editor-required-switch" size="sm" checked={false} disabled />
         </div>
-        <Select value="object" disabled data={[{ value: 'object', label: 'object' }]} />
-        <TextInput value="mock" disabled />
-        <TextInput value="description" disabled />
-        <div className="flex items-center gap-1">
+        <Select className="schema-editor-root-type" value="object" disabled data={[{ value: 'object', label: 'object' }]} />
+        <TextInput className="schema-editor-root-placeholder" value="mock" disabled />
+        <TextInput className="schema-editor-root-placeholder" value="description" disabled />
+        <div className="schema-editor-head-actions flex items-center gap-1">
           <Tooltip label="导入 JSON 生成 Schema">
             <ActionIcon variant="subtle" onClick={onImportJson}>
               <IconUpload size={16} />

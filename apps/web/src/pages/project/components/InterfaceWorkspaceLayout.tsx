@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Button, Drawer, SegmentedControl, Text } from '@mantine/core';
+import { Button, Drawer, SegmentedControl } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import {
   IconLayoutSidebarLeftCollapse,
@@ -26,29 +26,23 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
 
   const sidePanel = useMemo(
     () => (
-      <div className="legacy-interface-side-pane">
-        <div className="legacy-interface-side-header">
-          <div className="legacy-interface-side-header-copy">
-            <Text className="legacy-interface-side-kicker">资源目录</Text>
-            <Text className="legacy-interface-side-title">
-              {activeKey === 'api' ? '接口资源树' : '测试集合'}
-            </Text>
-          </div>
+      <div className="interface-workspace-pane">
+        <div className="interface-workspace-switch">
           {!isMobile ? (
-            <Button
-              variant="subtle"
-              size="compact-sm"
-              leftSection={
-                leftHidden ? <IconLayoutSidebarLeftExpand size={16} /> : <IconLayoutSidebarLeftCollapse size={16} />
-              }
-              onClick={() => setLeftHidden(value => !value)}
-              aria-label={leftHidden ? '展开资源目录' : '收起资源目录'}
-            >
-              {leftHidden ? '展开' : '收起'}
-            </Button>
+            <div className="interface-workspace-switch-actions">
+              <Button
+                variant="subtle"
+                size="compact-sm"
+                leftSection={
+                  leftHidden ? <IconLayoutSidebarLeftExpand size={16} /> : <IconLayoutSidebarLeftCollapse size={16} />
+                }
+                onClick={() => setLeftHidden(value => !value)}
+                aria-label={leftHidden ? '展开资源目录' : '收起资源目录'}
+              >
+                {leftHidden ? '展开目录' : '收起目录'}
+              </Button>
+            </div>
           ) : null}
-        </div>
-        <div className="legacy-interface-side-switch">
           <SegmentedControl
             fullWidth
             value={activeKey}
@@ -68,7 +62,7 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
             ]}
           />
         </div>
-        <div className="legacy-interface-side-body">
+        <div className="interface-workspace-body">
           {props.action === 'api' ? props.apiMenu : props.collectionMenu}
         </div>
       </div>
@@ -79,41 +73,31 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
   return (
     <>
       <SplitWorkspace
-        className="legacy-project-interface-layout"
+        className="interface-workspace-layout"
         leftWidth={336}
         leftHidden={!isMobile && leftHidden}
         left={isMobile ? <div /> : sidePanel}
         right={
-          <div className="legacy-project-interface-content">
-            <div className="legacy-interface-right-pane">
-              <div className="legacy-interface-workbench-toolbar">
-                <div className="legacy-interface-workbench-copy">
-                  <Text className="legacy-interface-workbench-kicker">工作区</Text>
-                  <Text className="legacy-interface-workbench-title">
-                    {activeKey === 'api' ? '接口详情与调试' : '测试集合与用例执行'}
-                  </Text>
+          <div className="interface-workspace-content">
+            <div className="interface-workspace-main">
+              {isMobile || leftHidden ? (
+                <div className="interface-workspace-actions">
+                  <Button
+                    variant="default"
+                    leftSection={<IconLayoutSidebarLeftExpand size={16} />}
+                    onClick={() => {
+                      if (isMobile) {
+                        setMobileOpen(true);
+                        return;
+                      }
+                      setLeftHidden(false);
+                    }}
+                  >
+                    {isMobile ? '打开目录' : '显示目录'}
+                  </Button>
                 </div>
-                <div className="legacy-interface-workbench-actions">
-                  {isMobile ? (
-                    <Button
-                      variant="default"
-                      leftSection={<IconLayoutSidebarLeftExpand size={16} />}
-                      onClick={() => setMobileOpen(true)}
-                    >
-                      打开目录
-                    </Button>
-                  ) : leftHidden ? (
-                    <Button
-                      variant="default"
-                      leftSection={<IconLayoutSidebarLeftExpand size={16} />}
-                      onClick={() => setLeftHidden(false)}
-                    >
-                      显示目录
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              <div className="legacy-interface-content-card">
+              ) : null}
+              <div className="interface-workspace-card">
                 {props.action === 'api' ? props.apiContent : props.collectionContent}
               </div>
             </div>
@@ -128,7 +112,7 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
           size="min(88vw, 360px)"
           opened={mobileOpen}
           onClose={() => setMobileOpen(false)}
-          className="legacy-interface-side-drawer"
+          className="interface-workspace-drawer"
         >
           {sidePanel}
         </Drawer>

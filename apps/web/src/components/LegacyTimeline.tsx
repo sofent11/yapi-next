@@ -146,9 +146,9 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
   }, [interfaces]);
 
   return (
-    <section className="legacy-timeline-wrap legacy-timeline-shell">
+    <section className="timeline-page timeline-shell">
       {props.showApiFilter && props.type === 'project' ? (
-        <div className="legacy-timeline-filter mb-4">
+        <div className="timeline-filter mb-4">
           <div className="flex flex-wrap items-center gap-3">
             <Text>选择查询的 Api：</Text>
             <Select
@@ -156,7 +156,7 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
               onChange={value => setSelectValue(value || '')}
               data={apiFilterOptions}
               searchable
-              className="legacy-timeline-api-select min-w-[280px]"
+              className="timeline-api-select min-w-[280px]"
             />
           </div>
         </div>
@@ -168,15 +168,15 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
         </div>
       ) : (
         <Timeline
-          className="legacy-timeline-content"
+          className="timeline-content"
           bulletSize={44}
           lineWidth={3}
           classNames={{
-            item: 'legacy-timeline-row',
-            itemBullet: 'legacy-timeline-bullet',
-            itemBody: 'legacy-timeline-body',
-            itemContent: 'legacy-timeline-item-content',
-            itemTitle: 'legacy-timeline-item-title'
+            item: 'timeline-row',
+            itemBullet: 'timeline-bullet',
+            itemBody: 'timeline-body',
+            itemContent: 'timeline-item-content',
+            itemTitle: 'timeline-item-title'
           }}
         >
           {logRows.map(item => {
@@ -193,18 +193,18 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
                   </Link>
                 }
               >
-                <div className="legacy-timeline-item space-y-3">
-                  <div className="legacy-log-head flex flex-wrap items-center gap-3">
-                    <span className="legacy-log-type legacy-log-chip">{typeLabel(rowType)}动态</span>
-                    <span className="legacy-log-time">{formatTime(Number(item.add_time || 0))}</span>
-                    <span className="legacy-logo-timeago">{formatTimeAgo(Number(item.add_time || 0))}</span>
+                <div className="timeline-item space-y-3">
+                  <div className="timeline-log-head flex flex-wrap items-center gap-3">
+                    <span className="timeline-log-type timeline-log-chip">{typeLabel(rowType)}动态</span>
+                    <span className="timeline-log-time">{formatTime(Number(item.add_time || 0))}</span>
+                    <span className="timeline-log-timeago">{formatTimeAgo(Number(item.add_time || 0))}</span>
                   </div>
                   <span
-                    className="legacy-log-content block"
+                    className="timeline-log-content block"
                     dangerouslySetInnerHTML={{ __html: sanitizeHtml(String(item.content || '-')) }}
                   />
                   {interfaceDiff ? (
-                    <div className="legacy-timeline-item-actions">
+                    <div className="timeline-item-actions">
                       <Button
                         variant="default"
                         size="compact-sm"
@@ -224,7 +224,7 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
         </Timeline>
       )}
 
-      <div className="legacy-timeline-footer mt-4 flex justify-center">
+      <div className="timeline-footer mt-4 flex justify-center">
         {query.isFetching ? (
           <Loader size="sm" />
         ) : hasMore ? (
@@ -244,12 +244,12 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
         onClose={() => setDetailOpen(false)}
         size="xl"
       >
-        <div className="legacy-diff-note mb-4 text-sm text-slate-500">注：绿色代表新增内容，红色代表删除内容</div>
-        <div className="legacy-diff-content space-y-4">
+        <div className="log-diff-note mb-4 text-sm text-slate-500">注：绿色代表新增内容，红色代表删除内容</div>
+        <div className="log-diff-content space-y-4">
           {diffItems.length > 0 ? (
             diffItems.map(item => (
-              <div key={item.title} className="legacy-diff-item space-y-2">
-                <h3 className="legacy-diff-item-title text-base font-semibold text-slate-900">{item.title}</h3>
+              <div key={item.title} className="log-diff-item space-y-2">
+                <h3 className="log-diff-item-title text-base font-semibold text-slate-900">{item.title}</h3>
                 <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.content) }} />
               </div>
             ))

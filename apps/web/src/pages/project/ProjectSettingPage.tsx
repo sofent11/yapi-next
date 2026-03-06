@@ -64,7 +64,7 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
         key: `plugin_${key}`,
         label: tab.name,
         children: (
-          <SectionCard className="legacy-project-setting-card">
+          <SectionCard className="project-settings-card">
             <C projectId={props.projectId} />
           </SectionCard>
         )
@@ -89,7 +89,7 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
   }, [activeTab, searchParams, setSearchParams]);
 
   return (
-    <div className="legacy-page-shell legacy-project-setting-page">
+    <div className="page-shell project-settings-page">
       <PageHeader
         eyebrow="项目管理"
         title="项目设置"

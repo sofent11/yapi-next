@@ -19,7 +19,7 @@ type SchemaModeEditorProps = {
 export function SchemaModeEditor(props: SchemaModeEditorProps) {
   return (
     <>
-      <Stack gap="xs" className="legacy-schema-mode-toolbar">
+      <Stack gap="xs" className="schema-editor-mode-toolbar">
         <Text fw={600}>编辑模式</Text>
         <Radio.Group
           value={props.mode}

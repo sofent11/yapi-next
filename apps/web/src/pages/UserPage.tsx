@@ -250,7 +250,7 @@ export function UserPage() {
 
   if (!inProfile) {
     return (
-      <div className="legacy-page-shell legacy-user-page">
+      <div className="page-shell user-page">
         <PageHeader
           eyebrow="组织管理"
           title="用户管理"
@@ -265,9 +265,9 @@ export function UserPage() {
           }
         />
 
-        <SectionCard title={`用户列表 (${totalUsers})`} className="legacy-user-list-card">
+        <SectionCard title={`用户列表 (${totalUsers})`} className="user-list-card">
           <FilterBar
-            className="legacy-user-search-bar"
+            className="user-search-bar"
             left={
               <div className="flex w-full flex-col gap-3 md:flex-row">
                 <TextInput
@@ -391,7 +391,7 @@ export function UserPage() {
   }
 
   return (
-    <div className="legacy-page-shell legacy-user-page">
+    <div className="page-shell user-page">
       <PageHeader
         eyebrow="个人资料"
         title={targetUid === currentUid ? '个人设置' : `${profileData?.username || targetUid} 资料设置`}
@@ -404,7 +404,7 @@ export function UserPage() {
         }
       />
 
-      <SectionCard className="legacy-user-profile-card">
+      <SectionCard className="user-profile-card">
         <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
           <div className="space-y-4">
             <div className="flex flex-col items-center gap-3 rounded-[24px] border border-slate-200 bg-slate-50 p-6 text-center">

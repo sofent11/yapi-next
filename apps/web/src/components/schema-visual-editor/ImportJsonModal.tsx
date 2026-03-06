@@ -20,7 +20,7 @@ export function ImportJsonModal({ open, draft, onChange, onCancel, onSave }: Pro
       <Textarea
         minRows={14}
         autosize
-        className="legacy-schema-editor-import-input"
+        className="schema-editor-import-input"
         value={draft}
         onChange={event => onChange(event.currentTarget.value)}
         placeholder={'{\n  "code": 0,\n  "message": "ok",\n  "data": { "records": [] }\n}'}

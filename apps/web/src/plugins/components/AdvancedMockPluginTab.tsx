@@ -461,7 +461,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
   }
 
   return (
-    <Stack className="legacy-workspace-stack" gap="sm">
+    <Stack className="workspace-stack" gap="sm">
       {loading && loadedId !== interfaceId ? (
         <div className="inline-flex items-center gap-2">
           <Loader size="sm" />
@@ -476,7 +476,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
         </Tabs.List>
 
         <Tabs.Panel value="case" pt="md">
-          <Stack className="legacy-workspace-stack" gap="sm">
+          <Stack className="workspace-stack" gap="sm">
             <div>
               <Button onClick={() => void handleOpenCaseModal()}>添加期望</Button>
             </div>
@@ -552,7 +552,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
         </Tabs.Panel>
 
         <Tabs.Panel value="script" pt="md">
-          <Stack className="legacy-workspace-stack" gap="sm">
+          <Stack className="workspace-stack" gap="sm">
             <div className="inline-flex items-center gap-3">
               <Text>是否启用</Text>
               <Switch checked={enable} onChange={event => setEnable(event.currentTarget.checked)} />
@@ -579,7 +579,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
         size="xl"
       >
         {casePreparing ? (
-          <div className="legacy-plugin-loading-block flex justify-center py-10">
+          <div className="plugin-loading-block flex justify-center py-10">
             <Loader />
           </div>
         ) : (
@@ -597,14 +597,14 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
                 )}
               </Field>
 
-              <div className="legacy-plugin-row-start flex flex-col gap-4 md:flex-row">
+              <div className="plugin-row-start flex flex-col gap-4 md:flex-row">
                 <Field<AdvancedMockCaseForm> name="ip_enable" valuePropName="checked">
                   {(control) => (
                     <Switch
                       label="IP 过滤开关"
                       checked={Boolean(control.value)}
                       onChange={event => control.onChange(event.currentTarget.checked)}
-                      className="legacy-plugin-ip-switch-item"
+                      className="plugin-ip-switch-item"
                     />
                   )}
                 </Field>
@@ -627,7 +627,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
                 >
                   {(control, meta) => (
                     <TextInput
-                      className="legacy-plugin-ip-address-item"
+                      className="plugin-ip-address-item"
                       label="IP 地址"
                       value={control.value ?? ''}
                       onChange={event => control.onChange(event.currentTarget.value)}
@@ -660,11 +660,11 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
                     <Stack gap="xs">
                       <Text fw={500}>参数过滤</Text>
                       {fields.map(field => (
-                        <div key={field.key} className="legacy-plugin-field-row flex flex-col gap-3 md:flex-row">
+                        <div key={field.key} className="plugin-field-row flex flex-col gap-3 md:flex-row">
                           <Field name={[field.name, 'name']} rules={[{ required: true, message: '参数名不能为空' }]}>
                             {(control, meta) => (
                               <TextInput
-                                className="legacy-plugin-field-w280"
+                                className="plugin-field-w280"
                                 value={control.value ?? ''}
                                 onChange={event => control.onChange(event.currentTarget.value)}
                                 error={meta.errors[0]}
@@ -675,7 +675,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
                           <Field name={[field.name, 'value']}>
                             {(control) => (
                               <TextInput
-                                className="legacy-plugin-field-w360"
+                                className="plugin-field-w360"
                                 value={control.value ?? ''}
                                 onChange={event => control.onChange(event.currentTarget.value)}
                                 placeholder="参数值"
@@ -709,11 +709,11 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
                 </Field>
               )}
 
-              <div className="legacy-plugin-row-start flex flex-col gap-4 md:flex-row">
+              <div className="plugin-row-start flex flex-col gap-4 md:flex-row">
                 <Field<AdvancedMockCaseForm> name="code">
                   {(control) => (
                     <Select
-                      className="legacy-plugin-field-w220"
+                      className="plugin-field-w220"
                       label="HTTP Code"
                       searchable
                       value={String(control.value ?? 200)}
@@ -725,7 +725,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
                 <Field<AdvancedMockCaseForm> name="delay">
                   {(control) => (
                     <NumberInput
-                      className="legacy-plugin-field-w220 legacy-workspace-control"
+                      className="plugin-field-w220 workspace-control"
                       label="延时(ms)"
                       min={0}
                       decimalScale={0}
@@ -741,11 +741,11 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
                   <Stack gap="xs">
                     <Text fw={500}>HTTP 头</Text>
                     {fields.map(field => (
-                      <div key={field.key} className="legacy-plugin-field-row flex flex-col gap-3 md:flex-row">
+                      <div key={field.key} className="plugin-field-row flex flex-col gap-3 md:flex-row">
                         <Field name={[field.name, 'name']}>
                           {(control) => (
                             <TextInput
-                              className="legacy-plugin-field-w280"
+                              className="plugin-field-w280"
                               value={control.value ?? ''}
                               onChange={event => control.onChange(event.currentTarget.value)}
                               placeholder="Header 名称"
@@ -755,7 +755,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
                         <Field name={[field.name, 'value']}>
                           {(control) => (
                             <TextInput
-                              className="legacy-plugin-field-w360"
+                              className="plugin-field-w360"
                               value={control.value ?? ''}
                               onChange={event => control.onChange(event.currentTarget.value)}
                               placeholder="Header 值"

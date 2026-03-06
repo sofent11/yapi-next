@@ -221,11 +221,11 @@ export function InterfaceApiDetailTabs(props: InterfaceApiDetailTabsProps) {
 
   return (
     <Card padding="lg" radius="lg" withBorder>
-      <div className="legacy-interface-summary">
-        <div className="legacy-interface-summary-main">
+      <div className="interface-detail-summary">
+        <div className="interface-detail-summary-main">
           <div className="flex flex-wrap items-center gap-2">
             <span className={props.methodClassName(props.method)}>{props.method}</span>
-            <Text className="legacy-interface-summary-path">
+            <Text className="interface-detail-summary-path">
               {props.fullPath}
             </Text>
             <Badge color={props.currentInterface.status === 'done' ? 'green' : 'gray'}>
@@ -239,7 +239,7 @@ export function InterfaceApiDetailTabs(props: InterfaceApiDetailTabsProps) {
             ) : null}
           </div>
         </div>
-        <div className="legacy-interface-summary-actions">
+        <div className="interface-detail-summary-actions">
           <Button size="compact-sm" variant="default" onClick={() => props.onCopyText(props.fullPath, '接口路径已复制')}>
             复制路径
           </Button>
@@ -248,7 +248,7 @@ export function InterfaceApiDetailTabs(props: InterfaceApiDetailTabsProps) {
           </Button>
         </div>
       </div>
-      <Tabs className="legacy-interface-content-tabs" value={props.tab} onChange={key => key && props.onSwitchTab(key)}>
+      <Tabs className="interface-detail-tabs" value={props.tab} onChange={key => key && props.onSwitchTab(key)}>
         <Tabs.List>
           {items.map(item => (
             <Tabs.Tab key={item.key} value={item.key}>

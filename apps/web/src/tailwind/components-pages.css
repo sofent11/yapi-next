@@ -1,0 +1,692 @@
+@layer components {
+  .page-shell,
+  .workspace-page {
+    @apply space-y-6;
+  }
+
+  .add-project-page,
+  .user-page,
+  .project-settings-page,
+  .project-data-page,
+  .project-members-page {
+    @apply space-y-6;
+  }
+
+  .add-project-card,
+  .project-settings-card,
+  .project-data-card,
+  .workspace-card {
+    @apply rounded-[24px] border border-slate-200 bg-white/94 shadow-sm;
+  }
+
+  .project-data-grid,
+  .workspace-grid {
+    @apply grid gap-4 xl:grid-cols-2;
+  }
+
+  .workspace-grid {
+    @apply items-start;
+  }
+
+  .workspace-card .mantine-Input-input,
+  .workspace-card .mantine-Select-input,
+  .workspace-card .mantine-Textarea-input,
+  .project-settings-card .mantine-Input-input,
+  .project-settings-card .mantine-Select-input,
+  .project-settings-card .mantine-Textarea-input,
+  .project-data-card .mantine-Input-input,
+  .project-data-card .mantine-Select-input,
+  .project-data-card .mantine-Textarea-input {
+    @apply rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
+  }
+
+  .workspace-card .mantine-Textarea-input,
+  .project-settings-card .mantine-Textarea-input,
+  .project-data-card .mantine-Textarea-input {
+    @apply leading-6;
+  }
+
+  .workspace-result-actions {
+    @apply justify-end;
+  }
+
+  .workspace-result-actions .mantine-Button-root {
+    @apply h-9 rounded-[12px] px-4 text-xs font-semibold;
+  }
+
+  .workspace-row-active td {
+    @apply bg-blue-50/80;
+  }
+
+  .interface-run-card,
+  .case-detail-section,
+  .interface-view-panel,
+  .interface-view-section {
+    @apply rounded-[24px] border border-slate-200 bg-white shadow-sm;
+  }
+
+  .interface-run-card .mantine-Input-input,
+  .interface-run-card .mantine-Select-input,
+  .interface-run-card .mantine-Textarea-input,
+  .case-detail-section .mantine-Input-input,
+  .case-detail-section .mantine-Select-input,
+  .case-detail-section .mantine-Textarea-input,
+  .interface-view-section .mantine-Input-input,
+  .interface-view-section .mantine-Textarea-input {
+    @apply rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
+  }
+
+  .interface-run-method-select .mantine-Select-input,
+  .case-debug-method-select .mantine-Select-input {
+    @apply h-11 rounded-[14px] border-slate-300 bg-white text-sm;
+  }
+
+  .interface-run-path-input .mantine-Input-input,
+  .case-debug-path-input .mantine-Input-input {
+    @apply h-11 rounded-[14px] border-slate-300 bg-white text-sm;
+  }
+
+  .interface-run-format-alert {
+    @apply rounded-[16px] border border-blue-100 bg-blue-50/80;
+  }
+
+  .interface-run-format-alert .mantine-Alert-title {
+    @apply text-sm font-semibold text-blue-800;
+  }
+
+  .interface-run-editor-grid {
+    @apply items-start;
+  }
+
+  .interface-run-editor-block,
+  .interface-run-editor-block-wide,
+  .interface-view-block {
+    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 p-4;
+  }
+
+  .workspace-section-head,
+  .case-detail-section-head {
+    @apply rounded-[14px] border border-slate-200 bg-white px-3 py-3;
+  }
+
+  .workspace-section-head .mantine-Text-root,
+  .case-detail-section-head .mantine-Text-root {
+    @apply text-sm font-semibold text-slate-900;
+  }
+
+  .workspace-section-actions .mantine-Button-root {
+    @apply h-8 rounded-[10px] px-3 text-xs font-semibold;
+  }
+
+  .case-detail-toolbar {
+    @apply items-start;
+  }
+
+  .case-detail-toolbar > div:first-child,
+  .case-detail-toolbar > div:last-child {
+    @apply w-full;
+  }
+
+  .case-detail-toolbar > div:last-child {
+    @apply ml-0 justify-start md:justify-end;
+  }
+
+  .case-detail-form {
+    @apply rounded-[20px] border border-slate-200 bg-slate-50/70 p-4;
+  }
+
+  .case-detail-meta-grid {
+    @apply items-start;
+  }
+
+  .case-detail-switch-card {
+    @apply rounded-[16px] border border-slate-200 bg-white px-4 py-3;
+  }
+
+  .case-detail-result-stack {
+    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 p-4;
+  }
+
+  .case-debug-panel {
+    @apply rounded-[20px] border border-slate-200 bg-slate-50/70 p-4;
+  }
+
+  .case-debug-toolbar {
+    @apply items-start;
+  }
+
+  .interface-view-block {
+    @apply space-y-3;
+  }
+
+  .interface-view-subtitle {
+    @apply text-sm font-semibold uppercase tracking-[0.08em] text-slate-500;
+  }
+
+  .interface-view-descriptions {
+    @apply items-start;
+  }
+
+  .interface-view-name {
+    @apply text-[15px] font-medium text-slate-900;
+  }
+
+  .interface-view-code-row {
+    @apply rounded-[14px] border border-slate-200 bg-slate-50/70 px-3 py-3;
+  }
+
+  .interface-view-code {
+    @apply min-w-0 flex-1 overflow-x-auto rounded-xl bg-slate-900 px-3 py-2 font-mono text-[12px] text-slate-100;
+  }
+
+  .interface-view-raw-block {
+    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 p-4;
+  }
+
+  .interface-view-raw-block textarea {
+    @apply rounded-[14px] border-slate-300 bg-white font-mono text-[13px] leading-6 text-slate-700;
+  }
+
+  .interface-view-link-button {
+    @apply min-w-0 truncate rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition-colors;
+  }
+
+  .interface-view-link-button:hover {
+    @apply bg-blue-100 text-blue-800;
+  }
+
+  .interface-view-link {
+    @apply text-sm text-slate-400;
+  }
+
+  .interface-view-remark {
+    @apply text-[15px] leading-7 text-slate-700;
+  }
+
+  .interface-view-remark p {
+    @apply my-0;
+  }
+
+  .status-chip {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold tracking-[0.06em];
+  }
+
+  .status-chip.done {
+    @apply bg-emerald-100 text-emerald-700;
+  }
+
+  .status-chip.undone {
+    @apply bg-amber-100 text-amber-700;
+  }
+
+  .multiline-text {
+    @apply whitespace-pre-wrap break-words text-sm leading-6 text-slate-700;
+  }
+
+  .inline-help-text {
+    @apply text-slate-400 transition-colors;
+  }
+
+  .inline-help-text:hover {
+    @apply text-slate-600;
+  }
+
+  .field-error-text {
+    @apply mt-2 text-sm text-rose-500;
+  }
+
+  .project-settings-info-alert {
+    @apply rounded-[18px] border border-blue-100 bg-blue-50/80;
+  }
+
+  .project-settings-info-alert .mantine-Alert-title {
+    @apply text-sm font-semibold text-blue-800;
+  }
+
+  .project-settings-actions {
+    @apply flex justify-end pt-2;
+  }
+
+  .project-settings-actions .mantine-Button-root {
+    @apply h-11 rounded-[14px] px-5 text-sm font-semibold;
+  }
+
+  .project-settings-radio-desc {
+    @apply mt-1 text-sm leading-6 text-slate-500;
+  }
+
+  .project-settings-divider {
+    @apply my-6 border-0 border-t border-slate-200;
+  }
+
+  .project-settings-hero {
+    @apply mb-5 flex flex-col gap-4 md:flex-row md:items-center;
+  }
+
+  .project-settings-hero-card {
+    @apply rounded-[20px] border border-slate-200 bg-slate-50/70 p-4;
+  }
+
+  .project-settings-hero-info {
+    @apply min-w-0 flex-1;
+  }
+
+  .project-settings-hero-title {
+    @apply m-0 text-[22px] font-semibold tracking-tight text-slate-900;
+  }
+
+  .project-settings-logo-btn {
+    @apply relative inline-flex border-0 bg-transparent p-0;
+  }
+
+  .project-settings-logo {
+    @apply inline-flex h-20 w-20 items-center justify-center rounded-[22px] text-white shadow-sm transition-transform duration-150;
+    background-color: #2395f1;
+  }
+
+  .project-settings-logo-btn:hover .project-settings-logo {
+    @apply -translate-y-0.5 shadow-md;
+  }
+
+  .project-settings-logo svg {
+    @apply h-9 w-9;
+  }
+
+  .project-settings-logo-mask {
+    @apply pointer-events-none absolute inset-x-2 bottom-2 rounded-full bg-slate-900/78 px-2 py-1 text-center text-[11px] font-semibold text-white opacity-0 transition-opacity duration-150;
+  }
+
+  .project-settings-logo-btn:hover .project-settings-logo-mask {
+    @apply opacity-100;
+  }
+
+  .project-settings-visual-popover {
+    @apply rounded-[20px] border border-slate-200 bg-white p-4 shadow-lg;
+  }
+
+  .project-settings-color-group,
+  .project-settings-icon-group {
+    @apply gap-2;
+  }
+
+  .project-settings-color-option,
+  .project-settings-icon-option {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-all duration-150;
+  }
+
+  .project-settings-color-option:hover,
+  .project-settings-icon-option:hover {
+    @apply -translate-y-px border-slate-300 shadow-sm;
+  }
+
+  .project-settings-icon-option svg {
+    @apply h-4 w-4;
+  }
+
+  .project-settings-permission-group .mantine-Radio-radio {
+    @apply border-slate-300;
+  }
+
+  .project-color-blue,
+  .project-settings-color-option.project-color-blue {
+    background-color: #2395f1;
+    color: #fff;
+  }
+
+  .project-color-green,
+  .project-settings-color-option.project-color-green {
+    background-color: #00a854;
+    color: #fff;
+  }
+
+  .project-color-yellow,
+  .project-settings-color-option.project-color-yellow {
+    background-color: #ffbf00;
+    color: #0f172a;
+  }
+
+  .project-color-red,
+  .project-settings-color-option.project-color-red {
+    background-color: #f56a00;
+    color: #fff;
+  }
+
+  .project-color-pink,
+  .project-settings-color-option.project-color-pink {
+    background-color: #f5317f;
+    color: #fff;
+  }
+
+  .project-color-cyan,
+  .project-settings-color-option.project-color-cyan {
+    background-color: #00a2ae;
+    color: #fff;
+  }
+
+  .project-color-gray,
+  .project-settings-color-option.project-color-gray {
+    background-color: #94a3b8;
+    color: #fff;
+  }
+
+  .project-color-purple,
+  .project-settings-color-option.project-color-purple {
+    background-color: #7265e6;
+    color: #fff;
+  }
+
+  .project-settings-danger-zone,
+  .console-danger-zone {
+    @apply rounded-[22px] border border-rose-200 bg-rose-50/70 p-4;
+  }
+
+  .project-settings-danger-header,
+  .console-danger-head {
+    @apply mb-3 flex flex-wrap items-center justify-between gap-3;
+  }
+
+  .project-settings-danger-title,
+  .console-danger-title {
+    @apply inline-flex items-center gap-2 text-sm font-semibold text-rose-700;
+  }
+
+  .project-settings-danger-desc,
+  .console-danger-desc {
+    @apply text-sm leading-6 text-rose-700/80;
+  }
+
+  .console-settings-custom-field-row {
+    @apply gap-3 rounded-[18px] border border-slate-200 bg-slate-50/70 px-4 py-4;
+  }
+
+  .console-settings-custom-field-input {
+    @apply min-w-[240px] flex-1;
+  }
+
+  .console-settings-custom-field-help {
+    @apply mt-3 text-slate-400;
+  }
+
+  .console-settings-submit {
+    @apply flex justify-end;
+  }
+
+  .console-settings-submit .mantine-Button-root {
+    @apply h-10 rounded-[14px] px-5 text-sm font-semibold;
+  }
+
+  .console-danger-content,
+  .console-danger-confirm-content {
+    @apply flex flex-col gap-3 rounded-[18px] border border-rose-200 bg-white px-4 py-4;
+  }
+
+  .console-danger-confirm-path {
+    @apply flex flex-col gap-2;
+  }
+
+  .console-danger-confirm-input .mantine-Input-input {
+    @apply rounded-[14px] border-rose-200 bg-white text-sm;
+  }
+
+  .console-danger-confirm-hint {
+    @apply text-sm leading-6;
+  }
+
+  .console-project-section {
+    @apply space-y-4;
+  }
+
+  .console-project-section-head {
+    @apply mb-0 rounded-[16px] border border-slate-200 bg-slate-50/70 px-4 py-3;
+  }
+
+  .console-project-header-actions {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .console-group-add-button {
+    @apply inline-flex h-10 items-center justify-center rounded-[14px] border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-150;
+  }
+
+  .console-group-add-button:hover {
+    @apply -translate-y-px border-slate-300 text-slate-900 shadow-md;
+  }
+
+  .console-members-summary {
+    @apply gap-2;
+  }
+
+  .console-members-actions {
+    @apply justify-end;
+  }
+
+  .console-members-row-owner td {
+    @apply bg-amber-50/70;
+  }
+
+  .console-members-row-dev td {
+    @apply bg-blue-50/70;
+  }
+
+  .console-members-row-guest td {
+    @apply bg-slate-50/70;
+  }
+
+  .console-copy-modal {
+    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 p-4;
+  }
+
+  .guide-popover {
+    @apply rounded-[18px] border border-slate-200 bg-white p-3 shadow-lg;
+  }
+
+  .guide-tip-title {
+    @apply text-sm font-semibold text-slate-700;
+  }
+
+  .guide-focus-mask {
+    @apply pointer-events-none absolute inset-0 rounded-[24px] ring-4 ring-blue-200/70;
+  }
+
+  .follow-page {
+    @apply space-y-6;
+  }
+
+  .project-page-root {
+    @apply space-y-6;
+  }
+
+  .follow-card,
+  .user-list-card,
+  .user-profile-card,
+  .group-members-card {
+    @apply rounded-[24px] border border-slate-200 bg-white/94 shadow-sm;
+  }
+
+  .follow-project-logo {
+    @apply inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm;
+  }
+
+  .user-search-bar {
+    @apply mb-4 rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-4 shadow-none;
+  }
+
+  .user-search-bar > div:first-child,
+  .user-search-bar > div:last-child {
+    @apply w-full;
+  }
+
+  .user-search-bar > div:last-child {
+    @apply ml-0 justify-start md:justify-end;
+  }
+
+  .project-console-page,
+  .project-console-layout,
+  .project-console-content,
+  .project-console-sider,
+  .interface-workspace-layout,
+  .interface-workspace-drawer,
+  .case-workspace,
+  .compat-workspace,
+  .spec-workspace {
+    @apply min-w-0;
+  }
+
+  .interface-run-tab {
+    @apply space-y-4;
+  }
+
+  .console-group-empty {
+    @apply rounded-xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-8 text-center text-sm text-slate-500;
+  }
+
+  .project-members-cell {
+    @apply flex flex-wrap items-center gap-3;
+  }
+
+  .project-members-card {
+    @apply rounded-[24px] border border-slate-200 bg-white/94 shadow-sm;
+  }
+
+  .project-members-role-select .mantine-Select-input,
+  .project-members-modal-select .mantine-Select-input {
+    @apply h-10 rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
+  }
+
+  .group-members-grid {
+    @apply items-start;
+  }
+
+  .group-members-item {
+    @apply rounded-[22px] border border-slate-200 bg-slate-50 p-4;
+  }
+
+  .group-members-name {
+    @apply mt-3 flex items-center gap-2 text-sm font-medium text-slate-900;
+  }
+
+  .group-members-role {
+    @apply mt-1 text-sm text-slate-500;
+  }
+
+  .report-table .mantine-Table-table {
+    @apply min-w-[860px];
+  }
+
+  .report-table th {
+    @apply bg-slate-50/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500;
+  }
+
+  .report-table td {
+    @apply border-slate-200 px-4 py-3 align-middle;
+  }
+
+  .report-row-pass td {
+    @apply bg-emerald-50/60;
+  }
+
+  .report-row-fail td {
+    @apply bg-amber-50/70;
+  }
+
+  .report-row-error td {
+    @apply bg-rose-50/70;
+  }
+
+  .timeline-page {
+    @apply gap-5;
+  }
+
+  .timeline-item-title {
+    @apply text-sm font-semibold text-slate-700;
+  }
+
+  .timeline-log-type {
+    @apply bg-slate-100 text-slate-700;
+  }
+
+  .log-diff-wrap {
+    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 p-4;
+  }
+
+  .log-diff-pair {
+    @apply grid gap-4 lg:grid-cols-2;
+  }
+
+  .log-diff-col {
+    @apply rounded-[18px] border border-slate-200 bg-white p-4;
+  }
+
+  .log-diff-col-title {
+    @apply mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-slate-500;
+  }
+
+  .log-diff-col-old {
+    @apply border-rose-200 bg-rose-50/40;
+  }
+
+  .log-diff-col-new {
+    @apply border-emerald-200 bg-emerald-50/40;
+  }
+
+  .plugin-loading-block {
+    @apply rounded-[18px] border border-dashed border-slate-200 bg-slate-50/70;
+  }
+
+  .plugin-row-start {
+    @apply items-start;
+  }
+
+  .plugin-field-row {
+    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 px-4 py-4;
+  }
+
+  .plugin-field-w220 {
+    @apply w-full md:w-[220px];
+  }
+
+  .plugin-field-w280 {
+    @apply w-full md:w-[280px];
+  }
+
+  .plugin-field-w360 {
+    @apply w-full md:w-[360px];
+  }
+
+  .plugin-ip-switch-item {
+    @apply rounded-[16px] border border-slate-200 bg-white px-4 py-3;
+  }
+
+  .plugin-ip-address-item {
+    @apply rounded-[16px] border border-slate-200 bg-white px-4 py-4;
+  }
+
+  .plugin-pre {
+    @apply overflow-x-auto rounded-[18px] border border-slate-200 bg-slate-950 px-4 py-4 font-mono text-[13px] leading-6 text-slate-100;
+  }
+
+  .schema-editor-head-name {
+    @apply items-center gap-2;
+  }
+
+  .schema-editor-required-switch {
+    @apply justify-center;
+  }
+
+  .schema-editor-root-type .mantine-Select-input,
+  .schema-editor-root-placeholder .mantine-Input-input {
+    @apply rounded-[14px] border-slate-300 bg-white text-sm text-slate-500;
+  }
+
+  .open-api-list {
+    @apply m-0 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-600;
+  }
+
+  .console-danger-icon {
+    @apply text-rose-500;
+  }
+
+  .project-settings-form {
+    @apply space-y-0;
+  }
+}

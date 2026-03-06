@@ -46,8 +46,8 @@ export function FollowPage() {
     const color = resolveProjectColor(visual.color, projectName);
     const colorKey = resolveProjectColorKey(visual.color);
     const logoClassName = colorKey
-      ? `legacy-follow-project-logo legacy-project-color-${colorKey}`
-      : 'legacy-follow-project-logo';
+      ? `follow-project-logo project-color-${colorKey}`
+      : 'follow-project-logo';
     const lastUpdate = Number(project.up_time || 0);
     const updatedAt = lastUpdate
       ? new Date(lastUpdate * 1000).toLocaleString('zh-CN', {
@@ -110,14 +110,14 @@ export function FollowPage() {
   };
 
   return (
-    <AppShell className="legacy-follow-page">
+    <AppShell className="follow-page">
       <PageHeader
         title="我的关注"
         subtitle="集中管理你已关注的项目，支持快速进入和取消关注。"
       />
       <SectionCard
         title={`关注项目 (${rows.length})`}
-        className="legacy-follow-card"
+        className="follow-card"
       >
         {followQuery.isLoading ? (
           <div className="flex min-h-[220px] items-center justify-center">

@@ -215,7 +215,7 @@ export function ProjectConsolePage() {
   const mixedPublicProjects = [...followedProjects, ...normalProjects];
   const guideVisible = guide.active;
   const personalSpaceTip = (
-    <div className="legacy-guide-tip-title">
+    <div className="guide-tip-title">
       <h3 className="flex items-center gap-2">
         <IconUser size={18} />
         个人空间
@@ -313,7 +313,7 @@ export function ProjectConsolePage() {
       labels: { confirm: '确认删除', cancel: '取消' },
       confirmProps: { color: 'red', loading: delGroupState.isLoading },
       children: (
-        <div className="legacy-console-danger-confirm-content space-y-3">
+        <div className="console-danger-confirm-content space-y-3">
           <Alert color="yellow" title="此操作会删除该分组下所有项目和接口，且无法恢复。" />
           <div>
             已确认分组名: <b>{inputName}</b>
@@ -613,7 +613,7 @@ export function ProjectConsolePage() {
   }
 
   return (
-    <AppShell className="legacy-project-console-page">
+    <AppShell className="project-console-page">
       <PageHeader
         eyebrow="分组工作台"
         title="项目控制台"
@@ -631,8 +631,8 @@ export function ProjectConsolePage() {
       />
 
       <div className="projectGround">
-        <div className="legacy-project-console-layout flex flex-col gap-4 lg:flex-row">
-          <aside className="legacy-project-console-sider w-full lg:w-[260px] lg:flex-none">
+        <div className="project-console-layout flex flex-col gap-4 lg:flex-row">
+          <aside className="project-console-sider w-full lg:w-[260px] lg:flex-none">
             <GroupOverview
               guideVisible={guideVisible}
               guideStep={guide.step}
@@ -652,9 +652,9 @@ export function ProjectConsolePage() {
             />
           </aside>
 
-          <section className="legacy-project-console-content min-w-0 flex-1">
+          <section className="project-console-content min-w-0 flex-1">
             <Tabs
-              className="m-tab tabs-large legacy-project-console-tabs"
+              className="m-tab tabs-large project-console-tabs"
               value={activeTab}
               onChange={key => {
                 if (key && isConsoleTabKey(key)) {

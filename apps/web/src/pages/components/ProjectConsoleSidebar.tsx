@@ -24,7 +24,7 @@ type ProjectConsoleSidebarProps = {
 
 function EmptyGroups() {
   return (
-    <div className="legacy-console-group-empty rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+    <div className="console-group-empty rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
       暂无分组
     </div>
   );
@@ -33,7 +33,7 @@ function EmptyGroups() {
 export function ProjectConsoleSidebar(props: ProjectConsoleSidebarProps) {
   return (
     <div className="m-group">
-      {props.guideVisible && props.guideStep === 0 ? <div className="legacy-study-mask" /> : null}
+      {props.guideVisible && props.guideStep === 0 ? <div className="guide-focus-mask" /> : null}
       <div className="group-bar">
         <div className="curr-group">
           <div className="curr-group-name">
@@ -43,7 +43,7 @@ export function ProjectConsoleSidebar(props: ProjectConsoleSidebarProps) {
             <Tooltip label="添加分组">
               <ActionIcon
                 variant="subtle"
-                className="editSet legacy-console-add-group-btn"
+                className="editSet console-group-add-button"
                 onClick={props.onOpenCreateGroup}
                 aria-label="添加分组"
               >
@@ -74,10 +74,10 @@ export function ProjectConsoleSidebar(props: ProjectConsoleSidebarProps) {
             />
           </div>
         </div>
-        <div className="legacy-console-group-summary">
+        <div className="console-group-summary">
           <Text c="dimmed">共 {props.groups.length} 个分组</Text>
         </div>
-        {props.loading && props.groups.length === 0 ? <Loader className="legacy-console-group-loading" /> : null}
+        {props.loading && props.groups.length === 0 ? <Loader className="console-group-loading" /> : null}
         {!props.loading && props.groups.length === 0 ? <EmptyGroups /> : null}
         <div className="group-list flex flex-col gap-2">
           {props.groups.map(group => {
@@ -103,7 +103,7 @@ export function ProjectConsoleSidebar(props: ProjectConsoleSidebarProps) {
               return (
                 <Popover key={gid} opened position="right" withinPortal={false}>
                   <Popover.Target>{button}</Popover.Target>
-                  <Popover.Dropdown className="legacy-guide-popover">
+                  <Popover.Dropdown className="guide-popover">
                     {props.personalSpaceTip}
                     <LegacyGuideActions onNext={props.onGuideNext} onExit={props.onGuideExit} />
                   </Popover.Dropdown>

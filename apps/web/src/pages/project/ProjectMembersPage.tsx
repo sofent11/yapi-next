@@ -246,7 +246,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
     emailNoticeState.isLoading;
 
   return (
-    <div className="legacy-page-shell legacy-members-page">
+    <div className="page-shell project-members-page">
       <PageHeader
         title="成员管理"
         subtitle={`项目 ${project?.name || props.projectId} · 当前成员 ${rows.length} 人${canManage ? '' : '（只读）'}`}
@@ -262,7 +262,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
         }
       />
 
-      <SectionCard title="项目成员" className="legacy-members-main-card">
+      <SectionCard title="项目成员" className="project-members-card">
         {loading && rows.length === 0 ? (
           <div className="flex justify-center py-12">
             <Loader />
@@ -289,7 +289,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
                   return (
                     <Table.Tr key={uid}>
                       <Table.Td>
-                        <div className="legacy-member-cell flex flex-wrap items-center gap-3">
+                        <div className="project-members-cell flex flex-wrap items-center gap-3">
                           <Avatar src={`/api/user/avatar?uid=${uid}`} size={32} />
                           <span>{displayName}</span>
                           {uid === currentUid ? <Badge color="blue">我</Badge> : null}
@@ -319,7 +319,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
                         {canManage ? (
                           <Select
                             value={(role as MemberRole) || 'dev'}
-                            className="legacy-members-role-select"
+                            className="project-members-role-select"
                             data={roleOptions.map(item => ({ ...item }))}
                             onChange={async newRole => {
                               if (!newRole) return;
@@ -363,23 +363,23 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
       <SectionCard
         title={`${groupQuery.data?.data?.group_name || '分组'} 成员池`}
         extra={<Text c="dimmed">{groupMembers.length} 人</Text>}
-        className="legacy-group-members-card"
+        className="group-members-card"
       >
         {groupMembers.length === 0 ? (
           <LegacyErrMsg type="noMemberInGroup" />
         ) : (
-          <div className="legacy-group-members-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="group-members-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {groupMembers.map(item => (
               <div
                 key={Number(item.uid || 0)}
-                className="legacy-group-member-item rounded-[22px] border border-slate-200 bg-slate-50 p-4"
+                className="group-members-item rounded-[22px] border border-slate-200 bg-slate-50 p-4"
               >
                 <Avatar size={40} src={`/api/user/avatar?uid=${item.uid}`} />
-                <div className="legacy-group-member-name mt-3 flex items-center gap-2 font-medium text-slate-900">
+                <div className="group-members-name mt-3 flex items-center gap-2 font-medium text-slate-900">
                   {String(item.username || item.uid || '-')}
                   {Number(item.uid || 0) === currentUid ? <Badge color="blue">我</Badge> : null}
                 </div>
-                <div className="legacy-group-member-role mt-1 text-sm text-slate-500">
+                <div className="group-members-role mt-1 text-sm text-slate-500">
                   {normalizeRole(item.role)}
                 </div>
               </div>
@@ -401,7 +401,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
             onChange={setSelectedMemberUids}
             placeholder="从分组成员中选择"
             data={groupMemberOptions}
-            className="legacy-members-modal-select"
+            className="project-members-modal-select"
           />
           <TextInput
             value={memberUid}
@@ -412,7 +412,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
             value={memberRole}
             onChange={value => setMemberRole((value as MemberRole) || 'dev')}
             data={roleOptions.map(item => ({ ...item }))}
-            className="legacy-members-modal-select"
+            className="project-members-modal-select"
           />
           <div className="flex justify-end gap-2">
             <Button variant="default" onClick={() => setAddMemberModalOpen(false)}>
@@ -444,7 +444,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
             disabled={groupProjectListQuery.isFetching}
             onChange={setSelectedImportProjectId}
             data={importProjectOptions}
-            className="legacy-members-modal-select"
+            className="project-members-modal-select"
           />
           <div className="flex justify-end gap-2">
             <Button

@@ -148,7 +148,7 @@ export function ProjectPage() {
   }
 
   return (
-    <AppShell className="legacy-project-page-root">
+    <AppShell className="project-page-root">
       <PageHeader
         eyebrow="项目工作区"
         title={String(project?.name || `项目 #${projectId}`)}

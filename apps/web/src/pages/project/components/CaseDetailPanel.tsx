@@ -71,7 +71,7 @@ function SectionActions(props: {
   disableClear?: boolean;
 }) {
   return (
-    <div className="legacy-run-section-actions flex flex-wrap gap-2">
+    <div className="workspace-section-actions flex flex-wrap gap-2">
       {props.onFormat ? (
         <Button size="xs" variant="default" onClick={props.onFormat}>
           格式化
@@ -109,7 +109,7 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
     <Card withBorder radius="xl">
       <div className="flex flex-col gap-4">
         <FilterBar
-          className="legacy-interface-list-toolbar legacy-case-toolbar"
+          className="interface-table-toolbar case-detail-toolbar"
           left={<Text fw={700}>{String(props.detail.casename || '测试用例')}</Text>}
           right={
             <div className="flex flex-wrap gap-2">
@@ -155,7 +155,7 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
               </div>
             </div>
 
-            <div className="legacy-case-form-main flex flex-col gap-4">
+            <div className="case-detail-form flex flex-col gap-4">
               <Field<CaseEditFormValues> name="casename" rules={[{ required: true, message: '请输入用例名称' }]}>
                 {(control, meta) => (
                   <TextInput
@@ -168,7 +168,7 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
                 )}
               </Field>
 
-              <div className="legacy-case-form-meta-row grid gap-4 md:grid-cols-3">
+              <div className="case-detail-meta-grid grid gap-4 md:grid-cols-3">
                 <Field<CaseEditFormValues> name="case_env">
                   {(control) => (
                     <Autocomplete
@@ -184,7 +184,7 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
                 <Field<CaseEditFormValues> name="enable_script" valuePropName="checked">
                   {(control) => (
                     <Switch
-                      className="legacy-case-form-switch-item"
+                      className="case-detail-switch-card"
                       label="启用脚本"
                       disabled={!props.canEdit}
                       checked={Boolean(control.value)}
@@ -279,9 +279,9 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
           </div>
         </RcForm>
 
-        <SectionCard title="测试结果" className="legacy-case-section">
+        <SectionCard title="测试结果" className="case-detail-section">
           <div className="flex flex-col gap-3">
-            <div className="legacy-case-section-head flex items-center justify-between gap-3">
+            <div className="case-detail-section-head flex items-center justify-between gap-3">
               <Text fw={600}>最近一次测试结果</Text>
               <Button size="xs" variant="default" onClick={props.onCopyCaseResult} disabled={!props.currentCaseReport}>
                 复制结果
@@ -289,7 +289,7 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
             </div>
 
             {props.currentCaseReport ? (
-              <Stack className="legacy-case-result-stack" gap="sm">
+              <Stack className="case-detail-result-stack" gap="sm">
                 <div className="flex flex-wrap items-center gap-3">
                   <Badge color={currentResultBadge.color} variant="light">
                     {currentResultBadge.label}
@@ -330,21 +330,21 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
           </div>
         </SectionCard>
 
-        <SectionCard title="调试请求" className="legacy-case-section">
-          <div className="legacy-case-debug-stack flex flex-col gap-4">
-            <div className="legacy-case-debug-toolbar grid gap-3 md:grid-cols-[140px_minmax(0,1fr)_120px]">
+        <SectionCard title="调试请求" className="case-detail-section">
+          <div className="case-debug-panel flex flex-col gap-4">
+            <div className="case-debug-toolbar grid gap-3 md:grid-cols-[140px_minmax(0,1fr)_120px]">
               <Select
                 value={props.caseRunMethod}
                 onChange={value => {
                   if (value) props.onSetCaseRunMethod(value);
                 }}
-                className="legacy-case-debug-method-select"
+                className="case-debug-method-select"
                 data={methodOptions}
               />
               <TextInput
                 value={props.caseRunPath}
                 onChange={event => props.onSetCaseRunPath(event.currentTarget.value)}
-                className="legacy-case-debug-path-input"
+                className="case-debug-path-input"
               />
               <Button loading={props.caseRunLoading} onClick={props.onRunCaseRequest}>
                 发送请求
@@ -354,7 +354,7 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
             <Alert color="blue" title="调试请求参数需使用 JSON 格式" />
 
             <div className="flex flex-col gap-2">
-              <div className="legacy-run-section-head flex items-center justify-between gap-3">
+              <div className="workspace-section-head flex items-center justify-between gap-3">
                 <Text fw={600}>Query</Text>
                 <SectionActions
                   onFormat={props.onFormatCaseRunQuery}
@@ -366,7 +366,7 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <div className="legacy-run-section-head flex items-center justify-between gap-3">
+              <div className="workspace-section-head flex items-center justify-between gap-3">
                 <Text fw={600}>Headers</Text>
                 <SectionActions
                   onFormat={props.onFormatCaseRunHeaders}
@@ -378,7 +378,7 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <div className="legacy-run-section-head flex items-center justify-between gap-3">
+              <div className="workspace-section-head flex items-center justify-between gap-3">
                 <Text fw={600}>Body</Text>
                 <SectionActions
                   onFormat={props.onFormatCaseRunBody}
@@ -390,7 +390,7 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
             </div>
 
             <div className="flex flex-col gap-2">
-              <div className="legacy-run-section-head flex items-center justify-between gap-3">
+              <div className="workspace-section-head flex items-center justify-between gap-3">
                 <Text fw={600}>响应</Text>
                 <SectionActions
                   onCopy={props.onCopyCaseRunResponse}

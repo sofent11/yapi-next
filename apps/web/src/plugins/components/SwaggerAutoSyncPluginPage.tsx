@@ -110,7 +110,7 @@ export function SwaggerAutoSyncPluginPage(props: { projectId: number }) {
   }
 
   return (
-    <Stack className="legacy-workspace-stack">
+    <Stack className="workspace-stack">
       {loading ? (
         <div className="inline-flex items-center gap-2">
           <Loader size="sm" />

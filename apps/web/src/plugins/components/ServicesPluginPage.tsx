@@ -46,7 +46,7 @@ export function ServicesPluginPage(props: { projectId: number }) {
   const modernUrl = `${origin}/api/open/plugin/export-full?type=json&pid=${props.projectId}&status=all&token=${token}`;
 
   return (
-    <Stack className="legacy-workspace-stack">
+    <Stack className="workspace-stack">
       {loading ? (
         <div className="inline-flex items-center gap-2">
           <Loader size="sm" />

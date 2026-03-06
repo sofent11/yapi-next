@@ -47,13 +47,13 @@ function renderDiffHtml(left: unknown, right: unknown): string | null {
   if (leftText === rightText) return null;
 
   return [
-    '<div class="legacy-diff-pair">',
-    '  <div class="legacy-diff-col legacy-diff-col-old">',
-    '    <div class="legacy-diff-col-title">变更前</div>',
+    '<div class="log-diff-pair">',
+    '  <div class="log-diff-col log-diff-col-old">',
+    '    <div class="log-diff-col-title">变更前</div>',
     `    <pre>${escapeHtml(leftText || '(空)')}</pre>`,
     '  </div>',
-    '  <div class="legacy-diff-col legacy-diff-col-new">',
-    '    <div class="legacy-diff-col-title">变更后</div>',
+    '  <div class="log-diff-col log-diff-col-new">',
+    '    <div class="log-diff-col-title">变更后</div>',
     `    <pre>${escapeHtml(rightText || '(空)')}</pre>`,
     '  </div>',
     '</div>'

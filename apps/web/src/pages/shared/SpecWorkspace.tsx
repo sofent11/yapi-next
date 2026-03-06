@@ -232,7 +232,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
   }
 
   return (
-    <div className={`legacy-workspace-page legacy-spec-workspace ${isWorkbench ? 'is-workbench' : 'is-console'}`}>
+    <div className={`workspace-page spec-workspace ${isWorkbench ? 'is-workbench' : 'is-console'}`}>
       <PageHeader
         title={isWorkbench ? '规范迁移工作台' : 'Spec Console'}
         subtitle={
@@ -242,12 +242,12 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
         }
       />
 
-      <SectionCard title="连接参数" className="legacy-workspace-card">
+      <SectionCard title="连接参数" className="workspace-card">
         <div className="grid gap-3 md:grid-cols-3">
           <div>
             <Text mb={6}>Project ID</Text>
             <NumberInput
-              className="legacy-workspace-control-top"
+              className="workspace-control-top"
               min={1}
               value={projectId}
               onChange={value => setProjectId(typeof value === 'number' ? value : 0)}
@@ -256,7 +256,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
           <div className="md:col-span-2">
             <Text mb={6}>{isWorkbench ? 'Token (可选，私有项目必填)' : 'Token (私有项目必填)'}</Text>
             <TextInput
-              className="legacy-workspace-field-top"
+              className="workspace-field-top"
               value={token}
               onChange={event => setToken(event.currentTarget.value)}
               placeholder={isWorkbench ? 'demo-token' : 'project token'}
@@ -265,14 +265,14 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
         </div>
       </SectionCard>
 
-      <div className="legacy-workspace-row grid gap-4 xl:grid-cols-2">
-        <SectionCard title={isWorkbench ? 'OpenAPI 导入任务' : '规范导入'} className="legacy-workspace-card">
-          <Stack className="legacy-workspace-stack">
+      <div className="workspace-grid grid gap-4 xl:grid-cols-2">
+        <SectionCard title={isWorkbench ? 'OpenAPI 导入任务' : '规范导入'} className="workspace-card">
+          <Stack className="workspace-stack">
             <div className="grid gap-3 md:grid-cols-3">
               <div>
                 <Text mb={6}>{isWorkbench ? '来源' : 'Source'}</Text>
                 <Select
-                  className="legacy-workspace-control-top"
+                  className="workspace-control-top"
                   value={source}
                   onChange={value => setSource((value as SpecSource) || 'json')}
                   data={[
@@ -284,7 +284,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
               <div>
                 <Text mb={6}>{isWorkbench ? '格式' : 'Format'}</Text>
                 <Select
-                  className="legacy-workspace-control-top"
+                  className="workspace-control-top"
                   value={format}
                   onChange={value => setFormat((value as 'auto' | 'swagger2' | 'openapi3') || 'auto')}
                   data={[
@@ -297,7 +297,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
               <div>
                 <Text mb={6}>{isWorkbench ? '同步模式' : 'Sync Mode'}</Text>
                 <Select
-                  className="legacy-workspace-control-top"
+                  className="workspace-control-top"
                   value={syncMode}
                   onChange={value => setSyncMode((value as SyncMode) || 'merge')}
                   data={[
@@ -311,7 +311,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
 
             {source === 'json' ? (
               <>
-                <div className="legacy-workspace-result-actions flex flex-wrap gap-2">
+                <div className="workspace-result-actions flex flex-wrap gap-2">
                   <Button size="xs" variant="default" onClick={handleFormatSpecJson} disabled={!specJson.trim()}>
                     格式化 JSON
                   </Button>
@@ -348,7 +348,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 color="blue"
                 title={`当前任务: ${taskId}`}
               >
-                <Stack className="legacy-workspace-stack" gap="xs" mt="xs">
+                <Stack className="workspace-stack" gap="xs" mt="xs">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge color={taskColor(task?.status)}>{task?.status || 'queued'}</Badge>
                     <Text>{task?.message || '-'}</Text>
@@ -370,13 +370,13 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
           </Stack>
         </SectionCard>
 
-        <SectionCard title="规范导出" className="legacy-workspace-card">
-          <Stack className="legacy-workspace-stack">
+        <SectionCard title="规范导出" className="workspace-card">
+          <Stack className="workspace-stack">
             <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <Text mb={6}>{isWorkbench ? '导出格式' : 'Format'}</Text>
                 <Select
-                  className="legacy-workspace-control-top"
+                  className="workspace-control-top"
                   value={exportFormat}
                   onChange={value => setExportFormat((value as SpecExportFormat) || 'openapi3')}
                   data={[
@@ -388,7 +388,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
               <div>
                 <Text mb={6}>{isWorkbench ? '可见性' : 'Status'}</Text>
                 <Select
-                  className="legacy-workspace-control-top"
+                  className="workspace-control-top"
                   value={exportStatus}
                   onChange={value => setExportStatus((value as 'all' | 'open') || 'all')}
                   data={
@@ -410,7 +410,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 {isWorkbench ? '导出' : '导出规范'}
               </Button>
             </div>
-            <div className="legacy-workspace-result-actions flex flex-wrap gap-2">
+            <div className="workspace-result-actions flex flex-wrap gap-2">
               <Button
                 size="xs"
                 variant="default"
@@ -452,7 +452,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
       </div>
 
       {isWorkbench ? (
-        <SectionCard title="导入任务历史" className="legacy-workspace-card">
+        <SectionCard title="导入任务历史" className="workspace-card">
           <Table striped highlightOnHover withTableBorder>
             <Table.Thead>
               <Table.Tr>
@@ -489,8 +489,8 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
       ) : null}
 
       {isWorkbench ? (
-        <div className="legacy-workspace-row grid gap-4 xl:grid-cols-2">
-          <SectionCard title="分类树" className="legacy-workspace-card">
+        <div className="workspace-grid grid gap-4 xl:grid-cols-2">
+          <SectionCard title="分类树" className="workspace-card">
             <Table striped highlightOnHover withTableBorder>
               <Table.Thead>
                 <Table.Tr>
@@ -524,7 +524,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
               </Table.Tbody>
             </Table>
           </SectionCard>
-          <SectionCard title={`分类接口列表 ${selectedCatid > 0 ? `(catid=${selectedCatid})` : ''}`} className="legacy-workspace-card">
+          <SectionCard title={`分类接口列表 ${selectedCatid > 0 ? `(catid=${selectedCatid})` : ''}`} className="workspace-card">
             <Table striped highlightOnHover withTableBorder>
               <Table.Thead>
                 <Table.Tr>
@@ -561,8 +561,8 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
           </SectionCard>
         </div>
       ) : (
-        <div className="legacy-workspace-row grid gap-4 xl:grid-cols-2">
-          <SectionCard title="导入任务历史" className="legacy-workspace-card">
+        <div className="workspace-grid grid gap-4 xl:grid-cols-2">
+          <SectionCard title="导入任务历史" className="workspace-card">
             <Table striped highlightOnHover withTableBorder>
               <Table.Thead>
                 <Table.Tr>
@@ -596,7 +596,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
               </Table.Tbody>
             </Table>
           </SectionCard>
-          <SectionCard title="接口分类统计" className="legacy-workspace-card">
+          <SectionCard title="接口分类统计" className="workspace-card">
             <Table striped highlightOnHover withTableBorder>
               <Table.Thead>
                 <Table.Tr>

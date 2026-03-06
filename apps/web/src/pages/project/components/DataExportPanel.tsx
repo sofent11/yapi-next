@@ -133,7 +133,7 @@ export default function DataExportPanel({ projectId, token }: DataExportPanelPro
   }, [wikiSupported, withWiki]);
 
   return (
-    <SectionCard title="数据导出" className="legacy-data-card">
+    <SectionCard title="数据导出" className="project-data-card">
       <Stack>
         <div className="dataImportTile">
           <Select
@@ -142,7 +142,7 @@ export default function DataExportPanel({ projectId, token }: DataExportPanelPro
             onChange={value => {
               if (value) setExportMethod(value);
             }}
-            className="legacy-workspace-control"
+            className="workspace-control"
             data={mergedExportOptions}
           />
         </div>
@@ -160,7 +160,7 @@ export default function DataExportPanel({ projectId, token }: DataExportPanelPro
           <span className="label inline-flex items-center gap-1">
             包含 Wiki
             <Tooltip label="开启后导出时附带项目 Wiki 内容">
-              <span className="legacy-inline-help inline-flex text-slate-500">
+              <span className="inline-help-text inline-flex text-slate-500">
                 <IconHelpCircle size={16} />
               </span>
             </Tooltip>

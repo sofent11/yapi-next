@@ -11,7 +11,7 @@ export function TypeSelector({ value, onChange }: TypeSelectorProps) {
   return (
     <Select
       value={value}
-      className="legacy-workspace-control"
+      className="workspace-control"
       data={FIELD_TYPES}
       onChange={nextValue => onChange((nextValue as SchemaFieldType) || 'string')}
     />

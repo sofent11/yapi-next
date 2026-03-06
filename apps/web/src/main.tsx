@@ -21,8 +21,8 @@ createRoot(document.getElementById('root') as HTMLElement).render(
       defaultColorScheme="light"
       theme={{
         primaryColor: 'indigo',
-        fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-        headings: { fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif' },
+        fontFamily: 'var(--font-sans)',
+        headings: { fontFamily: 'var(--font-sans)' },
         defaultRadius: 'md'
       }}
     >

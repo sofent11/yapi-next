@@ -69,11 +69,11 @@ export function SettingEnvTab(props: ProjectSettingPageProps) {
   }
 
   return (
-    <SectionCard className="m-panel legacy-project-setting-card">
-      <Stack className="legacy-workspace-stack">
+    <SectionCard className="m-panel project-settings-card">
+      <Stack className="workspace-stack">
         <Alert
           color="blue"
-          className="legacy-setting-info-alert"
+          className="project-settings-info-alert"
           title="为不同环境维护域名、Header 与全局变量，便于调试时快速切换。"
         />
         <div className="flex flex-wrap gap-3">
@@ -117,7 +117,7 @@ export function SettingEnvTab(props: ProjectSettingPageProps) {
                 删除
               </Button>
             </div>
-            <Stack className="legacy-workspace-stack">
+            <Stack className="workspace-stack">
               <TextInput
                 value={item.name}
                 onChange={event =>

@@ -126,7 +126,7 @@ export function ProjectConsoleModals(props: ProjectConsoleModalsProps) {
         opened={props.copyModalOpen}
         onClose={props.onCancelCopyModal}
       >
-        <div className="legacy-console-copy-modal">
+        <div className="console-copy-modal">
           <Alert color="blue" title={`该操作将会复制 ${props.copyProjectName || ''} 下的所有接口集合，但不包括测试集合中的接口`} />
           <RcForm<CopyForm> form={props.copyForm} onFinish={props.onSubmitCopy}>
             <Stack mt="md">

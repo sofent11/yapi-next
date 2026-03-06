@@ -311,7 +311,7 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
   }
 
   return (
-    <div className="legacy-workspace-stack legacy-schema-editor space-y-4">
+    <div className="workspace-stack schema-editor space-y-4">
       <SchemaEditorHeader
         rootCollapsed={rootCollapsed}
         onToggleRootCollapse={() => setRootCollapsed(value => !value)}
@@ -322,8 +322,8 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
 
       {parseError ? <Text c="red">当前 schema 解析失败: {parseError}</Text> : null}
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200">
-        <Table withTableBorder striped highlightOnHover>
+      <div className="schema-editor-table-wrap overflow-x-auto rounded-2xl border border-slate-200">
+        <Table className="schema-editor-table" withTableBorder striped highlightOnHover>
           <Table.Thead>
             <Table.Tr>
               <Table.Th className="w-[260px]">字段名</Table.Th>
@@ -350,11 +350,11 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
                 return (
                   <Table.Tr key={row.id}>
                     <Table.Td>
-                      <div className="legacy-schema-editor-tree-row flex items-center gap-2" style={{ paddingLeft: row.depth * 18 }}>
+                      <div className="schema-editor-tree-row flex items-center gap-2" style={{ paddingLeft: row.depth * 18 }}>
                         <ActionIcon
                           variant="subtle"
                           size="sm"
-                          className="legacy-schema-editor-toggle-btn"
+                          className="schema-editor-toggle-button"
                           onClick={() => hasChildren && toggleRowCollapse(row.id)}
                           disabled={!hasChildren}
                         >
@@ -394,7 +394,7 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
                       />
                     </Table.Td>
                     <Table.Td>
-                      <div className="flex items-center gap-1">
+                      <div className="schema-editor-row-actions flex items-center gap-1">
                         <Tooltip label="查看字段 Schema">
                           <ActionIcon variant="subtle" onClick={() => openFieldModal(row.id)}>
                             <IconSettings size={16} />

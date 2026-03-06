@@ -85,7 +85,7 @@ export function StatisticsPluginPage() {
   }, []);
 
   return (
-    <Stack className="legacy-workspace-stack" gap="md">
+    <Stack className="workspace-stack" gap="md">
       {loading ? (
         <Card padding="lg" radius="lg" withBorder>
           <div className="inline-flex items-center gap-2">

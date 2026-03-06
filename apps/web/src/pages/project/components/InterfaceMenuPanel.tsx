@@ -47,7 +47,7 @@ function IconButton(props: { label: string; onClick: () => void; children: React
   return (
     <button
       type="button"
-      className="legacy-interface-icon-btn"
+      className="interface-icon-button"
       onClick={event => {
         event.preventDefault();
         event.stopPropagation();
@@ -76,22 +76,22 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
   };
 
   return (
-    <div className="legacy-interface-menu">
-      <div className="legacy-interface-menu-actions">
+    <div className="interface-nav">
+      <div className="interface-nav-actions">
         <FilterBar
-          className="legacy-interface-filter"
+          className="interface-nav-filter"
           left={
             <TextInput
               value={props.menuKeyword}
               onChange={event => props.onMenuKeywordChange(event.currentTarget.value)}
               placeholder="搜索接口"
               leftSection={<IconSearch size={16} />}
-              className="legacy-interface-filter-input"
+              className="interface-nav-filter-input"
             />
           }
           right={
-            <div className="legacy-interface-filter-actions flex flex-wrap items-center gap-2">
-              <button type="button" className="legacy-interface-menu-link-btn" onClick={props.onNavigateAll}>
+            <div className="interface-nav-filter-actions flex flex-wrap items-center gap-2">
+              <button type="button" className="interface-link-button" onClick={props.onNavigateAll}>
                 全部接口
               </button>
               {props.canEdit ? (
@@ -109,16 +109,16 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
         />
       </div>
 
-      <div className="legacy-interface-menu-summary">
+      <div className="interface-nav-summary">
         <Text c="dimmed" size="sm">
           {keywordMode ? '筛选结果：' : ''}
           {props.menuDisplayRows.length} 个分类，{totalInterfaceCount} 个接口
         </Text>
       </div>
 
-      <div className="legacy-interface-menu-list">
+      <div className="interface-nav-list">
         {props.menuDisplayRows.length === 0 ? (
-          <div className="legacy-interface-menu-empty py-10 text-center">
+          <div className="interface-nav-empty py-10 text-center">
             <Text c="dimmed">{keywordMode ? '未找到匹配的接口分类或接口' : '暂无接口分类'}</Text>
           </div>
         ) : null}
@@ -133,7 +133,7 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
           return (
             <div
               key={`cat-${cat._id}`}
-              className="legacy-interface-cat"
+              className="interface-nav-group"
               onDragOver={event => {
                 if (!props.menuDragEnabled) return;
                 event.preventDefault();
@@ -146,7 +146,7 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
               }}
             >
               <div
-                className={`legacy-interface-cat-title${props.catId === catIdNum ? ' active' : ''}`}
+                className={`interface-nav-group-title${props.catId === catIdNum ? ' active' : ''}`}
                 role="button"
                 tabIndex={0}
                 aria-expanded={expanded}
@@ -161,10 +161,10 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
                 onClick={() => props.onNavigateCat(catIdNum)}
                 onKeyDown={event => triggerWithKeyboard(event, () => props.onNavigateCat(catIdNum))}
               >
-                <span className="legacy-interface-cat-main">
+                <span className="interface-nav-group-main">
                   <button
                     type="button"
-                    className="legacy-interface-cat-toggle"
+                    className="interface-nav-group-toggle"
                     onClick={event => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -180,10 +180,10 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
                   >
                     {expanded ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
                   </button>
-                  <span className="legacy-interface-cat-name">{cat.name}</span>
+                  <span className="interface-nav-group-name">{cat.name}</span>
                 </span>
 
-                <div className="legacy-interface-cat-actions flex items-center gap-1">
+                <div className="interface-nav-group-actions flex items-center gap-1">
                   {props.canEdit ? (
                     <>
                       <IconButton
@@ -205,10 +205,10 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
               </div>
 
               {shouldShowInterfaces && visibleInterfaces.length === 0 && catLoading ? (
-                <div className="legacy-interface-tip">加载接口中...</div>
+                <div className="interface-nav-tip">加载接口中...</div>
               ) : null}
               {shouldShowInterfaces && visibleInterfaces.length === 0 && !catLoading ? (
-                <div className="legacy-interface-tip">暂无接口</div>
+                <div className="interface-nav-tip">暂无接口</div>
               ) : null}
 
               {visibleInterfaces.map(item => {
@@ -216,7 +216,7 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
                 return (
                   <div
                     key={`iface-${item._id}`}
-                    className={`legacy-interface-item${props.interfaceId === interfaceId ? ' active' : ''}`}
+                    className={`interface-nav-item${props.interfaceId === interfaceId ? ' active' : ''}`}
                     role="button"
                     tabIndex={0}
                     aria-current={props.interfaceId === interfaceId ? 'page' : undefined}
@@ -244,10 +244,10 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
                       {String(item.method || 'GET').toUpperCase()}
                     </span>
                     <Tooltip label={item.path}>
-                      <span className="legacy-interface-item-title">{item.title || item.path}</span>
+                      <span className="interface-nav-item-title">{item.title || item.path}</span>
                     </Tooltip>
                     {props.canEdit ? (
-                      <div className="legacy-interface-item-actions flex items-center gap-1">
+                      <div className="interface-nav-item-actions flex items-center gap-1">
                         <IconButton label="复制接口" onClick={() => props.onCopyInterface(item)}>
                           <IconCopy size={14} />
                         </IconButton>

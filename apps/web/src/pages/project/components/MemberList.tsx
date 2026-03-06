@@ -34,14 +34,14 @@ export function MemberList(props: MemberListProps) {
   const guestCount = props.members.filter(item => item.role === 'guest').length;
 
   return (
-    <div className="m-panel legacy-console-member-panel">
-      <div className="legacy-console-member-toolbar">
-        <div className="legacy-console-member-toolbar-main">
+    <div className="m-panel console-members-panel">
+      <div className="console-members-toolbar">
+        <div className="console-members-toolbar-main">
           <Text fw={700}>{props.groupMemberCountTitle}</Text>
-          <div className="legacy-console-member-summary inline-flex flex-wrap gap-2">
-            <span className="legacy-console-member-summary-chip">组长 {ownerCount}</span>
-            <span className="legacy-console-member-summary-chip">开发者 {devCount}</span>
-            <span className="legacy-console-member-summary-chip">访客 {guestCount}</span>
+          <div className="console-members-summary inline-flex flex-wrap gap-2">
+            <span className="console-members-summary-chip">组长 {ownerCount}</span>
+            <span className="console-members-summary-chip">开发者 {devCount}</span>
+            <span className="console-members-summary-chip">访客 {guestCount}</span>
           </div>
         </div>
         {props.canManageGroupMembers ? (
@@ -61,7 +61,7 @@ export function MemberList(props: MemberListProps) {
         <LegacyErrMsg type="noMemberInGroup" />
       ) : (
         <div className="overflow-x-auto">
-          <table className="legacy-console-member-table min-w-full">
+          <table className="console-members-table min-w-full">
             <thead>
               <tr>
                 <th className="px-4 py-3 text-left">成员信息</th>
@@ -76,25 +76,25 @@ export function MemberList(props: MemberListProps) {
                 const email = String(row.email || '');
 
                 return (
-                  <tr key={uid} className={`legacy-console-member-row-${String(row.role || 'guest')}`}>
+                  <tr key={uid} className={`console-members-row-${String(row.role || 'guest')}`}>
                     <td className="px-4 py-4">
-                      <div className="legacy-console-member-cell">
+                      <div className="console-members-cell">
                         <Link to={`/user/profile/${uid}`}>
                           <Avatar src={`/api/user/avatar?uid=${uid}`} size={36} />
                         </Link>
-                        <div className="legacy-console-member-meta">
-                          <Link to={`/user/profile/${uid}`} className="legacy-console-member-name-link">
+                        <div className="console-members-meta">
+                          <Link to={`/user/profile/${uid}`} className="console-members-name-link">
                             {username}
                           </Link>
-                          {email ? <div className="legacy-console-member-email">{email}</div> : null}
+                          {email ? <div className="console-members-email">{email}</div> : null}
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-4">
                       {!props.canManageGroupMembers ? (
-                        <span className="legacy-console-member-role-text">{roleLabel(value)}</span>
+                        <span className="console-members-role-text">{roleLabel(value)}</span>
                       ) : (
-                        <div className="legacy-console-member-actions flex flex-wrap items-center gap-3">
+                        <div className="console-members-actions flex flex-wrap items-center gap-3">
                           <Select
                             value={value}
                             onChange={role => {
@@ -108,7 +108,7 @@ export function MemberList(props: MemberListProps) {
                               { value: 'dev', label: '开发者' },
                               { value: 'guest', label: '访客' }
                             ]}
-                            className="legacy-console-member-role-select"
+                            className="console-members-role-select"
                           />
                           {value !== 'owner' ? (
                             <Button

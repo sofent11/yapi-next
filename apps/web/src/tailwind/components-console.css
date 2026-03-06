@@ -1,0 +1,335 @@
+@layer components {
+  .projectGround {
+    @apply pb-8;
+  }
+
+  .group-bar {
+    @apply rounded-[24px] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+  }
+
+  .curr-group {
+    @apply mb-4 rounded-[20px] border border-slate-200 bg-slate-50/80 p-4;
+  }
+
+  .curr-group-name {
+    @apply mb-2 flex items-center justify-between gap-3;
+  }
+
+  .curr-group-name .name {
+    @apply text-2xl font-semibold tracking-tight text-slate-900;
+  }
+
+  .curr-group-desc {
+    @apply text-sm leading-6 text-slate-500;
+  }
+
+  .group-operate {
+    @apply mb-3;
+  }
+
+  .console-group-summary {
+    @apply mb-3 text-sm text-slate-500;
+  }
+
+  .console-group-loading {
+    @apply mx-auto my-6;
+  }
+
+  .group-item {
+    @apply border border-transparent shadow-sm transition-all duration-150;
+  }
+
+  .group-item:hover {
+    @apply -translate-y-px border-slate-200 shadow-md;
+  }
+
+  .project-console-tabs [role='tablist'] {
+    @apply mb-4 rounded-[20px] border border-slate-200 bg-white/92 p-1 shadow-sm;
+  }
+
+  .project-console-tabs [role='tab'] {
+    @apply rounded-2xl px-4 py-2 text-sm font-medium text-slate-500;
+  }
+
+  .project-console-tabs [role='tab'][data-active='true'] {
+    @apply bg-slate-900 text-white;
+  }
+
+  .console-project-panel {
+    @apply rounded-[24px] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+  }
+
+  .console-project-header {
+    @apply mb-4;
+  }
+
+  .console-project-header-main {
+    @apply flex flex-col gap-1;
+  }
+
+  .console-project-stats {
+    @apply mb-5 flex flex-wrap gap-2;
+  }
+
+  .console-project-stat-chip {
+    @apply inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600;
+  }
+
+  .console-project-grid {
+    @apply min-h-[240px];
+  }
+
+  .console-project-loading {
+    @apply flex min-h-[180px] items-center justify-center;
+  }
+
+  .console-project-section-empty {
+    @apply rounded-[20px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500;
+  }
+
+  .owner-type {
+    @apply m-0 text-lg font-semibold tracking-tight text-slate-900;
+  }
+
+  .card-container {
+    @apply relative;
+  }
+
+  .m-card.console-project-card-button {
+    @apply flex min-h-[288px] cursor-pointer flex-col rounded-[24px] border border-slate-200 bg-white px-6 py-6 shadow-sm transition-all duration-150;
+  }
+
+  .m-card.console-project-card-button:hover {
+    @apply -translate-y-0.5 border-slate-300 shadow-lg;
+  }
+
+  .ui-logo {
+    @apply mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-white;
+  }
+
+  .ui-title {
+    @apply m-0 text-[28px] font-semibold leading-tight tracking-tight text-slate-900;
+  }
+
+  .console-project-subtitle {
+    @apply mt-3 min-h-[48px] text-sm leading-6 text-slate-500;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .console-project-meta {
+    @apply mt-auto flex flex-col gap-1 pt-5 text-sm text-slate-400;
+  }
+
+  .console-members-panel,
+  .console-activity-panel {
+    @apply rounded-[24px] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+  }
+
+  .m-panel,
+  .news-box {
+    @apply rounded-[24px] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+  }
+
+  .g-row {
+    @apply flex flex-col gap-5;
+  }
+
+  .console-members-toolbar,
+  .console-activity-head {
+    @apply mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between;
+  }
+
+  .timeline-shell {
+    @apply flex flex-col gap-5;
+  }
+
+  .timeline-filter {
+    @apply rounded-[22px] border border-slate-200 bg-slate-50/80 p-4;
+  }
+
+  .timeline-filter .mantine-Text-root {
+    @apply text-sm font-medium text-slate-600;
+  }
+
+  .timeline-api-select {
+    min-width: min(100%, 560px);
+  }
+
+  .timeline-api-select .mantine-Input-input,
+  .timeline-api-select .mantine-Select-input {
+    @apply h-12 rounded-[16px] border-slate-300 bg-white px-4 text-sm text-slate-700;
+  }
+
+  .timeline-api-select .mantine-Input-input::placeholder,
+  .timeline-api-select .mantine-Select-input::placeholder {
+    @apply text-slate-400;
+  }
+
+  .timeline-content {
+    @apply flex flex-col gap-5;
+  }
+
+  .timeline-row {
+    @apply pb-0;
+  }
+
+  .timeline-bullet {
+    @apply border-4 border-white bg-slate-100 shadow-sm ring-1 ring-slate-200;
+  }
+
+  .timeline-bullet .mantine-Avatar-root {
+    @apply shadow-none;
+  }
+
+  .timeline-body {
+    @apply ml-4 pb-2;
+  }
+
+  .timeline-item-content {
+    @apply mt-0;
+  }
+
+  .timeline-item {
+    @apply rounded-[22px] border border-slate-200 bg-white px-5 py-4 shadow-sm;
+  }
+
+  .timeline-log-head {
+    @apply mb-1 flex flex-wrap items-center gap-3;
+  }
+
+  .timeline-log-chip {
+    @apply inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold tracking-wide text-blue-700;
+  }
+
+  .timeline-log-time {
+    @apply text-sm font-medium text-slate-700;
+  }
+
+  .timeline-log-timeago {
+    @apply text-sm text-slate-400;
+  }
+
+  .timeline-log-content {
+    @apply text-[15px] leading-8 text-slate-700;
+  }
+
+  .timeline-log-content a {
+    @apply font-medium text-slate-900;
+  }
+
+  .timeline-log-content p {
+    @apply m-0;
+  }
+
+  .timeline-item-actions {
+    @apply pt-1;
+  }
+
+  .timeline-item-actions .mantine-Button-root {
+    @apply rounded-full border-slate-200 bg-slate-50 text-slate-700;
+  }
+
+  .timeline-item-actions .mantine-Button-root:hover {
+    @apply border-slate-300 bg-white text-slate-900;
+  }
+
+  .timeline-footer {
+    @apply pt-2;
+  }
+
+  .timeline-footer .mantine-Button-root {
+    @apply rounded-full;
+  }
+
+  .log-diff-note {
+    @apply rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700;
+  }
+
+  .log-diff-content {
+    @apply flex flex-col gap-4;
+  }
+
+  .log-diff-item {
+    @apply rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-4;
+  }
+
+  .log-diff-item-title {
+    @apply m-0 text-base font-semibold text-slate-900;
+  }
+
+  .log-diff-item ins {
+    @apply rounded bg-emerald-100 px-1 text-emerald-800 no-underline;
+  }
+
+  .log-diff-item del {
+    @apply rounded bg-rose-100 px-1 text-rose-700 no-underline;
+  }
+
+  .console-members-toolbar-main {
+    @apply flex flex-col gap-2;
+  }
+
+  .console-members-summary-chip {
+    @apply inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600;
+  }
+
+  .console-members-table {
+    @apply overflow-hidden rounded-[20px] border border-slate-200 bg-white;
+  }
+
+  .console-members-table thead {
+    @apply bg-slate-50;
+  }
+
+  .console-members-table th {
+    @apply text-sm font-semibold text-slate-600;
+  }
+
+  .console-members-table tbody tr + tr {
+    @apply border-t border-slate-100;
+  }
+
+  .console-members-cell {
+    @apply flex items-center gap-3;
+  }
+
+  .console-members-meta {
+    @apply flex flex-col gap-1;
+  }
+
+  .console-members-name-link {
+    @apply font-medium text-slate-900;
+  }
+
+  .console-members-email,
+  .console-members-role-text {
+    @apply text-sm text-slate-500;
+  }
+
+  .console-members-role-select {
+    min-width: 132px;
+  }
+
+  .console-project-action-button {
+    @apply absolute z-10 flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-all duration-150;
+  }
+
+  .console-project-action-button:hover {
+    @apply -translate-y-px border-slate-300 text-slate-900 shadow-md;
+  }
+
+  .card-btns {
+    @apply right-12 top-4;
+  }
+
+  .copy-btns {
+    @apply right-2 top-4;
+  }
+
+  .console-project-action-button .icon.active {
+    @apply fill-amber-400 text-amber-500;
+  }
+}

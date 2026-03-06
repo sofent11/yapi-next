@@ -59,7 +59,7 @@ function IconButton(props: { label: string; onClick: () => void; children: React
   return (
     <button
       type="button"
-      className="legacy-interface-icon-btn"
+      className="interface-icon-button"
       onClick={event => {
         event.preventDefault();
         event.stopPropagation();
@@ -85,22 +85,22 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
   };
 
   return (
-    <div className="legacy-interface-menu">
-      <div className="legacy-interface-menu-actions">
+    <div className="interface-nav">
+      <div className="interface-nav-actions">
         <FilterBar
-          className="legacy-interface-filter"
+          className="interface-nav-filter"
           left={
             <TextInput
               value={props.colKeyword}
               onChange={event => props.onColKeywordChange(event.currentTarget.value)}
               placeholder="搜索测试集合"
               leftSection={<IconSearch size={16} />}
-              className="legacy-interface-filter-input"
+              className="interface-nav-filter-input"
             />
           }
           right={
             props.canEdit ? (
-              <div className="legacy-interface-filter-actions flex flex-wrap items-center gap-2">
+              <div className="interface-nav-filter-actions flex flex-wrap items-center gap-2">
                 <Button size="xs" onClick={props.onOpenAddCol} leftSection={<IconPlus size={14} />}>
                   添加集合
                 </Button>
@@ -110,16 +110,16 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
         />
       </div>
 
-      <div className="legacy-interface-menu-summary">
+      <div className="interface-nav-summary">
         <Text c="dimmed" size="sm">
           {keywordMode ? '筛选结果：' : ''}
           {props.colDisplayRows.length} 个集合，{totalCases} 个用例
         </Text>
       </div>
 
-      <div className="legacy-interface-menu-list">
+      <div className="interface-nav-list">
         {props.colDisplayRows.length === 0 ? (
-          <div className="legacy-interface-menu-empty py-10 text-center">
+          <div className="interface-nav-empty py-10 text-center">
             <Text c="dimmed">{keywordMode ? '未找到匹配的测试集合' : '暂无测试集合'}</Text>
             {!keywordMode && props.canEdit ? (
               <div className="mt-3">
@@ -140,7 +140,7 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
           return (
             <div
               key={`col-${colId}`}
-              className="legacy-interface-cat"
+              className="interface-nav-group"
               onDragOver={event => {
                 if (!props.colDragEnabled) return;
                 event.preventDefault();
@@ -153,7 +153,7 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
               }}
             >
               <div
-                className={`legacy-interface-cat-title${activeCol ? ' active' : ''}`}
+                className={`interface-nav-group-title${activeCol ? ' active' : ''}`}
                 role="button"
                 tabIndex={0}
                 aria-expanded={expanded}
@@ -168,10 +168,10 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                 onClick={() => props.onNavigateCol(colId)}
                 onKeyDown={event => triggerWithKeyboard(event, () => props.onNavigateCol(colId))}
               >
-                <span className="legacy-interface-cat-main">
+                <span className="interface-nav-group-main">
                   <button
                     type="button"
-                    className="legacy-interface-cat-toggle"
+                    className="interface-nav-group-toggle"
                     onClick={event => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -183,10 +183,10 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                   >
                     {expanded ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
                   </button>
-                  <IconFolderOpen size={16} className="legacy-interface-cat-folder" />
-                  <span className="legacy-interface-cat-name">{String(col.name || '')}</span>
+                  <IconFolderOpen size={16} className="interface-nav-group-folder" />
+                  <span className="interface-nav-group-name">{String(col.name || '')}</span>
                 </span>
-                <div className="legacy-interface-cat-actions flex items-center gap-1">
+                <div className="interface-nav-group-actions flex items-center gap-1">
                   {props.canEdit ? (
                     <>
                       <IconButton label="删除集合" onClick={() => props.onDeleteCol(colId)}>
@@ -212,7 +212,7 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                 return (
                   <div
                     key={`case-${id}`}
-                    className={`legacy-interface-item${props.action === 'case' && props.caseId === id ? ' active' : ''}`}
+                    className={`interface-nav-item${props.action === 'case' && props.caseId === id ? ' active' : ''}`}
                     role="button"
                     tabIndex={0}
                     aria-current={props.action === 'case' && props.caseId === id ? 'page' : undefined}
@@ -238,10 +238,10 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                   >
                     <Badge color="blue" variant="light">CASE</Badge>
                     <Tooltip label={String(item.path || '')}>
-                      <span className="legacy-interface-item-title">{String(item.casename || item.title || id)}</span>
+                      <span className="interface-nav-item-title">{String(item.casename || item.title || id)}</span>
                     </Tooltip>
                     {props.canEdit ? (
-                      <div className="legacy-interface-item-actions flex items-center gap-1">
+                      <div className="interface-nav-item-actions flex items-center gap-1">
                         <IconButton label="删除用例" onClick={() => props.onDeleteCase(id)}>
                           <IconTrash size={14} />
                         </IconButton>

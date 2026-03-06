@@ -351,7 +351,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
   return (
     <SectionCard
       title="数据导入"
-      className="legacy-data-card"
+      className="project-data-card"
       extra={
         <a
           target="_blank"
@@ -370,14 +370,14 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
             onChange={value => {
               if (value) setImportMethod(value);
             }}
-            className="legacy-workspace-control"
+            className="workspace-control"
             data={mergedImportOptions}
           />
         </div>
 
         <div className="catidSelect">
           <Select
-            className="legacy-workspace-control"
+            className="workspace-control"
             placeholder="请选择数据导入的默认分类"
             value={defaultCatId > 0 ? String(defaultCatId) : null}
             onChange={value => setDefaultCatId(Number(value || 0))}
@@ -412,7 +412,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
               multiline
               maw={320}
             >
-              <span className="legacy-inline-help inline-flex text-slate-500">
+              <span className="inline-help-text inline-flex text-slate-500">
                 <IconHelpCircle size={16} />
               </span>
             </Tooltip>
@@ -422,7 +422,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
             onChange={value => {
               if (value) setSyncMode(value as SyncMode);
             }}
-            className="legacy-workspace-control"
+            className="workspace-control"
             data={[
               { value: 'normal', label: '普通模式' },
               { value: 'good', label: '智能合并' },
@@ -436,7 +436,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
             <span className="label inline-flex items-center gap-1">
               开启 URL 导入
               <Tooltip label="使用 swagger/openapi 链接地址导入">
-                <span className="legacy-inline-help inline-flex text-slate-500">
+                <span className="inline-help-text inline-flex text-slate-500">
                   <IconHelpCircle size={16} />
                 </span>
               </Tooltip>
@@ -506,12 +506,12 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
               </Button>
             </div>
             {importMethodDesc ? (
-              <Text c="dimmed" className="legacy-workspace-paragraph-top-compact">
+              <Text c="dimmed" className="workspace-paragraph-compact">
                 {importMethodDesc}
               </Text>
             ) : null}
             {importFileName ? (
-              <Text c="dimmed" className="legacy-workspace-paragraph-top">
+              <Text c="dimmed" className="workspace-paragraph">
                 {importFileName}
               </Text>
             ) : null}

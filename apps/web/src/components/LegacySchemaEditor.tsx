@@ -49,7 +49,7 @@ export function LegacySchemaEditor(props: LegacySchemaEditorProps) {
       <>
         <Alert
           color="yellow"
-          className="legacy-schema-editor-alert mb-4"
+          className="schema-editor-alert mb-4"
           title="当前 schema 文本格式有误，已暂不启用可视化编辑。修正后会自动同步。"
         />
         <SchemaVisualEditor value={normalized.text} onChange={props.onChange} />

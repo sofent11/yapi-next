@@ -137,7 +137,7 @@ export function AddProjectPage() {
   }
 
   return (
-    <AppShell className="legacy-add-project-page">
+    <AppShell className="add-project-page">
       <PageHeader
         title="新建项目"
         subtitle="填写基础信息后立即进入接口工作区，后续可在项目设置中继续完善。"
@@ -152,7 +152,7 @@ export function AddProjectPage() {
         )}
       />
 
-      <SectionCard className="legacy-add-project-card">
+      <SectionCard className="add-project-card">
         <form className="space-y-6" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <TextInput
