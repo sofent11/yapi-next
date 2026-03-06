@@ -254,7 +254,7 @@ export class SpecController {
 
   private normalizeSyncMode(source: string | undefined): SyncMode {
     const value = (source || 'merge').toLowerCase();
-    if (value === 'normal' || value === 'good') return value;
+    if (value === 'normal' || value === 'good' || value === 'sync') return value;
     return 'merge';
   }
 

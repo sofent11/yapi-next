@@ -436,7 +436,7 @@ const testPlugin: ModernWebPlugin = {
   setup(api) {
     api.extendSubSettingNav(tabs => {
       tabs.test = {
-        name: 'test',
+        name: 'Swagger 3.0 同步',
         component: PluginTestPage
       };
     });

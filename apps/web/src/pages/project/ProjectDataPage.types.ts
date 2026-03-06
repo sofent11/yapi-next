@@ -7,7 +7,7 @@ export type ProjectDataPageProps = {
 
 export type SpecSource = 'json' | 'url';
 export type SpecFormat = 'auto' | 'swagger2' | 'openapi3';
-export type SyncMode = 'normal' | 'good' | 'merge';
+export type SyncMode = 'normal' | 'good' | 'merge' | 'sync';
 
 export type ExportFormat = 'openapi3' | 'swagger2';
 export type ExportStatus = 'all' | 'open';

@@ -10,6 +10,7 @@ import type {
   SpecSource,
   SyncMode
 } from '@yapi-next/shared-types';
+import { InterfaceEntity } from '../database/schemas/interface.schema';
 import { ProjectEntity } from '../database/schemas/project.schema';
 import { InterfaceCatService } from './interface-cat.service';
 import { InterfaceBulkUpsertService } from './interface-bulk-upsert.service';
@@ -21,6 +22,8 @@ export class SpecService {
   constructor(
     @InjectModel(ProjectEntity.name)
     private readonly projectModel: Model<ProjectEntity>,
+    @InjectModel(InterfaceEntity.name)
+    private readonly interfaceModel: Model<InterfaceEntity>,
     private readonly parserService: OpenapiParserService,
     private readonly catService: InterfaceCatService,
     private readonly bulkUpsertService: InterfaceBulkUpsertService,
@@ -70,6 +73,13 @@ export class SpecService {
     if (params.format !== 'auto' && params.format !== parsed.detectedFormat) {
       throw new Error(`format 与文档版本不匹配，当前检测为 ${parsed.detectedFormat}`);
     }
+    const apis = parsed.apis.filter(item => !String(item.path || '').includes('/inner/'));
+    const usedCatNames = new Set(
+      apis
+        .map(item => (typeof item.catname === 'string' ? item.catname.trim() : ''))
+        .filter(Boolean)
+    );
+    const cats = parsed.cats.filter(item => usedCatNames.has(String(item.name || '').trim()));
 
     if (params.dryRun) {
       await this.emitProgress(params.onProgress, {
@@ -81,10 +91,10 @@ export class SpecService {
         dryRun: true,
         project_id: params.projectId,
         detectedFormat: parsed.detectedFormat,
-        categories: parsed.cats.length,
-        interfaces: parsed.apis.length,
+        categories: cats.length,
+        interfaces: apis.length,
         basePath: parsed.basePath || '',
-        sample: parsed.apis.slice(0, 5).map(item => ({
+        sample: apis.slice(0, 5).map(item => ({
           method: item.method,
           path: item.path,
           title: item.title
@@ -98,15 +108,29 @@ export class SpecService {
       percent: 45,
       message: '正在处理分类'
     });
-    const categories = parsed.cats.length > 0
-      ? parsed.cats
-      : [{ name: '默认分类', desc: '默认分类' }];
-    const catMap = await this.catService.ensureCategories(params.projectId, categories, uid);
-    const items = parsed.apis.map(item => ({
+    const categorySeed = cats.length > 0
+      ? cats
+      : apis.length > 0
+        ? [{ name: '默认分类', desc: '默认分类' }]
+        : [];
+    const existingInterfaceMap = await this.findExistingInterfaces(params.projectId, apis);
+    const newInterfaceKeys = new Set(
+      apis.map(item => this.lookupKey(item)).filter(key => !existingInterfaceMap.has(key))
+    );
+    const ensuredCategories = params.syncMode === 'sync'
+      ? categorySeed.filter(cat =>
+          apis.some(item => item.catname === cat.name && newInterfaceKeys.has(this.lookupKey(item)))
+        )
+      : categorySeed;
+    const catMap = ensuredCategories.length > 0
+      ? await this.catService.ensureCategories(params.projectId, ensuredCategories, uid)
+      : new Map<string, number>();
+    const items = apis.map(item => ({
       ...item,
-      catid: item.catname && catMap.has(item.catname)
-        ? (catMap.get(item.catname) as number)
-        : this.firstCatId(catMap)
+      catid: existingInterfaceMap.get(this.lookupKey(item))
+        || (item.catname && catMap.has(item.catname)
+          ? (catMap.get(item.catname) as number)
+          : this.firstCatId(catMap, item.catname))
     }));
 
     await this.emitProgress(params.onProgress, {
@@ -141,8 +165,8 @@ export class SpecService {
     return {
       ...result,
       detectedFormat: parsed.detectedFormat,
-      categories: parsed.cats.length,
-      interfaces: parsed.apis.length,
+      categories: cats.length,
+      interfaces: apis.length,
       basePath: parsed.basePath || ''
     };
   }
@@ -163,10 +187,28 @@ export class SpecService {
     });
   }
 
-  private firstCatId(map: Map<string, number>): number {
+  private async findExistingInterfaces(projectId: number, apis: Array<{ path: string; method: string }>): Promise<Map<string, number>> {
+    if (apis.length === 0) {
+      return new Map<string, number>();
+    }
+    const deduped = Array.from(
+      new Map(apis.map(item => [this.lookupKey(item), item])).values()
+    );
+    const existingRows = await this.interfaceModel.find({
+      project_id: projectId,
+      $or: deduped.map(item => ({ path: item.path, method: item.method }))
+    }).select('path method catid').lean();
+    return new Map(existingRows.map(item => [this.lookupKey(item), Number(item.catid || 0)]));
+  }
+
+  private lookupKey(item: { path: string; method: string }): string {
+    return `${String(item.method || '').toUpperCase()} ${String(item.path || '')}`;
+  }
+
+  private firstCatId(map: Map<string, number>, catname?: string | null): number {
     const first = map.values().next();
     if (first.done || !first.value) {
-      throw new Error('项目分类为空，无法导入接口');
+      throw new Error(`分类不存在，无法导入接口${catname ? `: ${catname}` : ''}`);
     }
     return first.value;
   }

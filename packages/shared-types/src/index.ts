@@ -6,7 +6,7 @@ export interface ApiResult<T = unknown> {
 
 export type SpecFormat = 'auto' | 'swagger2' | 'openapi3';
 export type SpecSource = 'json' | 'url';
-export type SyncMode = 'normal' | 'good' | 'merge';
+export type SyncMode = 'normal' | 'good' | 'merge' | 'sync';
 export type SpecExportFormat = 'openapi3' | 'swagger2';
 export type InterfacePublishStatus = 'all' | 'open';
 export type InterfaceStatus = 'undone' | 'done';

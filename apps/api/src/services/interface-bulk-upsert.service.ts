@@ -11,6 +11,8 @@ import { InterfaceTreeCacheService } from './interface-tree-cache.service';
 import { mergeJsonSchema } from '../legacy/merge-json-schema';
 
 const BULK_WRITE_CHUNK_SIZE = 300;
+const PRESERVED_PARAM_FIELDS = ['desc', 'example'] as const;
+const PRESERVED_SCHEMA_METADATA_FIELDS = ['title', 'description'] as const;
 
 export interface BulkUpsertError {
   operationId?: string;
@@ -119,7 +121,26 @@ export class InterfaceBulkUpsertService {
         project_id: projectId,
         $or: dedupedItems.map(item => ({ path: item.path, method: item.method }))
       })
-      .select('_id path method res_body res_body_is_json_schema')
+      .select([
+        '_id',
+        'path',
+        'method',
+        'catid',
+        'title',
+        'desc',
+        'tag',
+        'api_opened',
+        'req_params',
+        'req_headers',
+        'req_query',
+        'req_body_form',
+        'req_body_type',
+        'req_body_other',
+        'req_body_is_json_schema',
+        'res_body_type',
+        'res_body',
+        'res_body_is_json_schema'
+      ].join(' '))
       .lean();
     const existingMap = new Map<string, any>();
     for (const row of existingRows) {
@@ -150,7 +171,29 @@ export class InterfaceBulkUpsertService {
       delete updateData.uid;
       delete updateData.add_time;
       updateData.up_time = this.now();
-      if (mode === 'good' && item.res_body_is_json_schema === true && existing.res_body_is_json_schema === true) {
+      if (mode === 'sync') {
+        updateData.catid = existing.catid;
+        updateData.title = this.preferExistingText(existing.title, item.title);
+        updateData.desc = this.preferExistingText(existing.desc, item.desc);
+        updateData.tag = Array.isArray(existing.tag) && existing.tag.length > 0 ? existing.tag : item.tag;
+        updateData.api_opened = existing.api_opened === true;
+        updateData.req_params = this.mergeNamedParams(existing.req_params, item.req_params);
+        updateData.req_headers = this.mergeNamedParams(existing.req_headers, item.req_headers);
+        updateData.req_query = this.mergeNamedParams(existing.req_query, item.req_query);
+        updateData.req_body_form = this.mergeNamedParams(existing.req_body_form, item.req_body_form);
+        updateData.req_body_other = this.mergeSchemaText(
+          existing.req_body_other,
+          existing.req_body_is_json_schema === true,
+          item.req_body_other,
+          item.req_body_is_json_schema === true
+        );
+        updateData.res_body = this.mergeSchemaText(
+          existing.res_body,
+          existing.res_body_is_json_schema === true,
+          item.res_body,
+          item.res_body_is_json_schema === true
+        );
+      } else if (mode === 'good' && item.res_body_is_json_schema === true && existing.res_body_is_json_schema === true) {
         try {
           const oldBody = this.parseJSON(existing.res_body);
           const newBody = this.parseJSON(item.res_body);
@@ -452,5 +495,98 @@ export class InterfaceBulkUpsertService {
       }
     }
     return reqHeaders;
+  }
+
+  private preferExistingText(existingValue: unknown, nextValue: unknown): string {
+    const current = typeof existingValue === 'string' ? existingValue.trim() : '';
+    if (current) return typeof existingValue === 'string' ? existingValue : current;
+    return typeof nextValue === 'string' ? nextValue : '';
+  }
+
+  private mergeNamedParams(
+    existingInput: unknown,
+    nextInput: unknown
+  ): Array<Record<string, unknown>> {
+    const existing = Array.isArray(existingInput) ? existingInput as Array<Record<string, unknown>> : [];
+    const next = Array.isArray(nextInput) ? nextInput as Array<Record<string, unknown>> : [];
+    const existingMap = new Map<string, Record<string, unknown>>();
+    existing.forEach(item => {
+      const name = this.toNameKey(item.name);
+      if (name) {
+        existingMap.set(name, item);
+      }
+    });
+    return next.map(item => {
+      const current = existingMap.get(this.toNameKey(item.name));
+      if (!current) return item;
+      const merged = { ...item };
+      PRESERVED_PARAM_FIELDS.forEach(field => {
+        const value = current[field];
+        if (typeof value === 'string' && value.trim()) {
+          merged[field] = value;
+        }
+      });
+      return merged;
+    });
+  }
+
+  private mergeSchemaText(
+    existingText: unknown,
+    existingIsSchema: boolean,
+    nextText: unknown,
+    nextIsSchema: boolean
+  ): string {
+    const nextValue = typeof nextText === 'string' ? nextText : '';
+    if (!existingIsSchema || !nextIsSchema) {
+      return nextValue;
+    }
+    try {
+      const existingSchema = this.parseJSON(typeof existingText === 'string' ? existingText : '');
+      const nextSchema = this.parseJSON(nextValue);
+      return JSON.stringify(this.syncJsonSchema(existingSchema, nextSchema), null, 2);
+    } catch (_err) {
+      return nextValue;
+    }
+  }
+
+  private syncJsonSchema(existingSchema: unknown, nextSchema: unknown): unknown {
+    if (!this.isPlainObject(existingSchema) || !this.isPlainObject(nextSchema)) {
+      return nextSchema;
+    }
+    const result: Record<string, unknown> = { ...nextSchema };
+    PRESERVED_SCHEMA_METADATA_FIELDS.forEach(field => {
+      const current = existingSchema[field];
+      if (typeof current === 'string' && current.trim()) {
+        result[field] = current;
+      }
+    });
+    if (nextSchema.type === 'object') {
+      result.properties = this.syncSchemaProperties(existingSchema.properties, nextSchema.properties);
+    } else if (nextSchema.type === 'array') {
+      result.items = this.syncJsonSchema(existingSchema.items, nextSchema.items);
+    }
+    return result;
+  }
+
+  private syncSchemaProperties(existingProperties: unknown, nextProperties: unknown): unknown {
+    if (!this.isPlainObject(nextProperties)) {
+      return nextProperties;
+    }
+    if (!this.isPlainObject(existingProperties)) {
+      return nextProperties;
+    }
+    const result: Record<string, unknown> = { ...nextProperties };
+    Object.keys(result).forEach(key => {
+      result[key] = this.syncJsonSchema(existingProperties[key], result[key]);
+    });
+    return result;
+  }
+
+  private isPlainObject(input: unknown): input is Record<string, any> {
+    return !!input && typeof input === 'object' && Object.getPrototypeOf(input) === Object.prototype;
+  }
+
+  private toNameKey(value: unknown): string {
+    return typeof value === 'string' ? value.trim() : '';
   }
 }

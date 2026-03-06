@@ -24,7 +24,7 @@ export class SpecImportTaskEntity {
   format!: 'auto' | 'swagger2' | 'openapi3';
 
   @Prop({ type: String, default: 'merge' })
-  syncMode!: 'normal' | 'good' | 'merge';
+  syncMode!: 'normal' | 'good' | 'merge' | 'sync';
 
   @Prop({ type: Boolean, default: false })
   dryRun!: boolean;
