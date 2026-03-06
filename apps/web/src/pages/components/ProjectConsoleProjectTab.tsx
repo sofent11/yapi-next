@@ -1,11 +1,9 @@
-import { CopyOutlined, StarOutlined } from '@ant-design/icons';
-import { Button, Card, Col, Row, Spin, Tooltip, Typography } from 'antd';
-import type { KeyboardEvent, MouseEvent } from 'react';
+import { Button, Card, Loader, Text, Tooltip } from '@mantine/core';
+import { IconCopy, IconStar } from '@tabler/icons-react';
+import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import type { ProjectListItem } from '@yapi-next/shared-types';
 import { LegacyErrMsg } from '../../components/LegacyErrMsg';
 import { renderProjectIcon, resolveProjectColor, resolveProjectColorKey } from '../../utils/project-visual';
-
-const { Text } = Typography;
 
 type ProjectConsoleProjectTabProps = {
   selectedGroupName: string;
@@ -22,6 +20,17 @@ type ProjectConsoleProjectTabProps = {
   onToggleFollow: (project: ProjectListItem, event: MouseEvent<HTMLElement>) => void;
   onOpenCopyProject: (project: ProjectListItem) => void;
 };
+
+function renderGrid(
+  projects: ProjectListItem[],
+  renderProjectCard: (project: ProjectListItem) => ReactNode
+) {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {projects.map(project => renderProjectCard(project))}
+    </div>
+  );
+}
 
 export function ProjectConsoleProjectTab(props: ProjectConsoleProjectTabProps) {
   const myProjectCount = props.normalProjects.length;
@@ -44,24 +53,26 @@ export function ProjectConsoleProjectTab(props: ProjectConsoleProjectTabProps) {
       String(project.basepath || '').trim() ||
       String(project.desc || '').trim() ||
       '未设置描述';
+
     return (
       <div className="card-container" key={pid}>
         <Card
-          bordered={false}
+          withBorder={false}
           className="m-card legacy-console-project-card-btn"
           onClick={() => props.onNavigateProject(pid)}
           role="button"
           tabIndex={0}
           onKeyDown={event => triggerCardWithKeyboard(event, () => props.onNavigateProject(pid))}
         >
-          <div
-            className={logoClassName}
-            style={colorKey ? undefined : { backgroundColor: color }}
-          >
+          <div className={logoClassName} style={colorKey ? undefined : { backgroundColor: color }}>
             {renderProjectIcon(project.icon)}
           </div>
-          <h4 className="ui-title" title={project.name || ''}>{project.name}</h4>
-          <p className="legacy-console-project-subtitle" title={secondaryText}>{secondaryText}</p>
+          <h4 className="ui-title" title={project.name || ''}>
+            {project.name}
+          </h4>
+          <p className="legacy-console-project-subtitle" title={secondaryText}>
+            {secondaryText}
+          </p>
         </Card>
         <button
           type="button"
@@ -69,8 +80,8 @@ export function ProjectConsoleProjectTab(props: ProjectConsoleProjectTabProps) {
           onClick={event => props.onToggleFollow(project, event)}
           aria-label={project.follow ? '取消关注项目' : '关注项目'}
         >
-          <Tooltip placement="rightTop" title={project.follow ? '取消关注' : '添加关注'}>
-            <StarOutlined className={`icon ${project.follow ? 'active' : ''}`} />
+          <Tooltip label={project.follow ? '取消关注' : '添加关注'} position="top-end">
+            <IconStar className={`icon ${project.follow ? 'active' : ''}`} size={18} />
           </Tooltip>
         </button>
         {props.canCopyProject ? (
@@ -83,8 +94,8 @@ export function ProjectConsoleProjectTab(props: ProjectConsoleProjectTabProps) {
             }}
             aria-label="复制项目"
           >
-            <Tooltip placement="rightTop" title="复制项目">
-              <CopyOutlined className="icon" />
+            <Tooltip label="复制项目" position="top-end">
+              <IconCopy className="icon" size={18} />
             </Tooltip>
           </button>
         ) : null}
@@ -94,82 +105,76 @@ export function ProjectConsoleProjectTab(props: ProjectConsoleProjectTabProps) {
 
   return (
     <div className="m-panel card-panel card-panel-s project-list legacy-console-project-panel">
-      <Row className="project-list-header legacy-console-project-header" gutter={[12, 12]}>
-        <Col xs={24} md={16} className="legacy-console-project-header-main">
-          <Text strong>{props.selectedGroupName || '分组'}</Text>
-          <Text type="secondary">共 {props.projectRows.length} 个项目</Text>
-        </Col>
-        <Col xs={24} md={8} className="legacy-console-project-header-actions">
+      <div className="project-list-header legacy-console-project-header flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="legacy-console-project-header-main flex flex-col gap-1">
+          <Text fw={700}>{props.selectedGroupName || '分组'}</Text>
+          <Text c="dimmed">共 {props.projectRows.length} 个项目</Text>
+        </div>
+        <div className="legacy-console-project-header-actions">
           {props.canCreateProject ? (
-            <Button type="primary" onClick={props.onAddProject}>添加项目</Button>
+            <Button onClick={props.onAddProject}>添加项目</Button>
           ) : (
-            <Tooltip title="您没有权限,请联系该分组组长或管理员">
-              <Button type="primary" disabled>添加项目</Button>
+            <Tooltip label="您没有权限,请联系该分组组长或管理员">
+              <Button disabled>添加项目</Button>
             </Tooltip>
           )}
-        </Col>
-      </Row>
+        </div>
+      </div>
       <div className="legacy-console-project-stats">
         {props.groupType === 'private' ? (
           <>
-            <Text type="secondary" className="legacy-console-project-stat-tag">我的项目 {myProjectCount}</Text>
-            <Text type="secondary" className="legacy-console-project-stat-tag">我的关注 {followProjectCount}</Text>
+            <Text c="dimmed" className="legacy-console-project-stat-tag">
+              我的项目 {myProjectCount}
+            </Text>
+            <Text c="dimmed" className="legacy-console-project-stat-tag">
+              我的关注 {followProjectCount}
+            </Text>
           </>
         ) : (
           <>
-            <Text type="secondary" className="legacy-console-project-stat-tag">全部项目 {props.mixedPublicProjects.length}</Text>
-            <Text type="secondary" className="legacy-console-project-stat-tag">已关注 {publicFollowCount}</Text>
+            <Text c="dimmed" className="legacy-console-project-stat-tag">
+              全部项目 {props.mixedPublicProjects.length}
+            </Text>
+            <Text c="dimmed" className="legacy-console-project-stat-tag">
+              已关注 {publicFollowCount}
+            </Text>
           </>
         )}
       </div>
       <div className="legacy-console-project-grid-wrap">
         {props.projectListFetching && props.projectRows.length === 0 ? (
-          <div className="legacy-console-project-loading"><Spin /></div>
+          <div className="legacy-console-project-loading">
+            <Loader />
+          </div>
         ) : props.projectRows.length === 0 ? (
           <LegacyErrMsg type="noProject" />
         ) : props.groupType === 'private' ? (
-          <div>
-            <Row className="legacy-console-project-section">
-              <Col span={24}>
-                <div className="legacy-console-project-section-head">
-                  <h3 className="owner-type">我的项目</h3>
-                  <Text type="secondary">{myProjectCount} 个</Text>
-                </div>
-              </Col>
+          <div className="space-y-6">
+            <section className="legacy-console-project-section">
+              <div className="legacy-console-project-section-head mb-4 flex items-center justify-between gap-3">
+                <h3 className="owner-type">我的项目</h3>
+                <Text c="dimmed">{myProjectCount} 个</Text>
+              </div>
               {props.normalProjects.length > 0 ? (
-                props.normalProjects.map(project => (
-                  <Col xs={24} sm={12} md={8} lg={6} xl={4} key={project._id}>{renderProjectCard(project)}</Col>
-                ))
+                renderGrid(props.normalProjects, renderProjectCard)
               ) : (
-                <Col span={24}>
-                  <div className="legacy-console-project-section-empty">暂无我创建或参与的项目</div>
-                </Col>
+                <div className="legacy-console-project-section-empty">暂无我创建或参与的项目</div>
               )}
-            </Row>
-            <Row className="legacy-console-project-section">
-              <Col span={24}>
-                <div className="legacy-console-project-section-head">
-                  <h3 className="owner-type">我的关注</h3>
-                  <Text type="secondary">{followProjectCount} 个</Text>
-                </div>
-              </Col>
+            </section>
+            <section className="legacy-console-project-section">
+              <div className="legacy-console-project-section-head mb-4 flex items-center justify-between gap-3">
+                <h3 className="owner-type">我的关注</h3>
+                <Text c="dimmed">{followProjectCount} 个</Text>
+              </div>
               {props.followedProjects.length > 0 ? (
-                props.followedProjects.map(project => (
-                  <Col xs={24} sm={12} md={8} lg={6} xl={4} key={`follow-${project._id}`}>{renderProjectCard(project)}</Col>
-                ))
+                renderGrid(props.followedProjects, renderProjectCard)
               ) : (
-                <Col span={24}>
-                  <div className="legacy-console-project-section-empty">暂无关注项目</div>
-                </Col>
+                <div className="legacy-console-project-section-empty">暂无关注项目</div>
               )}
-            </Row>
+            </section>
           </div>
         ) : (
-          <Row gutter={[16, 16]}>
-            {props.mixedPublicProjects.map(project => (
-              <Col xs={24} sm={12} md={8} lg={6} xl={4} key={project._id}>{renderProjectCard(project)}</Col>
-            ))}
-          </Row>
+          renderGrid(props.mixedPublicProjects, renderProjectCard)
         )}
       </div>
     </div>

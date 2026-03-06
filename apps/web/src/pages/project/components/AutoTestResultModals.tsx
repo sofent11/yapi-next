@@ -1,7 +1,7 @@
-import { Alert, Button, Descriptions, Input, Modal, Space, Table, Tag, Typography, message } from 'antd';
-import { CopyOutlined } from '@ant-design/icons';
-
-const { Text } = Typography;
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Badge, Button, Modal, Table, Text, Textarea } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { IconCopy } from '@tabler/icons-react';
 
 type AutoTestResultItem = {
   id: string;
@@ -39,6 +39,15 @@ export type AutoTestResultModalsProps = {
   methodClassName: (method?: string) => string;
 };
 
+const message = {
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  },
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  }
+};
+
 function stringifyPretty(value: unknown): string {
   if (typeof value === 'string') return value;
   try {
@@ -48,7 +57,47 @@ function stringifyPretty(value: unknown): string {
   }
 }
 
+function resultBadge(code: number) {
+  if (code === 0) return { color: 'teal', label: '通过' };
+  if (code === 1) return { color: 'yellow', label: '失败' };
+  return { color: 'red', label: '异常' };
+}
+
+function DetailSection(props: {
+  title: string;
+  value: string;
+  onCopy: () => void;
+  rows?: number;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="legacy-run-section-head flex items-center justify-between gap-3">
+        <Text fw={600}>{props.title}</Text>
+        <Button size="xs" variant="default" leftSection={<IconCopy size={14} />} onClick={props.onCopy}>
+          复制
+        </Button>
+      </div>
+      <Textarea minRows={props.rows || 6} readOnly value={props.value} />
+    </div>
+  );
+}
+
 export function AutoTestResultModals(props: AutoTestResultModalsProps) {
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+
+  useEffect(() => {
+    if (!props.reportOpen) {
+      setPage(1);
+    }
+  }, [props.reportOpen]);
+
+  const totalPages = Math.max(1, Math.ceil(props.rows.length / pageSize));
+  const visibleRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return props.rows.slice(start, start + pageSize);
+  }, [page, props.rows]);
+
   const reportSummaryText = [
     `总数: ${Number(props.report?.message?.len || props.rows.length || 0)}`,
     `通过: ${Number(props.report?.message?.successNum || 0)}`,
@@ -67,206 +116,208 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
 
   return (
     <>
-      <Modal
-        title="服务端测试结果"
-        open={props.reportOpen}
-        width={1080}
-        footer={[
-          <Button key="close" onClick={props.onCloseReport}>
-            关闭
-          </Button>
-        ]}
-        onCancel={props.onCloseReport}
-      >
-        <Space direction="vertical" className="legacy-report-modal-stack" size={12}>
-          <Alert
-            type="info"
-            showIcon
-            message={props.report?.message?.msg || '暂无测试结果'}
-            description={
-              <Space size={12} wrap>
-                <span>总数: {Number(props.report?.message?.len || props.rows.length || 0)}</span>
-                <span>通过: {Number(props.report?.message?.successNum || 0)}</span>
-                <span>失败: {Number(props.report?.message?.failedNum || 0)}</span>
-                <span>耗时: {String(props.report?.runTime || '-')}</span>
-                <Button
-                  size="small"
-                  icon={<CopyOutlined />}
-                  onClick={() => void copyText(reportSummaryText, '报告摘要已复制')}
-                >
-                  复制摘要
+      <Modal title="服务端测试结果" opened={props.reportOpen} onClose={props.onCloseReport} size="80rem">
+        <div className="flex flex-col gap-4">
+          <Alert color="blue" title={props.report?.message?.msg || '暂无测试结果'}>
+            <div className="flex flex-wrap items-center gap-3">
+              <span>总数: {Number(props.report?.message?.len || props.rows.length || 0)}</span>
+              <span>通过: {Number(props.report?.message?.successNum || 0)}</span>
+              <span>失败: {Number(props.report?.message?.failedNum || 0)}</span>
+              <span>耗时: {String(props.report?.runTime || '-')}</span>
+              <Button
+                size="xs"
+                variant="default"
+                leftSection={<IconCopy size={14} />}
+                onClick={() => void copyText(reportSummaryText, '报告摘要已复制')}
+              >
+                复制摘要
+              </Button>
+            </div>
+          </Alert>
+
+          <div className="overflow-x-auto">
+            <Table className="legacy-report-table" striped highlightOnHover withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>用例</Table.Th>
+                  <Table.Th>接口</Table.Th>
+                  <Table.Th>HTTP</Table.Th>
+                  <Table.Th>结果</Table.Th>
+                  <Table.Th>信息</Table.Th>
+                  <Table.Th>操作</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {visibleRows.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={6}>
+                      <Text c="dimmed" ta="center" py="lg">
+                        暂无可展示的测试结果
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : (
+                  visibleRows.map(row => {
+                    const badge = resultBadge(row.code);
+                    return (
+                      <Table.Tr
+                        key={String(row.id || `${row.method || 'GET'}:${row.path || ''}`)}
+                        className={
+                          row.code === 0
+                            ? 'legacy-report-row-pass'
+                            : row.code === 1
+                              ? 'legacy-report-row-fail'
+                              : 'legacy-report-row-error'
+                        }
+                        onClick={() => props.onOpenDetail(row)}
+                      >
+                        <Table.Td>{row.name || row.id}</Table.Td>
+                        <Table.Td>
+                          <div className="flex items-center gap-2">
+                            <span className={props.methodClassName(row.method || 'GET')}>
+                              {String(row.method || 'GET').toUpperCase()}
+                            </span>
+                            <span>{row.path || '-'}</span>
+                          </div>
+                        </Table.Td>
+                        <Table.Td>{row.status == null ? '-' : String(row.status)}</Table.Td>
+                        <Table.Td>
+                          <Badge color={badge.color} variant="light">
+                            {badge.label}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          {(row.validRes || [])
+                            .map(item => String(item?.message || ''))
+                            .filter(Boolean)
+                            .join(' | ') || row.statusText || '-'}
+                        </Table.Td>
+                        <Table.Td>
+                          <Button
+                            size="xs"
+                            variant="default"
+                            onClick={event => {
+                              event.stopPropagation();
+                              props.onOpenDetail(row);
+                            }}
+                          >
+                            详情
+                          </Button>
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })
+                )}
+              </Table.Tbody>
+            </Table>
+          </div>
+
+          {totalPages > 1 ? (
+            <div className="flex items-center justify-between gap-3">
+              <Text c="dimmed" size="sm">
+                第 {page} / {totalPages} 页
+              </Text>
+              <div className="flex gap-2">
+                <Button size="xs" variant="default" disabled={page <= 1} onClick={() => setPage(current => Math.max(1, current - 1))}>
+                  上一页
                 </Button>
-              </Space>
-            }
-          />
-          <Table<AutoTestResultItem>
-            className="legacy-report-table"
-            rowKey={row => String(row.id || `${row.method || 'GET'}:${row.path || ''}`)}
-            size="small"
-            pagination={{ pageSize: 10 }}
-            dataSource={props.rows}
-            rowClassName={row =>
-              row.code === 0 ? 'legacy-report-row-pass' : row.code === 1 ? 'legacy-report-row-fail' : 'legacy-report-row-error'
-            }
-            onRow={row => ({
-              onClick: () => props.onOpenDetail(row)
-            })}
-            locale={{ emptyText: '暂无可展示的测试结果' }}
-            columns={[
-              {
-                title: '用例',
-                width: 240,
-                render: (_, row) => <span>{row.name || row.id}</span>
-              },
-              {
-                title: '接口',
-                render: (_, row) => (
-                  <Space size={8}>
-                    <span className={props.methodClassName(row.method || 'GET')}>
-                      {String(row.method || 'GET').toUpperCase()}
-                    </span>
-                    <span>{row.path || '-'}</span>
-                  </Space>
-                )
-              },
-              {
-                title: 'HTTP',
-                width: 90,
-                render: (_, row) => (row.status == null ? '-' : String(row.status))
-              },
-              {
-                title: '结果',
-                width: 90,
-                render: (_, row) =>
-                  row.code === 0 ? (
-                    <Tag color="success">通过</Tag>
-                  ) : (
-                    <Tag color={row.code === 1 ? 'warning' : 'error'}>
-                      {row.code === 1 ? '失败' : '异常'}
-                    </Tag>
-                  )
-              },
-              {
-                title: '信息',
-                render: (_, row) => (
-                  <span>
-                    {(row.validRes || [])
-                      .map(item => String(item?.message || ''))
-                      .filter(Boolean)
-                      .join(' | ') || row.statusText || '-'}
-                  </span>
-                )
-              },
-              {
-                title: '操作',
-                width: 90,
-                render: (_, row) => (
-                  <Button
-                    size="small"
-                    onClick={event => {
-                      event.stopPropagation();
-                      props.onOpenDetail(row);
-                    }}
-                  >
-                    详情
-                  </Button>
-                )
-              }
-            ]}
-          />
-        </Space>
+                <Button
+                  size="xs"
+                  variant="default"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage(current => Math.min(totalPages, current + 1))}
+                >
+                  下一页
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex justify-end">
+            <Button variant="default" onClick={props.onCloseReport}>
+              关闭
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       <Modal
         title={`测试详情 ${props.detailItem?.name || ''}`}
-        open={!!props.detailItem}
-        width={980}
-        onCancel={props.onCloseDetail}
-        footer={[
-          <Button key="close" onClick={props.onCloseDetail}>
-            关闭
-          </Button>
-        ]}
+        opened={!!props.detailItem}
+        onClose={props.onCloseDetail}
+        size="72rem"
       >
         {props.detailItem ? (
-          <Space direction="vertical" className="legacy-report-detail-stack" size={12}>
-            <div className="legacy-run-section-head">
-              <Text strong>基础信息</Text>
+          <div className="flex flex-col gap-4">
+            <div className="legacy-run-section-head flex items-center justify-between gap-3">
+              <Text fw={600}>基础信息</Text>
               <Button
-                size="small"
-                icon={<CopyOutlined />}
+                size="xs"
+                variant="default"
+                leftSection={<IconCopy size={14} />}
                 onClick={() => void copyText(stringifyPretty(props.detailItem), '测试详情已复制')}
               >
                 复制全部
               </Button>
             </div>
-            <Descriptions bordered size="small" column={1}>
-              <Descriptions.Item label="用例ID">{props.detailItem.id || '-'}</Descriptions.Item>
-              <Descriptions.Item label="接口地址">
-                {props.detailItem.url || props.detailItem.path || '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="方法">{String(props.detailItem.method || '-')}</Descriptions.Item>
-              <Descriptions.Item label="HTTP 状态">
-                {props.detailItem.status == null ? '-' : String(props.detailItem.status)}
-              </Descriptions.Item>
-              <Descriptions.Item label="执行结果">
-                {props.detailItem.code === 0 ? '通过' : props.detailItem.code === 1 ? '失败' : '异常'}
-              </Descriptions.Item>
-            </Descriptions>
-            <div className="legacy-run-section-head">
-              <Text strong>校验信息</Text>
-              <Button
-                size="small"
-                icon={<CopyOutlined />}
-                onClick={() =>
-                  void copyText(
-                    (props.detailItem?.validRes || []).map(item => item?.message || '').join('\n') || '-',
-                    '校验信息已复制'
-                  )
-                }
-              >
-                复制
-              </Button>
+
+            <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
+              <div>
+                <Text c="dimmed" size="sm">用例ID</Text>
+                <Text>{props.detailItem.id || '-'}</Text>
+              </div>
+              <div>
+                <Text c="dimmed" size="sm">接口地址</Text>
+                <Text>{props.detailItem.url || props.detailItem.path || '-'}</Text>
+              </div>
+              <div>
+                <Text c="dimmed" size="sm">方法</Text>
+                <Text>{String(props.detailItem.method || '-')}</Text>
+              </div>
+              <div>
+                <Text c="dimmed" size="sm">HTTP 状态</Text>
+                <Text>{props.detailItem.status == null ? '-' : String(props.detailItem.status)}</Text>
+              </div>
+              <div>
+                <Text c="dimmed" size="sm">执行结果</Text>
+                <Text>{props.detailItem.code === 0 ? '通过' : props.detailItem.code === 1 ? '失败' : '异常'}</Text>
+              </div>
             </div>
-            <Input.TextArea
-              rows={5}
-              readOnly
+
+            <DetailSection
+              title="校验信息"
               value={(props.detailItem.validRes || []).map(item => item?.message || '').join('\n') || '-'}
+              onCopy={() =>
+                void copyText(
+                  (props.detailItem.validRes || []).map(item => item?.message || '').join('\n') || '-',
+                  '校验信息已复制'
+                )
+              }
+              rows={5}
             />
-            <div className="legacy-run-section-head">
-              <Text strong>请求参数</Text>
-              <Button
-                size="small"
-                icon={<CopyOutlined />}
-                onClick={() => void copyText(stringifyPretty(props.detailItem?.params), '请求参数已复制')}
-              >
-                复制
+            <DetailSection
+              title="请求参数"
+              value={stringifyPretty(props.detailItem.params)}
+              onCopy={() => void copyText(stringifyPretty(props.detailItem.params), '请求参数已复制')}
+            />
+            <DetailSection
+              title="响应头"
+              value={stringifyPretty(props.detailItem.res_header)}
+              onCopy={() => void copyText(stringifyPretty(props.detailItem.res_header), '响应头已复制')}
+            />
+            <DetailSection
+              title="响应体"
+              value={stringifyPretty(props.detailItem.res_body)}
+              onCopy={() => void copyText(stringifyPretty(props.detailItem.res_body), '响应体已复制')}
+              rows={10}
+            />
+
+            <div className="flex justify-end">
+              <Button variant="default" onClick={props.onCloseDetail}>
+                关闭
               </Button>
             </div>
-            <Input.TextArea rows={6} readOnly value={stringifyPretty(props.detailItem.params)} />
-            <div className="legacy-run-section-head">
-              <Text strong>响应头</Text>
-              <Button
-                size="small"
-                icon={<CopyOutlined />}
-                onClick={() => void copyText(stringifyPretty(props.detailItem?.res_header), '响应头已复制')}
-              >
-                复制
-              </Button>
-            </div>
-            <Input.TextArea rows={6} readOnly value={stringifyPretty(props.detailItem.res_header)} />
-            <div className="legacy-run-section-head">
-              <Text strong>响应体</Text>
-              <Button
-                size="small"
-                icon={<CopyOutlined />}
-                onClick={() => void copyText(stringifyPretty(props.detailItem?.res_body), '响应体已复制')}
-              >
-                复制
-              </Button>
-            </div>
-            <Input.TextArea rows={10} readOnly value={stringifyPretty(props.detailItem.res_body)} />
-          </Space>
+          </div>
         ) : null}
       </Modal>
     </>

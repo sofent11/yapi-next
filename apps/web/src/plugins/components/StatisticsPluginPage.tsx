@@ -1,14 +1,8 @@
-import { safeExecute, normalizePath, parseJsonSafe, parseMaybeJson, isValidRouteContract, toObject, inferPrimitiveSchema, mergeInferredSchemas, inferSchemaFromSample, inferDraft4SchemaTextFromJsonText, toStringValue, postJson, getJson, DRAFT4_SCHEMA_URI } from '../index';
-import type { LegacyRouteContract } from '../../types/legacy-contract';
-import type { HeaderMenuItem, SubNavItem, SubSettingNavItem, InterfaceTabItem, ImportDataItem, ExportDataItem, RequestLifecycleMeta } from '../index';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Spin, Switch, Table, Tabs, Tag, Typography, message } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import json5 from 'json5';
+import { useEffect, useState } from 'react';
+import { Badge, Card, Loader, SimpleGrid, Stack, Table, Text } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { getJson } from '../index';
 
-const { Text, Paragraph } = Typography;
-
-// Extracted from index.tsx
 type StatisticsCount = {
   groupCount: number;
   projectCount: number;
@@ -36,6 +30,23 @@ type StatisticsGroupRow = {
   mock?: number;
   project?: number;
 };
+
+const message = {
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  }
+};
+
+function StatRow(props: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 px-4 py-3">
+      <Text size="sm" c="dimmed">
+        {props.label}
+      </Text>
+      <Text fw={600}>{props.value}</Text>
+    </div>
+  );
+}
 
 export function StatisticsPluginPage() {
   const [loading, setLoading] = useState(false);
@@ -73,54 +84,66 @@ export function StatisticsPluginPage() {
     };
   }, []);
 
-  const columns = useMemo<ColumnsType<StatisticsGroupRow>>(
-    () => [
-      { title: '分组', dataIndex: 'name', key: 'name' },
-      { title: '项目数', dataIndex: 'project', key: 'project', width: 120 },
-      { title: '接口数', dataIndex: 'interface', key: 'interface', width: 120 },
-      { title: 'Mock 调用', dataIndex: 'mock', key: 'mock', width: 140 }
-    ],
-    []
-  );
-
   return (
-    <Space direction="vertical" className="legacy-workspace-stack" size={16}>
+    <Stack className="legacy-workspace-stack" gap="md">
       {loading ? (
-        <Card>
-          <Space>
-            <Spin size="small" />
+        <Card padding="lg" radius="lg" withBorder>
+          <div className="inline-flex items-center gap-2">
+            <Loader size="sm" />
             <Text>加载统计数据...</Text>
-          </Space>
+          </div>
         </Card>
       ) : null}
-      <Card title="总览">
-        <Space wrap size={24}>
-          <Tag color="blue">分组 {count?.groupCount ?? 0}</Tag>
-          <Tag color="green">项目 {count?.projectCount ?? 0}</Tag>
-          <Tag color="purple">接口 {count?.interfaceCount ?? 0}</Tag>
-          <Tag color="orange">测试用例 {count?.interfaceCaseCount ?? 0}</Tag>
-          <Tag color="cyan">Mock 访问 {mockData?.mockCount ?? 0}</Tag>
-        </Space>
+      <Card padding="lg" radius="lg" withBorder>
+        <Text fw={600} mb="sm">
+          总览
+        </Text>
+        <div className="flex flex-wrap gap-3">
+          <Badge color="blue">分组 {count?.groupCount ?? 0}</Badge>
+          <Badge color="green">项目 {count?.projectCount ?? 0}</Badge>
+          <Badge color="violet">接口 {count?.interfaceCount ?? 0}</Badge>
+          <Badge color="orange">测试用例 {count?.interfaceCaseCount ?? 0}</Badge>
+          <Badge color="cyan">Mock 访问 {mockData?.mockCount ?? 0}</Badge>
+        </div>
       </Card>
-      <Card title="系统状态">
-        <Descriptions size="small" bordered column={2}>
-          <Descriptions.Item label="系统">{systemStatus?.systemName || '-'}</Descriptions.Item>
-          <Descriptions.Item label="邮件">{systemStatus?.mail || '-'}</Descriptions.Item>
-          <Descriptions.Item label="CPU 负载">{systemStatus?.load || '-'}%</Descriptions.Item>
-          <Descriptions.Item label="运行时间">{systemStatus?.uptime || '-'}</Descriptions.Item>
-          <Descriptions.Item label="总内存">{systemStatus?.totalmem || '-'}</Descriptions.Item>
-          <Descriptions.Item label="可用内存">{systemStatus?.freemem || '-'}</Descriptions.Item>
-        </Descriptions>
+      <Card padding="lg" radius="lg" withBorder>
+        <Text fw={600} mb="sm">
+          系统状态
+        </Text>
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
+          <StatRow label="系统" value={systemStatus?.systemName || '-'} />
+          <StatRow label="邮件" value={systemStatus?.mail || '-'} />
+          <StatRow label="CPU 负载" value={`${systemStatus?.load || '-'}%`} />
+          <StatRow label="运行时间" value={systemStatus?.uptime || '-'} />
+          <StatRow label="总内存" value={systemStatus?.totalmem || '-'} />
+          <StatRow label="可用内存" value={systemStatus?.freemem || '-'} />
+        </SimpleGrid>
       </Card>
-      <Card title="分组统计">
-        <Table
-          rowKey={row => String(row.name || Math.random())}
-          size="small"
-          pagination={false}
-          columns={columns}
-          dataSource={groupRows}
-        />
+      <Card padding="lg" radius="lg" withBorder>
+        <Text fw={600} mb="sm">
+          分组统计
+        </Text>
+        <Table striped highlightOnHover withTableBorder>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>分组</Table.Th>
+              <Table.Th>项目数</Table.Th>
+              <Table.Th>接口数</Table.Th>
+              <Table.Th>Mock 调用</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {groupRows.map((row, index) => (
+              <Table.Tr key={`${row.name || 'group'}-${index}`}>
+                <Table.Td>{row.name || '-'}</Table.Td>
+                <Table.Td>{row.project ?? 0}</Table.Td>
+                <Table.Td>{row.interface ?? 0}</Table.Td>
+                <Table.Td>{row.mock ?? 0}</Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
       </Card>
-    </Space>
+    </Stack>
   );
 }

@@ -1,18 +1,17 @@
-import { Button, Empty, Input, Space, Tag, Tooltip, Typography } from 'antd';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
+import { Badge, Button, Text, TextInput, Tooltip } from '@mantine/core';
 import {
-  CopyOutlined,
-  DeleteOutlined,
-  DownOutlined,
-  EditOutlined,
-  FolderOpenOutlined,
-  ImportOutlined,
-  PlusOutlined,
-  RightOutlined,
-  SearchOutlined
-} from '@ant-design/icons';
+  IconChevronDown,
+  IconChevronRight,
+  IconCopy,
+  IconEdit,
+  IconFolderOpen,
+  IconFileImport,
+  IconPlus,
+  IconSearch,
+  IconTrash
+} from '@tabler/icons-react';
 import { FilterBar } from '../../../components/layout';
-const { Text } = Typography;
 
 type CollectionCaseRow = {
   _id?: string | number;
@@ -56,68 +55,88 @@ type CollectionMenuPanelProps = {
   onCopyCase: (caseId: string) => void;
 };
 
+function IconButton(props: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      className="legacy-interface-icon-btn"
+      onClick={event => {
+        event.preventDefault();
+        event.stopPropagation();
+        props.onClick();
+      }}
+      aria-label={props.label}
+    >
+      {props.children}
+    </button>
+  );
+}
+
 export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
   const keywordMode = props.colKeyword.trim().length > 0;
   const totalCases = props.colDisplayRows.reduce((sum, col) => sum + (col.caseList?.length || 0), 0);
-  const triggerWithKeyboard = (
-    event: KeyboardEvent<HTMLElement>,
-    handler: () => void
-  ) => {
+
+  const triggerWithKeyboard = (event: KeyboardEvent<HTMLElement>, handler: () => void) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       event.stopPropagation();
       handler();
     }
   };
+
   return (
     <div className="legacy-interface-menu">
       <div className="legacy-interface-menu-actions">
         <FilterBar
           className="legacy-interface-filter"
           left={
-            <Input
+            <TextInput
               value={props.colKeyword}
-              onChange={event => props.onColKeywordChange(event.target.value)}
+              onChange={event => props.onColKeywordChange(event.currentTarget.value)}
               placeholder="搜索测试集合"
-              prefix={<SearchOutlined />}
-              allowClear
+              leftSection={<IconSearch size={16} />}
               className="legacy-interface-filter-input"
             />
           }
           right={
             props.canEdit ? (
-              <Space className="legacy-interface-filter-actions" size={8}>
-                <Button type="primary" icon={<PlusOutlined />} onClick={props.onOpenAddCol}>
+              <div className="legacy-interface-filter-actions flex flex-wrap items-center gap-2">
+                <Button size="xs" onClick={props.onOpenAddCol} leftSection={<IconPlus size={14} />}>
                   添加集合
                 </Button>
-              </Space>
+              </div>
             ) : null
           }
         />
       </div>
+
       <div className="legacy-interface-menu-summary">
-        <Text type="secondary">
+        <Text c="dimmed" size="sm">
           {keywordMode ? '筛选结果：' : ''}
           {props.colDisplayRows.length} 个集合，{totalCases} 个用例
         </Text>
       </div>
+
       <div className="legacy-interface-menu-list">
         {props.colDisplayRows.length === 0 ? (
-          <div className="legacy-interface-menu-empty">
-            <Empty description={keywordMode ? '未找到匹配的测试集合' : '暂无测试集合'}>
-              {!keywordMode && props.canEdit ? (
-                <Button type="primary" icon={<PlusOutlined />} onClick={props.onOpenAddCol}>
+          <div className="legacy-interface-menu-empty py-10 text-center">
+            <Text c="dimmed">{keywordMode ? '未找到匹配的测试集合' : '暂无测试集合'}</Text>
+            {!keywordMode && props.canEdit ? (
+              <div className="mt-3">
+                <Button size="xs" onClick={props.onOpenAddCol} leftSection={<IconPlus size={14} />}>
                   新建集合
                 </Button>
-              ) : null}
-            </Empty>
+              </div>
+            ) : null}
           </div>
         ) : null}
+
         {props.colDisplayRows.map(col => {
           const colId = Number(col._id || 0);
           const activeCol = props.selectedColId === colId && (props.action === 'col' || props.action === 'case');
           const expanded = keywordMode || props.expandedColIds.includes(colId);
           const caseList = col.caseList || [];
+
           return (
             <div
               key={`col-${colId}`}
@@ -162,67 +181,32 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                     aria-label={expanded ? '收起集合' : '展开集合'}
                     aria-expanded={expanded}
                   >
-                    {expanded ? <DownOutlined /> : <RightOutlined />}
+                    {expanded ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
                   </button>
-                  <FolderOpenOutlined className="legacy-interface-cat-folder" />
+                  <IconFolderOpen size={16} className="legacy-interface-cat-folder" />
                   <span className="legacy-interface-cat-name">{String(col.name || '')}</span>
                 </span>
-                <Space size={4} className="legacy-interface-cat-actions">
+                <div className="legacy-interface-cat-actions flex items-center gap-1">
                   {props.canEdit ? (
                     <>
-                      <button
-                        type="button"
-                        className="legacy-interface-icon-btn"
-                        onClick={event => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          props.onDeleteCol(colId);
-                        }}
-                        aria-label="删除集合"
-                      >
-                        <DeleteOutlined />
-                      </button>
-                      <button
-                        type="button"
-                        className="legacy-interface-icon-btn"
-                        onClick={event => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          props.onEditCol(col);
-                        }}
-                        aria-label="编辑集合"
-                      >
-                        <EditOutlined />
-                      </button>
-                      <button
-                        type="button"
-                        className="legacy-interface-icon-btn"
-                        onClick={event => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          props.onImportCol(colId);
-                        }}
-                        aria-label="导入接口"
-                      >
-                        <ImportOutlined />
-                      </button>
-                      <button
-                        type="button"
-                        className="legacy-interface-icon-btn"
-                        onClick={event => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          props.onCopyCol(col);
-                        }}
-                        aria-label="复制集合"
-                      >
-                        <CopyOutlined />
-                      </button>
+                      <IconButton label="删除集合" onClick={() => props.onDeleteCol(colId)}>
+                        <IconTrash size={14} />
+                      </IconButton>
+                      <IconButton label="编辑集合" onClick={() => props.onEditCol(col)}>
+                        <IconEdit size={14} />
+                      </IconButton>
+                      <IconButton label="导入接口" onClick={() => props.onImportCol(colId)}>
+                        <IconFileImport size={14} />
+                      </IconButton>
+                      <IconButton label="复制集合" onClick={() => props.onCopyCol(col)}>
+                        <IconCopy size={14} />
+                      </IconButton>
                     </>
                   ) : null}
-                  <Tag>{caseList.length}</Tag>
-                </Space>
+                  <Badge variant="light" color="gray">{caseList.length}</Badge>
+                </div>
               </div>
+
               {(expanded ? caseList : []).map(item => {
                 const id = String(item._id || '');
                 return (
@@ -252,37 +236,19 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                     onClick={() => props.onNavigateCase(id)}
                     onKeyDown={event => triggerWithKeyboard(event, () => props.onNavigateCase(id))}
                   >
-                    <Tag color="blue">CASE</Tag>
-                    <Tooltip title={String(item.path || '')}>
+                    <Badge color="blue" variant="light">CASE</Badge>
+                    <Tooltip label={String(item.path || '')}>
                       <span className="legacy-interface-item-title">{String(item.casename || item.title || id)}</span>
                     </Tooltip>
                     {props.canEdit ? (
-                      <Space size={4} className="legacy-interface-item-actions">
-                        <button
-                          type="button"
-                          className="legacy-interface-icon-btn"
-                          onClick={event => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            props.onDeleteCase(id);
-                          }}
-                          aria-label="删除用例"
-                        >
-                          <DeleteOutlined />
-                        </button>
-                        <button
-                          type="button"
-                          className="legacy-interface-icon-btn"
-                          onClick={event => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            props.onCopyCase(id);
-                          }}
-                          aria-label="复制用例"
-                        >
-                          <CopyOutlined />
-                        </button>
-                      </Space>
+                      <div className="legacy-interface-item-actions flex items-center gap-1">
+                        <IconButton label="删除用例" onClick={() => props.onDeleteCase(id)}>
+                          <IconTrash size={14} />
+                        </IconButton>
+                        <IconButton label="复制用例" onClick={() => props.onCopyCase(id)}>
+                          <IconCopy size={14} />
+                        </IconButton>
+                      </div>
                     ) : null}
                   </div>
                 );

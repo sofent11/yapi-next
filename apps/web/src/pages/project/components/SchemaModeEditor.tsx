@@ -1,11 +1,7 @@
-import { Suspense, lazy } from 'react';
 import type { CSSProperties } from 'react';
-import { Form, Input, Radio, Space, Typography } from 'antd';
-
-const { Text } = Typography;
-const LazyLegacySchemaEditor = lazy(() =>
-  import('../../../components/LegacySchemaEditor').then(mod => ({ default: mod.LegacySchemaEditor }))
-);
+import { Radio, Stack, Textarea, Text } from '@mantine/core';
+import { Field } from 'rc-field-form';
+import { LegacySchemaEditor } from '../../../components/LegacySchemaEditor';
 
 type SchemaModeEditorProps = {
   mode: 'visual' | 'text';
@@ -23,30 +19,44 @@ type SchemaModeEditorProps = {
 export function SchemaModeEditor(props: SchemaModeEditorProps) {
   return (
     <>
-      <Space className="legacy-schema-mode-toolbar">
-        <Text strong>编辑模式</Text>
+      <Stack gap="xs" className="legacy-schema-mode-toolbar">
+        <Text fw={600}>编辑模式</Text>
         <Radio.Group
-          size="small"
           value={props.mode}
-          onChange={event => props.onModeChange(event.target.value)}
+          onChange={value => props.onModeChange(value as 'visual' | 'text')}
         >
-          <Radio.Button value="visual">可视化</Radio.Button>
-          <Radio.Button value="text">文本</Radio.Button>
+          <div className="flex flex-wrap gap-3">
+            <Radio value="visual" label="可视化" />
+            <Radio value="text" label="文本" />
+          </div>
         </Radio.Group>
-      </Space>
+      </Stack>
       {props.mode === 'visual' ? (
         <>
-          <Form.Item name={props.fieldName} hidden style={props.hiddenFormItemStyle}>
-            <Input.TextArea />
-          </Form.Item>
-          <Suspense fallback={<div>加载 schema 编辑器中...</div>}>
-            <LazyLegacySchemaEditor value={props.value} onChange={props.onValueChange} />
-          </Suspense>
+          <Field name={props.fieldName}>
+            {(control) => (
+              <Textarea
+                style={{ display: 'none', ...props.hiddenFormItemStyle }}
+                value={String(control.value ?? '')}
+                onChange={event => control.onChange(event.currentTarget.value)}
+              />
+            )}
+          </Field>
+          <LegacySchemaEditor value={props.value} onChange={props.onValueChange} />
         </>
       ) : (
-        <Form.Item label={props.textLabel} name={props.fieldName} style={props.textFormItemStyle}>
-          <Input.TextArea rows={props.textRows || 12} placeholder={props.textPlaceholder} />
-        </Form.Item>
+        <Field name={props.fieldName}>
+          {(control) => (
+            <Textarea
+              label={props.textLabel}
+              minRows={props.textRows || 12}
+              style={props.textFormItemStyle}
+              value={String(control.value ?? '')}
+              onChange={event => control.onChange(event.currentTarget.value)}
+              placeholder={props.textPlaceholder}
+            />
+          )}
+        </Field>
       )}
     </>
   );

@@ -13,23 +13,29 @@ export function SplitWorkspace(props: SplitWorkspaceProps) {
   const leftWidth = props.leftWidth ?? 320;
   const gap = props.gap ?? 16;
   const className = [
-    'legacy-split-workspace',
-    props.leftHidden ? 'legacy-split-workspace-left-hidden' : '',
+    'grid min-w-0 items-start',
     props.className
   ]
     .filter(Boolean)
     .join(' ');
-  const style = {
-    '--legacy-split-left-width': `${leftWidth}px`,
-    '--legacy-split-gap': `${gap}px`
-  } as CSSProperties;
+  const style = props.leftHidden
+    ? {
+        gap: `${gap}px`,
+        gridTemplateColumns: 'minmax(0, 1fr)'
+      }
+    : {
+        gap: `${gap}px`,
+        gridTemplateColumns: `minmax(260px, ${leftWidth}px) minmax(0, 1fr)`
+      } as CSSProperties;
 
   return (
     <div className={className} style={style}>
-      <div className="legacy-split-workspace-left" aria-hidden={props.leftHidden ? 'true' : undefined}>
-        {props.left}
-      </div>
-      <div className="legacy-split-workspace-right">{props.right}</div>
+      {props.leftHidden ? null : (
+        <div className="min-w-0" aria-hidden={props.leftHidden ? 'true' : undefined}>
+          {props.left}
+        </div>
+      )}
+      <div className="min-w-0">{props.right}</div>
     </div>
   );
 }

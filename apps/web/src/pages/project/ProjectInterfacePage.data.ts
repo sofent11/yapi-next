@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { message } from 'antd';
+import { notifications } from '@mantine/notifications';
 import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
 
 import {
@@ -55,6 +55,12 @@ import {
   useProjectInterfaceApiSection,
   useProjectInterfaceCollectionSection
 } from './ProjectInterfacePage.section-hooks';
+
+const message = {
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  }
+};
 
 type UseProjectInterfaceDataParams = {
   props: ProjectInterfacePageProps;

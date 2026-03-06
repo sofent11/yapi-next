@@ -1,13 +1,11 @@
 import { Suspense, lazy, useMemo, type ComponentType } from 'react';
+import { Badge, Button, Group, Loader } from '@mantine/core';
+import { IconArrowLeft } from '@tabler/icons-react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeftOutlined } from '@ant-design/icons';
-import { Button, Menu, Space, Spin, Tag } from 'antd';
-import type { MenuProps } from 'antd';
 import { useGetGroupQuery, useGetProjectQuery } from '../services/yapi-api';
 import { webPlugins, type SubNavItem } from '../plugins';
 import { AppShell } from '../components/layout/AppShell';
 import { PageHeader } from '../components/layout/PageHeader';
-import './ProjectPage.scss';
 
 const BUILT_IN_NAV_KEYS = new Set(['interface', 'activity', 'data', 'members', 'setting']);
 
@@ -119,15 +117,6 @@ export function ProjectPage() {
     [subNavMap, projectId]
   );
 
-  const navItems = useMemo<MenuProps['items']>(
-    () =>
-      Object.keys(subNavMap).map(key => ({
-        key,
-        label: subNavMap[key].name
-      })),
-    [subNavMap]
-  );
-
   const activeKey = useMemo(() => {
     const path = location.pathname;
     const entries = Object.entries(subNavMap);
@@ -152,8 +141,8 @@ export function ProjectPage() {
 
   if (projectQuery.isLoading && !project) {
     return (
-      <div className="legacy-page-loading">
-        <Spin />
+      <div className="flex min-h-[240px] items-center justify-center">
+        <Loader />
       </div>
     );
   }
@@ -169,44 +158,51 @@ export function ProjectPage() {
             : '接口、测试、数据与成员配置统一管理'
         }
         meta={
-          <Space size={[8, 8]} wrap>
-            <Tag bordered={false} color="blue">
+          <Group gap={8}>
+            <Badge variant="light" color="blue" radius="xl">
               {group?.group_name || '未分组项目'}
-            </Tag>
-            {project?.role ? <Tag bordered={false}>{`角色：${project.role}`}</Tag> : null}
-            <Tag bordered={false} color={hideMembers ? 'default' : 'green'}>
+            </Badge>
+            {project?.role ? <Badge variant="light" color="gray" radius="xl">{`角色：${project.role}`}</Badge> : null}
+            <Badge variant="light" color={hideMembers ? 'gray' : 'teal'} radius="xl">
               {hideMembers ? '私有成员模式' : '团队协作模式'}
-            </Tag>
-          </Space>
+            </Badge>
+          </Group>
         }
         actions={
           projectGroupId > 0 ? (
-            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(`/group/${projectGroupId}`)}>
+            <Button
+              leftSection={<IconArrowLeft size={16} />}
+              variant="light"
+              onClick={() => navigate(`/group/${projectGroupId}`)}
+            >
               返回分组
             </Button>
           ) : null
         }
       />
-      <div className="m-subnav">
-        <Menu
-          mode="horizontal"
-          selectedKeys={[activeKey]}
-          className="g-row m-subnav-menu legacy-project-subnav"
-          items={Object.keys(subNavMap).map(key => {
-            const item = subNavMap[key];
-            return {
-              key,
-              className: 'item',
-              label: <Link to={item.path}>{item.name}</Link>
-            };
-          })}
-        />
+      <div className="mb-5 flex flex-wrap gap-2 rounded-[24px] border border-slate-200 bg-white/95 p-3 shadow-sm">
+        {Object.keys(subNavMap).map(key => {
+          const item = subNavMap[key];
+          const active = key === activeKey;
+          return (
+            <Button
+              key={key}
+              component={Link}
+              to={item.path}
+              variant={active ? 'filled' : 'light'}
+              color={active ? 'blue' : 'gray'}
+              radius="xl"
+            >
+              {item.name}
+            </Button>
+          );
+        })}
       </div>
 
       <Suspense
         fallback={
-          <div className="legacy-page-loading">
-            <Spin />
+          <div className="flex min-h-[240px] items-center justify-center">
+            <Loader />
           </div>
         }
       >

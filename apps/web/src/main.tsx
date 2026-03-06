@@ -2,24 +2,32 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
-import { App as AntdApp, ConfigProvider } from 'antd';
-import zhCN from 'antd/locale/zh_CN';
+import { MantineProvider } from '@mantine/core';
+import { ModalsProvider } from '@mantine/modals';
+import { Notifications } from '@mantine/notifications';
 import { App } from './App';
-import { antdTheme } from './styles/antd-theme';
 import { bootstrapWebPlugins, webPlugins } from './plugins';
 import { registerDynamicReducers, store } from './store';
-import './styles/tokens.css';
+import '@mantine/core/styles.css';
+import '@mantine/notifications/styles.css';
+import './tailwind.css';
 
 bootstrapWebPlugins();
 registerDynamicReducers(webPlugins.getDynamicReducers());
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <Provider store={store}>
-    <ConfigProvider
-      locale={zhCN}
-      theme={antdTheme}
+    <MantineProvider
+      defaultColorScheme="light"
+      theme={{
+        primaryColor: 'indigo',
+        fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+        headings: { fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif' },
+        defaultRadius: 'md'
+      }}
     >
-      <AntdApp>
+      <ModalsProvider>
+        <Notifications position="top-right" />
         <BrowserRouter
           future={{
             v7_startTransition: true,
@@ -28,7 +36,7 @@ createRoot(document.getElementById('root') as HTMLElement).render(
         >
           <App />
         </BrowserRouter>
-      </AntdApp>
-    </ConfigProvider>
+      </ModalsProvider>
+    </MantineProvider>
   </Provider>
 );

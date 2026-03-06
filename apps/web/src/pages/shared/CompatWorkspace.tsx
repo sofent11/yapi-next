@@ -1,15 +1,14 @@
 import { useState } from 'react';
 import {
   Button,
-  Col,
-  Input,
-  InputNumber,
-  Row,
+  NumberInput,
   Select,
-  Space,
-  Typography,
-  message
-} from 'antd';
+  SimpleGrid,
+  Text,
+  TextInput,
+  Textarea
+} from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import {
   useGetOpenProjectInterfaceDataQuery,
   useGetLogListByUpdateMutation,
@@ -25,8 +24,6 @@ import { PageHeader, SectionCard } from '../../components/layout';
 import { getHttpMethodBadgeClassName } from '../../utils/http-method';
 import { getRequestErrorMessage } from '../../utils/request-error';
 
-const { Text } = Typography;
-
 type CompatWorkspaceProps = {
   title?: string;
   description: string;
@@ -35,6 +32,9 @@ type CompatWorkspaceProps = {
 
 const DEFAULT_INTER_UPLOAD_JSON =
   '{\n  "openapi": "3.0.0",\n  "info": { "title": "interUpload-demo", "version": "1.0.0" },\n  "paths": {\n    "/compat/upload-demo": {\n      "get": {\n        "summary": "demo",\n        "responses": {\n          "200": {\n            "description": "ok"\n          }\n        }\n      }\n    }\n  }\n}';
+
+const methodValues = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const;
+const mergeOptions = ['normal', 'good', 'merge'] as const;
 
 function pretty(input: unknown): string {
   try {
@@ -50,6 +50,30 @@ function formatJsonInput(text: string): string | null {
   } catch (_err) {
     return null;
   }
+}
+
+function showNotification(color: 'teal' | 'red' | 'yellow', message: string) {
+  notifications.show({ color, message });
+}
+
+function ResultActions(props: {
+  text: string;
+  copyLabel: string;
+  onClear?: () => void;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button variant="default" size="compact-sm" disabled={!props.text.trim()} onClick={props.onCopy}>
+        复制响应
+      </Button>
+      {props.onClear ? (
+        <Button variant="default" size="compact-sm" disabled={!props.text.trim()} onClick={props.onClear}>
+          清空
+        </Button>
+      ) : null}
+    </div>
+  );
 }
 
 export function CompatWorkspace(props: CompatWorkspaceProps) {
@@ -78,18 +102,20 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
   const [testPut, testPutState] = useTestPutCompatMutation();
   const [testPatch, testPatchState] = useTestPatchCompatMutation();
   const [testDelete, testDeleteState] = useTestDeleteCompatMutation();
-  const notifyRequestError = (error: unknown, fallback: string) => {
-    message.error(getRequestErrorMessage(error, fallback));
-  };
+
   const openProjectDataText = openProjectDataQuery.data ? pretty(openProjectDataQuery.data) : '';
-  const methodOptions = (['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const).map(item => ({
+  const methodOptions = methodValues.map(item => ({
     value: item,
     label: <span className={getHttpMethodBadgeClassName(item)}>{item}</span>
   }));
 
+  const notifyRequestError = (error: unknown, fallback: string) => {
+    showNotification('red', getRequestErrorMessage(error, fallback));
+  };
+
   async function handleRunAutoTest() {
     if (!token.trim()) {
-      message.error('请先输入项目 token');
+      showNotification('red', '请先输入项目 token');
       return;
     }
     try {
@@ -100,7 +126,7 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
         projectId
       }).unwrap();
       setOpenResultText(pretty(response));
-      message.success('run_auto_test 调用完成');
+      showNotification('teal', 'run_auto_test 调用完成');
     } catch (error) {
       notifyRequestError(error, 'run_auto_test 调用失败');
     }
@@ -146,10 +172,10 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
       }).unwrap();
       setInterUploadText(pretty(response));
       if (response.errcode === 0) {
-        message.success('interUpload 导入完成');
+        showNotification('teal', 'interUpload 导入完成');
         return;
       }
-      message.warning(response.errmsg || 'interUpload 执行失败');
+      showNotification('yellow', response.errmsg || 'interUpload 执行失败');
     } catch (error) {
       notifyRequestError(error, 'interUpload 调用失败');
     }
@@ -193,25 +219,25 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
 
   async function copyToClipboard(text: string, label: string) {
     if (!text.trim()) {
-      message.warning(`${label}为空`);
+      showNotification('yellow', `${label}为空`);
       return;
     }
     try {
       await navigator.clipboard.writeText(text);
-      message.success(`${label}已复制`);
+      showNotification('teal', `${label}已复制`);
     } catch (_err) {
-      message.error('复制失败，请手动复制');
+      showNotification('red', '复制失败，请手动复制');
     }
   }
 
   function handleFormatInterUploadJson() {
     const formatted = formatJsonInput(interUploadJson);
     if (!formatted) {
-      message.error('OpenAPI JSON 不是合法格式，无法格式化');
+      showNotification('red', 'OpenAPI JSON 不是合法格式，无法格式化');
       return;
     }
     setInterUploadJson(formatted);
-    message.success('OpenAPI JSON 已格式化');
+    showNotification('teal', 'OpenAPI JSON 已格式化');
   }
 
   const testLoading =
@@ -225,228 +251,159 @@ export function CompatWorkspace(props: CompatWorkspaceProps) {
       <PageHeader title={props.title || 'Compat Console'} subtitle={props.description} />
 
       <SectionCard title="参数设置" className="legacy-workspace-card">
-        <Row gutter={12}>
-          <Col xs={24} md={6}>
-            <Text>Project ID</Text>
-            <InputNumber
-              className="legacy-workspace-control-top"
-              min={1}
-              value={projectId}
-              onChange={value => setProjectId(Number(value || 0))}
-            />
-          </Col>
-          <Col xs={24} md={6}>
-            <Text>Col ID</Text>
-            <InputNumber
-              className="legacy-workspace-control-top"
-              min={1}
-              value={colId}
-              onChange={value => setColId(Number(value || 0))}
-            />
-          </Col>
-          <Col xs={24} md={12}>
-            <Text>Project Token</Text>
-            <Input
-              className="legacy-workspace-field-top"
+        <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+          <div>
+            <Text mb={6}>Project ID</Text>
+            <NumberInput min={1} value={projectId} onChange={value => setProjectId(Number(value || 0))} />
+          </div>
+          <div>
+            <Text mb={6}>Col ID</Text>
+            <NumberInput min={1} value={colId} onChange={value => setColId(Number(value || 0))} />
+          </div>
+          <div>
+            <Text mb={6}>Project Token</Text>
+            <TextInput
               value={token}
-              onChange={event => setToken(event.target.value)}
+              onChange={event => setToken(event.currentTarget.value)}
               placeholder="用于 open/run_auto_test 和 interUpload"
             />
-          </Col>
-        </Row>
+          </div>
+        </SimpleGrid>
       </SectionCard>
 
-      <Row gutter={16} className="legacy-workspace-row">
-        <Col xs={24} xl={12}>
-          <SectionCard title="Open 兼容接口" className="legacy-workspace-card">
-            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
-              <Space className="legacy-workspace-result-head" align="center">
-                <Text strong>/open/project_interface_data</Text>
-                <Space className="legacy-workspace-result-actions" size={8}>
-                  <Button
-                    size="small"
-                    disabled={!openProjectDataText.trim()}
-                    onClick={() => {
-                      void copyToClipboard(openProjectDataText, 'project_interface_data 响应');
-                    }}
-                  >
-                    复制响应
-                  </Button>
-                </Space>
-              </Space>
-              <Input.TextArea rows={8} readOnly value={openProjectDataText} placeholder="project_interface_data 响应" />
-              <Button type="primary" onClick={handleRunAutoTest} loading={runAutoTestState.isLoading}>
-                调用 /open/run_auto_test (json)
+      <div className="grid gap-4 xl:grid-cols-2">
+        <SectionCard title="Open 兼容接口" className="legacy-workspace-card">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Text fw={700}>/open/project_interface_data</Text>
+              <Button
+                variant="default"
+                size="compact-sm"
+                disabled={!openProjectDataText.trim()}
+                onClick={() => {
+                  void copyToClipboard(openProjectDataText, 'project_interface_data 响应');
+                }}
+              >
+                复制响应
               </Button>
-              <Space className="legacy-workspace-result-actions" size={8}>
-                <Button
-                  size="small"
-                  disabled={!openResultText.trim()}
-                  onClick={() => {
-                    void copyToClipboard(openResultText, 'run_auto_test 响应');
-                  }}
-                >
-                  复制响应
-                </Button>
-                <Button
-                  size="small"
-                  disabled={!openResultText.trim()}
-                  onClick={() => setOpenResultText('')}
-                >
-                  清空
-                </Button>
-              </Space>
-              <Input.TextArea rows={10} readOnly value={openResultText} placeholder="run_auto_test 响应" />
-            </Space>
-          </SectionCard>
-        </Col>
-        <Col xs={24} xl={12}>
-          <SectionCard title="Log 兼容接口" className="legacy-workspace-card">
-            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
-              <Button onClick={handleLoadLogList} loading={logListState.isFetching}>
-                查询 /log/list
-              </Button>
-              <Space className="legacy-workspace-result-actions" size={8}>
-                <Button
-                  size="small"
-                  disabled={!logListText.trim()}
-                  onClick={() => {
-                    void copyToClipboard(logListText, 'log/list 响应');
-                  }}
-                >
-                  复制响应
-                </Button>
-                <Button size="small" disabled={!logListText.trim()} onClick={() => setLogListText('')}>
-                  清空
-                </Button>
-              </Space>
-              <Input.TextArea rows={6} readOnly value={logListText} placeholder="log/list 响应" />
+            </div>
+            <Textarea minRows={8} autosize readOnly value={openProjectDataText} placeholder="project_interface_data 响应" />
+            <Button onClick={handleRunAutoTest} loading={runAutoTestState.isLoading}>
+              调用 /open/run_auto_test (json)
+            </Button>
+            <ResultActions
+              text={openResultText}
+              copyLabel="run_auto_test 响应"
+              onCopy={() => {
+                void copyToClipboard(openResultText, 'run_auto_test 响应');
+              }}
+              onClear={() => setOpenResultText('')}
+            />
+            <Textarea minRows={10} autosize readOnly value={openResultText} placeholder="run_auto_test 响应" />
+          </div>
+        </SectionCard>
 
-              <Row gutter={8}>
-                <Col xs={24} md={8}>
-                  <Select<'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'>
-                    className="legacy-workspace-control"
-                    value={apiMethod}
-                    onChange={setApiMethod}
-                    options={methodOptions}
-                  />
-                </Col>
-                <Col xs={24} md={16}>
-                  <Input value={apiPath} onChange={event => setApiPath(event.target.value)} />
-                </Col>
-              </Row>
+        <SectionCard title="Log 兼容接口" className="legacy-workspace-card">
+          <div className="space-y-3">
+            <Button variant="default" onClick={handleLoadLogList} loading={logListState.isFetching}>
+              查询 /log/list
+            </Button>
+            <ResultActions
+              text={logListText}
+              copyLabel="log/list 响应"
+              onCopy={() => {
+                void copyToClipboard(logListText, 'log/list 响应');
+              }}
+              onClear={() => setLogListText('')}
+            />
+            <Textarea minRows={6} autosize readOnly value={logListText} placeholder="log/list 响应" />
 
-              <Button onClick={handleListByUpdate} loading={logByUpdateState.isLoading}>
-                查询 /log/list_by_update
-              </Button>
-              <Space className="legacy-workspace-result-actions" size={8}>
-                <Button
-                  size="small"
-                  disabled={!logByUpdateText.trim()}
-                  onClick={() => {
-                    void copyToClipboard(logByUpdateText, 'log/list_by_update 响应');
-                  }}
-                >
-                  复制响应
-                </Button>
-                <Button size="small" disabled={!logByUpdateText.trim()} onClick={() => setLogByUpdateText('')}>
-                  清空
-                </Button>
-              </Space>
-              <Input.TextArea rows={6} readOnly value={logByUpdateText} placeholder="log/list_by_update 响应" />
-            </Space>
-          </SectionCard>
-        </Col>
-      </Row>
-
-      <Row gutter={16} className="legacy-workspace-row">
-        <Col xs={24} xl={12}>
-          <SectionCard title="Test 兼容接口" className="legacy-workspace-card">
-            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
-              <Space>
-                <Button onClick={handleTestPost} loading={testLoading}>
-                  POST
-                </Button>
-                <Button onClick={handleTestPut} loading={testLoading}>
-                  PUT
-                </Button>
-                <Button onClick={handleTestPatch} loading={testLoading}>
-                  PATCH
-                </Button>
-                <Button onClick={handleTestDelete} loading={testLoading}>
-                  DELETE
-                </Button>
-              </Space>
-              <Space className="legacy-workspace-result-actions" size={8}>
-                <Button
-                  size="small"
-                  disabled={!testResultText.trim()}
-                  onClick={() => {
-                    void copyToClipboard(testResultText, 'test/* 响应');
-                  }}
-                >
-                  复制响应
-                </Button>
-                <Button size="small" disabled={!testResultText.trim()} onClick={() => setTestResultText('')}>
-                  清空
-                </Button>
-              </Space>
-              <Input.TextArea rows={10} readOnly value={testResultText} placeholder="test/* 响应" />
-            </Space>
-          </SectionCard>
-        </Col>
-        <Col xs={24} xl={12}>
-          <SectionCard title="Interface 兼容补口" className="legacy-workspace-card">
-            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
-              <Select<'normal' | 'good' | 'merge'>
-                value={interUploadMode}
-                onChange={setInterUploadMode}
-                options={[
-                  { value: 'normal', label: 'normal' },
-                  { value: 'good', label: 'good' },
-                  { value: 'merge', label: 'merge' }
-                ]}
-                className="legacy-workspace-select-compact"
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
+              <Select
+                value={apiMethod}
+                onChange={value => setApiMethod((value as typeof apiMethod) || 'GET')}
+                data={methodOptions}
               />
-              <Space className="legacy-workspace-result-actions" size={8}>
-                <Button size="small" onClick={handleFormatInterUploadJson} disabled={!interUploadJson.trim()}>
-                  格式化 JSON
-                </Button>
-                <Button size="small" onClick={() => setInterUploadJson(DEFAULT_INTER_UPLOAD_JSON)}>
-                  加载示例
-                </Button>
-                <Button size="small" onClick={() => setInterUploadJson('')} disabled={!interUploadJson.trim()}>
-                  清空
-                </Button>
-              </Space>
-              <Input.TextArea
-                rows={9}
-                value={interUploadJson}
-                onChange={event => setInterUploadJson(event.target.value)}
-                placeholder="OpenAPI JSON"
-              />
-              <Button type="primary" onClick={handleInterUpload} loading={interUploadState.isLoading}>
-                调用 /interface/interUpload
+              <TextInput value={apiPath} onChange={event => setApiPath(event.currentTarget.value)} />
+            </SimpleGrid>
+
+            <Button variant="default" onClick={handleListByUpdate} loading={logByUpdateState.isLoading}>
+              查询 /log/list_by_update
+            </Button>
+            <ResultActions
+              text={logByUpdateText}
+              copyLabel="log/list_by_update 响应"
+              onCopy={() => {
+                void copyToClipboard(logByUpdateText, 'log/list_by_update 响应');
+              }}
+              onClear={() => setLogByUpdateText('')}
+            />
+            <Textarea minRows={6} autosize readOnly value={logByUpdateText} placeholder="log/list_by_update 响应" />
+          </div>
+        </SectionCard>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <SectionCard title="Test 兼容接口" className="legacy-workspace-card">
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Button variant="default" onClick={handleTestPost} loading={testLoading}>POST</Button>
+              <Button variant="default" onClick={handleTestPut} loading={testLoading}>PUT</Button>
+              <Button variant="default" onClick={handleTestPatch} loading={testLoading}>PATCH</Button>
+              <Button variant="default" onClick={handleTestDelete} loading={testLoading}>DELETE</Button>
+            </div>
+            <ResultActions
+              text={testResultText}
+              copyLabel="test/* 响应"
+              onCopy={() => {
+                void copyToClipboard(testResultText, 'test/* 响应');
+              }}
+              onClear={() => setTestResultText('')}
+            />
+            <Textarea minRows={10} autosize readOnly value={testResultText} placeholder="test/* 响应" />
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Interface 兼容补口" className="legacy-workspace-card">
+          <div className="space-y-3">
+            <Select
+              value={interUploadMode}
+              onChange={value => setInterUploadMode((value as typeof interUploadMode) || 'normal')}
+              data={mergeOptions.map(item => ({ value: item, label: item }))}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button variant="default" size="compact-sm" onClick={handleFormatInterUploadJson} disabled={!interUploadJson.trim()}>
+                格式化 JSON
               </Button>
-              <Space className="legacy-workspace-result-actions" size={8}>
-                <Button
-                  size="small"
-                  disabled={!interUploadText.trim()}
-                  onClick={() => {
-                    void copyToClipboard(interUploadText, 'interUpload 响应');
-                  }}
-                >
-                  复制响应
-                </Button>
-                <Button size="small" disabled={!interUploadText.trim()} onClick={() => setInterUploadText('')}>
-                  清空
-                </Button>
-              </Space>
-              <Input.TextArea rows={8} readOnly value={interUploadText} placeholder="interUpload 响应" />
-            </Space>
-          </SectionCard>
-        </Col>
-      </Row>
+              <Button variant="default" size="compact-sm" onClick={() => setInterUploadJson(DEFAULT_INTER_UPLOAD_JSON)}>
+                加载示例
+              </Button>
+              <Button variant="default" size="compact-sm" onClick={() => setInterUploadJson('')} disabled={!interUploadJson.trim()}>
+                清空
+              </Button>
+            </div>
+            <Textarea
+              minRows={9}
+              autosize
+              value={interUploadJson}
+              onChange={event => setInterUploadJson(event.currentTarget.value)}
+              placeholder="OpenAPI JSON"
+            />
+            <Button onClick={handleInterUpload} loading={interUploadState.isLoading}>
+              调用 /interface/interUpload
+            </Button>
+            <ResultActions
+              text={interUploadText}
+              copyLabel="interUpload 响应"
+              onCopy={() => {
+                void copyToClipboard(interUploadText, 'interUpload 响应');
+              }}
+              onClear={() => setInterUploadText('')}
+            />
+            <Textarea minRows={8} autosize readOnly value={interUploadText} placeholder="interUpload 响应" />
+          </div>
+        </SectionCard>
+      </div>
     </div>
   );
 }

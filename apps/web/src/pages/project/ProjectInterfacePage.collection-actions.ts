@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
-import { message, Modal } from 'antd';
-import type { FormInstance } from 'antd';
+import { modals } from '@mantine/modals';
+import { notifications } from '@mantine/notifications';
+import type { FormInstance } from 'rc-field-form';
 import type { NavigateFunction } from 'react-router-dom';
 import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
 
@@ -18,6 +19,18 @@ import { parseJsonText } from './ProjectInterfacePage.request-runner';
 import { toRecord } from './ProjectInterfacePage.utils';
 
 type MutationTrigger = (args: any) => { unwrap: () => Promise<any> };
+
+const message = {
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  },
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  warning(text: string) {
+    notifications.show({ color: 'yellow', message: text });
+  }
+};
 
 type UseProjectInterfaceCollectionActionsParams = {
   projectId: number;
@@ -147,21 +160,20 @@ export function useProjectInterfaceCollectionActions(params: UseProjectInterface
   const confirmDeleteCol = useCallback(
     (colId: number) => {
       if (params.colRows.length <= 1) {
-        Modal.confirm({
+        modals.openConfirmModal({
           title: '此测试集合为最后一个集合',
-          content: '温馨提示：建议不要删除',
-          okText: '确认',
-          cancelButtonProps: { style: { display: 'none' } }
+          children: '温馨提示：建议不要删除',
+          labels: { confirm: '确认', cancel: '' },
+          cancelProps: { style: { display: 'none' } }
         });
         return;
       }
-      Modal.confirm({
+      modals.openConfirmModal({
         title: '您确认删除此测试集合',
-        content: '温馨提示：该操作会删除该集合下所有测试用例，用例删除后无法恢复',
-        okText: '确认',
-        cancelText: '取消',
-        okButtonProps: { danger: true },
-        onOk: async () => {
+        children: '温馨提示：该操作会删除该集合下所有测试用例，用例删除后无法恢复',
+        labels: { confirm: '确认', cancel: '取消' },
+        confirmProps: { color: 'red' },
+        onConfirm: async () => {
           const response = await params.callApi(
             params.triggerDelCol({
               col_id: colId,
@@ -268,13 +280,12 @@ export function useProjectInterfaceCollectionActions(params: UseProjectInterface
 
   const confirmDeleteCase = useCallback(
     (caseItemId: string) => {
-      Modal.confirm({
+      modals.openConfirmModal({
         title: '您确认删除此测试用例',
-        content: '温馨提示：用例删除后无法恢复',
-        okText: '确认',
-        cancelText: '取消',
-        okButtonProps: { danger: true },
-        onOk: async () => {
+        children: '温馨提示：用例删除后无法恢复',
+        labels: { confirm: '确认', cancel: '取消' },
+        confirmProps: { color: 'red' },
+        onConfirm: async () => {
           const response = await params.callApi(
             params.triggerDelCase({
               caseid: caseItemId,

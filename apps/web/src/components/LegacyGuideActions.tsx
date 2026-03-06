@@ -1,4 +1,4 @@
-import { Button, Space } from 'antd';
+import { Button, Group } from '@mantine/core';
 
 type LegacyGuideActionsProps = {
   isLast?: boolean;
@@ -8,14 +8,13 @@ type LegacyGuideActionsProps = {
 
 export function LegacyGuideActions(props: LegacyGuideActionsProps) {
   return (
-    <Space className="legacy-guide-actions" size={8}>
-      <Button size="small" type="primary" onClick={props.onNext}>
+    <Group gap={8} wrap="nowrap">
+      <Button size="xs" radius="xl" onClick={props.onNext}>
         {props.isLast ? '完成' : '下一步'}
       </Button>
-      <Button size="small" onClick={props.onExit}>
+      <Button size="xs" radius="xl" variant="light" color="gray" onClick={props.onExit}>
         退出指引
       </Button>
-    </Space>
+    </Group>
   );
 }
-

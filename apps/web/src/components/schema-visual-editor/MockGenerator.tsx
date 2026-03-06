@@ -1,4 +1,4 @@
-import { Input } from 'antd';
+import { TextInput } from '@mantine/core';
 
 type MockGeneratorProps = {
   value: string;
@@ -7,9 +7,9 @@ type MockGeneratorProps = {
 
 export function MockGenerator({ value, onChange }: MockGeneratorProps) {
   return (
-    <Input
+    <TextInput
       value={value}
-      onChange={event => onChange(event.target.value)}
+      onChange={event => onChange(event.currentTarget.value)}
       placeholder="mock"
     />
   );

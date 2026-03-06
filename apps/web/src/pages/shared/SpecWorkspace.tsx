@@ -10,19 +10,18 @@ import type {
 } from '@yapi-next/shared-types';
 import {
   Alert,
+  Badge,
   Button,
-  Col,
-  Input,
-  InputNumber,
+  NumberInput,
   Progress,
-  Row,
   Select,
-  Space,
+  Stack,
   Table,
-  Tag,
-  Typography,
-  message
-} from 'antd';
+  Text,
+  TextInput,
+  Textarea
+} from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import {
   useExportSpecMutation,
   useGetImportTaskQuery,
@@ -35,8 +34,6 @@ import { PageHeader, SectionCard } from '../../components/layout';
 import { getHttpMethodBadgeClassName, normalizeHttpMethod } from '../../utils/http-method';
 import { safeApiRequest } from '../../utils/safe-request';
 
-const { Text } = Typography;
-
 type SpecWorkspaceMode = 'console' | 'workbench';
 
 type SpecWorkspaceProps = {
@@ -46,16 +43,28 @@ type SpecWorkspaceProps = {
 const DEFAULT_SPEC_JSON_SAMPLE =
   '{\n  "openapi": "3.0.0",\n  "info": { "title": "Demo", "version": "1.0.0" },\n  "paths": {}\n}';
 
+const message = {
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  },
+  warning(text: string) {
+    notifications.show({ color: 'yellow', message: text });
+  }
+};
+
 function formatUnixTime(value?: number): string {
   if (!value || value <= 0) return '-';
   return new Date(value * 1000).toLocaleString();
 }
 
-function taskColor(status: TaskStatus | undefined): 'default' | 'success' | 'processing' | 'error' {
-  if (status === 'success') return 'success';
-  if (status === 'running' || status === 'queued') return 'processing';
-  if (status === 'failed') return 'error';
-  return 'default';
+function taskColor(status: TaskStatus | undefined): string {
+  if (status === 'success') return 'teal';
+  if (status === 'running' || status === 'queued') return 'blue';
+  if (status === 'failed') return 'red';
+  return 'gray';
 }
 
 function downloadJsonFile(filename: string, value: unknown) {
@@ -234,374 +243,388 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
       />
 
       <SectionCard title="连接参数" className="legacy-workspace-card">
-        <Row gutter={12}>
-          <Col xs={24} md={8}>
-            <Text>Project ID</Text>
-            <InputNumber
+        <div className="grid gap-3 md:grid-cols-3">
+          <div>
+            <Text mb={6}>Project ID</Text>
+            <NumberInput
               className="legacy-workspace-control-top"
               min={1}
               value={projectId}
               onChange={value => setProjectId(typeof value === 'number' ? value : 0)}
             />
-          </Col>
-          <Col xs={24} md={16}>
-            <Text>{isWorkbench ? 'Token (可选，私有项目必填)' : 'Token (私有项目必填)'}</Text>
-            <Input
+          </div>
+          <div className="md:col-span-2">
+            <Text mb={6}>{isWorkbench ? 'Token (可选，私有项目必填)' : 'Token (私有项目必填)'}</Text>
+            <TextInput
               className="legacy-workspace-field-top"
               value={token}
-              onChange={event => setToken(event.target.value)}
+              onChange={event => setToken(event.currentTarget.value)}
               placeholder={isWorkbench ? 'demo-token' : 'project token'}
             />
-          </Col>
-        </Row>
+          </div>
+        </div>
       </SectionCard>
 
-      <Row gutter={16} className="legacy-workspace-row">
-        <Col xs={24} xl={12}>
-          <SectionCard title={isWorkbench ? 'OpenAPI 导入任务' : '规范导入'} className="legacy-workspace-card">
-            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
-              <Row gutter={8}>
-                <Col xs={24} md={8}>
-                  <Text>{isWorkbench ? '来源' : 'Source'}</Text>
-                  <Select<SpecSource>
-                    className="legacy-workspace-control-top"
-                    value={source}
-                    onChange={setSource}
-                    options={[
-                      { value: 'json', label: 'JSON' },
-                      { value: 'url', label: 'URL' }
-                    ]}
-                  />
-                </Col>
-                <Col xs={24} md={8}>
-                  <Text>{isWorkbench ? '格式' : 'Format'}</Text>
-                  <Select<'auto' | 'swagger2' | 'openapi3'>
-                    className="legacy-workspace-control-top"
-                    value={format}
-                    onChange={setFormat}
-                    options={[
-                      { value: 'auto', label: 'Auto' },
-                      { value: 'swagger2', label: 'Swagger2' },
-                      { value: 'openapi3', label: 'OpenAPI3' }
-                    ]}
-                  />
-                </Col>
-                <Col xs={24} md={8}>
-                  <Text>{isWorkbench ? '同步模式' : 'Sync Mode'}</Text>
-                  <Select<SyncMode>
-                    className="legacy-workspace-control-top"
-                    value={syncMode}
-                    onChange={setSyncMode}
-                    options={[
-                      { value: 'normal', label: 'Normal' },
-                      { value: 'good', label: 'Good' },
-                      { value: 'merge', label: 'Merge' }
-                    ]}
-                  />
-                </Col>
-              </Row>
-
-              {source === 'json' ? (
-                <>
-                  <Space className="legacy-workspace-result-actions" size={8}>
-                    <Button size="small" onClick={handleFormatSpecJson} disabled={!specJson.trim()}>
-                      格式化 JSON
-                    </Button>
-                    <Button size="small" onClick={() => setSpecJson(DEFAULT_SPEC_JSON_SAMPLE)}>
-                      加载示例
-                    </Button>
-                    <Button size="small" onClick={() => setSpecJson('')} disabled={!specJson.trim()}>
-                      清空
-                    </Button>
-                  </Space>
-                  <Input.TextArea
-                    rows={isWorkbench ? 12 : 10}
-                    value={specJson}
-                    onChange={event => setSpecJson(event.target.value)}
-                    placeholder={isWorkbench ? '粘贴 OpenAPI/Swagger JSON' : '粘贴 OpenAPI / Swagger JSON'}
-                  />
-                </>
-              ) : (
-                <Input
-                  value={specUrl}
-                  onChange={event => setSpecUrl(event.target.value)}
-                  placeholder="https://example.com/openapi.json"
+      <div className="legacy-workspace-row grid gap-4 xl:grid-cols-2">
+        <SectionCard title={isWorkbench ? 'OpenAPI 导入任务' : '规范导入'} className="legacy-workspace-card">
+          <Stack className="legacy-workspace-stack">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div>
+                <Text mb={6}>{isWorkbench ? '来源' : 'Source'}</Text>
+                <Select
+                  className="legacy-workspace-control-top"
+                  value={source}
+                  onChange={value => setSource((value as SpecSource) || 'json')}
+                  data={[
+                    { value: 'json', label: 'JSON' },
+                    { value: 'url', label: 'URL' }
+                  ]}
                 />
-              )}
+              </div>
+              <div>
+                <Text mb={6}>{isWorkbench ? '格式' : 'Format'}</Text>
+                <Select
+                  className="legacy-workspace-control-top"
+                  value={format}
+                  onChange={value => setFormat((value as 'auto' | 'swagger2' | 'openapi3') || 'auto')}
+                  data={[
+                    { value: 'auto', label: 'Auto' },
+                    { value: 'swagger2', label: 'Swagger2' },
+                    { value: 'openapi3', label: 'OpenAPI3' }
+                  ]}
+                />
+              </div>
+              <div>
+                <Text mb={6}>{isWorkbench ? '同步模式' : 'Sync Mode'}</Text>
+                <Select
+                  className="legacy-workspace-control-top"
+                  value={syncMode}
+                  onChange={value => setSyncMode((value as SyncMode) || 'merge')}
+                  data={[
+                    { value: 'normal', label: 'Normal' },
+                    { value: 'good', label: 'Good' },
+                    { value: 'merge', label: 'Merge' }
+                  ]}
+                />
+              </div>
+            </div>
 
-              <Button type="primary" onClick={handleCreateImportTask} loading={importState.isLoading}>
+            {source === 'json' ? (
+              <>
+                <div className="legacy-workspace-result-actions flex flex-wrap gap-2">
+                  <Button size="xs" variant="default" onClick={handleFormatSpecJson} disabled={!specJson.trim()}>
+                    格式化 JSON
+                  </Button>
+                  <Button size="xs" variant="default" onClick={() => setSpecJson(DEFAULT_SPEC_JSON_SAMPLE)}>
+                    加载示例
+                  </Button>
+                  <Button size="xs" variant="default" onClick={() => setSpecJson('')} disabled={!specJson.trim()}>
+                    清空
+                  </Button>
+                </div>
+                <Textarea
+                  minRows={isWorkbench ? 12 : 10}
+                  value={specJson}
+                  onChange={event => setSpecJson(event.currentTarget.value)}
+                  placeholder={isWorkbench ? '粘贴 OpenAPI/Swagger JSON' : '粘贴 OpenAPI / Swagger JSON'}
+                />
+              </>
+            ) : (
+              <TextInput
+                value={specUrl}
+                onChange={event => setSpecUrl(event.currentTarget.value)}
+                placeholder="https://example.com/openapi.json"
+              />
+            )}
+
+            <div>
+              <Button onClick={handleCreateImportTask} loading={importState.isLoading}>
                 创建导入任务
               </Button>
+            </div>
 
-              {taskId ? (
-                <Alert
-                  type="info"
-                  showIcon
-                  message={`当前任务: ${taskId}`}
-                  description={
-                    <Space direction="vertical" className="legacy-workspace-stack" size={8}>
-                      <Space>
-                        <Tag color={taskColor(task?.status)}>{task?.status || 'queued'}</Tag>
-                        <Text>{task?.message || '-'}</Text>
-                        {taskErrors.length > 0 ? (
-                          <Button
-                            size="small"
-                            onClick={() => downloadJsonFile(`import-task-${taskId}-errors.json`, taskErrors)}
-                          >
-                            下载失败明细
-                          </Button>
-                        ) : null}
-                      </Space>
-                      <Progress percent={task?.progress || 0} status={task?.status === 'failed' ? 'exception' : 'active'} />
-                      <Text type="secondary">阶段: {task?.stage || '-'}</Text>
-                    </Space>
+            {taskId ? (
+              <Alert
+                color="blue"
+                title={`当前任务: ${taskId}`}
+              >
+                <Stack className="legacy-workspace-stack" gap="xs" mt="xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge color={taskColor(task?.status)}>{task?.status || 'queued'}</Badge>
+                    <Text>{task?.message || '-'}</Text>
+                    {taskErrors.length > 0 ? (
+                      <Button
+                        size="xs"
+                        variant="default"
+                        onClick={() => downloadJsonFile(`import-task-${taskId}-errors.json`, taskErrors)}
+                      >
+                        下载失败明细
+                      </Button>
+                    ) : null}
+                  </div>
+                  <Progress value={task?.progress || 0} color={task?.status === 'failed' ? 'red' : 'blue'} />
+                  <Text c="dimmed">阶段: {task?.stage || '-'}</Text>
+                </Stack>
+              </Alert>
+            ) : null}
+          </Stack>
+        </SectionCard>
+
+        <SectionCard title="规范导出" className="legacy-workspace-card">
+          <Stack className="legacy-workspace-stack">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <Text mb={6}>{isWorkbench ? '导出格式' : 'Format'}</Text>
+                <Select
+                  className="legacy-workspace-control-top"
+                  value={exportFormat}
+                  onChange={value => setExportFormat((value as SpecExportFormat) || 'openapi3')}
+                  data={[
+                    { value: 'openapi3', label: 'OpenAPI3' },
+                    { value: 'swagger2', label: 'Swagger2' }
+                  ]}
+                />
+              </div>
+              <div>
+                <Text mb={6}>{isWorkbench ? '可见性' : 'Status'}</Text>
+                <Select
+                  className="legacy-workspace-control-top"
+                  value={exportStatus}
+                  onChange={value => setExportStatus((value as 'all' | 'open') || 'all')}
+                  data={
+                    isWorkbench
+                      ? [
+                          { value: 'all', label: '全部接口' },
+                          { value: 'open', label: '公开接口' }
+                        ]
+                      : [
+                          { value: 'all', label: 'all' },
+                          { value: 'open', label: 'open' }
+                        ]
                   }
                 />
-              ) : null}
-            </Space>
-          </SectionCard>
-        </Col>
-
-        <Col xs={24} xl={12}>
-          <SectionCard title="规范导出" className="legacy-workspace-card">
-            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
-              <Row gutter={8}>
-                <Col xs={24} md={12}>
-                  <Text>{isWorkbench ? '导出格式' : 'Format'}</Text>
-                  <Select<SpecExportFormat>
-                    className="legacy-workspace-control-top"
-                    value={exportFormat}
-                    onChange={setExportFormat}
-                    options={[
-                      { value: 'openapi3', label: 'OpenAPI3' },
-                      { value: 'swagger2', label: 'Swagger2' }
-                    ]}
-                  />
-                </Col>
-                <Col xs={24} md={12}>
-                  <Text>{isWorkbench ? '可见性' : 'Status'}</Text>
-                  <Select<'all' | 'open'>
-                    className="legacy-workspace-control-top"
-                    value={exportStatus}
-                    onChange={setExportStatus}
-                    options={
-                      isWorkbench
-                        ? [
-                            { value: 'all', label: '全部接口' },
-                            { value: 'open', label: '公开接口' }
-                          ]
-                        : [
-                            { value: 'all', label: 'all' },
-                            { value: 'open', label: 'open' }
-                          ]
-                    }
-                  />
-                </Col>
-              </Row>
-              <Space>
-                <Button type="primary" onClick={handleExport} loading={exportState.isLoading}>
-                  {isWorkbench ? '导出' : '导出规范'}
-                </Button>
-              </Space>
-              <Space className="legacy-workspace-result-actions" size={8}>
-                <Button
-                  size="small"
-                  disabled={!exportText.trim()}
-                  onClick={() => {
-                    void copyToClipboard(exportText, '导出结果');
-                  }}
-                >
-                  复制结果
-                </Button>
-                <Button
-                  size="small"
-                  disabled={!exportData}
-                  onClick={() => downloadJsonFile(`spec-export-${projectId}-${exportFormat}.json`, exportData)}
-                >
-                  下载 JSON
-                </Button>
-                <Button
-                  size="small"
-                  disabled={!exportText.trim() && !exportData}
-                  onClick={() => {
-                    setExportText('');
-                    setExportData(null);
-                  }}
-                >
-                  清空结果
-                </Button>
-              </Space>
-              <Input.TextArea
-                rows={isWorkbench ? 14 : 13}
-                readOnly
-                value={exportText}
-                placeholder={isWorkbench ? '导出结果将展示在这里' : '导出结果'}
-              />
-            </Space>
-          </SectionCard>
-        </Col>
-      </Row>
+              </div>
+            </div>
+            <div>
+              <Button onClick={handleExport} loading={exportState.isLoading}>
+                {isWorkbench ? '导出' : '导出规范'}
+              </Button>
+            </div>
+            <div className="legacy-workspace-result-actions flex flex-wrap gap-2">
+              <Button
+                size="xs"
+                variant="default"
+                disabled={!exportText.trim()}
+                onClick={() => {
+                  void copyToClipboard(exportText, '导出结果');
+                }}
+              >
+                复制结果
+              </Button>
+              <Button
+                size="xs"
+                variant="default"
+                disabled={!exportData}
+                onClick={() => downloadJsonFile(`spec-export-${projectId}-${exportFormat}.json`, exportData)}
+              >
+                下载 JSON
+              </Button>
+              <Button
+                size="xs"
+                variant="default"
+                disabled={!exportText.trim() && !exportData}
+                onClick={() => {
+                  setExportText('');
+                  setExportData(null);
+                }}
+              >
+                清空结果
+              </Button>
+            </div>
+            <Textarea
+              minRows={isWorkbench ? 14 : 13}
+              readOnly
+              value={exportText}
+              placeholder={isWorkbench ? '导出结果将展示在这里' : '导出结果'}
+            />
+          </Stack>
+        </SectionCard>
+      </div>
 
       {isWorkbench ? (
         <SectionCard title="导入任务历史" className="legacy-workspace-card">
-          <Table
-            size="small"
-            pagination={false}
-            loading={tasksQuery.isLoading}
-            rowKey="task_id"
-            dataSource={taskRows}
-            locale={{ emptyText: '暂无导入任务' }}
-            columns={[
-              {
-                title: 'Task ID',
-                dataIndex: 'task_id',
-                key: 'task_id',
-                render: (value: string) => (
-                  <Button type="link" onClick={() => setTaskId(value)}>
-                    {value}
-                  </Button>
-                )
-              },
-              {
-                title: '状态',
-                dataIndex: 'status',
-                key: 'status',
-                render: (value: TaskStatus) => <Tag color={taskColor(value)}>{value}</Tag>
-              },
-              {
-                title: '进度',
-                dataIndex: 'progress',
-                key: 'progress',
-                width: 260,
-                render: (_value: number, row: SpecImportTaskDTO) => <Progress percent={row.progress || 0} size="small" />
-              },
-              {
-                title: '更新时间',
-                dataIndex: 'up_time',
-                key: 'up_time',
-                width: 180,
-                render: (value: number) => formatUnixTime(value)
-              }
-            ]}
-          />
+          <Table striped highlightOnHover withTableBorder>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Task ID</Table.Th>
+                <Table.Th>状态</Table.Th>
+                <Table.Th>进度</Table.Th>
+                <Table.Th>更新时间</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {taskRows.length === 0 ? (
+                <Table.Tr>
+                  <Table.Td colSpan={4}>
+                    <Text c="dimmed" ta="center" py="md">暂无导入任务</Text>
+                  </Table.Td>
+                </Table.Tr>
+              ) : (
+                taskRows.map(row => (
+                  <Table.Tr key={row.task_id}>
+                    <Table.Td>
+                      <Button variant="subtle" size="compact-sm" onClick={() => setTaskId(row.task_id)}>
+                        {row.task_id}
+                      </Button>
+                    </Table.Td>
+                    <Table.Td><Badge color={taskColor(row.status)}>{row.status}</Badge></Table.Td>
+                    <Table.Td><Progress value={row.progress || 0} /></Table.Td>
+                    <Table.Td>{formatUnixTime(row.up_time)}</Table.Td>
+                  </Table.Tr>
+                ))
+              )}
+            </Table.Tbody>
+          </Table>
         </SectionCard>
       ) : null}
 
       {isWorkbench ? (
-        <Row gutter={16} className="legacy-workspace-row">
-          <Col xs={24} xl={12}>
-            <SectionCard title="分类树" className="legacy-workspace-card">
-              <Table
-                size="small"
-                pagination={false}
-                loading={treeQuery.isLoading}
-                dataSource={categoryRows}
-                locale={{ emptyText: '暂无分类数据' }}
-                columns={[
-                  { title: '分类ID', dataIndex: '_id', key: '_id', width: 100 },
-                  { title: '名称', dataIndex: 'name', key: 'name' },
-                  { title: '接口数', dataIndex: 'interface_count', key: 'interface_count', width: 100 },
-                  {
-                    title: '操作',
-                    key: 'action',
-                    width: 120,
-                    render: (_value, row) => (
-                      <Button size="small" onClick={() => setSelectedCatid(row._id)}>
-                        查看接口
-                      </Button>
-                    )
-                  }
-                ]}
-              />
-            </SectionCard>
-          </Col>
-          <Col xs={24} xl={12}>
-            <SectionCard title={`分类接口列表 ${selectedCatid > 0 ? `(catid=${selectedCatid})` : ''}`} className="legacy-workspace-card">
-              <Table
-                size="small"
-                pagination={false}
-                loading={nodeQuery.isLoading}
-                dataSource={interfaceRows}
-                locale={{ emptyText: selectedCatid > 0 ? '该分类下暂无接口' : '请选择分类后查看接口' }}
-                columns={[
-                  {
-                    title: 'Method',
-                    dataIndex: 'method',
-                    key: 'method',
-                    width: 110,
-                    render: (value: string) => {
-                      const method = normalizeHttpMethod(value || 'GET');
-                      return <span className={getHttpMethodBadgeClassName(method)}>{method}</span>;
-                    }
-                  },
-                  { title: 'Path', dataIndex: 'path', key: 'path' },
-                  { title: 'Title', dataIndex: 'title', key: 'title' },
-                  { title: 'Status', dataIndex: 'status', key: 'status', width: 100 }
-                ]}
-              />
-            </SectionCard>
-          </Col>
-        </Row>
+        <div className="legacy-workspace-row grid gap-4 xl:grid-cols-2">
+          <SectionCard title="分类树" className="legacy-workspace-card">
+            <Table striped highlightOnHover withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>分类ID</Table.Th>
+                  <Table.Th>名称</Table.Th>
+                  <Table.Th>接口数</Table.Th>
+                  <Table.Th>操作</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {categoryRows.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={4}>
+                      <Text c="dimmed" ta="center" py="md">暂无分类数据</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : (
+                  categoryRows.map(row => (
+                    <Table.Tr key={row.key}>
+                      <Table.Td>{row._id}</Table.Td>
+                      <Table.Td>{row.name}</Table.Td>
+                      <Table.Td>{row.interface_count}</Table.Td>
+                      <Table.Td>
+                        <Button size="xs" variant="default" onClick={() => setSelectedCatid(row._id)}>
+                          查看接口
+                        </Button>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))
+                )}
+              </Table.Tbody>
+            </Table>
+          </SectionCard>
+          <SectionCard title={`分类接口列表 ${selectedCatid > 0 ? `(catid=${selectedCatid})` : ''}`} className="legacy-workspace-card">
+            <Table striped highlightOnHover withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Method</Table.Th>
+                  <Table.Th>Path</Table.Th>
+                  <Table.Th>Title</Table.Th>
+                  <Table.Th>Status</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {interfaceRows.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={4}>
+                      <Text c="dimmed" ta="center" py="md">
+                        {selectedCatid > 0 ? '该分类下暂无接口' : '请选择分类后查看接口'}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : (
+                  interfaceRows.map(row => {
+                    const method = normalizeHttpMethod(row.method || 'GET');
+                    return (
+                      <Table.Tr key={row.key}>
+                        <Table.Td><span className={getHttpMethodBadgeClassName(method)}>{method}</span></Table.Td>
+                        <Table.Td>{row.path}</Table.Td>
+                        <Table.Td>{row.title}</Table.Td>
+                        <Table.Td>{row.status}</Table.Td>
+                      </Table.Tr>
+                    );
+                  })
+                )}
+              </Table.Tbody>
+            </Table>
+          </SectionCard>
+        </div>
       ) : (
-        <Row gutter={16} className="legacy-workspace-row">
-          <Col xs={24} xl={12}>
-            <SectionCard title="导入任务历史" className="legacy-workspace-card">
-              <Table
-                size="small"
-                rowKey="task_id"
-                loading={tasksQuery.isLoading}
-                dataSource={taskRows}
-                pagination={false}
-                locale={{ emptyText: '暂无导入任务' }}
-                columns={[
-                  {
-                    title: 'Task ID',
-                    dataIndex: 'task_id',
-                    render: (value: string) => (
-                      <Button type="link" onClick={() => setTaskId(value)}>
-                        {value}
-                      </Button>
-                    )
-                  },
-                  {
-                    title: '状态',
-                    dataIndex: 'status',
-                    width: 100,
-                    render: (value: TaskStatus) => <Tag color={taskColor(value)}>{value}</Tag>
-                  },
-                  {
-                    title: '进度',
-                    width: 180,
-                    render: (_value: unknown, row: SpecImportTaskDTO) => <Progress percent={row.progress || 0} size="small" />
-                  },
-                  {
-                    title: '更新时间',
-                    dataIndex: 'up_time',
-                    width: 170,
-                    render: (value: number) => formatUnixTime(value)
-                  }
-                ]}
-              />
-            </SectionCard>
-          </Col>
-          <Col xs={24} xl={12}>
-            <SectionCard title="接口分类统计" className="legacy-workspace-card">
-              <Table
-                size="small"
-                rowKey="key"
-                loading={treeQuery.isLoading}
-                dataSource={categoryRows}
-                pagination={false}
-                locale={{ emptyText: '暂无分类数据' }}
-                columns={[
-                  { title: '分类ID', dataIndex: '_id', width: 100 },
-                  { title: '名称', dataIndex: 'name' },
-                  { title: '接口数', dataIndex: 'interface_count', width: 100 }
-                ]}
-              />
-            </SectionCard>
-          </Col>
-        </Row>
+        <div className="legacy-workspace-row grid gap-4 xl:grid-cols-2">
+          <SectionCard title="导入任务历史" className="legacy-workspace-card">
+            <Table striped highlightOnHover withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Task ID</Table.Th>
+                  <Table.Th>状态</Table.Th>
+                  <Table.Th>进度</Table.Th>
+                  <Table.Th>更新时间</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {taskRows.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={4}>
+                      <Text c="dimmed" ta="center" py="md">暂无导入任务</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : (
+                  taskRows.map(row => (
+                    <Table.Tr key={row.task_id}>
+                      <Table.Td>
+                        <Button variant="subtle" size="compact-sm" onClick={() => setTaskId(row.task_id)}>
+                          {row.task_id}
+                        </Button>
+                      </Table.Td>
+                      <Table.Td><Badge color={taskColor(row.status)}>{row.status}</Badge></Table.Td>
+                      <Table.Td><Progress value={row.progress || 0} /></Table.Td>
+                      <Table.Td>{formatUnixTime(row.up_time)}</Table.Td>
+                    </Table.Tr>
+                  ))
+                )}
+              </Table.Tbody>
+            </Table>
+          </SectionCard>
+          <SectionCard title="接口分类统计" className="legacy-workspace-card">
+            <Table striped highlightOnHover withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>分类ID</Table.Th>
+                  <Table.Th>名称</Table.Th>
+                  <Table.Th>接口数</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {categoryRows.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={3}>
+                      <Text c="dimmed" ta="center" py="md">暂无分类数据</Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : (
+                  categoryRows.map(row => (
+                    <Table.Tr key={row.key}>
+                      <Table.Td>{row._id}</Table.Td>
+                      <Table.Td>{row.name}</Table.Td>
+                      <Table.Td>{row.interface_count}</Table.Td>
+                    </Table.Tr>
+                  ))
+                )}
+              </Table.Tbody>
+            </Table>
+          </SectionCard>
+        </div>
       )}
     </div>
   );

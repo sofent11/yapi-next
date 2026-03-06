@@ -1,10 +1,8 @@
-import { Button, Input, Select, Space, Table, Tooltip, Typography, Alert } from 'antd';
-import { CopyOutlined, DeleteOutlined, EyeOutlined, SearchOutlined } from '@ant-design/icons';
+import { Alert, Badge, Button, Select, Table, Text, TextInput, Tooltip } from '@mantine/core';
+import { IconCopy, IconEye, IconSearch, IconTrash } from '@tabler/icons-react';
 import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
 import { LegacyErrMsg } from '../../../components/LegacyErrMsg';
 import { FilterBar } from '../../../components/layout/FilterBar';
-
-const { Text } = Typography;
 
 type InterfaceCategoryOption = {
   _id: number;
@@ -44,198 +42,185 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
   const tablePageSize = 20;
   const pagedFilteredList = props.filteredList.slice((props.listPage - 1) * tablePageSize, props.listPage * tablePageSize);
   const hasActiveFilters = props.listKeyword.trim().length > 0 || props.statusFilter !== 'all';
+  const totalPages = Math.max(1, Math.ceil(props.filteredList.length / tablePageSize));
 
   return (
-    <Space direction="vertical" className="legacy-interface-list-wrap">
+    <div className="legacy-interface-list-wrap space-y-4">
       {props.currentCat ? (
         <Alert
           className="legacy-interface-cat-alert"
-          type="info"
-          showIcon
-          message={`接口分类：${props.currentCat.name}`}
-          description={
-            <Space size={8}>
-              <span>{props.currentCat.desc?.trim() || '暂无分类简介'}</span>
-              {props.canEdit ? (
-                <Button size="small" type="link" onClick={() => props.onOpenEditCat(props.currentCat as InterfaceCategoryOption)}>
-                  编辑分类
-                </Button>
-              ) : null}
-            </Space>
-          }
-        />
+          color="blue"
+          title={`接口分类：${props.currentCat.name}`}
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <span>{props.currentCat.desc?.trim() || '暂无分类简介'}</span>
+            {props.canEdit ? (
+              <Button size="compact-sm" variant="subtle" onClick={() => props.onOpenEditCat(props.currentCat as InterfaceCategoryOption)}>
+                编辑分类
+              </Button>
+            ) : null}
+          </div>
+        </Alert>
       ) : null}
+
       <FilterBar
         className="legacy-interface-list-toolbar"
         left={
           <div className="legacy-interface-list-toolbar-copy">
-            <Text strong>{props.currentCatName}</Text>
-            <Text type="secondary">{`${props.filteredList.length} 个接口`}</Text>
+            <Text fw={700}>{props.currentCatName}</Text>
+            <Text c="dimmed">{`${props.filteredList.length} 个接口`}</Text>
           </div>
         }
         right={
-          <Space size={8}>
-            <Input
+          <div className="flex flex-wrap gap-2">
+            <TextInput
               value={props.listKeyword}
-              onChange={event => props.onListKeywordChange(event.target.value)}
+              onChange={event => props.onListKeywordChange(event.currentTarget.value)}
               placeholder="按名称或路径搜索接口…"
-              prefix={<SearchOutlined />}
-              allowClear
-              className="legacy-interface-list-search"
+              leftSection={<IconSearch size={16} />}
+              className="legacy-interface-list-search min-w-[240px]"
               aria-label="搜索接口"
             />
-            <Select<'all' | 'done' | 'undone'>
+            <Select
               value={props.statusFilter}
-              onChange={props.onStatusFilterChange}
-              className="legacy-interface-list-status-filter"
+              onChange={value => props.onStatusFilterChange((value as 'all' | 'done' | 'undone') || 'all')}
+              className="legacy-interface-list-status-filter min-w-[150px]"
               aria-label="按状态筛选接口"
-              options={[
+              data={[
                 { value: 'all', label: '全部状态' },
                 { value: 'done', label: '已完成' },
                 { value: 'undone', label: '未完成' }
               ]}
             />
-            <Button onClick={props.onResetFilters} disabled={!hasActiveFilters}>
+            <Button variant="default" onClick={props.onResetFilters} disabled={!hasActiveFilters}>
               清空筛选
             </Button>
             {props.canEdit ? (
               <>
-                <Button type="primary" onClick={props.onOpenAddInterface} disabled={!props.hasCategories}>
+                <Button onClick={props.onOpenAddInterface} disabled={!props.hasCategories}>
                   添加接口
                 </Button>
-                <Button onClick={props.onOpenAddCat}>
+                <Button variant="default" onClick={props.onOpenAddCat}>
                   添加分类
                 </Button>
               </>
             ) : null}
-          </Space>
+          </div>
         }
       />
 
-      <Table<LegacyInterfaceDTO>
-        rowKey={row => Number(row._id || 0)}
-        loading={props.currentListLoading}
-        dataSource={pagedFilteredList}
-        rowClassName={row => (Number(row._id || 0) === props.activeInterfaceId ? 'legacy-interface-list-row-active' : '')}
-        onRow={row => ({
-          onClick: () => props.onNavigateInterface(Number(row._id || 0))
-        })}
-        locale={{
-          emptyText:
-            props.filteredList.length === 0 && !props.listKeyword.trim() && props.statusFilter === 'all' ? (
-              <LegacyErrMsg type="noInterface" />
-            ) : (
-              <LegacyErrMsg type="noData" />
-            )
-        }}
-        pagination={{
-          current: props.listPage,
-          pageSize: tablePageSize,
-          total: props.filteredList.length,
-          showSizeChanger: false,
-          onChange: page => props.onListPageChange(page)
-        }}
-        columns={[
-          {
-            title: '接口名称',
-            dataIndex: 'title',
-            render: (value, row) => (
-              <button
-                type="button"
-                className="legacy-interface-menu-link-btn"
-                onClick={() => props.onNavigateInterface(Number(row._id || 0))}
-              >
-                {value}
-              </button>
-            )
-          },
-          {
-            title: '接口路径',
-            dataIndex: 'path',
-            render: (value, row) => (
-              <Space>
-                <span className={props.methodClassName(String(row.method || 'GET'))}>
-                  {String(row.method || 'GET').toUpperCase()}
-                </span>
-                {row.api_opened ? (
-                  <Tooltip title="开放接口">
-                    <EyeOutlined className="legacy-opened-icon" />
-                  </Tooltip>
-                ) : null}
-                <span className="legacy-interface-path-text">{`${props.basepath || ''}${value || ''}`}</span>
-              </Space>
-            )
-          },
-          {
-            title: '状态',
-            dataIndex: 'status',
-            width: 140,
-            render: (value, row) => (
-              <div
-                onClick={event => event.stopPropagation()}
-                onMouseDown={event => event.stopPropagation()}
-              >
-                <Select<'done' | 'undone'>
-                  value={String(value || 'undone') as 'done' | 'undone'}
-                  className="legacy-interface-status-select"
-                  disabled={!props.canEdit}
-                  onChange={next => props.onUpdateStatus(Number(row._id || 0), next)}
-                  options={[
-                    { label: '已完成', value: 'done' },
-                    { label: '未完成', value: 'undone' }
-                  ]}
-                />
-              </div>
-            )
-          },
-          {
-            title: '分类',
-            width: 220,
-            render: (_, row) => (
-              <div
-                onClick={event => event.stopPropagation()}
-                onMouseDown={event => event.stopPropagation()}
-              >
-                <Select<number>
-                  value={Number(row.catid || 0)}
-                  className="legacy-interface-catid-select"
-                  disabled={!props.canEdit}
-                  onChange={nextCatId => props.onUpdateCategory(Number(row._id || 0), nextCatId)}
-                  options={props.catOptions}
-                />
-              </div>
-            )
-          },
-          {
-            title: '操作',
-            width: 130,
-            render: (_, row) =>
-              props.canEdit ? (
-                <Space size={4}>
-                  <Button
-                    size="small"
-                    icon={<CopyOutlined />}
-                    onClick={event => {
-                      event.stopPropagation();
-                      props.onCopyInterface(row);
-                    }}
-                  />
-                  <Button
-                    size="small"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={event => {
-                      event.stopPropagation();
-                      props.onDeleteInterface(Number(row._id || 0));
-                    }}
-                  />
-                </Space>
-              ) : (
-                '-'
-              )
-          }
-        ]}
-      />
-    </Space>
+      {props.filteredList.length === 0 ? (
+        props.filteredList.length === 0 && !props.listKeyword.trim() && props.statusFilter === 'all' ? (
+          <LegacyErrMsg type="noInterface" />
+        ) : (
+          <LegacyErrMsg type="noData" />
+        )
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-slate-200">
+          <Table withTableBorder striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>接口名称</Table.Th>
+                <Table.Th>接口路径</Table.Th>
+                <Table.Th>状态</Table.Th>
+                <Table.Th>分类</Table.Th>
+                <Table.Th>操作</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {pagedFilteredList.map(row => (
+                <Table.Tr
+                  key={Number(row._id || 0)}
+                  className={Number(row._id || 0) === props.activeInterfaceId ? 'legacy-interface-list-row-active' : undefined}
+                  onClick={() => props.onNavigateInterface(Number(row._id || 0))}
+                >
+                  <Table.Td>
+                    <button
+                      type="button"
+                      className="legacy-interface-menu-link-btn"
+                      onClick={() => props.onNavigateInterface(Number(row._id || 0))}
+                    >
+                      {row.title}
+                    </button>
+                  </Table.Td>
+                  <Table.Td>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={props.methodClassName(String(row.method || 'GET'))}>
+                        {String(row.method || 'GET').toUpperCase()}
+                      </span>
+                      {row.api_opened ? (
+                        <Tooltip label="开放接口">
+                          <span className="inline-flex"><IconEye size={16} className="legacy-opened-icon" /></span>
+                        </Tooltip>
+                      ) : null}
+                      <span className="legacy-interface-path-text">{`${props.basepath || ''}${row.path || ''}`}</span>
+                    </div>
+                  </Table.Td>
+                  <Table.Td onClick={event => event.stopPropagation()}>
+                    <Select
+                      value={String(row.status || 'undone')}
+                      className="legacy-interface-status-select min-w-[120px]"
+                      disabled={!props.canEdit}
+                      onChange={next => next && props.onUpdateStatus(Number(row._id || 0), next as 'done' | 'undone')}
+                      data={[
+                        { label: '已完成', value: 'done' },
+                        { label: '未完成', value: 'undone' }
+                      ]}
+                    />
+                  </Table.Td>
+                  <Table.Td onClick={event => event.stopPropagation()}>
+                    <Select
+                      value={String(Number(row.catid || 0))}
+                      className="legacy-interface-catid-select min-w-[180px]"
+                      disabled={!props.canEdit}
+                      onChange={nextCatId => nextCatId && props.onUpdateCategory(Number(row._id || 0), Number(nextCatId))}
+                      data={props.catOptions.map(option => ({ label: option.label, value: String(option.value) }))}
+                    />
+                  </Table.Td>
+                  <Table.Td onClick={event => event.stopPropagation()}>
+                    {props.canEdit ? (
+                      <div className="flex gap-2">
+                        <Button size="compact-sm" variant="default" onClick={() => props.onCopyInterface(row)}>
+                          <IconCopy size={14} />
+                        </Button>
+                        <Button size="compact-sm" color="red" variant="light" onClick={() => props.onDeleteInterface(Number(row._id || 0))}>
+                          <IconTrash size={14} />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Badge variant="light">只读</Badge>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </div>
+      )}
+
+      {props.filteredList.length > tablePageSize ? (
+        <div className="flex items-center justify-between gap-3">
+          <Text size="sm" c="dimmed">
+            第 {props.listPage} / {totalPages} 页，共 {props.filteredList.length} 个接口
+          </Text>
+          <div className="flex gap-2">
+            <Button
+              variant="default"
+              disabled={props.listPage <= 1}
+              onClick={() => props.onListPageChange(props.listPage - 1)}
+            >
+              上一页
+            </Button>
+            <Button
+              variant="default"
+              disabled={props.listPage >= totalPages}
+              onClick={() => props.onListPageChange(props.listPage + 1)}
+            >
+              下一页
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

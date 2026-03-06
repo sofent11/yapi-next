@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react';
-import { FolderOpenOutlined, FolderAddOutlined, UserOutlined } from '@ant-design/icons';
-import { Empty, Input, Menu, Popover, Spin, Tooltip, Typography } from 'antd';
+import { ActionIcon, Loader, Popover, Text, TextInput, Tooltip } from '@mantine/core';
+import { IconFolderOpen, IconFolderPlus, IconSearch, IconUser, IconX } from '@tabler/icons-react';
 import type { GroupListItem } from '@yapi-next/shared-types';
 import { LegacyGuideActions } from '../../../components/LegacyGuideActions';
-
-const { Text } = Typography;
 
 interface GroupOverviewProps {
   guideVisible: boolean;
@@ -13,8 +11,6 @@ interface GroupOverviewProps {
   selectedGroupType?: string;
   selectedGroupName?: string;
   selectedGroupDesc?: string;
-  selectedGroupRole?: string;
-  projectCount: number;
   groupKeyword: string;
   onGroupKeywordChange: (value: string) => void;
   loading: boolean;
@@ -26,93 +22,99 @@ interface GroupOverviewProps {
   onGuideExit: () => void;
 }
 
-export function GroupOverview(props: GroupOverviewProps) {
-  const menuItems = props.groups
-    .map(group => {
-      const gid = Number(group._id || 0);
-      if (!Number.isFinite(gid) || gid <= 0) return null;
-      const isPrivate = group.type === 'private';
-      const labelNode = isPrivate ? '个人空间' : group.group_name;
-      return {
-        key: String(gid),
-        className: 'group-item',
-        icon: isPrivate ? <UserOutlined /> : <FolderOpenOutlined />,
-        label:
-          isPrivate && gid === props.selectedGroupId && props.guideVisible && props.guideStep === 0 ? (
-            <Popover
-              placement="right"
-              open
-              title={props.personalSpaceTip}
-              content={<LegacyGuideActions onNext={props.onGuideNext} onExit={props.onGuideExit} />}
-              overlayClassName="legacy-guide-popover"
-            >
-              <span>{labelNode}</span>
-            </Popover>
-          ) : (
-            labelNode
-          ),
-        onClick: () => props.onSelectGroup(gid)
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+function EmptyGroups() {
+  return (
+    <div className="legacy-console-group-empty rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+      暂无分组
+    </div>
+  );
+}
 
+export function GroupOverview(props: GroupOverviewProps) {
   return (
     <div className="m-group">
       {props.guideVisible && props.guideStep === 0 ? <div className="legacy-study-mask" /> : null}
-        <div className="group-bar">
+      <div className="group-bar">
         <div className="curr-group">
           <div className="curr-group-name">
             <span className="name">
               {props.selectedGroupType === 'private' ? '个人空间' : props.selectedGroupName || '项目分组'}
             </span>
-            <Tooltip title="添加分组">
-              <button
-                type="button"
+            <Tooltip label="添加分组">
+              <ActionIcon
+                variant="subtle"
                 className="editSet legacy-console-add-group-btn"
                 onClick={props.onOpenCreateGroup}
                 aria-label="新建分组"
               >
-                <FolderAddOutlined className="btn" />
-              </button>
+                <IconFolderPlus className="btn" size={18} />
+              </ActionIcon>
             </Tooltip>
           </div>
           <div className="curr-group-desc">{props.selectedGroupDesc || '当前分组尚未填写简介。'}</div>
-          <div className="legacy-console-group-badges">
-            {props.selectedGroupRole ? <Text className="legacy-console-group-badge">{`角色 ${props.selectedGroupRole}`}</Text> : null}
-            <Text className="legacy-console-group-badge">{`${props.projectCount} 个项目`}</Text>
-          </div>
         </div>
         <div className="group-operate">
           <div className="search">
-            <Input.Search
+            <TextInput
               value={props.groupKeyword}
-              onChange={event => props.onGroupKeywordChange(event.target.value)}
+              onChange={event => props.onGroupKeywordChange(event.currentTarget.value)}
               placeholder="搜索分组…"
               aria-label="搜索分组"
-              allowClear
+              leftSection={<IconSearch size={16} />}
+              rightSection={
+                props.groupKeyword ? (
+                  <ActionIcon
+                    variant="subtle"
+                    onClick={() => props.onGroupKeywordChange('')}
+                    aria-label="清空搜索"
+                  >
+                    <IconX size={14} />
+                  </ActionIcon>
+                ) : null
+              }
             />
           </div>
         </div>
         <div className="legacy-console-group-summary">
-          <Text type="secondary">共 {props.groups.length} 个分组</Text>
+          <Text c="dimmed">共 {props.groups.length} 个分组</Text>
         </div>
-        {props.loading && props.groups.length === 0 ? (
-          <Spin className="legacy-console-group-loading" />
-        ) : null}
-        {!props.loading && props.groups.length === 0 ? (
-          <div className="legacy-console-group-empty">
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="暂无分组"
-            />
-          </div>
-        ) : null}
-        <Menu
-          className="group-list"
-          mode="inline"
-          selectedKeys={[String(props.selectedGroupId)]}
-          items={menuItems}
-        />
+        {props.loading && props.groups.length === 0 ? <Loader className="legacy-console-group-loading" /> : null}
+        {!props.loading && props.groups.length === 0 ? <EmptyGroups /> : null}
+        <div className="group-list flex flex-col gap-2">
+          {props.groups.map(group => {
+            const gid = Number(group._id || 0);
+            if (!Number.isFinite(gid) || gid <= 0) return null;
+            const isPrivate = group.type === 'private';
+            const labelNode = isPrivate ? '个人空间' : group.group_name;
+            const button = (
+              <button
+                key={gid}
+                type="button"
+                className={`group-item flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left ${
+                  gid === props.selectedGroupId ? 'bg-slate-900 text-white' : 'bg-white text-slate-700'
+                }`}
+                onClick={() => props.onSelectGroup(gid)}
+              >
+                {isPrivate ? <IconUser size={18} /> : <IconFolderOpen size={18} />}
+                <span className="truncate">{labelNode}</span>
+              </button>
+            );
+
+            if (isPrivate && gid === props.selectedGroupId && props.guideVisible && props.guideStep === 0) {
+              return (
+                <Popover key={gid} opened position="right" withinPortal={false}>
+                  <Popover.Target>{button}</Popover.Target>
+                  <Popover.Dropdown className="legacy-guide-popover">
+                    {props.personalSpaceTip}
+                    <LegacyGuideActions onNext={props.onGuideNext} onExit={props.onGuideExit} />
+                  </Popover.Dropdown>
+                </Popover>
+              );
+            }
+
+            return button;
+          })}
+        </div>
       </div>
     </div>
   );

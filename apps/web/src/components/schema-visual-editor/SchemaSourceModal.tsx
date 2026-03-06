@@ -1,4 +1,4 @@
-import { Modal, Input } from 'antd';
+import { Button, Group, Modal, Textarea } from '@mantine/core';
 
 type Props = {
   open: boolean;
@@ -12,13 +12,15 @@ export function SchemaSourceModal({ open, draft, onChange, onCancel, onSave }: P
   return (
     <Modal
       title="Schema 文件编辑"
-      open={open}
-      onCancel={onCancel}
-      onOk={onSave}
-      width={900}
-      okText="应用"
+      opened={open}
+      onClose={onCancel}
+      size="xl"
     >
-      <Input.TextArea rows={20} value={draft} onChange={event => onChange(event.target.value)} />
+      <Textarea minRows={20} autosize value={draft} onChange={event => onChange(event.currentTarget.value)} />
+      <Group justify="flex-end" mt="md">
+        <Button variant="default" onClick={onCancel}>取消</Button>
+        <Button onClick={onSave}>应用</Button>
+      </Group>
     </Modal>
   );
 }

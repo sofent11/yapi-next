@@ -1,18 +1,28 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  QuestionCircleOutlined,
-  SearchOutlined,
-  StarOutlined,
-  PlusCircleOutlined,
-  UserOutlined,
-  TeamOutlined,
-  LogoutOutlined,
-  SettingOutlined,
-  StarFilled,
-  DownOutlined,
-  BarChartOutlined
-} from '@ant-design/icons';
-import { AutoComplete, Avatar, Dropdown, Input, MenuProps, Popover, Tag, Tooltip, message } from 'antd';
+  ActionIcon,
+  Avatar,
+  Badge,
+  Menu,
+  Popover,
+  Text,
+  Tooltip
+} from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { Autocomplete } from '@mantine/core';
+import {
+  IconChevronDown,
+  IconChartBar,
+  IconCirclePlus,
+  IconHelpCircle,
+  IconLogout,
+  IconSearch,
+  IconStar,
+  IconStarFilled,
+  IconUser,
+  IconUsers,
+  IconSettings
+} from '@tabler/icons-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useLazySearchProjectQuery, useLogoutMutation } from '../services/yapi-api';
 import { webPlugins, type HeaderMenuItem } from '../plugins';
@@ -48,21 +58,21 @@ const defaultHeaderMenu: Record<string, HeaderMenuItem> = {
 function mapIcon(icon?: string) {
   switch (icon) {
     case 'user':
-      return <UserOutlined />;
+      return <IconUser size={16} />;
     case 'team':
     case 'solution':
-      return <TeamOutlined />;
+      return <IconUsers size={16} />;
     case 'star':
     case 'star-o':
-      return <StarFilled />;
+      return <IconStarFilled size={16} />;
     case 'logout':
-      return <LogoutOutlined />;
+      return <IconLogout size={16} />;
     case 'setting':
-      return <SettingOutlined />;
+      return <IconSettings size={16} />;
     case 'bar-chart':
-      return <BarChartOutlined />;
+      return <IconChartBar size={16} />;
     default:
-      return <UserOutlined />;
+      return <IconUser size={16} />;
   }
 }
 
@@ -80,8 +90,8 @@ export function LegacyHeader(props: LegacyHeaderProps) {
     return next;
   }, []);
 
-  const dropdownItems = useMemo<MenuProps['items']>(() => {
-    const rows: MenuProps['items'] = [];
+  const dropdownItems = useMemo(() => {
+    const rows: Array<{ key: string; label: string; to?: string; icon?: ReactNode; onClick?: () => Promise<void> }> = [];
     Object.keys(headerMenu).forEach(key => {
       const item = headerMenu[key];
       if (item.adminFlag && props.role !== 'admin') return;
@@ -91,24 +101,22 @@ export function LegacyHeader(props: LegacyHeaderProps) {
       }
       rows.push({
         key,
-        label: <Link to={link}>{item.name}</Link>,
+        label: item.name,
+        to: link,
         icon: mapIcon(item.icon)
       });
     });
     rows.push({
-      type: 'divider'
-    });
-    rows.push({
       key: 'logout',
       label: '退出',
-      icon: <LogoutOutlined />,
+      icon: <IconLogout size={16} />,
       onClick: async () => {
         const response = await logout().unwrap();
         if (response.errcode !== 0) {
-          message.error(response.errmsg || '退出失败');
+          notifications.show({ color: 'red', message: response.errmsg || '退出失败' });
           return;
         }
-        message.success('退出成功');
+        notifications.show({ color: 'teal', message: '退出成功' });
         navigate('/');
       }
     });
@@ -207,124 +215,176 @@ export function LegacyHeader(props: LegacyHeaderProps) {
   const guideVisible = guide.active && !props.study;
   const tipFollow = (
     <div className="legacy-guide-tip-title">
-      <h3><StarOutlined /> 关注</h3>
+      <h3><IconStar size={16} /> 关注</h3>
       <p>这里是你的专属收藏夹，便于你快速找到常用项目。</p>
     </div>
   );
   const tipAdd = (
     <div className="legacy-guide-tip-title">
-      <h3><PlusCircleOutlined /> 新建项目</h3>
+      <h3><IconCirclePlus size={16} /> 新建项目</h3>
       <p>在任何页面都可以快速新建项目。</p>
     </div>
   );
   const tipDoc = (
     <div className="legacy-guide-tip-title">
       <h3>
-        使用文档 <Tag color="orange">推荐</Tag>
+        使用文档 <Badge color="orange">推荐</Badge>
       </h3>
       <p>初次使用建议先阅读文档，快速掌握项目、接口和 Mock 的完整流程。</p>
     </div>
   );
 
   return (
-    <header className="legacy-header">
-      <Link to="/group" className="legacy-logo-link">
-        <div className="legacy-logo-dot">
+    <header className="flex items-center gap-4 border-b border-slate-800 bg-slate-900 px-4 py-3 text-white">
+      <Link
+        to="/group"
+        className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-700 bg-white text-slate-900 transition hover:border-blue-400 hover:bg-blue-400 hover:text-white"
+      >
+        <div className="flex h-8 w-8 items-center justify-center rounded-full">
           <LogoSVG length={28} />
         </div>
       </Link>
 
       <LegacyBreadcrumb />
 
-      <div className="legacy-header-tools">
-        <AutoComplete
-          className="legacy-header-search"
+      <div className="flex items-center gap-3">
+        <Autocomplete
+          className="w-[230px] max-w-[32vw]"
           value={keyword}
-          options={autoOptions}
+          data={autoOptions}
           onChange={setKeyword}
-          onSelect={handleSelect}
-          defaultActiveFirstOption={false}
-        >
-          <Input
-            onPressEnter={event => {
-              void handleSearch(event.currentTarget.value);
-            }}
-            prefix={<SearchOutlined />}
-            placeholder="搜索分组/项目/接口"
-            aria-label="搜索分组、项目或接口"
-          />
-        </AutoComplete>
+          onOptionSubmit={handleSelect}
+          leftSection={<IconSearch size={16} />}
+          placeholder="搜索分组/项目/接口"
+          aria-label="搜索分组、项目或接口"
+          onKeyDown={event => {
+            if (event.key === 'Enter') {
+              void handleSearch(keyword);
+            }
+          }}
+        />
         <Popover
-          placement="bottomRight"
           open={guideVisible && guide.step === 1}
-          title={tipFollow}
-          content={<LegacyGuideActions onNext={guide.next} onExit={guide.finish} />}
-          overlayClassName="legacy-guide-popover"
+          position="bottom-end"
+          withArrow
+          shadow="md"
         >
-          <Tooltip title="我的关注">
-            <Link
-              to="/follow"
-              className={`legacy-icon-link${inFollow ? ' active' : ''}`}
-              aria-label="进入我的关注"
-            >
-              <StarOutlined />
-            </Link>
-          </Tooltip>
+          <Popover.Target>
+            <div>
+              <Tooltip label="我的关注">
+                <ActionIcon
+                  component={Link}
+                  to="/follow"
+                  variant={inFollow ? 'light' : 'subtle'}
+                  color={inFollow ? 'blue' : 'gray'}
+                  radius="xl"
+                  size="lg"
+                  aria-label="进入我的关注"
+                >
+                  <IconStar size={18} />
+                </ActionIcon>
+              </Tooltip>
+            </div>
+          </Popover.Target>
+          <Popover.Dropdown>
+            <div className="space-y-3">
+              {tipFollow}
+              <LegacyGuideActions onNext={guide.next} onExit={guide.finish} />
+            </div>
+          </Popover.Dropdown>
         </Popover>
-        <Popover
-          placement="bottomRight"
-          open={guideVisible && guide.step === 2}
-          title={tipAdd}
-          content={<LegacyGuideActions onNext={guide.next} onExit={guide.finish} />}
-          overlayClassName="legacy-guide-popover"
-        >
-          <Tooltip title="新建项目">
-            <Link
-              to="/add-project"
-              className={`legacy-icon-link${inAddProject ? ' active' : ''}`}
-              aria-label="新建项目"
-            >
-              <PlusCircleOutlined />
-            </Link>
-          </Tooltip>
+        <Popover open={guideVisible && guide.step === 2} position="bottom-end" withArrow shadow="md">
+          <Popover.Target>
+            <div>
+              <Tooltip label="新建项目">
+                <ActionIcon
+                  component={Link}
+                  to="/add-project"
+                  variant={inAddProject ? 'light' : 'subtle'}
+                  color={inAddProject ? 'blue' : 'gray'}
+                  radius="xl"
+                  size="lg"
+                  aria-label="新建项目"
+                >
+                  <IconCirclePlus size={18} />
+                </ActionIcon>
+              </Tooltip>
+            </div>
+          </Popover.Target>
+          <Popover.Dropdown>
+            <div className="space-y-3">
+              {tipAdd}
+              <LegacyGuideActions onNext={guide.next} onExit={guide.finish} />
+            </div>
+          </Popover.Dropdown>
         </Popover>
-        <Popover
-          placement="bottomRight"
-          open={guideVisible && guide.step === 3}
-          title={tipDoc}
-          content={<LegacyGuideActions isLast onNext={guide.next} onExit={guide.finish} />}
-          overlayClassName="legacy-guide-popover"
-        >
-          <Tooltip title="使用文档">
-            <a
-              href="https://hellosean1025.github.io/yapi/"
-              target="_blank"
-              rel="noreferrer"
-              className="legacy-icon-link"
-              aria-label="打开使用文档"
-            >
-              <QuestionCircleOutlined />
-            </a>
-          </Tooltip>
+        <Popover open={guideVisible && guide.step === 3} position="bottom-end" withArrow shadow="md">
+          <Popover.Target>
+            <div>
+              <Tooltip label="使用文档">
+                <ActionIcon
+                  component="a"
+                  href="https://hellosean1025.github.io/yapi/"
+                  target="_blank"
+                  rel="noreferrer"
+                  variant="subtle"
+                  color="gray"
+                  radius="xl"
+                  size="lg"
+                  aria-label="打开使用文档"
+                >
+                  <IconHelpCircle size={18} />
+                </ActionIcon>
+              </Tooltip>
+            </div>
+          </Popover.Target>
+          <Popover.Dropdown>
+            <div className="space-y-3">
+              {tipDoc}
+              <LegacyGuideActions isLast onNext={guide.next} onExit={guide.finish} />
+            </div>
+          </Popover.Dropdown>
         </Popover>
 
-        <Dropdown
-          menu={{ items: dropdownItems, className: 'legacy-user-menu' }}
-          placement="bottomRight"
-          trigger={['click']}
-        >
-          <button
-            type="button"
-            className="legacy-user-btn"
-            disabled={logoutState.isLoading}
-            aria-label="打开用户菜单"
-          >
-            <Avatar src={avatarUrl} size={30} style={{ backgroundColor: '#1677ff', color: '#fff' }}>
-              {(props.username || props.email || 'U').slice(0, 1).toUpperCase()}
-            </Avatar>
-            <DownOutlined />
-          </button>
-        </Dropdown>
+        <Menu width={220} position="bottom-end" shadow="md">
+          <Menu.Target>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-white transition hover:border-slate-500"
+              disabled={logoutState.isLoading}
+              aria-label="打开用户菜单"
+            >
+              <Avatar src={avatarUrl} size={30} color="blue">
+                {(props.username || props.email || 'U').slice(0, 1).toUpperCase()}
+              </Avatar>
+              <Text size="sm" className="max-w-24 truncate text-slate-100">
+                {props.username || props.email || 'User'}
+              </Text>
+              <IconChevronDown size={16} className="text-slate-400" />
+            </button>
+          </Menu.Target>
+          <Menu.Dropdown>
+            {dropdownItems.map(item =>
+              item.key === 'logout' ? (
+                <Fragment key={item.key}>
+                  <Menu.Divider />
+                  <Menu.Item leftSection={item.icon} onClick={() => void item.onClick?.()}>
+                    {item.label}
+                  </Menu.Item>
+                </Fragment>
+              ) : (
+                <Menu.Item
+                  key={item.key}
+                  component={item.to ? Link : 'button'}
+                  to={item.to}
+                  leftSection={item.icon}
+                >
+                  {item.label}
+                </Menu.Item>
+              )
+            )}
+          </Menu.Dropdown>
+        </Menu>
       </div>
     </header>
   );

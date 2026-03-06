@@ -1,5 +1,5 @@
 import React from 'react';
-import type { FormInstance } from 'antd';
+import type { FormInstance } from 'rc-field-form';
 import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
 import { InterfaceMenuPanel } from './InterfaceMenuPanel';
 import { getHttpMethodBadgeClassName } from '../../../utils/http-method';

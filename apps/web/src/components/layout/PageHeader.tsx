@@ -1,7 +1,4 @@
 import type { ReactNode } from 'react';
-import { Space, Typography } from 'antd';
-
-const { Title, Paragraph } = Typography;
 
 type PageHeaderProps = {
   title: string;
@@ -14,29 +11,25 @@ type PageHeaderProps = {
 
 export function PageHeader(props: PageHeaderProps) {
   return (
-    <header className="legacy-page-header">
-      <div className="legacy-page-header-main">
-        <Space direction="vertical" size={6} className="legacy-page-header-copy">
+    <header className="mb-5 flex flex-wrap items-start justify-between gap-4 rounded-[28px] border border-slate-200 bg-white/92 px-5 py-5 shadow-sm backdrop-blur">
+      <div className="min-w-0 flex-1">
+        <div className="space-y-2">
           {props.eyebrow ? (
-            <span className="legacy-page-header-eyebrow">{props.eyebrow}</span>
+            <span className="inline-flex rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-white">
+              {props.eyebrow}
+            </span>
           ) : null}
-          <Title level={3} className="legacy-page-header-title">
-            {props.title}
-          </Title>
-          {props.subtitle ? (
-            <Paragraph type="secondary" className="legacy-page-header-subtitle">
-              {props.subtitle}
-            </Paragraph>
-          ) : null}
+          <h1 className="m-0 text-2xl font-semibold text-slate-900 md:text-3xl">{props.title}</h1>
+          {props.subtitle ? <p className="m-0 max-w-4xl text-sm leading-7 text-slate-600">{props.subtitle}</p> : null}
           {props.meta || props.status ? (
-            <div className="legacy-page-header-meta-wrap">
-              {props.meta ? <div className="legacy-page-header-meta">{props.meta}</div> : null}
-              {props.status ? <div className="legacy-page-header-status">{props.status}</div> : null}
+            <div className="flex flex-wrap items-center gap-3 pt-1 text-sm text-slate-500">
+              {props.meta ? <div>{props.meta}</div> : null}
+              {props.status ? <div>{props.status}</div> : null}
             </div>
           ) : null}
-        </Space>
+        </div>
       </div>
-      {props.actions ? <div className="legacy-page-header-actions">{props.actions}</div> : null}
+      {props.actions ? <div className="ml-auto flex flex-wrap items-center gap-2">{props.actions}</div> : null}
     </header>
   );
 }

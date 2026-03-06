@@ -1,0 +1,620 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans:
+    "Plus Jakarta Sans",
+    "Noto Sans SC",
+    "PingFang SC",
+    "Microsoft YaHei",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    color: #0f172a;
+    background: #020617;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@layer components {
+  .projectGround {
+    @apply pb-8;
+  }
+
+  .group-bar {
+    @apply rounded-[24px] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+  }
+
+  .curr-group {
+    @apply mb-4 rounded-[20px] border border-slate-200 bg-slate-50/80 p-4;
+  }
+
+  .curr-group-name {
+    @apply mb-2 flex items-center justify-between gap-3;
+  }
+
+  .curr-group-name .name {
+    @apply text-2xl font-semibold tracking-tight text-slate-900;
+  }
+
+  .curr-group-desc {
+    @apply text-sm leading-6 text-slate-500;
+  }
+
+  .group-operate {
+    @apply mb-3;
+  }
+
+  .legacy-console-group-summary {
+    @apply mb-3 text-sm text-slate-500;
+  }
+
+  .legacy-console-group-loading {
+    @apply mx-auto my-6;
+  }
+
+  .group-item {
+    @apply border border-transparent shadow-sm transition-all duration-150;
+  }
+
+  .group-item:hover {
+    @apply -translate-y-px border-slate-200 shadow-md;
+  }
+
+  .legacy-project-console-tabs [role='tablist'] {
+    @apply mb-4 rounded-[20px] border border-slate-200 bg-white/92 p-1 shadow-sm;
+  }
+
+  .legacy-project-console-tabs [role='tab'] {
+    @apply rounded-2xl px-4 py-2 text-sm font-medium text-slate-500;
+  }
+
+  .legacy-project-console-tabs [role='tab'][data-active='true'] {
+    @apply bg-slate-900 text-white;
+  }
+
+  .legacy-console-project-panel {
+    @apply rounded-[24px] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+  }
+
+  .legacy-console-project-header {
+    @apply mb-4;
+  }
+
+  .legacy-console-project-header-main {
+    @apply flex flex-col gap-1;
+  }
+
+  .legacy-console-project-stats {
+    @apply mb-5 flex flex-wrap gap-2;
+  }
+
+  .legacy-console-project-stat-tag {
+    @apply inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600;
+  }
+
+  .legacy-console-project-grid-wrap {
+    @apply min-h-[240px];
+  }
+
+  .legacy-console-project-loading {
+    @apply flex min-h-[180px] items-center justify-center;
+  }
+
+  .legacy-console-project-section-empty {
+    @apply rounded-[20px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500;
+  }
+
+  .owner-type {
+    @apply m-0 text-lg font-semibold tracking-tight text-slate-900;
+  }
+
+  .card-container {
+    @apply relative;
+  }
+
+  .m-card.legacy-console-project-card-btn {
+    @apply flex min-h-[288px] cursor-pointer flex-col rounded-[24px] border border-slate-200 bg-white px-6 py-6 shadow-sm transition-all duration-150;
+  }
+
+  .m-card.legacy-console-project-card-btn:hover {
+    @apply -translate-y-0.5 border-slate-300 shadow-lg;
+  }
+
+  .ui-logo {
+    @apply mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-white;
+  }
+
+  .ui-title {
+    @apply m-0 text-[28px] font-semibold leading-tight tracking-tight text-slate-900;
+  }
+
+  .legacy-console-project-subtitle {
+    @apply mt-3 min-h-[48px] text-sm leading-6 text-slate-500;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .legacy-console-project-meta {
+    @apply mt-auto flex flex-col gap-1 pt-5 text-sm text-slate-400;
+  }
+
+  .legacy-console-member-panel,
+  .legacy-console-activity-panel {
+    @apply rounded-[24px] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+  }
+
+  .m-panel,
+  .news-box {
+    @apply rounded-[24px] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+  }
+
+  .g-row {
+    @apply flex flex-col gap-5;
+  }
+
+  .legacy-console-member-toolbar,
+  .legacy-console-activity-head {
+    @apply mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between;
+  }
+
+  .legacy-timeline-shell {
+    @apply flex flex-col gap-5;
+  }
+
+  .legacy-timeline-filter {
+    @apply rounded-[22px] border border-slate-200 bg-slate-50/80 p-4;
+  }
+
+  .legacy-timeline-filter .mantine-Text-root {
+    @apply text-sm font-medium text-slate-600;
+  }
+
+  .legacy-timeline-api-select {
+    min-width: min(100%, 560px);
+  }
+
+  .legacy-timeline-api-select .mantine-Input-input,
+  .legacy-timeline-api-select .mantine-Select-input {
+    @apply h-12 rounded-[16px] border-slate-300 bg-white px-4 text-sm text-slate-700;
+  }
+
+  .legacy-timeline-api-select .mantine-Input-input::placeholder,
+  .legacy-timeline-api-select .mantine-Select-input::placeholder {
+    @apply text-slate-400;
+  }
+
+  .legacy-timeline-content {
+    @apply flex flex-col gap-5;
+  }
+
+  .legacy-timeline-row {
+    @apply pb-0;
+  }
+
+  .legacy-timeline-bullet {
+    @apply border-4 border-white bg-slate-100 shadow-sm ring-1 ring-slate-200;
+  }
+
+  .legacy-timeline-bullet .mantine-Avatar-root {
+    @apply shadow-none;
+  }
+
+  .legacy-timeline-body {
+    @apply ml-4 pb-2;
+  }
+
+  .legacy-timeline-item-content {
+    @apply mt-0;
+  }
+
+  .legacy-timeline-item {
+    @apply rounded-[22px] border border-slate-200 bg-white px-5 py-4 shadow-sm;
+  }
+
+  .legacy-log-head {
+    @apply mb-1 flex flex-wrap items-center gap-3;
+  }
+
+  .legacy-log-chip {
+    @apply inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold tracking-wide text-blue-700;
+  }
+
+  .legacy-log-time {
+    @apply text-sm font-medium text-slate-700;
+  }
+
+  .legacy-logo-timeago {
+    @apply text-sm text-slate-400;
+  }
+
+  .legacy-log-content {
+    @apply text-[15px] leading-8 text-slate-700;
+  }
+
+  .legacy-log-content a {
+    @apply font-medium text-slate-900;
+  }
+
+  .legacy-log-content p {
+    @apply m-0;
+  }
+
+  .legacy-timeline-item-actions {
+    @apply pt-1;
+  }
+
+  .legacy-timeline-item-actions .mantine-Button-root {
+    @apply rounded-full border-slate-200 bg-slate-50 text-slate-700;
+  }
+
+  .legacy-timeline-item-actions .mantine-Button-root:hover {
+    @apply border-slate-300 bg-white text-slate-900;
+  }
+
+  .legacy-timeline-footer {
+    @apply pt-2;
+  }
+
+  .legacy-timeline-footer .mantine-Button-root {
+    @apply rounded-full;
+  }
+
+  .legacy-diff-note {
+    @apply rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700;
+  }
+
+  .legacy-diff-content {
+    @apply flex flex-col gap-4;
+  }
+
+  .legacy-diff-item {
+    @apply rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-4;
+  }
+
+  .legacy-diff-item-title {
+    @apply m-0 text-base font-semibold text-slate-900;
+  }
+
+  .legacy-diff-item ins {
+    @apply rounded bg-emerald-100 px-1 text-emerald-800 no-underline;
+  }
+
+  .legacy-diff-item del {
+    @apply rounded bg-rose-100 px-1 text-rose-700 no-underline;
+  }
+
+  .legacy-console-member-toolbar-main {
+    @apply flex flex-col gap-2;
+  }
+
+  .legacy-console-member-summary-chip {
+    @apply inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600;
+  }
+
+  .legacy-console-member-table {
+    @apply overflow-hidden rounded-[20px] border border-slate-200 bg-white;
+  }
+
+  .legacy-console-member-table thead {
+    @apply bg-slate-50;
+  }
+
+  .legacy-console-member-table th {
+    @apply text-sm font-semibold text-slate-600;
+  }
+
+  .legacy-console-member-table tbody tr + tr {
+    @apply border-t border-slate-100;
+  }
+
+  .legacy-console-member-cell {
+    @apply flex items-center gap-3;
+  }
+
+  .legacy-console-member-meta {
+    @apply flex flex-col gap-1;
+  }
+
+  .legacy-console-member-name-link {
+    @apply font-medium text-slate-900;
+  }
+
+  .legacy-console-member-email,
+  .legacy-console-member-role-text {
+    @apply text-sm text-slate-500;
+  }
+
+  .legacy-console-member-role-select {
+    min-width: 132px;
+  }
+
+  .legacy-console-project-action-btn {
+    @apply absolute z-10 flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-all duration-150;
+  }
+
+  .legacy-console-project-action-btn:hover {
+    @apply -translate-y-px border-slate-300 text-slate-900 shadow-md;
+  }
+
+  .card-btns {
+    @apply right-12 top-4;
+  }
+
+  .copy-btns {
+    @apply right-2 top-4;
+  }
+
+  .legacy-console-project-action-btn .icon.active {
+    @apply fill-amber-400 text-amber-500;
+  }
+
+  .legacy-interface-side-pane {
+    @apply flex h-full flex-col gap-4;
+  }
+
+  .legacy-interface-side-header,
+  .legacy-interface-workbench-toolbar {
+    @apply flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-slate-200 bg-white/94 px-6 py-5 shadow-sm backdrop-blur;
+  }
+
+  .legacy-interface-side-header-copy,
+  .legacy-interface-workbench-copy {
+    @apply flex flex-col gap-2;
+  }
+
+  .legacy-interface-side-kicker,
+  .legacy-interface-workbench-kicker {
+    @apply text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400;
+  }
+
+  .legacy-interface-side-title,
+  .legacy-interface-workbench-title {
+    @apply text-[15px] font-medium leading-none text-slate-500 md:text-[16px];
+  }
+
+  .legacy-interface-side-header-copy .mantine-Text-root:last-child,
+  .legacy-interface-workbench-copy .mantine-Text-root:last-child {
+    @apply text-[22px] font-semibold tracking-tight text-slate-900 md:text-[24px];
+  }
+
+  .legacy-interface-side-switch {
+    @apply rounded-[24px] border border-slate-200 bg-white/94 p-4 shadow-sm backdrop-blur;
+  }
+
+  .legacy-interface-side-switch .mantine-SegmentedControl-root {
+    @apply rounded-[18px] bg-slate-100/90 p-1;
+  }
+
+  .legacy-interface-side-switch .mantine-SegmentedControl-indicator {
+    @apply rounded-[14px] border border-slate-200 bg-white shadow-sm;
+  }
+
+  .legacy-interface-side-switch .mantine-SegmentedControl-label {
+    @apply rounded-[14px] px-4 py-3 text-base font-semibold text-slate-500 transition-colors;
+  }
+
+  .legacy-interface-side-switch [data-active='true'] {
+    @apply bg-transparent text-slate-900 shadow-none;
+  }
+
+  .legacy-interface-side-body,
+  .legacy-interface-content-card {
+    @apply min-h-0 rounded-[28px] border border-slate-200 bg-white/94 p-6 shadow-sm backdrop-blur;
+  }
+
+  .legacy-interface-menu {
+    @apply flex flex-col gap-4;
+  }
+
+  .legacy-interface-filter {
+    @apply mb-0 rounded-[22px] border border-slate-200 bg-slate-50/70 px-5 py-5 shadow-none;
+  }
+
+  .legacy-interface-filter-input {
+    min-width: min(100%, 240px);
+  }
+
+  .legacy-interface-filter-input .mantine-TextInput-input {
+    @apply h-14 rounded-[18px] border-slate-300 bg-white px-4 text-base;
+  }
+
+  .legacy-interface-filter-actions {
+    @apply justify-end;
+  }
+
+  .legacy-interface-menu-summary {
+    @apply px-1 text-sm text-slate-500;
+  }
+
+  .legacy-interface-menu-list {
+    @apply flex flex-col gap-3;
+  }
+
+  .legacy-interface-cat {
+    @apply rounded-[20px] border border-slate-200 bg-slate-50/60 p-2.5;
+  }
+
+  .legacy-interface-cat-title {
+    @apply flex min-h-11 items-center justify-between gap-2 rounded-2xl px-3 py-2.5 text-slate-700 transition-all duration-150;
+  }
+
+  .legacy-interface-cat-title:hover {
+    @apply bg-white/95 shadow-sm;
+  }
+
+  .legacy-interface-cat-title.active {
+    @apply bg-white text-slate-900 shadow-sm ring-1 ring-slate-200;
+  }
+
+  .legacy-interface-cat-main {
+    @apply flex min-w-0 items-center gap-2;
+  }
+
+  .legacy-interface-cat-toggle {
+    @apply inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition-colors;
+  }
+
+  .legacy-interface-cat-title.active .legacy-interface-cat-toggle {
+    @apply text-slate-600;
+  }
+
+  .legacy-interface-cat-folder {
+    @apply text-slate-400;
+  }
+
+  .legacy-interface-cat-title.active .legacy-interface-cat-folder {
+    @apply text-slate-400;
+  }
+
+  .legacy-interface-cat-name {
+    @apply truncate text-[15px] font-semibold tracking-tight;
+  }
+
+  .legacy-interface-cat-actions {
+    @apply shrink-0;
+  }
+
+  .legacy-interface-cat-actions .mantine-Badge-root {
+    @apply rounded-full;
+  }
+
+  .legacy-interface-tip {
+    @apply px-3 py-2 text-sm text-slate-400;
+  }
+
+  .legacy-interface-item {
+    @apply ml-7 mt-2 flex min-h-10 items-center gap-2 rounded-2xl border border-transparent bg-white/96 px-3 py-2.5 text-slate-700 shadow-sm transition-all duration-150;
+  }
+
+  .legacy-interface-item:hover {
+    @apply -translate-y-px border-slate-200 shadow-md;
+  }
+
+  .legacy-interface-item.active {
+    @apply border-slate-300 bg-slate-100 text-slate-900 shadow-md;
+  }
+
+  .legacy-interface-item-title {
+    @apply min-w-0 flex-1 truncate text-[13px] font-medium text-slate-700;
+  }
+
+  .legacy-interface-item-actions {
+    @apply shrink-0;
+  }
+
+  .legacy-interface-icon-btn {
+    @apply inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition-all duration-150;
+  }
+
+  .legacy-interface-icon-btn:hover {
+    @apply bg-white text-slate-700 shadow-sm;
+  }
+
+  .legacy-interface-menu-link-btn {
+    @apply inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-base font-medium text-slate-700 transition-colors;
+  }
+
+  .legacy-interface-menu-link-btn:hover {
+    @apply bg-slate-100 text-slate-900;
+  }
+
+  .legacy-project-interface-content {
+    @apply min-h-0;
+  }
+
+  .legacy-interface-right-pane {
+    @apply flex min-h-full flex-col gap-4;
+  }
+
+  .legacy-interface-summary {
+    @apply mb-4 flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-slate-50/70 px-5 py-5;
+  }
+
+  .legacy-interface-summary-main {
+    @apply min-w-0;
+  }
+
+  .legacy-interface-summary-main > div:first-child {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .legacy-interface-summary-path {
+    @apply min-w-0 text-[28px] font-semibold tracking-tight text-slate-900;
+  }
+
+  .legacy-interface-summary .mantine-Badge-root {
+    @apply rounded-full;
+  }
+
+  .legacy-interface-summary-actions {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .legacy-interface-summary-actions .mantine-Button-root {
+    @apply rounded-full;
+  }
+
+  .legacy-interface-content-tabs [role='tablist'] {
+    @apply border-b border-slate-200;
+  }
+
+  .legacy-interface-content-tabs [role='tab'] {
+    @apply rounded-none border-b-2 border-transparent px-4 py-3 text-base font-medium text-slate-500;
+  }
+
+  .legacy-interface-content-tabs [role='tab'][data-active='true'] {
+    @apply border-blue-500 text-slate-900;
+  }
+
+  .legacy-method-pill {
+    @apply inline-flex h-6 min-w-[40px] items-center justify-center rounded-full px-2 text-[10px] font-semibold uppercase tracking-[0.08em];
+  }
+
+  .legacy-method-get {
+    @apply bg-emerald-100 text-emerald-700;
+  }
+
+  .legacy-method-post {
+    @apply bg-blue-100 text-blue-700;
+  }
+
+  .legacy-method-put,
+  .legacy-method-patch {
+    @apply bg-amber-100 text-amber-700;
+  }
+
+  .legacy-method-delete {
+    @apply bg-rose-100 text-rose-700;
+  }
+
+  .legacy-method-head,
+  .legacy-method-options {
+    @apply bg-slate-200 text-slate-700;
+  }
+}

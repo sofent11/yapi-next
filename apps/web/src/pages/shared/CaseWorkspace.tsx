@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Badge,
   Button,
-  Col,
-  Input,
-  InputNumber,
-  Row,
-  Space,
+  NumberInput,
+  SimpleGrid,
   Table,
-  Tag,
-  Typography,
-  message
-} from 'antd';
+  Text,
+  TextInput,
+  Textarea
+} from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import {
   useAddColCaseMutation,
   useAddColMutation,
@@ -25,8 +24,6 @@ import {
 } from '../../services/yapi-api';
 import { PageHeader, SectionCard } from '../../components/layout';
 import { getRequestErrorMessage } from '../../utils/request-error';
-
-const { Text } = Typography;
 
 type CaseWorkspaceProps = {
   title?: string;
@@ -48,6 +45,30 @@ function formatJsonInput(text: string): string | null {
   } catch (_err) {
     return null;
   }
+}
+
+function showNotification(color: 'teal' | 'red' | 'yellow', message: string) {
+  notifications.show({ color, message });
+}
+
+function ResultActions(props: {
+  text: string;
+  copyLabel: string;
+  onCopy: () => void;
+  onClear?: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button variant="default" size="compact-sm" disabled={!props.text.trim()} onClick={props.onCopy}>
+        复制响应
+      </Button>
+      {props.onClear ? (
+        <Button variant="default" size="compact-sm" disabled={!props.text.trim()} onClick={props.onClear}>
+          清空
+        </Button>
+      ) : null}
+    </div>
+  );
 }
 
 export function CaseWorkspace(props: CaseWorkspaceProps) {
@@ -87,20 +108,21 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
   const [runScript, runScriptState] = useRunColCaseScriptMutation();
   const [triggerDelCol, delColState] = useDelColMutation();
   const [triggerDelCase, delCaseState] = useDelColCaseMutation();
+
   const notifyRequestError = (error: unknown, fallback: string) => {
-    message.error(getRequestErrorMessage(error, fallback));
+    showNotification('red', getRequestErrorMessage(error, fallback));
   };
 
   async function copyToClipboard(text: string, label: string) {
     if (!text.trim()) {
-      message.warning(`${label}为空`);
+      showNotification('yellow', `${label}为空`);
       return;
     }
     try {
       await navigator.clipboard.writeText(text);
-      message.success(`${label}已复制`);
+      showNotification('teal', `${label}已复制`);
     } catch (_err) {
-      message.error('复制失败，请手动复制');
+      showNotification('red', '复制失败，请手动复制');
     }
   }
 
@@ -139,7 +161,7 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
 
   async function handleAddCol() {
     if (!colName.trim()) {
-      message.error('测试集名称不能为空');
+      showNotification('red', '测试集名称不能为空');
       return;
     }
     try {
@@ -150,10 +172,10 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
         desc: colDesc.trim() || undefined
       }).unwrap();
       if (response.errcode !== 0) {
-        message.error(response.errmsg || '创建测试集失败');
+        showNotification('red', response.errmsg || '创建测试集失败');
         return;
       }
-      message.success('测试集已创建');
+      showNotification('teal', '测试集已创建');
       await colListQuery.refetch();
     } catch (error) {
       notifyRequestError(error, '创建测试集失败');
@@ -168,10 +190,10 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
         token: token || undefined
       }).unwrap();
       if (response.errcode !== 0) {
-        message.error(response.errmsg || '删除测试集失败');
+        showNotification('red', response.errmsg || '删除测试集失败');
         return;
       }
-      message.success('测试集删除请求已执行');
+      showNotification('teal', '测试集删除请求已执行');
       await Promise.all([colListQuery.refetch(), caseListQuery.refetch()]);
     } catch (error) {
       notifyRequestError(error, '删除测试集失败');
@@ -186,10 +208,10 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
         token: token || undefined
       }).unwrap();
       if (response.errcode !== 0) {
-        message.error(response.errmsg || '删除测试用例失败');
+        showNotification('red', response.errmsg || '删除测试用例失败');
         return;
       }
-      message.success('测试用例删除请求已执行');
+      showNotification('teal', '测试用例删除请求已执行');
       if (selectedCaseId === caseId) {
         setSelectedCaseId('');
       }
@@ -201,15 +223,15 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
 
   async function handleAddCase() {
     if (selectedColId <= 0) {
-      message.error('请先选择测试集');
+      showNotification('red', '请先选择测试集');
       return;
     }
     if (caseInterfaceId <= 0) {
-      message.error('请输入 interface_id');
+      showNotification('red', '请输入 interface_id');
       return;
     }
     if (!caseName.trim()) {
-      message.error('用例名称不能为空');
+      showNotification('red', '用例名称不能为空');
       return;
     }
     try {
@@ -221,10 +243,10 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
         token: token || undefined
       }).unwrap();
       if (response.errcode !== 0) {
-        message.error(response.errmsg || '添加用例失败');
+        showNotification('red', response.errmsg || '添加用例失败');
         return;
       }
-      message.success('用例已添加');
+      showNotification('teal', '用例已添加');
       await caseListQuery.refetch();
     } catch (error) {
       notifyRequestError(error, '添加用例失败');
@@ -233,18 +255,18 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
 
   async function handleRunScript() {
     if (selectedColId <= 0) {
-      message.error('请先选择测试集');
+      showNotification('red', '请先选择测试集');
       return;
     }
     if (caseInterfaceId <= 0) {
-      message.error('请输入 interface_id');
+      showNotification('red', '请输入 interface_id');
       return;
     }
     let body: unknown;
     try {
       body = responseBody.trim() ? JSON.parse(responseBody) : {};
     } catch (_err) {
-      message.error('response.body 不是合法 JSON');
+      showNotification('red', 'response.body 不是合法 JSON');
       return;
     }
     try {
@@ -263,10 +285,10 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
       }).unwrap();
       setRunResultText(toJson(response));
       if (response.errcode === 0) {
-        message.success('run_script 执行成功');
+        showNotification('teal', 'run_script 执行成功');
         return;
       }
-      message.warning(response.errmsg || 'run_script 执行失败');
+      showNotification('yellow', response.errmsg || 'run_script 执行失败');
     } catch (error) {
       notifyRequestError(error, 'run_script 执行失败');
     }
@@ -275,11 +297,11 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
   function handleFormatResponseBody() {
     const formatted = formatJsonInput(responseBody);
     if (!formatted) {
-      message.error('response.body 不是合法 JSON，无法格式化');
+      showNotification('red', 'response.body 不是合法 JSON，无法格式化');
       return;
     }
     setResponseBody(formatted);
-    message.success('response.body 已格式化');
+    showNotification('teal', 'response.body 已格式化');
   }
 
   return (
@@ -287,230 +309,236 @@ export function CaseWorkspace(props: CaseWorkspaceProps) {
       <PageHeader title={props.title || 'Case Console'} subtitle={props.description} />
 
       <SectionCard title="连接参数" className="legacy-workspace-card">
-        <Row gutter={12}>
-          <Col xs={24} md={8}>
-            <Text>Project ID</Text>
-            <InputNumber
-              className="legacy-workspace-control-top"
-              min={1}
-              value={projectId}
-              onChange={value => setProjectId(Number(value || 0))}
-            />
-          </Col>
-          <Col xs={24} md={16}>
-            <Text>Token (私有项目建议填写)</Text>
-            <Input
-              className="legacy-workspace-field-top"
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+          <div>
+            <Text mb={6}>Project ID</Text>
+            <NumberInput min={1} value={projectId} onChange={value => setProjectId(Number(value || 0))} />
+          </div>
+          <div>
+            <Text mb={6}>Token (私有项目建议填写)</Text>
+            <TextInput
               value={token}
-              onChange={event => setToken(event.target.value)}
+              onChange={event => setToken(event.currentTarget.value)}
               placeholder="project token"
             />
-          </Col>
-        </Row>
+          </div>
+        </SimpleGrid>
       </SectionCard>
 
-      <Row gutter={16} className="legacy-workspace-row">
-        <Col xs={24} xl={12}>
-          <SectionCard title="测试集合" className="legacy-workspace-card">
-            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
-              <Input value={colName} onChange={event => setColName(event.target.value)} placeholder="测试集名称" />
-              <Input value={colDesc} onChange={event => setColDesc(event.target.value)} placeholder="测试集描述" />
-              <Button type="primary" onClick={handleAddCol} loading={addColState.isLoading}>
-                新建测试集
-              </Button>
-              <Table
-                size="small"
-                loading={colListQuery.isFetching}
-                pagination={false}
-                dataSource={colRows}
-                locale={{ emptyText: '暂无测试集合' }}
-                columns={[
-                  { title: 'ID', dataIndex: '_id', width: 90 },
-                  { title: 'Name', dataIndex: 'name' },
-                  {
-                    title: '操作',
-                    width: 170,
-                    render: (_value, row) => (
-                      <Space>
-                        <Button size="small" onClick={() => setSelectedColId(row._id)}>
-                          选择
-                        </Button>
-                        <Button
-                          size="small"
-                          danger
-                          loading={delColState.isLoading}
-                          onClick={() => handleDeleteCol(row._id)}
-                        >
-                          删除
-                        </Button>
-                      </Space>
-                    )
-                  }
-                ]}
-              />
-            </Space>
-          </SectionCard>
-        </Col>
-        <Col xs={24} xl={12}>
-          <SectionCard title={`测试用例 ${selectedColId > 0 ? `(col_id=${selectedColId})` : ''}`} className="legacy-workspace-card">
-            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
-              <Row gutter={8}>
-                <Col xs={24} md={10}>
-                  <InputNumber
-                    className="legacy-workspace-control"
-                    min={1}
-                    value={caseInterfaceId}
-                    onChange={value => setCaseInterfaceId(Number(value || 0))}
-                    placeholder="interface_id"
-                  />
-                </Col>
-                <Col xs={24} md={14}>
-                  <Input value={caseName} onChange={event => setCaseName(event.target.value)} placeholder="case 名称" />
-                </Col>
-              </Row>
-              <Button onClick={handleAddCase} loading={addCaseState.isLoading}>
-                添加用例
-              </Button>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <SectionCard title="测试集合" className="legacy-workspace-card">
+          <div className="space-y-3">
+            <TextInput value={colName} onChange={event => setColName(event.currentTarget.value)} placeholder="测试集名称" />
+            <TextInput value={colDesc} onChange={event => setColDesc(event.currentTarget.value)} placeholder="测试集描述" />
+            <Button onClick={handleAddCol} loading={addColState.isLoading}>
+              新建测试集
+            </Button>
+            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+              <Table striped highlightOnHover withTableBorder>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>ID</Table.Th>
+                    <Table.Th>Name</Table.Th>
+                    <Table.Th>操作</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {colRows.length === 0 ? (
+                    <Table.Tr>
+                      <Table.Td colSpan={3}>
+                        <div className="py-8 text-center text-sm text-slate-500">
+                          {colListQuery.isFetching ? '加载中...' : '暂无测试集合'}
+                        </div>
+                      </Table.Td>
+                    </Table.Tr>
+                  ) : (
+                    colRows.map(row => (
+                      <Table.Tr key={row.key}>
+                        <Table.Td>{row._id}</Table.Td>
+                        <Table.Td>{row.name}</Table.Td>
+                        <Table.Td>
+                          <div className="flex flex-wrap gap-2">
+                            <Button variant="default" size="compact-sm" onClick={() => setSelectedColId(row._id)}>
+                              选择
+                            </Button>
+                            <Button
+                              color="red"
+                              variant="light"
+                              size="compact-sm"
+                              loading={delColState.isLoading}
+                              onClick={() => handleDeleteCol(row._id)}
+                            >
+                              删除
+                            </Button>
+                          </div>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))
+                  )}
+                </Table.Tbody>
+              </Table>
+            </div>
+          </div>
+        </SectionCard>
 
-              <Table
-                size="small"
-                loading={caseListQuery.isFetching}
-                pagination={false}
-                dataSource={caseRows}
-                rowClassName={row => (selectedCaseId && row._id === selectedCaseId ? 'legacy-workspace-active-row' : '')}
-                locale={{ emptyText: selectedColId > 0 ? '该测试集暂无用例' : '请先选择测试集' }}
-                columns={[
-                  { title: 'Case ID', dataIndex: '_id', width: 180 },
-                  { title: 'Name', dataIndex: 'casename' },
-                  {
-                    title: 'Interface',
-                    width: 160,
-                    render: (_value, row) => <Tag>{row.interface_id}</Tag>
-                  },
-                  {
-                    title: '操作',
-                    width: 200,
-                    render: (_value, row) => (
-                      <Space>
-                        <Button
-                          size="small"
-                          onClick={() => {
-                            setSelectedCaseId(row._id);
-                            setCaseInterfaceId(row.interface_id);
-                          }}
-                        >
-                          选中
-                        </Button>
-                        <Button
-                          size="small"
-                          danger
-                          loading={delCaseState.isLoading}
-                          onClick={() => handleDeleteCase(row._id)}
-                        >
-                          删除
-                        </Button>
-                      </Space>
-                    )
-                  }
-                ]}
+        <SectionCard title={`测试用例 ${selectedColId > 0 ? `(col_id=${selectedColId})` : ''}`} className="legacy-workspace-card">
+          <div className="space-y-3">
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
+              <NumberInput
+                min={1}
+                value={caseInterfaceId}
+                onChange={value => setCaseInterfaceId(Number(value || 0))}
+                placeholder="interface_id"
               />
-            </Space>
-          </SectionCard>
-        </Col>
-      </Row>
+              <TextInput value={caseName} onChange={event => setCaseName(event.currentTarget.value)} placeholder="case 名称" />
+            </SimpleGrid>
+            <Button variant="default" onClick={handleAddCase} loading={addCaseState.isLoading}>
+              添加用例
+            </Button>
 
-      <Row gutter={16} className="legacy-workspace-row">
-        <Col xs={24} xl={12}>
-          <SectionCard title="run_script 验证" className="legacy-workspace-card">
-            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
-              <Alert
-                showIcon
-                type="info"
-                message={`selected_case=${selectedCaseId || '-'} / interface_id=${caseInterfaceId || '-'}`}
-              />
-              <InputNumber
-                className="legacy-workspace-control"
-                min={100}
-                max={599}
-                value={responseStatus}
-                onChange={value => setResponseStatus(Number(value || 200))}
-                placeholder="response.status"
-              />
-              <Input.TextArea
-                rows={4}
-                value={responseBody}
-                onChange={event => setResponseBody(event.target.value)}
-                placeholder='response.body (JSON), e.g. {"code":0}'
-              />
-              <Space className="legacy-workspace-result-actions" size={8}>
-                <Button size="small" onClick={handleFormatResponseBody} disabled={!responseBody.trim()}>
-                  格式化 Body JSON
-                </Button>
-              </Space>
-              <Input.TextArea
-                rows={3}
-                value={scriptText}
-                onChange={event => setScriptText(event.target.value)}
-                placeholder="assert.equal(body.code, 0)"
-              />
-              <Button type="primary" onClick={handleRunScript} loading={runScriptState.isLoading}>
-                执行 run_script
+            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+              <Table striped highlightOnHover withTableBorder>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Case ID</Table.Th>
+                    <Table.Th>Name</Table.Th>
+                    <Table.Th>Interface</Table.Th>
+                    <Table.Th>操作</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {caseRows.length === 0 ? (
+                    <Table.Tr>
+                      <Table.Td colSpan={4}>
+                        <div className="py-8 text-center text-sm text-slate-500">
+                          {selectedColId > 0 ? '该测试集暂无用例' : '请先选择测试集'}
+                        </div>
+                      </Table.Td>
+                    </Table.Tr>
+                  ) : (
+                    caseRows.map(row => (
+                      <Table.Tr
+                        key={row.key}
+                        className={selectedCaseId && row._id === selectedCaseId ? 'legacy-workspace-active-row' : undefined}
+                      >
+                        <Table.Td>{row._id}</Table.Td>
+                        <Table.Td>{row.casename}</Table.Td>
+                        <Table.Td><Badge variant="light">{String(row.interface_id)}</Badge></Table.Td>
+                        <Table.Td>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="default"
+                              size="compact-sm"
+                              onClick={() => {
+                                setSelectedCaseId(row._id);
+                                setCaseInterfaceId(row.interface_id);
+                              }}
+                            >
+                              选中
+                            </Button>
+                            <Button
+                              color="red"
+                              variant="light"
+                              size="compact-sm"
+                              loading={delCaseState.isLoading}
+                              onClick={() => handleDeleteCase(row._id)}
+                            >
+                              删除
+                            </Button>
+                          </div>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))
+                  )}
+                </Table.Tbody>
+              </Table>
+            </div>
+          </div>
+        </SectionCard>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <SectionCard title="run_script 验证" className="legacy-workspace-card">
+          <div className="space-y-3">
+            <Alert color="blue" title={`selected_case=${selectedCaseId || '-'} / interface_id=${caseInterfaceId || '-'}`} />
+            <NumberInput
+              min={100}
+              max={599}
+              value={responseStatus}
+              onChange={value => setResponseStatus(Number(value || 200))}
+              placeholder="response.status"
+            />
+            <Textarea
+              minRows={4}
+              autosize
+              value={responseBody}
+              onChange={event => setResponseBody(event.currentTarget.value)}
+              placeholder='response.body (JSON), e.g. {"code":0}'
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button variant="default" size="compact-sm" onClick={handleFormatResponseBody} disabled={!responseBody.trim()}>
+                格式化 Body JSON
               </Button>
-              <Space className="legacy-workspace-result-actions" size={8}>
+            </div>
+            <Textarea
+              minRows={3}
+              autosize
+              value={scriptText}
+              onChange={event => setScriptText(event.currentTarget.value)}
+              placeholder="assert.equal(body.code, 0)"
+            />
+            <Button onClick={handleRunScript} loading={runScriptState.isLoading}>
+              执行 run_script
+            </Button>
+            <ResultActions
+              text={runResultText}
+              copyLabel="run_script 响应"
+              onCopy={() => {
+                void copyToClipboard(runResultText, 'run_script 响应');
+              }}
+              onClear={() => setRunResultText('')}
+            />
+            <Textarea minRows={10} autosize readOnly value={runResultText} placeholder="run_script 响应" />
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Case 变量与环境视图" className="legacy-workspace-card">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Text fw={700}>case_env_list</Text>
                 <Button
-                  size="small"
-                  disabled={!runResultText.trim()}
+                  variant="default"
+                  size="compact-sm"
+                  disabled={!envListText.trim()}
                   onClick={() => {
-                    void copyToClipboard(runResultText, 'run_script 响应');
+                    void copyToClipboard(envListText, 'case_env_list 响应');
                   }}
                 >
                   复制响应
                 </Button>
-                <Button size="small" disabled={!runResultText.trim()} onClick={() => setRunResultText('')}>
-                  清空
+              </div>
+              <Textarea minRows={7} autosize readOnly value={envListText} placeholder="环境列表响应" />
+            </div>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Text fw={700}>case_list_by_var_params</Text>
+                <Button
+                  variant="default"
+                  size="compact-sm"
+                  disabled={!varCaseText.trim()}
+                  onClick={() => {
+                    void copyToClipboard(varCaseText, 'case_list_by_var_params 响应');
+                  }}
+                >
+                  复制响应
                 </Button>
-              </Space>
-              <Input.TextArea rows={10} readOnly value={runResultText} placeholder="run_script 响应" />
-            </Space>
-          </SectionCard>
-        </Col>
-        <Col xs={24} xl={12}>
-          <SectionCard title="Case 变量与环境视图" className="legacy-workspace-card">
-            <Space direction="vertical" className="legacy-workspace-stack" size={12}>
-              <Space className="legacy-workspace-result-head" align="center">
-                <Text strong>case_env_list</Text>
-                <Space className="legacy-workspace-result-actions" size={8}>
-                  <Button
-                    size="small"
-                    disabled={!envListText.trim()}
-                    onClick={() => {
-                      void copyToClipboard(envListText, 'case_env_list 响应');
-                    }}
-                  >
-                    复制响应
-                  </Button>
-                </Space>
-              </Space>
-              <Input.TextArea rows={7} readOnly value={envListText} placeholder="环境列表响应" />
-              <Space className="legacy-workspace-result-head" align="center">
-                <Text strong>case_list_by_var_params</Text>
-                <Space className="legacy-workspace-result-actions" size={8}>
-                  <Button
-                    size="small"
-                    disabled={!varCaseText.trim()}
-                    onClick={() => {
-                      void copyToClipboard(varCaseText, 'case_list_by_var_params 响应');
-                    }}
-                  >
-                    复制响应
-                  </Button>
-                </Space>
-              </Space>
-              <Input.TextArea rows={7} readOnly value={varCaseText} placeholder="变量参数视图响应" />
-            </Space>
-          </SectionCard>
-        </Col>
-      </Row>
+              </div>
+              <Textarea minRows={7} autosize readOnly value={varCaseText} placeholder="变量参数视图响应" />
+            </div>
+          </div>
+        </SectionCard>
+      </div>
     </div>
   );
 }

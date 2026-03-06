@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
-import type { FormInstance } from 'antd';
+import type { FormInstance } from 'rc-field-form';
 import type { NavigateFunction } from 'react-router-dom';
 import json5 from 'json5';
 import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
@@ -311,6 +311,8 @@ type UseProjectInterfaceEditSyncEffectsParams = {
 };
 
 export function useProjectInterfaceEditSyncEffects(params: UseProjectInterfaceEditSyncEffectsParams) {
+  const lastInitializedEditKeyRef = useRef('');
+
   useEffect(() => {
     const shouldWatchConflict = params.action === 'api' && params.interfaceId > 0 && params.tab === 'edit';
     if (!shouldWatchConflict) {
@@ -318,7 +320,6 @@ export function useProjectInterfaceEditSyncEffects(params: UseProjectInterfaceEd
       return;
     }
 
-    params.setEditConflictState({ status: 'loading' });
     let destroyed = false;
     let pollTimer: number | null = null;
 
@@ -392,10 +393,21 @@ export function useProjectInterfaceEditSyncEffects(params: UseProjectInterfaceEd
   }, [params.form, params.tab, params.watchedValues]);
 
   useEffect(() => {
-    if (!params.currentInterface) return;
+    if (!params.currentInterface) {
+      lastInitializedEditKeyRef.current = '';
+      return;
+    }
     const values = params.buildEditFormValues(params.currentInterface);
+    const nextBaseline = params.serializeEditValues(values);
+    const currentInterfaceId = Number(params.currentInterface._id || params.interfaceId || 0);
+    const nextEditKey = `${currentInterfaceId}:${nextBaseline}`;
+    if (lastInitializedEditKeyRef.current === nextEditKey) {
+      return;
+    }
+
+    lastInitializedEditKeyRef.current = nextEditKey;
     params.form.setFieldsValue(values);
-    params.setEditBaseline(params.serializeEditValues(values));
+    params.setEditBaseline(nextBaseline);
     params.setReqRadioType(supportsRequestBody(values.method) ? 'req-body' : 'req-query');
     params.setResEditorTab('tpl');
     params.setResPreviewText('');

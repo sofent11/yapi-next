@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { FormInstance } from 'antd';
+import type { FormInstance } from 'rc-field-form';
 import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
 
 import type { InterfaceTabItem } from '../../plugins';

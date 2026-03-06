@@ -1,11 +1,19 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Input, Space, Typography, message } from 'antd';
+import { Alert, Button, Card, Stack, Text, TextInput, Textarea } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useGetProjectEnvQuery, useUpdateProjectEnvMutation, useGetProjectQuery } from '../../../services/yapi-api';
 import { SectionCard } from '../../../components/layout';
 import { parseJsonArray, toJsonText } from '../ProjectSettingPage.utils';
 import type { EnvEditorItem, ProjectSettingPageProps } from '../ProjectSettingPage.types';
 
-const { Text } = Typography;
+const message = {
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  }
+};
 
 export function SettingEnvTab(props: ProjectSettingPageProps) {
   const envQuery = useGetProjectEnvQuery(
@@ -62,15 +70,15 @@ export function SettingEnvTab(props: ProjectSettingPageProps) {
 
   return (
     <SectionCard className="m-panel legacy-project-setting-card">
-      <Space direction="vertical" className="legacy-workspace-stack">
+      <Stack className="legacy-workspace-stack">
         <Alert
-          type="info"
-          showIcon
+          color="blue"
           className="legacy-setting-info-alert"
-          message="为不同环境维护域名、Header 与全局变量，便于调试时快速切换。"
+          title="为不同环境维护域名、Header 与全局变量，便于调试时快速切换。"
         />
-        <Space wrap>
+        <div className="flex flex-wrap gap-3">
           <Button
+            variant="default"
             onClick={() =>
               setEnvEditors(prev => [
                 ...prev,
@@ -86,75 +94,76 @@ export function SettingEnvTab(props: ProjectSettingPageProps) {
           >
             添加环境
           </Button>
-          <Button
-            type="primary"
-            onClick={() => void handleSaveEnv()}
-            loading={updateEnvState.isLoading}
-          >
+          <Button onClick={() => void handleSaveEnv()} loading={updateEnvState.isLoading}>
             保存环境
           </Button>
-        </Space>
-        {envEditors.length === 0 ? <Alert type="info" showIcon message="暂无环境，点击“添加环境”开始配置。" /> : null}
+        </div>
+        {envEditors.length === 0 ? (
+          <Alert color="blue" title="暂无环境，点击“添加环境”开始配置。" />
+        ) : null}
         {envEditors.map((item, index) => (
           <Card
             key={item.key}
-            title={`环境 ${index + 1}`}
-            extra={
+            withBorder
+            radius="lg"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <Text fw={600}>{`环境 ${index + 1}`}</Text>
               <Button
-                danger
+                color="red"
+                variant="light"
                 onClick={() => setEnvEditors(prev => prev.filter((_, i) => i !== index))}
               >
                 删除
               </Button>
-            }
-          >
-            <Space direction="vertical" className="legacy-workspace-stack">
-              <Input
+            </div>
+            <Stack className="legacy-workspace-stack">
+              <TextInput
                 value={item.name}
                 onChange={event =>
                   setEnvEditors(prev =>
-                    prev.map((env, i) => (i === index ? { ...env, name: event.target.value } : env))
+                    prev.map((env, i) => (i === index ? { ...env, name: event.currentTarget.value } : env))
                   )
                 }
                 placeholder="例如：开发环境…"
               />
-              <Input
+              <TextInput
                 value={item.domain}
                 onChange={event =>
                   setEnvEditors(prev =>
-                    prev.map((env, i) => (i === index ? { ...env, domain: event.target.value } : env))
+                    prev.map((env, i) => (i === index ? { ...env, domain: event.currentTarget.value } : env))
                   )
                 }
                 placeholder="例如：https://dev.example.com…"
               />
-              <Text type="secondary">Header(JSON 数组)</Text>
-              <Input.TextArea
-                rows={4}
+              <Text c="dimmed">Header(JSON 数组)</Text>
+              <Textarea
+                minRows={4}
                 value={item.headerText}
                 onChange={event =>
                   setEnvEditors(prev =>
                     prev.map((env, i) =>
-                      i === index ? { ...env, headerText: event.target.value } : env
+                      i === index ? { ...env, headerText: event.currentTarget.value } : env
                     )
                   )
                 }
               />
-              <Text type="secondary">Global(JSON 数组)</Text>
-              <Input.TextArea
-                rows={4}
+              <Text c="dimmed">Global(JSON 数组)</Text>
+              <Textarea
+                minRows={4}
                 value={item.globalText}
                 onChange={event =>
                   setEnvEditors(prev =>
                     prev.map((env, i) =>
-                      i === index ? { ...env, globalText: event.target.value } : env
+                      i === index ? { ...env, globalText: event.currentTarget.value } : env
                     )
                   )
                 }
               />
-            </Space>
+            </Stack>
           </Card>
         ))}
-      </Space>
+      </Stack>
     </SectionCard>
   );
 }

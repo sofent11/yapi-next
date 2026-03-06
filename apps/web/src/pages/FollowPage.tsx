@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import type { KeyboardEvent } from 'react';
-import { StarFilled } from '@ant-design/icons';
-import { Button, Card, Spin, Tooltip, message } from 'antd';
+import { ActionIcon, Card, Loader, Text, Tooltip } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { IconStarFilled } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useDelFollowMutation, useGetFollowListQuery } from '../services/yapi-api';
 import { renderProjectIcon, resolveProjectColor, resolveProjectColorKey } from '../utils/project-visual';
@@ -24,7 +25,7 @@ export function FollowPage() {
   async function handleDel(projectId: number) {
     const response = await delFollow({ projectid: projectId }).unwrap();
     if (response.errcode !== 0) {
-      message.error(response.errmsg || '取消关注失败');
+      notifications.show({ color: 'red', message: response.errmsg || '取消关注失败' });
       return;
     }
     await followQuery.refetch();
@@ -70,36 +71,39 @@ export function FollowPage() {
     return (
       <Card
         key={pid}
-        hoverable
-        className="legacy-follow-project-card"
+        radius="xl"
+        withBorder
+        className="cursor-pointer rounded-[24px] border border-slate-200 bg-white/95 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         onClick={handleNavigate}
         role="button"
         tabIndex={0}
         onKeyDown={handleCardKeydown}
-        extra={
-          <Tooltip placement="left" title="取消关注">
-            <Button
-              type="text"
-              className="legacy-follow-star-btn"
-              icon={<StarFilled />}
+      >
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className={logoClassName} style={colorKey ? undefined : { backgroundColor: color }}>
+            {renderProjectIcon(visual.icon)}
+          </div>
+          <Tooltip label="取消关注">
+            <ActionIcon
+              variant="light"
+              color="yellow"
+              radius="xl"
               aria-label={`取消关注 ${projectName}`}
               onClick={event => {
                 event.stopPropagation();
                 void handleDel(pid);
               }}
-            />
+            >
+              <IconStarFilled size={18} />
+            </ActionIcon>
           </Tooltip>
-        }
-      >
-        <div className="legacy-follow-project-head">
-          <div className={logoClassName} style={colorKey ? undefined : { backgroundColor: color }}>
-            {renderProjectIcon(visual.icon)}
-          </div>
         </div>
-        <div className="legacy-follow-project-title">{projectName}</div>
-        <div className="legacy-follow-project-meta">
-          <span>BasePath: {project.basepath ? String(project.basepath) : '/'}</span>
-          <span>更新于 {updatedAt}</span>
+        <div className="space-y-3">
+          <div className="text-lg font-semibold text-slate-900">{projectName}</div>
+          <div className="flex flex-col gap-1 text-sm text-slate-500">
+            <Text size="sm" c="dimmed">BasePath: {project.basepath ? String(project.basepath) : '/'}</Text>
+            <Text size="sm" c="dimmed">更新于 {updatedAt}</Text>
+          </div>
         </div>
       </Card>
     );
@@ -116,13 +120,13 @@ export function FollowPage() {
         className="legacy-follow-card"
       >
         {followQuery.isLoading ? (
-          <div className="legacy-page-loading">
-            <Spin />
+          <div className="flex min-h-[220px] items-center justify-center">
+            <Loader />
           </div>
         ) : rows.length === 0 ? (
           <LegacyErrMsg type="noFollow" />
         ) : (
-          <div className="legacy-follow-grid">{rows.map(item => renderProjectCard(item))}</div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{rows.map(item => renderProjectCard(item))}</div>
         )}
       </SectionCard>
     </AppShell>

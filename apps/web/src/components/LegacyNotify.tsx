@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert } from 'antd';
+import { Alert } from '@mantine/core';
 
 type LegacyNotifyProps = {
   enabled?: boolean;
@@ -49,21 +49,23 @@ export function LegacyNotify(props: LegacyNotifyProps) {
 
   return (
     <Alert
-      banner
-      closable
-      type="info"
-      message={
-        <div>
-          当前版本是：{currentVersion}&nbsp;&nbsp;可升级到：{latestVersion}&nbsp;&nbsp;&nbsp;
-          <a
-            target="_blank"
-            rel="noreferrer"
-            href="https://github.com/YMFE/yapi/blob/master/CHANGELOG.md"
-          >
-            版本详情
-          </a>
-        </div>
-      }
-    />
+      variant="light"
+      color="blue"
+      withCloseButton
+      className="mx-auto mt-4 w-full max-w-[1600px]"
+      title="版本提示"
+    >
+      <div>
+        当前版本是：{currentVersion}&nbsp;&nbsp;可升级到：{latestVersion}&nbsp;&nbsp;&nbsp;
+        <a
+          target="_blank"
+          rel="noreferrer"
+          href="https://github.com/YMFE/yapi/blob/master/CHANGELOG.md"
+          className="underline underline-offset-2"
+        >
+          版本详情
+        </a>
+      </div>
+    </Alert>
   );
 }

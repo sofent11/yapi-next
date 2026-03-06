@@ -4,7 +4,6 @@ import DataImportPanel from './components/DataImportPanel';
 import DataExportPanel from './components/DataExportPanel';
 import ImportTaskModal from './components/ImportTaskModal';
 import type { ProjectDataPageProps } from './ProjectDataPage.types';
-import './ProjectData.scss';
 
 export function ProjectDataPage(props: ProjectDataPageProps) {
   const [taskId, setTaskId] = useState('');

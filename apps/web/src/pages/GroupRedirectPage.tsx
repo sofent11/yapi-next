@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom';
-import { Spin } from 'antd';
+import { Loader, Text } from '@mantine/core';
 import { useGetGroupListQuery, useGetMyGroupQuery } from '../services/yapi-api';
 
 export function GroupRedirectPage() {
@@ -12,8 +12,8 @@ export function GroupRedirectPage() {
 
   if ((myGroupQuery.isLoading || groupListQuery.isLoading) && targetGroupId <= 0) {
     return (
-      <div className="loading-shell">
-        <Spin />
+      <div className="flex min-h-[240px] items-center justify-center">
+        <Loader />
       </div>
     );
   }
@@ -22,5 +22,9 @@ export function GroupRedirectPage() {
     return <Navigate to={`/group/${targetGroupId}`} replace />;
   }
 
-  return <div className="legacy-empty-hint">暂无可访问分组，请联系管理员分配权限。</div>;
+  return (
+    <div className="flex min-h-[260px] items-center justify-center">
+      <Text c="dimmed">暂无可访问分组，请联系管理员分配权限。</Text>
+    </div>
+  );
 }

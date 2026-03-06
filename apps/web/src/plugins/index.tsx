@@ -1,35 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ComponentType } from 'react';
 import type { AnyAction, Reducer } from '@reduxjs/toolkit';
-import {
-  Alert,
-  Button,
-  Card,
-  Descriptions,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Popconfirm,
-  Radio,
-  Select,
-  Space,
-  Spin,
-  Switch,
-  Table,
-  Tabs,
-  Tag,
-  Typography,
-  message
-} from 'antd';
-import type { ColumnsType } from 'antd/es/table';
 import { useParams } from 'react-router-dom';
 import type { LegacyRouteContract } from '../types/legacy-contract';
 
 import { isValidRouteContract } from './utils';
 export * from './utils';
-
-const { Text, Paragraph } = Typography;
 
 export type HeaderMenuItem = {
   path: string;

@@ -1,11 +1,22 @@
 import { useEffect } from 'react';
-import { Alert, Button, Form, Input, Switch, message } from 'antd';
+import { Alert, Button, Stack, Switch, Text, Textarea } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import RcForm, { Field, useForm as useRcForm } from 'rc-field-form';
 import { useGetProjectQuery, useUpdateProjectMutation } from '../../../services/yapi-api';
 import { SectionCard } from '../../../components/layout';
 import type { MockForm, ProjectSettingPageProps } from '../ProjectSettingPage.types';
 
+const message = {
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  }
+};
+
 export function SettingMockTab(props: ProjectSettingPageProps) {
-  const [mockForm] = Form.useForm<MockForm>();
+  const [mockForm] = useRcForm<MockForm>();
   const detailQuery = useGetProjectQuery(
     { projectId: props.projectId },
     { skip: props.projectId <= 0 }
@@ -39,29 +50,45 @@ export function SettingMockTab(props: ProjectSettingPageProps) {
 
   return (
     <SectionCard className="m-panel legacy-project-setting-card">
-      <Form<MockForm> form={mockForm} layout="vertical">
-        <Alert
-          showIcon
-          type="info"
-          className="legacy-setting-info-alert"
-          message="为整个项目统一定义 Mock 入口与全局脚本，适合需要稳定演示数据或联调兜底的场景。"
-        />
-        <Form.Item label="是否开启全局 Mock" name="is_mock_open" valuePropName="checked">
-          <Switch checkedChildren="开" unCheckedChildren="关" />
-        </Form.Item>
-        <Form.Item
-          label="Mock 脚本"
-          name="project_mock_script"
-          extra="脚本会作用于项目所有接口返回值，请保持逻辑简洁且可维护。"
-        >
-          <Input.TextArea rows={16} placeholder="在这里编写项目级 Mock 脚本…" />
-        </Form.Item>
-        <div className="legacy-setting-actions">
-          <Button className="btn-save" type="primary" size="large" onClick={() => void handleSaveMock()} loading={updateState.isLoading}>
-            保存 Mock 配置
-          </Button>
-        </div>
-      </Form>
+      <RcForm<MockForm> form={mockForm}>
+        <Stack>
+          <Alert
+            color="blue"
+            className="legacy-setting-info-alert"
+            title="为整个项目统一定义 Mock 入口与全局脚本，适合需要稳定演示数据或联调兜底的场景。"
+          />
+          <Field<MockForm> name="is_mock_open" valuePropName="checked">
+            {(control) => (
+              <Switch
+                label="是否开启全局 Mock"
+                checked={Boolean(control.value)}
+                onChange={event => control.onChange(event.currentTarget.checked)}
+              />
+            )}
+          </Field>
+          <Field<MockForm> name="project_mock_script">
+            {(control) => (
+              <div>
+                <Textarea
+                  label="Mock 脚本"
+                  minRows={16}
+                  value={control.value ?? ''}
+                  onChange={event => control.onChange(event.currentTarget.value)}
+                  placeholder="在这里编写项目级 Mock 脚本…"
+                />
+                <Text c="dimmed" size="sm" mt={6}>
+                  脚本会作用于项目所有接口返回值，请保持逻辑简洁且可维护。
+                </Text>
+              </div>
+            )}
+          </Field>
+          <div className="legacy-setting-actions">
+            <Button className="btn-save" size="md" onClick={() => void handleSaveMock()} loading={updateState.isLoading}>
+              保存 Mock 配置
+            </Button>
+          </div>
+        </Stack>
+      </RcForm>
     </SectionCard>
   );
 }

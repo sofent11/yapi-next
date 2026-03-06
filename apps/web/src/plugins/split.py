@@ -44,9 +44,28 @@ postman = get_block(1670, 1798)
 har = get_block(1800, 1872)
 yapi = get_block(1874, 1897)
 
-common_imports = """import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Spin, Switch, Table, Tabs, Tag, Typography, message } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
+common_imports = """import { useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Loader,
+  Modal,
+  NumberInput,
+  Radio,
+  Select,
+  Stack,
+  Switch,
+  Table,
+  Text,
+  TextInput,
+  Textarea,
+  Tabs
+} from '@mantine/core';
+import { modals } from '@mantine/modals';
+import { notifications } from '@mantine/notifications';
+import RcForm, { Field, List, useForm as useRcForm, useWatch } from 'rc-field-form';
 import json5 from 'json5';
 """
 

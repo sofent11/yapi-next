@@ -3,19 +3,20 @@ import {
   Alert,
   Button,
   Card,
-  Form,
-  Input,
   Modal,
   Popover,
   Radio,
   Select,
-  Space,
+  Stack,
   Switch,
-  Tooltip,
-  Typography,
-  message,
-} from 'antd';
-import { LockOutlined, QuestionCircleOutlined, UnlockOutlined } from '@ant-design/icons';
+  Text,
+  TextInput,
+  Textarea,
+  Tooltip
+} from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { IconHelpCircle, IconLock, IconLockOpen } from '@tabler/icons-react';
+import RcForm, { Field, useForm as useRcForm } from 'rc-field-form';
 import { useNavigate } from 'react-router-dom';
 import {
   useDelProjectMutation,
@@ -35,11 +36,18 @@ import { legacyNameValidator } from '../../../utils/legacy-validation';
 import { SectionCard } from '../../../components/layout';
 import type { ProjectForm, ProjectSettingPageProps } from '../ProjectSettingPage.types';
 
-const { Text } = Typography;
+const message = {
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  }
+};
 
 export function SettingGeneralTab(props: ProjectSettingPageProps) {
   const navigate = useNavigate();
-  const [projectForm] = Form.useForm<ProjectForm>();
+  const [projectForm] = useRcForm<ProjectForm>();
   const detailQuery = useGetProjectQuery(
     { projectId: props.projectId },
     { skip: props.projectId <= 0 }
@@ -62,7 +70,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
   const groupOptions = useMemo(
     () =>
       (groupListQuery.data?.data || []).map(item => ({
-        value: Number(item._id || 0),
+        value: String(Number(item._id || 0)),
         label: item.group_name
       })),
     [groupListQuery.data]
@@ -173,180 +181,227 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
   return (
     <SectionCard className="m-panel legacy-project-setting-card">
       <div className="legacy-project-setting-head legacy-project-setting-head-card">
-        <Popover
-          trigger="click"
-          placement="bottom"
-          overlayClassName="legacy-project-visual-popover"
-          title={
-            <Radio.Group
-              className="legacy-project-color-group"
-              value={projectColorKey}
-              onChange={event => void handleChangeProjectColor(String(event.target.value || ''))}
-              disabled={upsetState.isLoading}
-            >
-              {PROJECT_COLOR_OPTIONS.map(item => (
-                <Radio.Button
-                  key={item}
-                  value={item}
-                  className={`legacy-project-color-option legacy-project-color-${item}`}
-                >
-                  {projectColorKey === item ? '✓' : null}
-                </Radio.Button>
-              ))}
-            </Radio.Group>
-          }
-          content={
-            <Radio.Group
-              className="legacy-project-icon-group"
-              value={projectIconKey}
-              onChange={event => void handleChangeProjectIcon(String(event.target.value || ''))}
-              disabled={upsetState.isLoading}
-            >
-              {PROJECT_ICON_OPTIONS.map(item => (
-                <Radio.Button key={item} value={item} className="legacy-project-icon-option">
-                  {renderProjectIcon(item)}
-                </Radio.Button>
-              ))}
-            </Radio.Group>
-          }
-        >
-          <button type="button" className="legacy-project-setting-logo-btn">
-            <span
-              className={`legacy-project-setting-logo ${projectVisualColorClass}`.trim()}
-              title="点击修改项目图标和颜色"
-              style={projectVisualColorClass ? undefined : { backgroundColor: projectVisualColor }}
-            >
-              {renderProjectIcon(projectIconKey)}
-            </span>
-            <span className="legacy-project-setting-logo-mask">点击修改</span>
-          </button>
+        <Popover width={360} position="bottom" shadow="md">
+          <Popover.Target>
+            <button type="button" className="legacy-project-setting-logo-btn">
+              <span
+                className={`legacy-project-setting-logo ${projectVisualColorClass}`.trim()}
+                title="点击修改项目图标和颜色"
+                style={projectVisualColorClass ? undefined : { backgroundColor: projectVisualColor }}
+              >
+                {renderProjectIcon(projectIconKey)}
+              </span>
+              <span className="legacy-project-setting-logo-mask">点击修改</span>
+            </button>
+          </Popover.Target>
+          <Popover.Dropdown className="legacy-project-visual-popover">
+            <Stack gap="md">
+              <div>
+                <Text fw={600} mb="xs">颜色</Text>
+                <div className="legacy-project-color-group flex flex-wrap gap-2">
+                  {PROJECT_COLOR_OPTIONS.map(item => (
+                    <button
+                      key={item}
+                      type="button"
+                      className={`legacy-project-color-option legacy-project-color-${item}`}
+                      onClick={() => void handleChangeProjectColor(item)}
+                      disabled={upsetState.isLoading}
+                    >
+                      {projectColorKey === item ? '✓' : null}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Text fw={600} mb="xs">图标</Text>
+                <div className="legacy-project-icon-group flex flex-wrap gap-2">
+                  {PROJECT_ICON_OPTIONS.map(item => (
+                    <button
+                      key={item}
+                      type="button"
+                      className="legacy-project-icon-option"
+                      onClick={() => void handleChangeProjectIcon(item)}
+                      disabled={upsetState.isLoading}
+                    >
+                      {renderProjectIcon(item)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </Stack>
+          </Popover.Dropdown>
         </Popover>
 
         <div className="legacy-project-setting-head-info">
           <h2 className="legacy-project-setting-head-title">
             {(currentGroupName ? `${currentGroupName} / ` : '') + (project?.name || '')}
           </h2>
-          <Text type="secondary">点击图标可调整项目视觉样式，帮助团队更快识别项目。</Text>
+          <Text c="dimmed">点击图标可调整项目视觉样式，帮助团队更快识别项目。</Text>
         </div>
       </div>
       <Alert
-        showIcon
-        type="info"
+        color="blue"
         className="legacy-setting-info-alert"
-        message="这里维护项目基础信息、访问权限与行为开关，调整公开权限前请先确认协作范围。"
+        title="这里维护项目基础信息、访问权限与行为开关，调整公开权限前请先确认协作范围。"
       />
       <hr className="legacy-breakline" />
 
-      <Form<ProjectForm> className="legacy-project-setting-form" form={projectForm} onFinish={handleSubmit} labelCol={{ lg: { offset: 1, span: 3 }, xs: { span: 24 }, sm: { span: 6 } }} wrapperCol={{ lg: { span: 19 }, xs: { span: 24 }, sm: { span: 14 } }}>
-        <Form.Item label="项目ID" className="form-item">
-          <span>{project?._id || '-'}</span>
-        </Form.Item>
-        <Form.Item
-          label="项目名称"
-          name="name"
-          rules={[{ required: true, validator: legacyNameValidator('项目') }]}
-          className="form-item"
-        >
-          <Input placeholder="例如：支付中心 API…" />
-        </Form.Item>
-        <Form.Item
-          label="所属分组"
-          name="group_id"
-          rules={[{ required: true, message: '请选择所属分组' }]}
-          className="form-item"
-        >
-          <Select
-            options={groupOptions}
-            loading={groupListQuery.isLoading}
-            disabled={!canChangeProjectGroup}
-            placeholder="请选择所属分组…"
+      <RcForm<ProjectForm> className="legacy-project-setting-form" form={projectForm} onFinish={handleSubmit}>
+        <Stack gap="md">
+          <div className="form-item">
+            <Text fw={500}>项目ID</Text>
+            <Text>{String(project?._id || '-')}</Text>
+          </div>
+          <Field<ProjectForm> name="name" rules={[{ required: true, validator: legacyNameValidator('项目') }]}>
+            {(control, meta) => (
+              <TextInput
+                label="项目名称"
+                value={control.value ?? ''}
+                onChange={event => control.onChange(event.currentTarget.value)}
+                error={meta.errors[0]}
+                placeholder="例如：支付中心 API…"
+              />
+            )}
+          </Field>
+          <Field<ProjectForm> name="group_id" rules={[{ required: true, message: '请选择所属分组' }]}>
+            {(control, meta) => (
+              <Select
+                label="所属分组"
+                value={control.value ? String(control.value) : null}
+                onChange={value => control.onChange(value ? Number(value) : undefined)}
+                data={groupOptions}
+                disabled={!canChangeProjectGroup}
+                placeholder="请选择所属分组…"
+                error={meta.errors[0]}
+              />
+            )}
+          </Field>
+          <Field<ProjectForm> name="basepath">
+            {(control) => (
+              <TextInput
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    接口基本路径
+                    <Tooltip label="基本路径为空表示根路径">
+                      <IconHelpCircle size={16} />
+                    </Tooltip>
+                  </span>
+                }
+                value={control.value ?? ''}
+                onChange={event => control.onChange(event.currentTarget.value)}
+                placeholder="/api/v1…"
+              />
+            )}
+          </Field>
+          <TextInput
+            label={
+              <span className="inline-flex items-center gap-1">
+                MOCK地址
+                <Tooltip label="具体使用方法请查看文档">
+                  <IconHelpCircle size={16} />
+                </Tooltip>
+              </span>
+            }
+            value={mockUrl}
+            readOnly
           />
-        </Form.Item>
-        <Form.Item
-          label={
-            <span>
-              接口基本路径&nbsp;
-              <Tooltip title="基本路径为空表示根路径">
-                <QuestionCircleOutlined />
-              </Tooltip>
-            </span>
-          }
-          name="basepath"
-          className="form-item"
-        >
-          <Input placeholder="/api/v1…" />
-        </Form.Item>
-        <Form.Item
-          label={
-            <span>
-              MOCK地址&nbsp;
-              <Tooltip title="具体使用方法请查看文档">
-                <QuestionCircleOutlined />
-              </Tooltip>
-            </span>
-          }
-          className="form-item"
-        >
-          <Input value={mockUrl} disabled />
-        </Form.Item>
-        <Form.Item label="描述" name="desc" className="form-item">
-          <Input.TextArea rows={8} placeholder="简要说明项目职责、接口范围或协作说明…" />
-        </Form.Item>
-        <Form.Item
-          label={
-            <span>
-              mock严格模式&nbsp;
-              <Tooltip title="开启后 mock 请求会对 query、body form 必填字段和 json schema 进行校验">
-                <QuestionCircleOutlined />
-              </Tooltip>
-            </span>
-          }
-          name="strice"
-          valuePropName="checked"
-          className="form-item"
-        >
-          <Switch checkedChildren="开" unCheckedChildren="关" />
-        </Form.Item>
-        <Form.Item
-          label={
-            <span>
-              开启json5&nbsp;
-              <Tooltip title="开启后可在接口 body 和返回值中写 json 字段">
-                <QuestionCircleOutlined />
-              </Tooltip>
-            </span>
-          }
-          name="is_json5"
-          valuePropName="checked"
-          className="form-item"
-        >
-          <Switch checkedChildren="开" unCheckedChildren="关" />
-        </Form.Item>
-        <Form.Item label="默认开启消息通知" name="switch_notice" valuePropName="checked" className="form-item">
-          <Switch checkedChildren="开" unCheckedChildren="关" />
-        </Form.Item>
-        <Form.Item label="权限" name="project_type" className="form-item">
-          <Radio.Group
-            className="legacy-project-permission-group"
-            value={projectType}
-            onChange={event => setProjectType(event.target.value)}
-          >
-            <Radio value="private">
-              <LockOutlined /> 私有
-              <div className="legacy-radio-desc">只有组长和项目开发者可以索引并查看项目信息</div>
-            </Radio>
-            {canPublicProject ? (
-              <Radio value="public">
-                <UnlockOutlined /> 公开
-                <div className="legacy-radio-desc">任何人都可以索引并查看项目信息</div>
-              </Radio>
-            ) : null}
-          </Radio.Group>
-        </Form.Item>
-      </Form>
+          <Field<ProjectForm> name="desc">
+            {(control) => (
+              <Textarea
+                label="描述"
+                minRows={8}
+                value={control.value ?? ''}
+                onChange={event => control.onChange(event.currentTarget.value)}
+                placeholder="简要说明项目职责、接口范围或协作说明…"
+              />
+            )}
+          </Field>
+          <Field<ProjectForm> name="strice" valuePropName="checked">
+            {(control) => (
+              <Switch
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    mock严格模式
+                    <Tooltip label="开启后 mock 请求会对 query、body form 必填字段和 json schema 进行校验">
+                      <IconHelpCircle size={16} />
+                    </Tooltip>
+                  </span>
+                }
+                checked={Boolean(control.value)}
+                onChange={event => control.onChange(event.currentTarget.checked)}
+              />
+            )}
+          </Field>
+          <Field<ProjectForm> name="is_json5" valuePropName="checked">
+            {(control) => (
+              <Switch
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    开启json5
+                    <Tooltip label="开启后可在接口 body 和返回值中写 json 字段">
+                      <IconHelpCircle size={16} />
+                    </Tooltip>
+                  </span>
+                }
+                checked={Boolean(control.value)}
+                onChange={event => control.onChange(event.currentTarget.checked)}
+              />
+            )}
+          </Field>
+          <Field<ProjectForm> name="switch_notice" valuePropName="checked">
+            {(control) => (
+              <Switch
+                label="默认开启消息通知"
+                checked={Boolean(control.value)}
+                onChange={event => control.onChange(event.currentTarget.checked)}
+              />
+            )}
+          </Field>
+          <Field<ProjectForm> name="project_type">
+            {(control) => (
+              <Radio.Group
+                label="权限"
+                className="legacy-project-permission-group"
+                value={control.value || projectType}
+                onChange={value => {
+                  setProjectType(value as 'public' | 'private');
+                  control.onChange(value);
+                }}
+              >
+                <Stack gap="sm" mt="xs">
+                  <Radio
+                    value="private"
+                    label={
+                      <div>
+                        <span className="inline-flex items-center gap-1">
+                          <IconLock size={16} /> 私有
+                        </span>
+                        <div className="legacy-radio-desc">只有组长和项目开发者可以索引并查看项目信息</div>
+                      </div>
+                    }
+                  />
+                  {canPublicProject ? (
+                    <Radio
+                      value="public"
+                      label={
+                        <div>
+                          <span className="inline-flex items-center gap-1">
+                            <IconLockOpen size={16} /> 公开
+                          </span>
+                          <div className="legacy-radio-desc">任何人都可以索引并查看项目信息</div>
+                        </div>
+                      }
+                    />
+                  ) : null}
+                </Stack>
+              </Radio.Group>
+            )}
+          </Field>
+        </Stack>
+      </RcForm>
 
       <div className="legacy-setting-actions">
-        <Button className="btn-save" type="primary" size="large" onClick={() => void projectForm.submit()} loading={updateState.isLoading}>
+        <Button className="btn-save" size="md" onClick={() => void projectForm.submit()} loading={updateState.isLoading}>
           保存项目配置
         </Button>
       </div>
@@ -355,17 +410,17 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
         <div className="legacy-danger-zone">
           <div className="legacy-group-danger-header">
             <div className="legacy-group-danger-title">
-              <QuestionCircleOutlined />
+              <IconHelpCircle size={16} />
               危险操作
             </div>
           </div>
-          <Card className="card-danger">
+          <Card className="card-danger" withBorder>
             <div className="card-danger-content">
               <h3>删除项目</h3>
               <p className="legacy-group-danger-desc">项目一旦删除，将无法恢复数据，请慎重操作。</p>
               <p className="legacy-group-danger-desc">只有组长和管理员有权限删除项目。</p>
             </div>
-            <Button type="primary" danger ghost className="card-danger-btn" onClick={() => setDeleteModalOpen(true)}>
+            <Button color="red" variant="outline" className="card-danger-btn" onClick={() => setDeleteModalOpen(true)}>
               删除
             </Button>
           </Card>
@@ -374,28 +429,35 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
 
       <Modal
         title={`确认删除 ${projectName} 项目吗？`}
-        open={deleteModalOpen}
-        onCancel={() => {
+        opened={deleteModalOpen}
+        onClose={() => {
           setDeleteModalOpen(false);
           setDeleteConfirmText('');
         }}
-        onOk={() => void handleDeleteProject()}
-        okText="确认删除"
-        okButtonProps={{ danger: true, loading: delState.isLoading }}
       >
-        <Space direction="vertical" className="legacy-workspace-stack">
-          <Alert
-            type="warning"
-            showIcon
-            message="该操作会删除项目下所有接口与相关数据，且无法恢复。"
-          />
+        <Stack className="legacy-workspace-stack">
+          <Alert color="yellow" title="该操作会删除项目下所有接口与相关数据，且无法恢复。" />
           <Text>请输入项目名称以确认删除：</Text>
-          <Input
+          <TextInput
             value={deleteConfirmText}
-            onChange={event => setDeleteConfirmText(event.target.value)}
+            onChange={event => setDeleteConfirmText(event.currentTarget.value)}
             placeholder={`输入 ${projectName} 以确认删除…`}
           />
-        </Space>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="default"
+              onClick={() => {
+                setDeleteModalOpen(false);
+                setDeleteConfirmText('');
+              }}
+            >
+              取消
+            </Button>
+            <Button color="red" loading={delState.isLoading} onClick={() => void handleDeleteProject()}>
+              确认删除
+            </Button>
+          </div>
+        </Stack>
       </Modal>
     </SectionCard>
   );

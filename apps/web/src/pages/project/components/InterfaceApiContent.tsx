@@ -1,5 +1,5 @@
-import { Card } from 'antd';
-import type { FormInstance } from 'antd';
+import { Card, Loader } from '@mantine/core';
+import type { FormInstance } from 'rc-field-form';
 import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
 import type { InterfaceTabItem } from '../../../plugins';
 import { LegacyErrMsg } from '../../../components/LegacyErrMsg';
@@ -138,7 +138,13 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
   }
 
   if (props.detailLoading) {
-    return <Card loading />;
+    return (
+      <Card padding="lg" radius="lg" withBorder>
+        <div className="flex justify-center py-10">
+          <Loader />
+        </div>
+      </Card>
+    );
   }
 
   if (!props.currentInterface) {

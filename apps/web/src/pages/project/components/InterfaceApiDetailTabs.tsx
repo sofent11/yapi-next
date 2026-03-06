@@ -1,6 +1,5 @@
-import { Button, Card, Space, Tabs, Tag, Typography } from 'antd';
-import type { FormInstance } from 'antd';
-import type { TabsProps } from 'antd';
+import { Badge, Button, Card, Tabs, Text } from '@mantine/core';
+import type { FormInstance } from 'rc-field-form';
 import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
 import type { InterfaceTabItem } from '../../../plugins';
 import { InterfaceEditTab } from './InterfaceEditTab';
@@ -97,7 +96,7 @@ export function InterfaceApiDetailTabs(props: InterfaceApiDetailTabsProps) {
     ? ((props.currentInterface as unknown as Record<string, unknown>).tag as unknown[]).length
     : 0;
 
-  const items: TabsProps['items'] = Object.keys(props.interfaceTabs).flatMap(key => {
+  const items = Object.keys(props.interfaceTabs).flatMap(key => {
     const tabItem = props.interfaceTabs[key];
     if (key === 'view') {
       return [{
@@ -221,38 +220,48 @@ export function InterfaceApiDetailTabs(props: InterfaceApiDetailTabsProps) {
   });
 
   return (
-    <Card>
+    <Card padding="lg" radius="lg" withBorder>
       <div className="legacy-interface-summary">
         <div className="legacy-interface-summary-main">
-          <Space size={[8, 8]} wrap>
+          <div className="flex flex-wrap items-center gap-2">
             <span className={props.methodClassName(props.method)}>{props.method}</span>
-            <Typography.Text className="legacy-interface-summary-path" copyable={{ text: props.fullPath }}>
+            <Text className="legacy-interface-summary-path">
               {props.fullPath}
-            </Typography.Text>
-            <Tag bordered={false} color={props.currentInterface.status === 'done' ? 'success' : 'default'}>
+            </Text>
+            <Badge color={props.currentInterface.status === 'done' ? 'green' : 'gray'}>
               {statusText}
-            </Tag>
-            <Tag bordered={false}>{`更新于 ${updatedAt}`}</Tag>
+            </Badge>
+            <Badge variant="light">{`更新于 ${updatedAt}`}</Badge>
             {tagCount > 0 ? (
-              <Tag bordered={false} color="blue">
+              <Badge color="blue" variant="light">
                 {`${tagCount} 个标签`}
-              </Tag>
+              </Badge>
             ) : null}
-          </Space>
+          </div>
         </div>
         <div className="legacy-interface-summary-actions">
-          <Button size="small" onClick={() => props.onCopyText(props.mockUrl, 'Mock 地址已复制')}>
+          <Button size="compact-sm" variant="default" onClick={() => props.onCopyText(props.fullPath, '接口路径已复制')}>
+            复制路径
+          </Button>
+          <Button size="compact-sm" onClick={() => props.onCopyText(props.mockUrl, 'Mock 地址已复制')}>
             复制 Mock URL
           </Button>
         </div>
       </div>
-      <Tabs
-        type="card"
-        className="legacy-interface-content-tabs"
-        activeKey={props.tab}
-        onChange={key => props.onSwitchTab(key)}
-        items={items}
-      />
+      <Tabs className="legacy-interface-content-tabs" value={props.tab} onChange={key => key && props.onSwitchTab(key)}>
+        <Tabs.List>
+          {items.map(item => (
+            <Tabs.Tab key={item.key} value={item.key}>
+              {item.label}
+            </Tabs.Tab>
+          ))}
+        </Tabs.List>
+        {items.map(item => (
+          <Tabs.Panel key={item.key} value={item.key} pt="md">
+            {item.children}
+          </Tabs.Panel>
+        ))}
+      </Tabs>
     </Card>
   );
 }

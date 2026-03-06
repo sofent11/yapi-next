@@ -1,6 +1,6 @@
 import { Suspense, lazy, useMemo, type ComponentType } from 'react';
 import { matchPath, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { Alert, Button, Layout, Result, Spin } from 'antd';
+import { Alert, Button, Center, Loader, Stack, Title } from '@mantine/core';
 import { useGetUserStatusQuery } from './services/yapi-api';
 import { LegacyHeader } from './components/LegacyHeader';
 import { LegacyFooter } from './components/LegacyFooter';
@@ -8,9 +8,12 @@ import { LegacyNotify } from './components/LegacyNotify';
 import { LegacyGuideProvider } from './context/LegacyGuideContext';
 import { webPlugins } from './plugins';
 import type { LegacyRouteContract } from './types/legacy-contract';
-import './styles.css';
 
-const { Content } = Layout;
+const pageShellClassName = 'min-h-screen bg-slate-50 text-slate-900 flex flex-col';
+const contentClassName = 'flex-1 px-6 py-6';
+const skipLinkClassName =
+  'sr-only focus:not-sr-only focus:absolute focus:left-6 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow';
+const browserHintClassName = 'mb-4';
 
 function createLazyRouteComponent(
   loader: () => Promise<{ default: ComponentType<any> }>
@@ -62,24 +65,56 @@ function shouldShowBrowserHint(): boolean {
 
 function LoadingView() {
   return (
-    <div className="loading-shell">
-      <Spin />
-    </div>
+    <Center className="min-h-[240px]">
+      <Loader size="lg" />
+    </Center>
   );
 }
 
 function StatusErrorView(props: { onRetry: () => void }) {
   return (
-    <Result
-      status="warning"
-      title="登录状态检查失败"
-      subTitle="网络或服务暂时不可用，请重试。"
-      extra={
-        <Button type="primary" onClick={props.onRetry}>
-          重试
-        </Button>
-      }
-    />
+    <Center className="min-h-[260px]">
+      <Stack align="center" gap="xs">
+        <Title order={4}>登录状态检查失败</Title>
+        <p className="text-sm text-slate-600">网络或服务暂时不可用，请重试。</p>
+        <Button onClick={props.onRetry}>重试</Button>
+      </Stack>
+    </Center>
+  );
+}
+
+function BrowserHint({ message }: { message: string }) {
+  return (
+    <Alert color="yellow" title="浏览器提示" className={browserHintClassName}>
+      {message}
+    </Alert>
+  );
+}
+
+function SkipLink() {
+  return (
+    <a href="#app-main-content" className={skipLinkClassName}>
+      跳转到主内容
+    </a>
+  );
+}
+
+function AppContent({ children }: { children: React.ReactNode }) {
+  return (
+    <main id="app-main-content" role="main" tabIndex={-1} className={contentClassName}>
+      {children}
+    </main>
+  );
+}
+
+function AppShell({ children }: { children: React.ReactNode }) {
+  return <div className={pageShellClassName}>{children}</div>;
+}
+
+function renderBrowserHint(show: boolean) {
+  if (!show) return null;
+  return (
+    <BrowserHint message="YApi 的接口测试等功能仅支持 Chrome 浏览器，请使用 Chrome 浏览器获得完整功能。" />
   );
 }
 
@@ -167,28 +202,20 @@ export function App() {
 
   if (!isLoggedIn) {
     return (
-      <>
-        <a href="#app-main-content" className="legacy-skip-link">
-          跳转到主内容
-        </a>
-        {browserHint ? (
-          <Alert
-            banner
-            closable
-            type="warning"
-            message="YApi 的接口测试等功能仅支持 Chrome 浏览器，请使用 Chrome 浏览器获得完整功能。"
-            className="legacy-browser-hint"
-          />
-        ) : null}
+      <AppShell>
+        <SkipLink />
+        {renderBrowserHint(browserHint)}
         <Suspense fallback={<LoadingView />}>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/login" element={<LoginPage />} />
-            {renderRoutes(appRoutes, 'public')}
-            <Route path="*" element={<Navigate to={redirectToLogin} replace />} />
-          </Routes>
+          <AppContent>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/login" element={<LoginPage />} />
+              {renderRoutes(appRoutes, 'public')}
+              <Route path="*" element={<Navigate to={redirectToLogin} replace />} />
+            </Routes>
+          </AppContent>
         </Suspense>
-      </>
+      </AppShell>
     );
   }
 
@@ -197,10 +224,8 @@ export function App() {
       uid={Number(user?._id || user?.uid || 0)}
       study={Boolean((user as unknown as Record<string, unknown> | null)?.study)}
     >
-      <Layout className="legacy-app-root">
-        <a href="#app-main-content" className="legacy-skip-link">
-          跳转到主内容
-        </a>
+      <AppShell>
+        <SkipLink />
         <LegacyHeader
           uid={Number(user?._id || user?.uid || 0)}
           username={user?.username}
@@ -209,27 +234,19 @@ export function App() {
           study={Boolean((user as unknown as Record<string, unknown> | null)?.study)}
         />
         <LegacyNotify enabled={String(user?.role || '') === 'admin'} />
-        {browserHint ? (
-          <Alert
-            banner
-            closable
-            type="warning"
-            message="YApi 的接口测试等功能仅支持 Chrome 浏览器，请使用 Chrome 浏览器获得完整功能。"
-            className="legacy-browser-hint"
-          />
-        ) : null}
-        <Content className="legacy-content-wrap" id="app-main-content" role="main" tabIndex={-1}>
-          <Suspense fallback={<LoadingView />}>
+        {renderBrowserHint(browserHint)}
+        <Suspense fallback={<LoadingView />}>
+          <AppContent>
             <Routes>
               <Route path="/" element={<Navigate to="/group" replace />} />
               <Route path="/login" element={<Navigate to="/group" replace />} />
               {renderRoutes(appRoutes, 'all')}
               <Route path="*" element={<Navigate to="/group" replace />} />
             </Routes>
-          </Suspense>
-        </Content>
+          </AppContent>
+        </Suspense>
         <LegacyFooter />
-      </Layout>
+      </AppShell>
     </LegacyGuideProvider>
   );
 }

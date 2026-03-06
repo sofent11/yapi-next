@@ -1,18 +1,16 @@
-import { Button, Empty, Input, Space, Tag, Tooltip, Typography } from 'antd';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
+import { Badge, Button, Text, TextInput, Tooltip } from '@mantine/core';
 import {
-  CopyOutlined,
-  DeleteOutlined,
-  DownOutlined,
-  EditOutlined,
-  PlusOutlined,
-  RightOutlined,
-  SearchOutlined
-} from '@ant-design/icons';
+  IconChevronDown,
+  IconChevronRight,
+  IconCopy,
+  IconPlus,
+  IconSearch,
+  IconTrash,
+  IconEdit
+} from '@tabler/icons-react';
 import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
 import { FilterBar } from '../../../components/layout';
-
-const { Text } = Typography;
 
 type InterfaceMenuPanelProps = {
   menuKeyword: string;
@@ -45,16 +43,31 @@ type InterfaceMenuPanelProps = {
   methodClassName: (method?: string) => string;
 };
 
+function IconButton(props: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      className="legacy-interface-icon-btn"
+      onClick={event => {
+        event.preventDefault();
+        event.stopPropagation();
+        props.onClick();
+      }}
+      aria-label={props.label}
+    >
+      {props.children}
+    </button>
+  );
+}
+
 export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
   const keywordMode = props.menuKeyword.trim().length > 0;
   const totalInterfaceCount = props.menuDisplayRows.reduce(
     (sum, cat) => sum + Number(cat.interface_count || cat.list?.length || 0),
     0
   );
-  const triggerWithKeyboard = (
-    event: KeyboardEvent<HTMLElement>,
-    handler: () => void
-  ) => {
+
+  const triggerWithKeyboard = (event: KeyboardEvent<HTMLElement>, handler: () => void) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       event.stopPropagation();
@@ -68,57 +81,48 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
         <FilterBar
           className="legacy-interface-filter"
           left={
-            <Input
+            <TextInput
               value={props.menuKeyword}
-              onChange={event => props.onMenuKeywordChange(event.target.value)}
+              onChange={event => props.onMenuKeywordChange(event.currentTarget.value)}
               placeholder="搜索接口"
-              prefix={<SearchOutlined />}
-              allowClear
+              leftSection={<IconSearch size={16} />}
               className="legacy-interface-filter-input"
             />
           }
           right={
-            <Space className="legacy-interface-filter-actions" size={8}>
-              <button
-                type="button"
-                className="legacy-interface-menu-link-btn"
-                onClick={props.onNavigateAll}
-              >
+            <div className="legacy-interface-filter-actions flex flex-wrap items-center gap-2">
+              <button type="button" className="legacy-interface-menu-link-btn" onClick={props.onNavigateAll}>
                 全部接口
               </button>
               {props.canEdit ? (
                 <>
-                  <Button
-                    icon={<PlusOutlined />}
-                    onClick={props.onOpenAddInterface}
-                    disabled={!props.hasCategories}
-                  >
+                  <Button size="xs" onClick={props.onOpenAddInterface} disabled={!props.hasCategories} leftSection={<IconPlus size={14} />}>
                     接口
                   </Button>
-                  <Button icon={<PlusOutlined />} onClick={props.onOpenAddCat}>
+                  <Button size="xs" variant="default" onClick={props.onOpenAddCat} leftSection={<IconPlus size={14} />}>
                     分类
                   </Button>
                 </>
               ) : null}
-            </Space>
+            </div>
           }
         />
       </div>
+
       <div className="legacy-interface-menu-summary">
-        <Text type="secondary">
+        <Text c="dimmed" size="sm">
           {keywordMode ? '筛选结果：' : ''}
           {props.menuDisplayRows.length} 个分类，{totalInterfaceCount} 个接口
         </Text>
       </div>
+
       <div className="legacy-interface-menu-list">
         {props.menuDisplayRows.length === 0 ? (
-          <div className="legacy-interface-menu-empty">
-            <Empty
-              description={keywordMode ? '未找到匹配的接口分类或接口' : '暂无接口分类'}
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-            />
+          <div className="legacy-interface-menu-empty py-10 text-center">
+            <Text c="dimmed">{keywordMode ? '未找到匹配的接口分类或接口' : '暂无接口分类'}</Text>
           </div>
         ) : null}
+
         {props.menuDisplayRows.map(cat => {
           const catIdNum = Number(cat._id || 0);
           const expanded = keywordMode || props.expandedCatIds.includes(catIdNum);
@@ -174,64 +178,37 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
                     aria-label={expanded ? '收起分类' : '展开分类'}
                     aria-expanded={expanded}
                   >
-                    {expanded ? <DownOutlined /> : <RightOutlined />}
+                    {expanded ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
                   </button>
                   <span className="legacy-interface-cat-name">{cat.name}</span>
                 </span>
-                <Space size={4} className="legacy-interface-cat-actions">
+
+                <div className="legacy-interface-cat-actions flex items-center gap-1">
                   {props.canEdit ? (
                     <>
-                      <button
-                        type="button"
-                        className="legacy-interface-icon-btn"
-                        onClick={event => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          props.onOpenAddInterfaceInCat(catIdNum);
-                        }}
-                        aria-label="在分类下新增接口"
+                      <IconButton
+                        label="在分类下新增接口"
+                        onClick={() => props.onOpenAddInterfaceInCat(catIdNum)}
                       >
-                        <PlusOutlined />
-                      </button>
-                      <button
-                        type="button"
-                        className="legacy-interface-icon-btn"
-                        onClick={event => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          props.onEditCat(cat);
-                        }}
-                        aria-label="编辑分类"
-                      >
-                        <EditOutlined />
-                      </button>
-                      <button
-                        type="button"
-                        className="legacy-interface-icon-btn"
-                        onClick={event => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          props.onDeleteCat(cat);
-                        }}
-                        aria-label="删除分类"
-                      >
-                        <DeleteOutlined />
-                      </button>
+                        <IconPlus size={14} />
+                      </IconButton>
+                      <IconButton label="编辑分类" onClick={() => props.onEditCat(cat)}>
+                        <IconEdit size={14} />
+                      </IconButton>
+                      <IconButton label="删除分类" onClick={() => props.onDeleteCat(cat)}>
+                        <IconTrash size={14} />
+                      </IconButton>
                     </>
                   ) : null}
-                  <Tag>{cat.interface_count || cat.list?.length || 0}</Tag>
-                </Space>
+                  <Badge variant="light" color="gray">{cat.interface_count || cat.list?.length || 0}</Badge>
+                </div>
               </div>
 
               {shouldShowInterfaces && visibleInterfaces.length === 0 && catLoading ? (
-                <div className="legacy-interface-tip">
-                  加载接口中...
-                </div>
+                <div className="legacy-interface-tip">加载接口中...</div>
               ) : null}
               {shouldShowInterfaces && visibleInterfaces.length === 0 && !catLoading ? (
-                <div className="legacy-interface-tip">
-                  暂无接口
-                </div>
+                <div className="legacy-interface-tip">暂无接口</div>
               ) : null}
 
               {visibleInterfaces.map(item => {
@@ -266,38 +243,18 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
                     <span className={props.methodClassName(item.method)}>
                       {String(item.method || 'GET').toUpperCase()}
                     </span>
-                    <Tooltip title={item.path}>
-                      <span className="legacy-interface-item-title">
-                        {item.title || item.path}
-                      </span>
+                    <Tooltip label={item.path}>
+                      <span className="legacy-interface-item-title">{item.title || item.path}</span>
                     </Tooltip>
                     {props.canEdit ? (
-                      <Space size={4} className="legacy-interface-item-actions">
-                        <button
-                          type="button"
-                          className="legacy-interface-icon-btn"
-                          onClick={event => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            props.onCopyInterface(item);
-                          }}
-                          aria-label="复制接口"
-                        >
-                          <CopyOutlined />
-                        </button>
-                        <button
-                          type="button"
-                          className="legacy-interface-icon-btn"
-                          onClick={event => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            props.onDeleteInterface(interfaceId);
-                          }}
-                          aria-label="删除接口"
-                        >
-                          <DeleteOutlined />
-                        </button>
-                      </Space>
+                      <div className="legacy-interface-item-actions flex items-center gap-1">
+                        <IconButton label="复制接口" onClick={() => props.onCopyInterface(item)}>
+                          <IconCopy size={14} />
+                        </IconButton>
+                        <IconButton label="删除接口" onClick={() => props.onDeleteInterface(interfaceId)}>
+                          <IconTrash size={14} />
+                        </IconButton>
+                      </div>
                     ) : null}
                   </div>
                 );

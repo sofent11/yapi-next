@@ -1,9 +1,7 @@
-import { Alert, Button, Input, Select, Space, Typography } from 'antd';
-import { ClearOutlined, CopyOutlined, FormatPainterOutlined } from '@ant-design/icons';
+import { Alert, Button, Select, Text, TextInput, Textarea } from '@mantine/core';
+import { IconBrush, IconCopy, IconTrash } from '@tabler/icons-react';
 import { SectionCard } from '../../../components/layout';
 import { getHttpMethodBadgeClassName } from '../../../utils/http-method';
-
-const { Text } = Typography;
 
 type InterfaceRunTabProps = {
   runMethod: string;
@@ -33,6 +31,30 @@ type InterfaceRunTabProps = {
   onClearResponse: () => void;
 };
 
+function ActionGroup(props: {
+  onFormat?: () => void;
+  onCopy: () => void;
+  onClear: () => void;
+  disableCopy?: boolean;
+  disableClear?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {props.onFormat ? (
+        <Button size="compact-sm" variant="default" leftSection={<IconBrush size={14} />} onClick={props.onFormat}>
+          格式化
+        </Button>
+      ) : null}
+      <Button size="compact-sm" variant="default" leftSection={<IconCopy size={14} />} onClick={props.onCopy} disabled={props.disableCopy}>
+        复制
+      </Button>
+      <Button size="compact-sm" variant="default" leftSection={<IconTrash size={14} />} onClick={props.onClear} disabled={props.disableClear}>
+        清空
+      </Button>
+    </div>
+  );
+}
+
 export function InterfaceRunTab(props: InterfaceRunTabProps) {
   const methodSelectOptions = props.runMethods.map(item => ({
     value: item,
@@ -40,117 +62,72 @@ export function InterfaceRunTab(props: InterfaceRunTabProps) {
   }));
 
   return (
-    <div className="legacy-interface-run-tab">
+    <div className="legacy-interface-run-tab space-y-4">
       <SectionCard title="请求调试" className="legacy-run-card">
-        <Space wrap className="legacy-run-toolbar">
-          <Select
-            value={props.runMethod}
-            onChange={props.onSetRunMethod}
-            className="legacy-run-method-select"
-            options={methodSelectOptions}
-          />
-          <Input
-            value={props.runPath}
-            onChange={event => props.onSetRunPath(event.target.value)}
-            className="legacy-run-path-input"
-            placeholder="/api/example"
-          />
-          <Button type="primary" loading={props.runLoading} onClick={props.onRun}>
-            发送请求
-          </Button>
-          <Button onClick={props.onClearResponse} disabled={!props.runResponse}>
-            清空响应
-          </Button>
-        </Space>
-        <Alert className="legacy-run-format-alert" type="info" showIcon message="调试请求参数需使用 JSON 格式" />
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            <Select
+              value={props.runMethod}
+              onChange={value => props.onSetRunMethod(value || 'GET')}
+              className="legacy-run-method-select min-w-[120px]"
+              data={methodSelectOptions}
+            />
+            <TextInput
+              value={props.runPath}
+              onChange={event => props.onSetRunPath(event.currentTarget.value)}
+              className="legacy-run-path-input min-w-[280px] flex-1"
+              placeholder="/api/example"
+            />
+            <Button loading={props.runLoading} onClick={props.onRun}>
+              发送请求
+            </Button>
+            <Button variant="default" onClick={props.onClearResponse} disabled={!props.runResponse}>
+              清空响应
+            </Button>
+          </div>
+          <Alert color="blue" title="调试请求参数需使用 JSON 格式" className="legacy-run-format-alert" />
+        </div>
       </SectionCard>
 
       <SectionCard title="请求参数" className="legacy-run-card">
-        <div className="legacy-run-editor-grid">
-          <div className="legacy-run-editor-block">
-            <div className="legacy-run-section-head">
-              <Text strong>Query</Text>
-              <Space size={4} className="legacy-run-section-actions">
-                <Button size="small" icon={<FormatPainterOutlined />} onClick={props.onFormatRunQuery}>
-                  格式化
-                </Button>
-                <Button size="small" icon={<CopyOutlined />} onClick={props.onCopyRunQuery}>
-                  复制
-                </Button>
-                <Button size="small" icon={<ClearOutlined />} onClick={props.onClearRunQuery}>
-                  清空
-                </Button>
-              </Space>
+        <div className="legacy-run-editor-grid grid gap-4 lg:grid-cols-2">
+          <div className="legacy-run-editor-block space-y-3">
+            <div className="legacy-run-section-head flex flex-wrap items-center justify-between gap-3">
+              <Text fw={700}>Query</Text>
+              <ActionGroup onFormat={props.onFormatRunQuery} onCopy={props.onCopyRunQuery} onClear={props.onClearRunQuery} />
             </div>
-            <Input.TextArea
-              rows={6}
-              value={props.runQuery}
-              onChange={event => props.onSetRunQuery(event.target.value)}
-            />
+            <Textarea minRows={6} autosize value={props.runQuery} onChange={event => props.onSetRunQuery(event.currentTarget.value)} />
           </div>
-          <div className="legacy-run-editor-block">
-            <div className="legacy-run-section-head">
-              <Text strong>Headers</Text>
-              <Space size={4} className="legacy-run-section-actions">
-                <Button size="small" icon={<FormatPainterOutlined />} onClick={props.onFormatRunHeaders}>
-                  格式化
-                </Button>
-                <Button size="small" icon={<CopyOutlined />} onClick={props.onCopyRunHeaders}>
-                  复制
-                </Button>
-                <Button size="small" icon={<ClearOutlined />} onClick={props.onClearRunHeaders}>
-                  清空
-                </Button>
-              </Space>
+          <div className="legacy-run-editor-block space-y-3">
+            <div className="legacy-run-section-head flex flex-wrap items-center justify-between gap-3">
+              <Text fw={700}>Headers</Text>
+              <ActionGroup onFormat={props.onFormatRunHeaders} onCopy={props.onCopyRunHeaders} onClear={props.onClearRunHeaders} />
             </div>
-            <Input.TextArea
-              rows={6}
-              value={props.runHeaders}
-              onChange={event => props.onSetRunHeaders(event.target.value)}
-            />
+            <Textarea minRows={6} autosize value={props.runHeaders} onChange={event => props.onSetRunHeaders(event.currentTarget.value)} />
           </div>
-          <div className="legacy-run-editor-block legacy-run-editor-block-wide">
-            <div className="legacy-run-section-head">
-              <Text strong>Body</Text>
-              <Space size={4} className="legacy-run-section-actions">
-                <Button size="small" icon={<FormatPainterOutlined />} onClick={props.onFormatRunBody}>
-                  格式化
-                </Button>
-                <Button size="small" icon={<CopyOutlined />} onClick={props.onCopyRunBody}>
-                  复制
-                </Button>
-                <Button size="small" icon={<ClearOutlined />} onClick={props.onClearRunBody}>
-                  清空
-                </Button>
-              </Space>
+          <div className="legacy-run-editor-block legacy-run-editor-block-wide space-y-3 lg:col-span-2">
+            <div className="legacy-run-section-head flex flex-wrap items-center justify-between gap-3">
+              <Text fw={700}>Body</Text>
+              <ActionGroup onFormat={props.onFormatRunBody} onCopy={props.onCopyRunBody} onClear={props.onClearRunBody} />
             </div>
-            <Input.TextArea
-              rows={8}
-              value={props.runBody}
-              onChange={event => props.onSetRunBody(event.target.value)}
-            />
+            <Textarea minRows={8} autosize value={props.runBody} onChange={event => props.onSetRunBody(event.currentTarget.value)} />
           </div>
         </div>
       </SectionCard>
 
       <SectionCard title="响应结果" className="legacy-run-card">
-        <div className="legacy-run-section-head">
-          <Text strong>Response</Text>
-          <Space size={4} className="legacy-run-section-actions">
-            <Button size="small" icon={<CopyOutlined />} onClick={props.onCopyRunResponse} disabled={!props.runResponse}>
-              复制
-            </Button>
-            <Button size="small" icon={<ClearOutlined />} onClick={props.onClearResponse} disabled={!props.runResponse}>
-              清空
-            </Button>
-          </Space>
+        <div className="space-y-3">
+          <div className="legacy-run-section-head flex flex-wrap items-center justify-between gap-3">
+            <Text fw={700}>Response</Text>
+            <ActionGroup
+              onCopy={props.onCopyRunResponse}
+              onClear={props.onClearResponse}
+              disableCopy={!props.runResponse}
+              disableClear={!props.runResponse}
+            />
+          </div>
+          <Textarea minRows={14} autosize value={props.runResponse} readOnly placeholder="点击“发送请求”后显示结果" />
         </div>
-        <Input.TextArea
-          rows={14}
-          value={props.runResponse}
-          readOnly
-          placeholder="点击“发送请求”后显示结果"
-        />
       </SectionCard>
     </div>
   );

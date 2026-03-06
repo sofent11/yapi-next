@@ -1,16 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Empty, Input, Space, Switch, Table, Tooltip, Typography, message } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
 import {
-  DeleteOutlined,
-  DownOutlined,
-  PlusOutlined,
-  RightOutlined,
-  SettingOutlined
-} from '@ant-design/icons';
+  ActionIcon,
+  Button,
+  Switch,
+  Table,
+  Text,
+  TextInput,
+  Tooltip
+} from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import {
+  IconChevronDown,
+  IconChevronRight,
+  IconPlus,
+  IconSettings,
+  IconTrash
+} from '@tabler/icons-react';
 import json5 from 'json5';
 
-import type { SchemaFieldRow, SchemaVisualEditorProps, SchemaFieldType } from './SchemaVisualEditor.types';
+import type { SchemaFieldRow, SchemaVisualEditorProps } from './SchemaVisualEditor.types';
 import {
   ROOT_ID,
   buildChildrenMap,
@@ -35,7 +43,9 @@ import { TypeSelector } from './schema-visual-editor/TypeSelector';
 import { MockGenerator } from './schema-visual-editor/MockGenerator';
 import { PropertyEditor } from './schema-visual-editor/PropertyEditor';
 
-const { Text } = Typography;
+function showError(message: string) {
+  notifications.show({ color: 'red', message });
+}
 
 export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
   const initialParsed = useMemo(() => parseSchemaRows(props.value), []);
@@ -213,7 +223,7 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
   function saveSchemaModal() {
     const parsed = parseSchemaRows(schemaDraft);
     if (parsed.error) {
-      message.error(`Schema 解析失败: ${parsed.error}`);
+      showError(`Schema 解析失败: ${parsed.error}`);
       return;
     }
     setSchemaModalOpen(false);
@@ -246,7 +256,7 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
       const parsed = json5.parse(fieldDraft);
       const node = normalizeNodeSchema(parsed);
       if (!node) {
-        message.error('字段 schema 格式无效');
+        showError('字段 schema 格式无效');
         return;
       }
 
@@ -270,7 +280,7 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
       setFieldModalOpen(false);
       setFieldEditingRowId('');
     } catch (error) {
-      message.error(`字段 schema 解析失败: ${String((error as Error).message || error)}`);
+      showError(`字段 schema 解析失败: ${String((error as Error).message || error)}`);
     }
   }
 
@@ -284,7 +294,7 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
       const schemaText = buildSchemaFromPlainJsonText(importJsonDraft);
       const parsed = parseSchemaRows(schemaText);
       if (parsed.error) {
-        message.error(`导入失败: ${parsed.error}`);
+        showError(`导入失败: ${parsed.error}`);
         return;
       }
       setImportJsonModalOpen(false);
@@ -296,107 +306,12 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
       lastEmittedSchemaRef.current = schemaText;
       props.onChange(schemaText);
     } catch (error) {
-      message.error(`JSON 解析失败: ${String((error as Error).message || error)}`);
+      showError(`JSON 解析失败: ${String((error as Error).message || error)}`);
     }
   }
 
-  const columns: ColumnsType<SchemaFieldRow> = [
-    {
-      title: '字段名',
-      dataIndex: 'name',
-      width: 260,
-      render: (_, row) => {
-        const hasChildren = (childrenMap.get(row.id) || []).length > 0;
-        const expanded = !collapsedIds.has(row.id);
-        return (
-          <div className="legacy-schema-editor-tree-row" style={{ paddingLeft: row.depth * 18 }}>
-            <Button
-              type="text"
-              size="small"
-              className="legacy-schema-editor-toggle-btn"
-              icon={hasChildren ? (expanded ? <DownOutlined /> : <RightOutlined />) : <span />}
-              onClick={() => hasChildren && toggleRowCollapse(row.id)}
-            />
-            <Input
-              value={row.isArrayItem ? 'items' : row.name}
-              onChange={event => patchRow(row.id, { name: event.target.value })}
-              placeholder={row.isArrayItem ? 'items' : 'name'}
-              disabled={row.isArrayItem}
-            />
-          </div>
-        );
-      }
-    },
-    {
-      title: '必填',
-      dataIndex: 'required',
-      width: 88,
-      render: (_, row) => (
-        <Switch
-          size="small"
-          checked={row.required}
-          disabled={!isRequiredEditable(rows, row)}
-          onChange={checked => patchRow(row.id, { required: checked })}
-        />
-      )
-    },
-    {
-      title: '类型',
-      dataIndex: 'type',
-      width: 140,
-      render: (_, row) => (
-        <TypeSelector
-          value={row.type}
-          onChange={value => patchRow(row.id, { type: value })}
-        />
-      )
-    },
-    {
-      title: 'mock',
-      dataIndex: 'mockValue',
-      width: 180,
-      render: (_, row) => (
-        <MockGenerator
-          value={row.mockValue}
-          onChange={value => patchRow(row.id, { mockValue: value })}
-        />
-      )
-    },
-    {
-      title: 'description',
-      dataIndex: 'description',
-      width: 220,
-      render: (_, row) => (
-        <PropertyEditor
-          value={row.description}
-          onChange={value => patchRow(row.id, { description: value })}
-          placeholder="备注"
-        />
-      )
-    },
-    {
-      title: '操作',
-      width: 150,
-      render: (_, row) => (
-        <Space size={0}>
-          <Tooltip title="查看字段 Schema">
-            <Button type="text" icon={<SettingOutlined />} onClick={() => openFieldModal(row.id)} />
-          </Tooltip>
-          {row.type === 'object' || row.type === 'array' ? (
-            <Tooltip title="添加子节点">
-              <Button type="text" icon={<PlusOutlined />} onClick={() => addChildRow(row.id)} />
-            </Tooltip>
-          ) : null}
-          <Tooltip title="删除字段">
-            <Button danger type="text" icon={<DeleteOutlined />} onClick={() => removeRow(row.id)} />
-          </Tooltip>
-        </Space>
-      )
-    }
-  ];
-
   return (
-    <Space direction="vertical" className="legacy-workspace-stack legacy-schema-editor">
+    <div className="legacy-workspace-stack legacy-schema-editor space-y-4">
       <SchemaEditorHeader
         rootCollapsed={rootCollapsed}
         onToggleRootCollapse={() => setRootCollapsed(value => !value)}
@@ -405,23 +320,107 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
         onAddTopRow={addTopRow}
       />
 
-      {parseError ? <Text type="danger">当前 schema 解析失败: {parseError}</Text> : null}
+      {parseError ? <Text c="red">当前 schema 解析失败: {parseError}</Text> : null}
 
-      <Table<SchemaFieldRow>
-        rowKey="id"
-        size="small"
-        pagination={false}
-        columns={columns}
-        dataSource={visibleRows}
-        locale={{
-          emptyText: (
-            <Empty
-              description="暂无字段，点击 root 行右侧 + 添加子节点"
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-            />
-          )
-        }}
-      />
+      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+        <Table withTableBorder striped highlightOnHover>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th className="w-[260px]">字段名</Table.Th>
+              <Table.Th className="w-[88px]">必填</Table.Th>
+              <Table.Th className="w-[140px]">类型</Table.Th>
+              <Table.Th className="w-[180px]">mock</Table.Th>
+              <Table.Th className="w-[220px]">description</Table.Th>
+              <Table.Th className="w-[150px]">操作</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {visibleRows.length === 0 ? (
+              <Table.Tr>
+                <Table.Td colSpan={6}>
+                  <div className="py-10 text-center text-sm text-slate-500">
+                    暂无字段，点击 root 行右侧 + 添加子节点
+                  </div>
+                </Table.Td>
+              </Table.Tr>
+            ) : (
+              visibleRows.map(row => {
+                const hasChildren = (childrenMap.get(row.id) || []).length > 0;
+                const expanded = !collapsedIds.has(row.id);
+                return (
+                  <Table.Tr key={row.id}>
+                    <Table.Td>
+                      <div className="legacy-schema-editor-tree-row flex items-center gap-2" style={{ paddingLeft: row.depth * 18 }}>
+                        <ActionIcon
+                          variant="subtle"
+                          size="sm"
+                          className="legacy-schema-editor-toggle-btn"
+                          onClick={() => hasChildren && toggleRowCollapse(row.id)}
+                          disabled={!hasChildren}
+                        >
+                          {hasChildren ? (
+                            expanded ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />
+                          ) : (
+                            <span className="block h-4 w-4" />
+                          )}
+                        </ActionIcon>
+                        <TextInput
+                          value={row.isArrayItem ? 'items' : row.name}
+                          onChange={event => patchRow(row.id, { name: event.currentTarget.value })}
+                          placeholder={row.isArrayItem ? 'items' : 'name'}
+                          disabled={row.isArrayItem}
+                        />
+                      </div>
+                    </Table.Td>
+                    <Table.Td>
+                      <Switch
+                        size="sm"
+                        checked={row.required}
+                        disabled={!isRequiredEditable(rows, row)}
+                        onChange={event => patchRow(row.id, { required: event.currentTarget.checked })}
+                      />
+                    </Table.Td>
+                    <Table.Td>
+                      <TypeSelector value={row.type} onChange={value => patchRow(row.id, { type: value })} />
+                    </Table.Td>
+                    <Table.Td>
+                      <MockGenerator value={row.mockValue} onChange={value => patchRow(row.id, { mockValue: value })} />
+                    </Table.Td>
+                    <Table.Td>
+                      <PropertyEditor
+                        value={row.description}
+                        onChange={value => patchRow(row.id, { description: value })}
+                        placeholder="备注"
+                      />
+                    </Table.Td>
+                    <Table.Td>
+                      <div className="flex items-center gap-1">
+                        <Tooltip label="查看字段 Schema">
+                          <ActionIcon variant="subtle" onClick={() => openFieldModal(row.id)}>
+                            <IconSettings size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                        {row.type === 'object' || row.type === 'array' ? (
+                          <Tooltip label="添加子节点">
+                            <ActionIcon variant="subtle" onClick={() => addChildRow(row.id)}>
+                              <IconPlus size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                        ) : null}
+                        <Tooltip label="删除字段">
+                          <ActionIcon color="red" variant="subtle" onClick={() => removeRow(row.id)}>
+                            <IconTrash size={16} />
+                          </ActionIcon>
+                        </Tooltip>
+                      </div>
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })
+            )}
+          </Table.Tbody>
+        </Table>
+      </div>
 
       <SchemaSourceModal
         open={schemaModalOpen}
@@ -446,6 +445,6 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
         onCancel={() => setImportJsonModalOpen(false)}
         onSave={saveImportJsonModal}
       />
-    </Space>
+    </div>
   );
 }

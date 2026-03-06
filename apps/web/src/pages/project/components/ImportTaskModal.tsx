@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { App as AntdApp, Button, Modal, Progress } from 'antd';
+import { Button, Modal, Progress, Stack, Text } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useGetImportTaskQuery } from '../../../services/yapi-api';
 import { taskStatusLabel } from '../ProjectDataPage.utils';
 
@@ -10,8 +11,16 @@ export interface ImportTaskModalProps {
   onClose: () => void;
 }
 
+const messageApi = {
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  },
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  }
+};
+
 export default function ImportTaskModal({ projectId, token, taskId, onClose }: ImportTaskModalProps) {
-  const { message: messageApi } = AntdApp.useApp();
   const [notifiedStatus, setNotifiedStatus] = useState('');
 
   useEffect(() => {
@@ -22,7 +31,7 @@ export default function ImportTaskModal({ projectId, token, taskId, onClose }: I
     {
       taskId,
       projectId,
-      token,
+      token
     },
     {
       skip: !taskId,
@@ -42,11 +51,11 @@ export default function ImportTaskModal({ projectId, token, taskId, onClose }: I
       messageApi.error(task.message || '导入任务执行失败');
     }
     setNotifiedStatus(task.status);
-  }, [notifiedStatus, taskQuery.data, messageApi]);
+  }, [notifiedStatus, taskQuery.data]);
 
   const task = taskQuery.data?.data;
   const isTaskFinished = task?.status === 'success' || task?.status === 'failed';
-  const taskProgressStatus = task?.status === 'failed' ? 'exception' : task?.status === 'success' ? 'success' : 'active';
+  const progressColor = task?.status === 'failed' ? 'red' : task?.status === 'success' ? 'teal' : 'blue';
 
   function downloadTaskReport() {
     if (!taskId) return;
@@ -60,20 +69,20 @@ export default function ImportTaskModal({ projectId, token, taskId, onClose }: I
   }
 
   return (
-    <Modal
-      title="OpenAPI 导入任务"
-      open={Boolean(taskId)}
-      onCancel={onClose}
-      footer={[
-        <Button key="download" onClick={downloadTaskReport} disabled={!taskId}>下载结果</Button>,
-        <Button key="close" type="primary" onClick={onClose}>{isTaskFinished ? '关闭' : '后台继续'}</Button>
-      ]}
-    >
-      <p>任务 ID：{taskId || '-'}</p>
-      <p>状态：{taskStatusLabel(task?.status)}</p>
-      <Progress percent={Math.max(0, Math.min(100, Math.round(Number(task?.progress || 0))))} status={taskProgressStatus} />
-      <p>阶段：{task?.stage || '-'}</p>
-      <p>消息：{task?.message || '-'}</p>
+    <Modal title="OpenAPI 导入任务" opened={Boolean(taskId)} onClose={onClose}>
+      <Stack>
+        <Text>任务 ID：{taskId || '-'}</Text>
+        <Text>状态：{taskStatusLabel(task?.status)}</Text>
+        <Progress value={Math.max(0, Math.min(100, Math.round(Number(task?.progress || 0))))} color={progressColor} />
+        <Text>阶段：{task?.stage || '-'}</Text>
+        <Text>消息：{task?.message || '-'}</Text>
+        <div className="flex justify-end gap-3">
+          <Button variant="default" onClick={downloadTaskReport} disabled={!taskId}>
+            下载结果
+          </Button>
+          <Button onClick={onClose}>{isTaskFinished ? '关闭' : '后台继续'}</Button>
+        </div>
+      </Stack>
     </Modal>
   );
 }

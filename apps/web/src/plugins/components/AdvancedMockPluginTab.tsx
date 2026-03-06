@@ -1,41 +1,26 @@
-import { safeExecute, normalizePath, parseJsonSafe, parseMaybeJson, isValidRouteContract, toObject, inferPrimitiveSchema, mergeInferredSchemas, inferSchemaFromSample, inferDraft4SchemaTextFromJsonText, toStringValue, postJson, getJson, DRAFT4_SCHEMA_URI } from '../index';
-import type { LegacyRouteContract } from '../../types/legacy-contract';
-import type { HeaderMenuItem, SubNavItem, SubSettingNavItem, InterfaceTabItem, ImportDataItem, ExportDataItem, RequestLifecycleMeta } from '../index';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Spin, Switch, Table, Tabs, Tag, Typography, message } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
+import { useEffect, useState } from 'react';
+import {
+  Alert,
+  Badge,
+  Button,
+  Loader,
+  Modal,
+  NumberInput,
+  Radio,
+  Select,
+  Stack,
+  Switch,
+  Table,
+  Text,
+  TextInput,
+  Textarea,
+  Tabs
+} from '@mantine/core';
+import { modals } from '@mantine/modals';
+import { notifications } from '@mantine/notifications';
+import RcForm, { Field, List, useForm as useRcForm, useWatch } from 'rc-field-form';
 import json5 from 'json5';
-
-const { Text, Paragraph } = Typography;
-
-// Extracted from index.tsx
-function normalizeHeaderRow(value: unknown): Array<{ name: string; value: string }> {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map(item => {
-      const source = item as Record<string, unknown>;
-      return {
-        name: toStringValue(source.name),
-        value: toStringValue(source.value)
-      };
-    })
-    .filter(item => item.name);
-}
-
-function normalizeSimpleParam(value: unknown) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map(item => {
-      const source = item as Record<string, unknown>;
-      return {
-        name: toStringValue(source.name || source.key),
-        value: toStringValue(source.value || source.example),
-        required: source.required === '0' ? '0' : '1',
-        desc: toStringValue(source.desc || source.description || '')
-      };
-    })
-    .filter(item => item.name);
-}
+import { getJson, parseJsonSafe, parseMaybeJson, postJson, toStringValue } from '../index';
 
 type AdvancedMockCaseRecord = {
   _id?: string | number;
@@ -77,6 +62,30 @@ const ADV_MOCK_HTTP_CODES = [
 ];
 
 const IP_REGEXP = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+
+const CASE_FORM_INITIAL_VALUES: AdvancedMockCaseForm = {
+  name: '',
+  ip_enable: false,
+  ip: '',
+  params_mode: 'form',
+  params_rows: [{ name: '', value: '' }],
+  params_json: '{}',
+  code: 200,
+  delay: 0,
+  headers: [{ name: '', value: '' }],
+  res_body: '{}'
+};
+
+const HTTP_CODE_OPTIONS = ADV_MOCK_HTTP_CODES.map(code => ({ label: String(code), value: String(code) }));
+
+const message = {
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  }
+};
 
 function normalizeCaseKeyValues(value: unknown): AdvancedMockKeyValue[] {
   if (!Array.isArray(value)) return [{ name: '', value: '' }];
@@ -161,70 +170,10 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
   const [caseSaving, setCaseSaving] = useState(false);
   const [casePreparing, setCasePreparing] = useState(false);
   const [editingCase, setEditingCase] = useState<AdvancedMockCaseRecord | null>(null);
-  const [caseForm] = Form.useForm<AdvancedMockCaseForm>();
+  const [caseForm] = useRcForm<AdvancedMockCaseForm>();
 
-  const watchParamsMode = Form.useWatch('params_mode', caseForm) || 'form';
-  const watchIpEnable = Form.useWatch('ip_enable', caseForm) === true;
-
-  const caseColumns: ColumnsType<AdvancedMockCaseRecord> = [
-    {
-      title: '期望名称',
-      dataIndex: 'name',
-      key: 'name'
-    },
-    {
-      title: 'IP',
-      dataIndex: 'ip',
-      key: 'ip',
-      render: (_value, row) => (row.ip_enable ? toStringValue(row.ip) || '-' : '无过滤')
-    },
-    {
-      title: '创建人',
-      dataIndex: 'username',
-      key: 'username',
-      width: 140,
-      render: value => toStringValue(value) || '-'
-    },
-    {
-      title: '编辑时间',
-      dataIndex: 'up_time',
-      key: 'up_time',
-      width: 180,
-      render: value => formatCaseUpdateTime(value)
-    },
-    {
-      title: '状态',
-      dataIndex: 'case_enable',
-      key: 'case_enable',
-      width: 100,
-      render: value => (value === false ? <Tag color="default">未开启</Tag> : <Tag color="green">已开启</Tag>)
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 240,
-      render: (_, row) => (
-        <Space size={6} wrap>
-          <Button size="small" onClick={() => void handleOpenCaseModal(row)}>
-            编辑
-          </Button>
-          <Popconfirm
-            title="确定删除该期望吗？"
-            okText="确定"
-            cancelText="取消"
-            onConfirm={() => void handleDeleteCase(row)}
-          >
-            <Button size="small" danger>
-              删除
-            </Button>
-          </Popconfirm>
-          <Button size="small" onClick={() => void handleToggleCase(row)}>
-            {row.case_enable === false ? '未开启' : '已开启'}
-          </Button>
-        </Space>
-      )
-    }
-  ];
+  const watchParamsMode = useWatch('params_mode', caseForm) || 'form';
+  const watchIpEnable = useWatch('ip_enable', caseForm) === true;
 
   async function convertSchemaToJson(schemaText: string): Promise<string | null> {
     try {
@@ -451,7 +400,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
       closeCaseModal();
       await loadCaseList();
     } catch (_error) {
-      // antd form validation error is handled by Form.Item
+      // rc-field-form validation errors are displayed inline.
     } finally {
       setCaseSaving(false);
     }
@@ -508,226 +457,350 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
   }
 
   if (interfaceId <= 0) {
-    return <Alert type="info" showIcon message="请先选择接口后再编辑高级 Mock 配置" />;
+    return <Alert color="blue" title="请先选择接口后再编辑高级 Mock 配置" />;
   }
 
   return (
-    <Space direction="vertical" className="legacy-workspace-stack" size={12}>
+    <Stack className="legacy-workspace-stack" gap="sm">
       {loading && loadedId !== interfaceId ? (
-        <Space>
-          <Spin size="small" />
+        <div className="inline-flex items-center gap-2">
+          <Loader size="sm" />
           <Text>加载高级 Mock...</Text>
-        </Space>
+        </div>
       ) : null}
-      <Alert
-        type="info"
-        showIcon
-        message="高级 Mock 脚本支持在 Mock 返回前覆盖响应结构。"
-      />
-      <Tabs
-        activeKey={activeTab}
-        onChange={key => setActiveTab(key === 'script' ? 'script' : 'case')}
-        items={[
-          {
-            key: 'case',
-            label: '期望',
-            children: (
-              <Space direction="vertical" className="legacy-workspace-stack" size={12}>
-                <Space>
-                  <Button type="primary" onClick={() => void handleOpenCaseModal()}>
-                    添加期望
-                  </Button>
-                </Space>
-                <Table
-                  size="small"
-                  loading={caseLoading}
-                  rowKey={row => String(row._id || row.name || Math.random())}
-                  pagination={false}
-                  columns={caseColumns}
-                  dataSource={caseRows}
-                />
-              </Space>
-            )
-          },
-          {
-            key: 'script',
-            label: '脚本',
-            children: (
-              <Space direction="vertical" className="legacy-workspace-stack" size={12}>
-                <Space align="center">
-                  <Text>是否启用</Text>
-                  <Switch checked={enable} onChange={setEnable} />
-                </Space>
-                <Input.TextArea
-                  value={script}
-                  onChange={event => setScript(event.target.value)}
-                  rows={14}
-                  placeholder={'// 例如：\ncontext.mockJson = { code: 0, data: [] };'}
-                />
-                <Space>
-                  <Button type="primary" loading={saving} onClick={() => void handleSave()}>
-                    保存
-                  </Button>
-                </Space>
-              </Space>
-            )
-          }
-        ]}
-      />
+      <Alert color="blue" title="高级 Mock 脚本支持在 Mock 返回前覆盖响应结构。" />
+      <Tabs value={activeTab} onChange={key => setActiveTab(key === 'script' ? 'script' : 'case')}>
+        <Tabs.List>
+          <Tabs.Tab value="case">期望</Tabs.Tab>
+          <Tabs.Tab value="script">脚本</Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="case" pt="md">
+          <Stack className="legacy-workspace-stack" gap="sm">
+            <div>
+              <Button onClick={() => void handleOpenCaseModal()}>添加期望</Button>
+            </div>
+            <Table striped highlightOnHover withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>期望名称</Table.Th>
+                  <Table.Th>IP</Table.Th>
+                  <Table.Th>创建人</Table.Th>
+                  <Table.Th>编辑时间</Table.Th>
+                  <Table.Th>状态</Table.Th>
+                  <Table.Th>操作</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {caseLoading ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={6}>
+                      <div className="flex justify-center py-6">
+                        <Loader size="sm" />
+                      </div>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : caseRows.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={6}>
+                      <Text c="dimmed" ta="center" py="md">
+                        暂无期望
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ) : (
+                  caseRows.map((row, index) => (
+                    <Table.Tr key={String(row._id || row.name || index)}>
+                      <Table.Td>{toStringValue(row.name) || '-'}</Table.Td>
+                      <Table.Td>{row.ip_enable ? toStringValue(row.ip) || '-' : '无过滤'}</Table.Td>
+                      <Table.Td>{toStringValue(row.username) || '-'}</Table.Td>
+                      <Table.Td>{formatCaseUpdateTime(row.up_time)}</Table.Td>
+                      <Table.Td>
+                        {row.case_enable === false ? <Badge color="gray">未开启</Badge> : <Badge color="green">已开启</Badge>}
+                      </Table.Td>
+                      <Table.Td>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="xs" variant="light" onClick={() => void handleOpenCaseModal(row)}>
+                            编辑
+                          </Button>
+                          <Button
+                            size="xs"
+                            color="red"
+                            variant="light"
+                            onClick={() =>
+                              modals.openConfirmModal({
+                                title: '确定删除该期望吗？',
+                                labels: { confirm: '确定', cancel: '取消' },
+                                confirmProps: { color: 'red' },
+                                onConfirm: () => void handleDeleteCase(row)
+                              })
+                            }
+                          >
+                            删除
+                          </Button>
+                          <Button size="xs" variant="default" onClick={() => void handleToggleCase(row)}>
+                            {row.case_enable === false ? '未开启' : '已开启'}
+                          </Button>
+                        </div>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))
+                )}
+              </Table.Tbody>
+            </Table>
+          </Stack>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="script" pt="md">
+          <Stack className="legacy-workspace-stack" gap="sm">
+            <div className="inline-flex items-center gap-3">
+              <Text>是否启用</Text>
+              <Switch checked={enable} onChange={event => setEnable(event.currentTarget.checked)} />
+            </div>
+            <Textarea
+              value={script}
+              onChange={event => setScript(event.currentTarget.value)}
+              minRows={14}
+              placeholder={'// 例如：\ncontext.mockJson = { code: 0, data: [] };'}
+            />
+            <div>
+              <Button loading={saving} onClick={() => void handleSave()}>
+                保存
+              </Button>
+            </div>
+          </Stack>
+        </Tabs.Panel>
+      </Tabs>
+
       <Modal
         title={editingCase ? '编辑期望' : '添加期望'}
-        open={caseModalOpen}
-        onCancel={closeCaseModal}
-        onOk={() => void handleSaveCase()}
-        okText={editingCase ? '保存' : '添加'}
-        cancelText="取消"
-        width={860}
-        confirmLoading={caseSaving}
-        destroyOnHidden
+        opened={caseModalOpen}
+        onClose={closeCaseModal}
+        size="xl"
       >
         {casePreparing ? (
-          <div className="legacy-plugin-loading-block">
-            <Spin />
+          <div className="legacy-plugin-loading-block flex justify-center py-10">
+            <Loader />
           </div>
         ) : (
-          <Form<AdvancedMockCaseForm>
-            form={caseForm}
-            layout="vertical"
-            initialValues={{
-              name: '',
-              ip_enable: false,
-              ip: '',
-              params_mode: 'form',
-              params_rows: [{ name: '', value: '' }],
-              params_json: '{}',
-              code: 200,
-              delay: 0,
-              headers: [{ name: '', value: '' }],
-              res_body: '{}'
-            }}
-          >
-            <Form.Item label="期望名称" name="name" rules={[{ required: true, message: '请输入期望名称' }]}>
-              <Input placeholder="请输入期望名称" />
-            </Form.Item>
-            <Space className="legacy-plugin-row-start" align="start">
-              <Form.Item
-                label="IP 过滤开关"
-                name="ip_enable"
-                valuePropName="checked"
-                className="legacy-plugin-ip-switch-item"
-              >
-                <Switch />
-              </Form.Item>
-              <Form.Item
-                className="legacy-plugin-ip-address-item"
-                label="IP 地址"
-                name="ip"
-                rules={[
-                  {
-                    validator(_, value) {
-                      if (!watchIpEnable) return Promise.resolve();
-                      const raw = toStringValue(value).trim();
-                      if (!raw) {
-                        return Promise.reject(new Error('请输入过滤 IP'));
+          <RcForm<AdvancedMockCaseForm> form={caseForm} initialValues={CASE_FORM_INITIAL_VALUES}>
+            <Stack>
+              <Field<AdvancedMockCaseForm> name="name" rules={[{ required: true, message: '请输入期望名称' }]}>
+                {(control, meta) => (
+                  <TextInput
+                    label="期望名称"
+                    value={control.value ?? ''}
+                    onChange={event => control.onChange(event.currentTarget.value)}
+                    error={meta.errors[0]}
+                    placeholder="请输入期望名称"
+                  />
+                )}
+              </Field>
+
+              <div className="legacy-plugin-row-start flex flex-col gap-4 md:flex-row">
+                <Field<AdvancedMockCaseForm> name="ip_enable" valuePropName="checked">
+                  {(control) => (
+                    <Switch
+                      label="IP 过滤开关"
+                      checked={Boolean(control.value)}
+                      onChange={event => control.onChange(event.currentTarget.checked)}
+                      className="legacy-plugin-ip-switch-item"
+                    />
+                  )}
+                </Field>
+                <Field<AdvancedMockCaseForm>
+                  name="ip"
+                  rules={[
+                    {
+                      async validator(_, value) {
+                        if (!watchIpEnable) return;
+                        const raw = toStringValue(value).trim();
+                        if (!raw) {
+                          throw new Error('请输入过滤 IP');
+                        }
+                        if (!IP_REGEXP.test(raw)) {
+                          throw new Error('请输入合法的 IPv4 地址');
+                        }
                       }
-                      if (!IP_REGEXP.test(raw)) {
-                        return Promise.reject(new Error('请输入合法的 IPv4 地址'));
-                      }
-                      return Promise.resolve();
                     }
-                  }
-                ]}
-              >
-                <Input disabled={!watchIpEnable} placeholder="例如 192.168.1.10" />
-              </Form.Item>
-            </Space>
-            <Form.Item label="参数过滤模式" name="params_mode">
-              <Radio.Group
-                options={[
-                  { label: '表单', value: 'form' },
-                  { label: 'JSON', value: 'json' }
-                ]}
-                optionType="button"
-                buttonStyle="solid"
-              />
-            </Form.Item>
-            {watchParamsMode === 'form' ? (
-              <Form.List name="params_rows">
+                  ]}
+                >
+                  {(control, meta) => (
+                    <TextInput
+                      className="legacy-plugin-ip-address-item"
+                      label="IP 地址"
+                      value={control.value ?? ''}
+                      onChange={event => control.onChange(event.currentTarget.value)}
+                      error={meta.errors[0]}
+                      disabled={!watchIpEnable}
+                      placeholder="例如 192.168.1.10"
+                    />
+                  )}
+                </Field>
+              </div>
+
+              <Field<AdvancedMockCaseForm> name="params_mode">
+                {(control) => (
+                  <Radio.Group
+                    label="参数过滤模式"
+                    value={control.value || 'form'}
+                    onChange={value => control.onChange(value)}
+                  >
+                    <div className="mt-2 flex gap-4">
+                      <Radio value="form" label="表单" />
+                      <Radio value="json" label="JSON" />
+                    </div>
+                  </Radio.Group>
+                )}
+              </Field>
+
+              {watchParamsMode === 'form' ? (
+                <List name="params_rows">
+                  {(fields, { add, remove }) => (
+                    <Stack gap="xs">
+                      <Text fw={500}>参数过滤</Text>
+                      {fields.map(field => (
+                        <div key={field.key} className="legacy-plugin-field-row flex flex-col gap-3 md:flex-row">
+                          <Field name={[field.name, 'name']} rules={[{ required: true, message: '参数名不能为空' }]}>
+                            {(control, meta) => (
+                              <TextInput
+                                className="legacy-plugin-field-w280"
+                                value={control.value ?? ''}
+                                onChange={event => control.onChange(event.currentTarget.value)}
+                                error={meta.errors[0]}
+                                placeholder="参数名"
+                              />
+                            )}
+                          </Field>
+                          <Field name={[field.name, 'value']}>
+                            {(control) => (
+                              <TextInput
+                                className="legacy-plugin-field-w360"
+                                value={control.value ?? ''}
+                                onChange={event => control.onChange(event.currentTarget.value)}
+                                placeholder="参数值"
+                              />
+                            )}
+                          </Field>
+                          <Button color="red" variant="light" onClick={() => remove(field.name)}>
+                            删除
+                          </Button>
+                        </div>
+                      ))}
+                      <div>
+                        <Button variant="light" onClick={() => add({ name: '', value: '' })}>
+                          添加参数
+                        </Button>
+                      </div>
+                    </Stack>
+                  )}
+                </List>
+              ) : (
+                <Field<AdvancedMockCaseForm> name="params_json">
+                  {(control) => (
+                    <Textarea
+                      label="参数过滤(JSON)"
+                      minRows={6}
+                      value={control.value ?? '{}'}
+                      onChange={event => control.onChange(event.currentTarget.value)}
+                      placeholder='例如: {"status":"ready"}'
+                    />
+                  )}
+                </Field>
+              )}
+
+              <div className="legacy-plugin-row-start flex flex-col gap-4 md:flex-row">
+                <Field<AdvancedMockCaseForm> name="code">
+                  {(control) => (
+                    <Select
+                      className="legacy-plugin-field-w220"
+                      label="HTTP Code"
+                      searchable
+                      value={String(control.value ?? 200)}
+                      onChange={value => control.onChange(Number(value || 200))}
+                      data={HTTP_CODE_OPTIONS}
+                    />
+                  )}
+                </Field>
+                <Field<AdvancedMockCaseForm> name="delay">
+                  {(control) => (
+                    <NumberInput
+                      className="legacy-plugin-field-w220 legacy-workspace-control"
+                      label="延时(ms)"
+                      min={0}
+                      decimalScale={0}
+                      value={Number(control.value ?? 0)}
+                      onChange={value => control.onChange(typeof value === 'number' ? value : 0)}
+                    />
+                  )}
+                </Field>
+              </div>
+
+              <List name="headers">
                 {(fields, { add, remove }) => (
-                  <Space direction="vertical" className="legacy-workspace-stack" size={8}>
+                  <Stack gap="xs">
+                    <Text fw={500}>HTTP 头</Text>
                     {fields.map(field => (
-                      <Space key={field.key} className="legacy-plugin-field-row" align="baseline">
-                        <Form.Item
-                          name={[field.name, 'name']}
-                          rules={[{ required: true, message: '参数名不能为空' }]}
-                          className="legacy-plugin-field-w280"
-                        >
-                          <Input placeholder="参数名" />
-                        </Form.Item>
-                        <Form.Item name={[field.name, 'value']} className="legacy-plugin-field-w360">
-                          <Input placeholder="参数值" />
-                        </Form.Item>
-                        <Button danger onClick={() => remove(field.name)}>
+                      <div key={field.key} className="legacy-plugin-field-row flex flex-col gap-3 md:flex-row">
+                        <Field name={[field.name, 'name']}>
+                          {(control) => (
+                            <TextInput
+                              className="legacy-plugin-field-w280"
+                              value={control.value ?? ''}
+                              onChange={event => control.onChange(event.currentTarget.value)}
+                              placeholder="Header 名称"
+                            />
+                          )}
+                        </Field>
+                        <Field name={[field.name, 'value']}>
+                          {(control) => (
+                            <TextInput
+                              className="legacy-plugin-field-w360"
+                              value={control.value ?? ''}
+                              onChange={event => control.onChange(event.currentTarget.value)}
+                              placeholder="Header 值"
+                            />
+                          )}
+                        </Field>
+                        <Button color="red" variant="light" onClick={() => remove(field.name)}>
                           删除
                         </Button>
-                      </Space>
+                      </div>
                     ))}
-                    <Button type="dashed" onClick={() => add({ name: '', value: '' })}>
-                      添加参数
-                    </Button>
-                  </Space>
+                    <div>
+                      <Button variant="light" onClick={() => add({ name: '', value: '' })}>
+                        添加 HTTP 头
+                      </Button>
+                    </div>
+                  </Stack>
                 )}
-              </Form.List>
-            ) : (
-              <Form.Item label="参数过滤(JSON)" name="params_json">
-                <Input.TextArea rows={6} placeholder='例如: {"status":"ready"}' />
-              </Form.Item>
-            )}
-            <Space className="legacy-plugin-row-start" align="start">
-              <Form.Item label="HTTP Code" name="code" className="legacy-plugin-field-w220">
-                <Select
-                  showSearch
-                  options={ADV_MOCK_HTTP_CODES.map(code => ({ label: String(code), value: code }))}
-                />
-              </Form.Item>
-              <Form.Item label="延时(ms)" name="delay" className="legacy-plugin-field-w220">
-                <InputNumber min={0} precision={0} className="legacy-workspace-control" />
-              </Form.Item>
-            </Space>
-            <Form.Item label="HTTP 头">
-              <Form.List name="headers">
-                {(fields, { add, remove }) => (
-                  <Space direction="vertical" className="legacy-workspace-stack" size={8}>
-                    {fields.map(field => (
-                      <Space key={field.key} className="legacy-plugin-field-row" align="baseline">
-                        <Form.Item name={[field.name, 'name']} className="legacy-plugin-field-w280">
-                          <Input placeholder="Header 名称" />
-                        </Form.Item>
-                        <Form.Item name={[field.name, 'value']} className="legacy-plugin-field-w360">
-                          <Input placeholder="Header 值" />
-                        </Form.Item>
-                        <Button danger onClick={() => remove(field.name)}>
-                          删除
-                        </Button>
-                      </Space>
-                    ))}
-                    <Button type="dashed" onClick={() => add({ name: '', value: '' })}>
-                      添加 HTTP 头
-                    </Button>
-                  </Space>
+              </List>
+
+              <Field<AdvancedMockCaseForm> name="res_body" rules={[{ required: true, message: '请输入响应 Body' }]}>
+                {(control, meta) => (
+                  <Textarea
+                    label="响应 Body"
+                    minRows={10}
+                    value={control.value ?? ''}
+                    onChange={event => control.onChange(event.currentTarget.value)}
+                    error={meta.errors[0]}
+                    placeholder='例如: {"code":200,"data":[]}'
+                  />
                 )}
-              </Form.List>
-            </Form.Item>
-            <Form.Item
-              label="响应 Body"
-              name="res_body"
-              rules={[{ required: true, message: '请输入响应 Body' }]}
-            >
-              <Input.TextArea rows={10} placeholder='例如: {"code":200,"data":[]}' />
-            </Form.Item>
-          </Form>
+              </Field>
+
+              <div className="flex justify-end gap-3">
+                <Button variant="default" onClick={closeCaseModal}>
+                  取消
+                </Button>
+                <Button loading={caseSaving} onClick={() => void handleSaveCase()}>
+                  {editingCase ? '保存' : '添加'}
+                </Button>
+              </div>
+            </Stack>
+          </RcForm>
         )}
       </Modal>
-    </Space>
+    </Stack>
   );
 }

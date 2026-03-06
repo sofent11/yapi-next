@@ -1,4 +1,4 @@
-import type { RuleObject } from 'antd/es/form';
+import type { RuleObject } from 'rc-field-form';
 
 function legacyStringLength(input: string): number {
   let length = 0;
@@ -19,4 +19,3 @@ export function legacyNameValidator(label: string, limit = 100) {
     return Promise.resolve();
   };
 }
-

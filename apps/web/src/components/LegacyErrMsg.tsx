@@ -1,8 +1,6 @@
-import { FrownOutlined, MehOutlined } from '@ant-design/icons';
-import { Button, Space, Typography } from 'antd';
+import { Button, Stack, Text, ThemeIcon, Title } from '@mantine/core';
+import { IconMoodEmpty, IconMoodSad } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
-
-const { Text } = Typography;
 
 type LegacyErrMsgType =
   | 'noFollow'
@@ -74,21 +72,25 @@ export function LegacyErrMsg(props: LegacyErrMsgProps) {
   const desc = props.desc || fallback.desc;
 
   return (
-    <div className="legacy-err-msg">
-      <div className="legacy-err-msg-icon">
-        {fallback.icon === 'meh' ? <MehOutlined /> : <FrownOutlined />}
-      </div>
-      <div className="legacy-err-msg-title">{title}</div>
-      <Text type="secondary" className="legacy-err-msg-desc">
+    <Stack
+      align="center"
+      gap="sm"
+      className="rounded-[28px] border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center"
+    >
+      <ThemeIcon size={56} radius="xl" variant="light" color="gray">
+        {fallback.icon === 'meh' ? <IconMoodEmpty size={28} /> : <IconMoodSad size={28} />}
+      </ThemeIcon>
+      <Title order={4} c="dark">
+        {title}
+      </Title>
+      <Text c="dimmed" className="max-w-lg leading-7">
         {desc}
       </Text>
       {props.type === 'noFollow' ? (
-        <Space className="legacy-err-msg-actions">
-          <Button type="link" onClick={() => navigate('/group')}>
-            去项目广场
-          </Button>
-        </Space>
+        <Button variant="subtle" onClick={() => navigate('/group')}>
+          去项目广场
+        </Button>
       ) : null}
-    </div>
+    </Stack>
   );
 }

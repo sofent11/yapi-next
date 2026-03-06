@@ -1,8 +1,7 @@
-import { Form, Input, Modal, Select, Space, Typography } from 'antd';
-import type { FormInstance } from 'antd';
+import { Button, Modal, Select, Stack, Text, TextInput, Textarea } from '@mantine/core';
+import RcForm, { Field } from 'rc-field-form';
+import type { FormInstance } from 'rc-field-form';
 import { legacyNameValidator } from '../../../utils/legacy-validation';
-
-const { Text } = Typography;
 
 type AddInterfaceModalForm = {
   title: string;
@@ -50,145 +49,192 @@ export type InterfaceCoreModalsProps = {
   onSubmitEditCat: (values: CategoryModalForm) => void;
 };
 
+function ModalActions(props: {
+  cancelText?: string;
+  confirmText: string;
+  loading?: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="flex justify-end gap-3">
+      <Button variant="default" onClick={props.onCancel}>
+        {props.cancelText || '取消'}
+      </Button>
+      <Button loading={props.loading} onClick={props.onConfirm}>
+        {props.confirmText}
+      </Button>
+    </div>
+  );
+}
+
+function CategoryFormModal(props: {
+  title: string;
+  opened: boolean;
+  form: FormInstance<CategoryModalForm>;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (values: CategoryModalForm) => void;
+}) {
+  return (
+    <Modal title={props.title} opened={props.opened} onClose={props.onClose}>
+      <RcForm<CategoryModalForm> form={props.form} onFinish={props.onSubmit}>
+        <Stack>
+          <Field<CategoryModalForm> name="name" rules={[{ required: true, message: '请输入分类名称' }]}>
+            {(control, meta) => (
+              <TextInput
+                label="分类名称"
+                value={String(control.value ?? '')}
+                onChange={event => control.onChange(event.currentTarget.value)}
+                error={meta.errors[0]}
+              />
+            )}
+          </Field>
+          <Field<CategoryModalForm> name="desc">
+            {(control) => (
+              <Textarea
+                label="描述"
+                minRows={3}
+                value={String(control.value ?? '')}
+                onChange={event => control.onChange(event.currentTarget.value)}
+              />
+            )}
+          </Field>
+          <ModalActions
+            loading={props.loading}
+            onCancel={props.onClose}
+            onConfirm={() => props.form.submit()}
+            confirmText="确认"
+          />
+        </Stack>
+      </RcForm>
+    </Modal>
+  );
+}
+
 export function InterfaceCoreModals(props: InterfaceCoreModalsProps) {
+  const methodOptions = props.runMethods.map(item => ({ value: item, label: item }));
+  const catOptions = props.catRows.map(item => ({
+    value: String(Number(item._id || 0)),
+    label: String(item.name || '')
+  }));
+
   return (
     <>
-      <Modal
-        title="你即将离开编辑页面"
-        open={props.confirmOpen}
-        onCancel={props.onCancelConfirm}
-        onOk={props.onConfirmLeave}
-      >
-        <p>离开页面会丢失当前编辑的内容，确定要离开吗？</p>
+      <Modal title="你即将离开编辑页面" opened={props.confirmOpen} onClose={props.onCancelConfirm}>
+        <Stack>
+          <Text c="dimmed">离开页面会丢失当前编辑的内容，确定要离开吗？</Text>
+          <ModalActions onCancel={props.onCancelConfirm} onConfirm={props.onConfirmLeave} confirmText="确认离开" />
+        </Stack>
       </Modal>
 
-      <Modal
-        title="新增接口"
-        open={props.addInterfaceOpen}
-        onCancel={props.onCancelAddInterface}
-        onOk={() => {
-          void props.addInterfaceForm.submit();
-        }}
-        confirmLoading={props.addInterfaceLoading}
-        okText="确认"
-        cancelText="取消"
-      >
-        <Form<AddInterfaceModalForm>
-          form={props.addInterfaceForm}
-          layout="vertical"
-          onFinish={values => void props.onSubmitAddInterface(values)}
-        >
-          <Form.Item
-            label="接口名称"
-            name="title"
-            rules={[{ required: true, validator: legacyNameValidator('接口') }]}
-          >
-            <Input />
-          </Form.Item>
-          <Form.Item label="路径" name="path" rules={[{ required: true, message: '请输入接口路径' }]}>
-            <Input placeholder="/api/example" />
-          </Form.Item>
-          <Form.Item label="Method" name="method" rules={[{ required: true, message: '请选择 Method' }]}>
-            <Select options={props.runMethods.map(item => ({ label: item, value: item }))} />
-          </Form.Item>
-          <Form.Item label="分类" name="catid" rules={[{ required: true, message: '请选择分类' }]}>
-            <Select
-              options={props.catRows.map(item => ({
-                label: item.name,
-                value: Number(item._id || 0)
-              }))}
+      <Modal title="新增接口" opened={props.addInterfaceOpen} onClose={props.onCancelAddInterface}>
+        <RcForm<AddInterfaceModalForm> form={props.addInterfaceForm} onFinish={props.onSubmitAddInterface}>
+          <Stack>
+            <Field<AddInterfaceModalForm>
+              name="title"
+              rules={[{ required: true, validator: legacyNameValidator('接口') }]}
+            >
+              {(control, meta) => (
+                <TextInput
+                  label="接口名称"
+                  value={String(control.value ?? '')}
+                  onChange={event => control.onChange(event.currentTarget.value)}
+                  error={meta.errors[0]}
+                />
+              )}
+            </Field>
+            <Field<AddInterfaceModalForm> name="path" rules={[{ required: true, message: '请输入接口路径' }]}>
+              {(control, meta) => (
+                <TextInput
+                  label="路径"
+                  value={String(control.value ?? '')}
+                  onChange={event => control.onChange(event.currentTarget.value)}
+                  placeholder="/api/example"
+                  error={meta.errors[0]}
+                />
+              )}
+            </Field>
+            <Field<AddInterfaceModalForm> name="method" rules={[{ required: true, message: '请选择 Method' }]}>
+              {(control, meta) => (
+                <Select
+                  label="Method"
+                  value={control.value ? String(control.value) : null}
+                  onChange={value => control.onChange(value || undefined)}
+                  data={methodOptions}
+                  error={meta.errors[0]}
+                />
+              )}
+            </Field>
+            <Field<AddInterfaceModalForm> name="catid" rules={[{ required: true, message: '请选择分类' }]}>
+              {(control, meta) => (
+                <Select
+                  label="分类"
+                  value={control.value ? String(control.value) : null}
+                  onChange={value => control.onChange(value ? Number(value) : undefined)}
+                  data={catOptions}
+                  error={meta.errors[0]}
+                />
+              )}
+            </Field>
+            <ModalActions
+              loading={props.addInterfaceLoading}
+              onCancel={props.onCancelAddInterface}
+              onConfirm={() => props.addInterfaceForm.submit()}
+              confirmText="确认"
             />
-          </Form.Item>
-        </Form>
+          </Stack>
+        </RcForm>
       </Modal>
 
-      <Modal
-        title="Tag 设置"
-        open={props.tagSettingOpen}
-        onCancel={props.onCancelTagSetting}
-        onOk={props.onSaveTagSetting}
-        confirmLoading={props.tagSettingLoading}
-        okText="保存"
-      >
-        <Space direction="vertical" className="legacy-interface-modal-stack">
-          <Text type="secondary">每行一个 Tag 名称，保存后会更新当前项目 Tag 列表。</Text>
-          <Input.TextArea
-            rows={8}
+      <Modal title="Tag 设置" opened={props.tagSettingOpen} onClose={props.onCancelTagSetting}>
+        <Stack className="legacy-interface-modal-stack">
+          <Text c="dimmed">每行一个 Tag 名称，保存后会更新当前项目 Tag 列表。</Text>
+          <Textarea
+            minRows={8}
             value={props.tagSettingInput}
-            onChange={event => props.onTagSettingInputChange(event.target.value)}
+            onChange={event => props.onTagSettingInputChange(event.currentTarget.value)}
             placeholder={'example-tag\nbeta\ninternal'}
           />
-        </Space>
+          <ModalActions
+            loading={props.tagSettingLoading}
+            onCancel={props.onCancelTagSetting}
+            onConfirm={props.onSaveTagSetting}
+            confirmText="保存"
+          />
+        </Stack>
       </Modal>
 
-      <Modal
-        title="批量添加参数"
-        open={props.bulkOpen}
-        onCancel={props.onCancelBulk}
-        onOk={props.onConfirmBulk}
-        okText="导入"
-        cancelText="取消"
-      >
-        <Space direction="vertical" className="legacy-interface-modal-stack">
-          <Text type="secondary">每行一个 `name:example`，例如 `id:1`。</Text>
-          <Input.TextArea
-            rows={10}
+      <Modal title="批量添加参数" opened={props.bulkOpen} onClose={props.onCancelBulk}>
+        <Stack className="legacy-interface-modal-stack">
+          <Text c="dimmed">每行一个 `name:example`，例如 `id:1`。</Text>
+          <Textarea
+            minRows={10}
             value={props.bulkValue}
-            onChange={event => props.onBulkValueChange(event.target.value)}
+            onChange={event => props.onBulkValueChange(event.currentTarget.value)}
             placeholder="name:example"
           />
-        </Space>
+          <ModalActions onCancel={props.onCancelBulk} onConfirm={props.onConfirmBulk} confirmText="导入" />
+        </Stack>
       </Modal>
 
-      <Modal
+      <CategoryFormModal
         title="新增分类"
-        open={props.addCatOpen}
-        onCancel={props.onCancelAddCat}
-        onOk={() => {
-          void props.addCatForm.submit();
-        }}
-        confirmLoading={props.addCatLoading}
-        okText="确认"
-        cancelText="取消"
-      >
-        <Form<CategoryModalForm>
-          form={props.addCatForm}
-          layout="vertical"
-          onFinish={values => void props.onSubmitAddCat(values)}
-        >
-          <Form.Item label="分类名称" name="name" rules={[{ required: true, message: '请输入分类名称' }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item label="描述" name="desc">
-            <Input.TextArea rows={3} />
-          </Form.Item>
-        </Form>
-      </Modal>
+        opened={props.addCatOpen}
+        form={props.addCatForm}
+        loading={props.addCatLoading}
+        onClose={props.onCancelAddCat}
+        onSubmit={props.onSubmitAddCat}
+      />
 
-      <Modal
+      <CategoryFormModal
         title="编辑分类"
-        open={props.editCatOpen}
-        onCancel={props.onCancelEditCat}
-        onOk={() => {
-          void props.editCatForm.submit();
-        }}
-        confirmLoading={props.editCatLoading}
-        okText="确认"
-        cancelText="取消"
-      >
-        <Form<CategoryModalForm>
-          form={props.editCatForm}
-          layout="vertical"
-          onFinish={values => void props.onSubmitEditCat(values)}
-        >
-          <Form.Item label="分类名称" name="name" rules={[{ required: true, message: '请输入分类名称' }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item label="描述" name="desc">
-            <Input.TextArea rows={3} />
-          </Form.Item>
-        </Form>
-      </Modal>
+        opened={props.editCatOpen}
+        form={props.editCatForm}
+        loading={props.editCatLoading}
+        onClose={props.onCancelEditCat}
+        onSubmit={props.onSubmitEditCat}
+      />
     </>
   );
 }

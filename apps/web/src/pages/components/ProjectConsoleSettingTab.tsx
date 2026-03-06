@@ -1,8 +1,7 @@
-import { DownOutlined, ExclamationCircleOutlined, QuestionCircleOutlined, UpOutlined } from '@ant-design/icons';
-import { Button, Form, Input, Space, Switch, Tooltip, Typography } from 'antd';
-import type { FormInstance } from 'antd';
-
-const { Text } = Typography;
+import { Button, Group, Switch, Text, TextInput, Textarea, Tooltip } from '@mantine/core';
+import { IconChevronDown, IconChevronUp, IconExclamationCircle, IconHelpCircle } from '@tabler/icons-react';
+import RcForm, { Field } from 'rc-field-form';
+import type { FormInstance } from 'rc-field-form';
 
 export type GroupSettingForm = {
   group_name: string;
@@ -32,45 +31,76 @@ type ProjectConsoleSettingTabProps = {
 export function ProjectConsoleSettingTab(props: ProjectConsoleSettingTabProps) {
   return (
     <div className="m-panel group-setting-pane">
-      <Form<GroupSettingForm> form={props.form} layout="vertical" onFinish={props.onSave}>
-        <Form.Item label="分组名称" name="group_name" rules={[{ required: true, message: '请输入分组名称' }]}>
-          <Input />
-        </Form.Item>
-        <Form.Item label="分组简介" name="group_desc">
-          <Input.TextArea rows={4} />
-        </Form.Item>
-        <Form.Item label="接口自定义字段">
-          <Space align="start" className="legacy-console-custom-field-row">
-            <Form.Item noStyle name="custom_field1_name">
-              <Input
-                placeholder="请输入自定义字段名称"
-                status={props.customFieldRule ? 'error' : ''}
-                className="legacy-console-custom-field-input"
-              />
-            </Form.Item>
-            <Tooltip title="可以在接口中添加额外字段数据">
-              <QuestionCircleOutlined className="legacy-console-custom-field-help" />
-            </Tooltip>
-            <Form.Item noStyle name="custom_field1_enable" valuePropName="checked">
-              <Switch checkedChildren="开" unCheckedChildren="关" />
-            </Form.Item>
-          </Space>
-          {props.customFieldRule ? <div className="legacy-field-error">自定义字段名称不能为空</div> : null}
-        </Form.Item>
-        <div className="legacy-console-setting-submit">
-          <Button type="primary" htmlType="submit" loading={props.updateLoading}>保存设置</Button>
+      <RcForm<GroupSettingForm> form={props.form} onFinish={props.onSave}>
+        <div className="space-y-4">
+          <Field<GroupSettingForm> name="group_name" rules={[{ required: true, message: '请输入分组名称' }]}>
+            {(control, meta) => (
+              <div>
+                <Text mb={6} fw={500}>
+                  分组名称
+                </Text>
+                <TextInput value={control.value} onChange={event => control.onChange(event.currentTarget.value)} />
+                {meta.errors[0] ? <div className="legacy-field-error">{meta.errors[0]}</div> : null}
+              </div>
+            )}
+          </Field>
+
+          <Field<GroupSettingForm> name="group_desc">
+            {(control) => (
+              <div>
+                <Text mb={6} fw={500}>
+                  分组简介
+                </Text>
+                <Textarea rows={4} value={control.value} onChange={event => control.onChange(event.currentTarget.value)} />
+              </div>
+            )}
+          </Field>
+
+          <div>
+            <Text mb={6} fw={500}>
+              接口自定义字段
+            </Text>
+            <Group align="start" className="legacy-console-custom-field-row">
+              <Field<GroupSettingForm> name="custom_field1_name">
+                {(control) => (
+                  <TextInput
+                    value={control.value}
+                    onChange={event => control.onChange(event.currentTarget.value)}
+                    placeholder="请输入自定义字段名称"
+                    error={props.customFieldRule ? '自定义字段名称不能为空' : undefined}
+                    className="legacy-console-custom-field-input"
+                  />
+                )}
+              </Field>
+              <Tooltip label="可以在接口中添加额外字段数据">
+                <IconHelpCircle className="legacy-console-custom-field-help" size={18} />
+              </Tooltip>
+              <Field<GroupSettingForm> name="custom_field1_enable" valuePropName="checked">
+                {(control) => (
+                  <Switch checked={Boolean(control.value)} onChange={event => control.onChange(event.currentTarget.checked)} />
+                )}
+              </Field>
+            </Group>
+            {props.customFieldRule ? <div className="legacy-field-error">自定义字段名称不能为空</div> : null}
+          </div>
+
+          <div className="legacy-console-setting-submit">
+            <Button type="submit" loading={props.updateLoading}>
+              保存设置
+            </Button>
+          </div>
         </div>
-      </Form>
+      </RcForm>
 
       {props.canDeleteGroup ? (
         <div className="group-danger-zone legacy-console-danger-zone">
           <div className="legacy-console-danger-head">
             <span className="legacy-console-danger-title">
-              <ExclamationCircleOutlined className="legacy-console-danger-icon" />
+              <IconExclamationCircle className="legacy-console-danger-icon" size={18} />
               危险操作
             </span>
-            <Button onClick={props.onToggleDanger}>
-              {props.showDangerOptions ? '收起' : '查看'} {props.showDangerOptions ? <UpOutlined /> : <DownOutlined />}
+            <Button variant="light" onClick={props.onToggleDanger} rightSection={props.showDangerOptions ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}>
+              {props.showDangerOptions ? '收起' : '查看'}
             </Button>
           </div>
           {props.showDangerOptions ? (
@@ -79,17 +109,17 @@ export function ProjectConsoleSettingTab(props: ProjectConsoleSettingTabProps) {
                 分组删除后将移除分组下所有项目及接口，请谨慎操作。仅管理员可执行该操作。
               </div>
               <div className="legacy-console-danger-confirm-path">
-                <Text type="secondary">
-                  请输入分组名 <Text code>{props.selectedGroupName || '-'}</Text> 以确认删除
+                <Text c="dimmed">
+                  请输入分组名 <Text component="span" fw={700}>{props.selectedGroupName || '-'}</Text> 以确认删除
                 </Text>
-                <Input
+                <TextInput
                   value={props.dangerConfirmName}
-                  onChange={event => props.onDangerConfirmNameChange(event.target.value)}
+                  onChange={event => props.onDangerConfirmNameChange(event.currentTarget.value)}
                   placeholder={`请输入 ${props.selectedGroupName || '分组名'}`}
                   className="legacy-console-danger-confirm-input"
                 />
                 <Text
-                  type={props.dangerConfirmName.trim() && !props.dangerConfirmMatched ? 'danger' : 'secondary'}
+                  c={props.dangerConfirmName.trim() && !props.dangerConfirmMatched ? 'red' : 'dimmed'}
                   className="legacy-console-danger-confirm-hint"
                 >
                   {props.dangerConfirmName.trim()
@@ -99,12 +129,7 @@ export function ProjectConsoleSettingTab(props: ProjectConsoleSettingTabProps) {
                     : '输入完成后可点击删除分组'}
                 </Text>
               </div>
-              <Button
-                danger
-                onClick={props.onDeleteGroup}
-                loading={props.deleteLoading}
-                disabled={!props.dangerConfirmMatched}
-              >
+              <Button color="red" onClick={props.onDeleteGroup} loading={props.deleteLoading} disabled={!props.dangerConfirmMatched}>
                 删除分组
               </Button>
             </div>

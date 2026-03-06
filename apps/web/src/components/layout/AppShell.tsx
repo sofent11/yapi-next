@@ -6,5 +6,16 @@ type AppShellProps = {
 };
 
 export function AppShell(props: AppShellProps) {
-  return <div className={`legacy-page-shell ${props.className || ''}`.trim()}>{props.children}</div>;
+  return (
+    <div
+      className={[
+        'mx-auto w-full max-w-[1600px] px-4 py-6 md:px-6 lg:px-8',
+        props.className
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      {props.children}
+    </div>
+  );
 }

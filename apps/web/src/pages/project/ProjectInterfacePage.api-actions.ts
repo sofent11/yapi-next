@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
-import { message, Modal } from 'antd';
-import type { FormInstance } from 'antd';
+import { modals } from '@mantine/modals';
+import { notifications } from '@mantine/notifications';
+import type { FormInstance } from 'rc-field-form';
 import type { NavigateFunction } from 'react-router-dom';
 import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
 
@@ -28,6 +29,18 @@ import {
 import { stringifyPretty } from './ProjectInterfacePage.request-runner';
 
 type ApiMutationTrigger = (args: any) => { unwrap: () => Promise<any> };
+
+const message = {
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  },
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  warning(text: string) {
+    notifications.show({ color: 'yellow', message: text });
+  }
+};
 
 type UseProjectInterfaceApiActionsParams = {
   projectId: number;
@@ -316,13 +329,12 @@ export function useProjectInterfaceApiActions(params: UseProjectInterfaceApiActi
   }, [params]);
 
   const confirmDeleteCat = useCallback((cat: InterfaceTreeNode) => {
-    Modal.confirm({
+    modals.openConfirmModal({
       title: `确定删除分类 ${cat.name} 吗？`,
-      content: '该操作会删除分类下所有接口，且无法恢复。',
-      okText: '确认',
-      cancelText: '取消',
-      okButtonProps: { danger: true },
-      onOk: async () => {
+      children: '该操作会删除分类下所有接口，且无法恢复。',
+      labels: { confirm: '确认', cancel: '取消' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
         const response = await params.callApi(
           params.delInterfaceCat({
             catid: Number(cat._id || 0),
@@ -340,13 +352,12 @@ export function useProjectInterfaceApiActions(params: UseProjectInterfaceApiActi
   }, [params]);
 
   const confirmDeleteInterface = useCallback((id: number) => {
-    Modal.confirm({
+    modals.openConfirmModal({
       title: '确定删除此接口吗？',
-      content: '接口删除后无法恢复。',
-      okText: '确认',
-      cancelText: '取消',
-      okButtonProps: { danger: true },
-      onOk: async () => {
+      children: '接口删除后无法恢复。',
+      labels: { confirm: '确认', cancel: '取消' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
         const response = await params.callApi(
           params.delInterface({
             id,

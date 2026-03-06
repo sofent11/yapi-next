@@ -1,15 +1,13 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { Button, Drawer, SegmentedControl, Text } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import {
-  AppstoreOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  PartitionOutlined
-} from '@ant-design/icons';
-import { Button, Drawer, Grid, Segmented, Space, Typography } from 'antd';
+  IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand,
+  IconListDetails,
+  IconFolders
+} from '@tabler/icons-react';
 import { SplitWorkspace } from '../../../components/layout';
-
-const { useBreakpoint } = Grid;
-const { Text } = Typography;
 
 type InterfaceWorkspaceLayoutProps = {
   action: string;
@@ -22,8 +20,7 @@ type InterfaceWorkspaceLayoutProps = {
 
 export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
   const activeKey = props.action === 'api' ? 'api' : 'col';
-  const screens = useBreakpoint();
-  const isMobile = !screens.lg;
+  const isMobile = !useMediaQuery('(min-width: 75em)');
   const [leftHidden, setLeftHidden] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -39,40 +36,34 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
           </div>
           {!isMobile ? (
             <Button
-              type="text"
-              size="small"
-              icon={leftHidden ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              variant="subtle"
+              size="compact-sm"
+              leftSection={
+                leftHidden ? <IconLayoutSidebarLeftExpand size={16} /> : <IconLayoutSidebarLeftCollapse size={16} />
+              }
               onClick={() => setLeftHidden(value => !value)}
               aria-label={leftHidden ? '展开资源目录' : '收起资源目录'}
-            />
+            >
+              {leftHidden ? '展开' : '收起'}
+            </Button>
           ) : null}
         </div>
         <div className="legacy-interface-side-switch">
-          <Segmented
-            block
+          <SegmentedControl
+            fullWidth
             value={activeKey}
             onChange={value => {
               if (value === 'api') props.onSwitchAction('api');
               if (value === 'col') props.onSwitchAction('col');
             }}
-            options={[
+            data={[
               {
                 value: 'api',
-                label: (
-                  <Space size={6}>
-                    <PartitionOutlined />
-                    <span>接口</span>
-                  </Space>
-                )
+                label: <span className="inline-flex items-center gap-1"><IconListDetails size={14} />接口</span>
               },
               {
                 value: 'col',
-                label: (
-                  <Space size={6}>
-                    <AppstoreOutlined />
-                    <span>集合</span>
-                  </Space>
-                )
+                label: <span className="inline-flex items-center gap-1"><IconFolders size={14} />集合</span>
               }
             ]}
           />
@@ -104,11 +95,19 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
                 </div>
                 <div className="legacy-interface-workbench-actions">
                   {isMobile ? (
-                    <Button icon={<MenuUnfoldOutlined />} onClick={() => setMobileOpen(true)}>
+                    <Button
+                      variant="default"
+                      leftSection={<IconLayoutSidebarLeftExpand size={16} />}
+                      onClick={() => setMobileOpen(true)}
+                    >
                       打开目录
                     </Button>
                   ) : leftHidden ? (
-                    <Button icon={<MenuUnfoldOutlined />} onClick={() => setLeftHidden(false)}>
+                    <Button
+                      variant="default"
+                      leftSection={<IconLayoutSidebarLeftExpand size={16} />}
+                      onClick={() => setLeftHidden(false)}
+                    >
                       显示目录
                     </Button>
                   ) : null}
@@ -125,9 +124,9 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
       {isMobile ? (
         <Drawer
           title="资源目录"
-          placement="left"
-          width="min(88vw, 360px)"
-          open={mobileOpen}
+          position="left"
+          size="min(88vw, 360px)"
+          opened={mobileOpen}
           onClose={() => setMobileOpen(false)}
           className="legacy-interface-side-drawer"
         >

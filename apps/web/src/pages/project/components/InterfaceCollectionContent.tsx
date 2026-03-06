@@ -1,5 +1,5 @@
-import type { FormInstance } from 'antd';
-import { Card } from 'antd';
+import { Card, Loader } from '@mantine/core';
+import type { FormInstance } from 'rc-field-form';
 import { LegacyErrMsg } from '../../../components/LegacyErrMsg';
 import { CaseDetailPanel } from './CaseDetailPanel';
 import { CollectionOverviewPanel } from './CollectionOverviewPanel';
@@ -126,7 +126,13 @@ export function InterfaceCollectionContent(props: InterfaceCollectionContentProp
   }
 
   if (props.caseDetailLoading) {
-    return <Card loading />;
+    return (
+      <Card padding="lg" radius="lg" withBorder>
+        <div className="flex justify-center py-10">
+          <Loader />
+        </div>
+      </Card>
+    );
   }
 
   const detail = props.caseDetailData;

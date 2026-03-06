@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
-import { message } from 'antd';
-import type { FormInstance } from 'antd';
+import { notifications } from '@mantine/notifications';
+import type { FormInstance } from 'rc-field-form';
 import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
 
 import {
@@ -16,6 +16,18 @@ import {
   sanitizeReqParams,
   sanitizeReqQuery
 } from './ProjectInterfacePage.utils';
+
+const message = {
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  },
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  warning(text: string) {
+    notifications.show({ color: 'yellow', message: text });
+  }
+};
 
 type UseProjectInterfaceEditHelpersParams = {
   props: ProjectInterfacePageProps;

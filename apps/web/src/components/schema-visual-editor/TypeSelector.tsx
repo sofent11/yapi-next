@@ -1,4 +1,4 @@
-import { Select } from 'antd';
+import { Select } from '@mantine/core';
 import { FIELD_TYPES } from '../SchemaVisualEditor.utils';
 import type { SchemaFieldType } from '../SchemaVisualEditor.types';
 
@@ -9,11 +9,11 @@ type TypeSelectorProps = {
 
 export function TypeSelector({ value, onChange }: TypeSelectorProps) {
   return (
-    <Select<SchemaFieldType>
+    <Select
       value={value}
       className="legacy-workspace-control"
-      options={FIELD_TYPES}
-      onChange={onChange}
+      data={FIELD_TYPES}
+      onChange={nextValue => onChange((nextValue as SchemaFieldType) || 'string')}
     />
   );
 }

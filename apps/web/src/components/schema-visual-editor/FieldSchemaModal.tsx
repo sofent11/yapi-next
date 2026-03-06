@@ -1,4 +1,4 @@
-import { Modal, Input } from 'antd';
+import { Button, Group, Modal, Textarea } from '@mantine/core';
 
 type Props = {
   open: boolean;
@@ -12,13 +12,15 @@ export function FieldSchemaModal({ open, draft, onChange, onCancel, onSave }: Pr
   return (
     <Modal
       title="字段 Schema"
-      open={open}
-      onCancel={onCancel}
-      onOk={onSave}
-      width={720}
-      okText="应用"
+      opened={open}
+      onClose={onCancel}
+      size="lg"
     >
-      <Input.TextArea rows={16} value={draft} onChange={event => onChange(event.target.value)} />
+      <Textarea minRows={16} autosize value={draft} onChange={event => onChange(event.currentTarget.value)} />
+      <Group justify="flex-end" mt="md">
+        <Button variant="default" onClick={onCancel}>取消</Button>
+        <Button onClick={onSave}>应用</Button>
+      </Group>
     </Modal>
   );
 }

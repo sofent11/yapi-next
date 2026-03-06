@@ -1,4 +1,4 @@
-import { Input } from 'antd';
+import { TextInput } from '@mantine/core';
 
 type PropertyEditorProps = {
   value: string;
@@ -8,9 +8,9 @@ type PropertyEditorProps = {
 
 export function PropertyEditor({ value, onChange, placeholder }: PropertyEditorProps) {
   return (
-    <Input
+    <TextInput
       value={value}
-      onChange={event => onChange(event.target.value)}
+      onChange={event => onChange(event.currentTarget.value)}
       placeholder={placeholder || '备注'}
     />
   );

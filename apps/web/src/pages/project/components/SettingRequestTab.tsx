@@ -1,11 +1,22 @@
 import { useEffect } from 'react';
-import { Alert, Button, Form, Input, message } from 'antd';
+import { Alert, Button, Stack, Text, Textarea } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import RcForm, { Field, useForm as useRcForm } from 'rc-field-form';
 import { useGetProjectQuery, useUpdateProjectMutation } from '../../../services/yapi-api';
 import { SectionCard } from '../../../components/layout';
 import type { RequestForm, ProjectSettingPageProps } from '../ProjectSettingPage.types';
 
+const message = {
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  }
+};
+
 export function SettingRequestTab(props: ProjectSettingPageProps) {
-  const [requestForm] = Form.useForm<RequestForm>();
+  const [requestForm] = useRcForm<RequestForm>();
   const detailQuery = useGetProjectQuery(
     { projectId: props.projectId },
     { skip: props.projectId <= 0 }
@@ -39,33 +50,52 @@ export function SettingRequestTab(props: ProjectSettingPageProps) {
 
   return (
     <SectionCard className="m-panel legacy-project-setting-card">
-      <Form<RequestForm> form={requestForm} layout="vertical">
-        <Alert
-          showIcon
-          type="info"
-          className="legacy-setting-info-alert"
-          message="在请求发送前后执行全局脚本，适合统一注入 Header、鉴权或响应后处理。"
-        />
-        <Form.Item
-          label="Pre-request Script（请求前处理脚本）"
-          name="pre_script"
-          extra="发送请求前执行，适合补充签名、时间戳或环境变量。"
-        >
-          <Input.TextArea rows={10} placeholder="在这里编写请求前处理脚本…" />
-        </Form.Item>
-        <Form.Item
-          label="Post-response Script（响应后处理脚本）"
-          name="after_script"
-          extra="请求完成后执行，适合统一整理响应数据或埋点。"
-        >
-          <Input.TextArea rows={10} placeholder="在这里编写响应后处理脚本…" />
-        </Form.Item>
-        <div className="legacy-setting-actions">
-          <Button className="btn-save" type="primary" size="large" onClick={() => void handleSaveRequest()} loading={updateState.isLoading}>
-            保存请求配置
-          </Button>
-        </div>
-      </Form>
+      <RcForm<RequestForm> form={requestForm}>
+        <Stack>
+          <Alert
+            color="blue"
+            className="legacy-setting-info-alert"
+            title="在请求发送前后执行全局脚本，适合统一注入 Header、鉴权或响应后处理。"
+          />
+          <Field<RequestForm> name="pre_script">
+            {(control) => (
+              <div>
+                <Textarea
+                  label="Pre-request Script（请求前处理脚本）"
+                  minRows={10}
+                  value={control.value ?? ''}
+                  onChange={event => control.onChange(event.currentTarget.value)}
+                  placeholder="在这里编写请求前处理脚本…"
+                />
+                <Text c="dimmed" size="sm" mt={6}>
+                  发送请求前执行，适合补充签名、时间戳或环境变量。
+                </Text>
+              </div>
+            )}
+          </Field>
+          <Field<RequestForm> name="after_script">
+            {(control) => (
+              <div>
+                <Textarea
+                  label="Post-response Script（响应后处理脚本）"
+                  minRows={10}
+                  value={control.value ?? ''}
+                  onChange={event => control.onChange(event.currentTarget.value)}
+                  placeholder="在这里编写响应后处理脚本…"
+                />
+                <Text c="dimmed" size="sm" mt={6}>
+                  请求完成后执行，适合统一整理响应数据或埋点。
+                </Text>
+              </div>
+            )}
+          </Field>
+          <div className="legacy-setting-actions">
+            <Button className="btn-save" size="md" onClick={() => void handleSaveRequest()} loading={updateState.isLoading}>
+              保存请求配置
+            </Button>
+          </div>
+        </Stack>
+      </RcForm>
     </SectionCard>
   );
 }

@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Avatar, Button, Empty, Modal, Select, Space, Timeline, Typography } from 'antd';
+import { Avatar, Button, Loader, Modal, Select, Text, Timeline } from '@mantine/core';
 import { Link } from 'react-router-dom';
 import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
 import { useGetInterfaceListQuery, useGetLogListQuery } from '../services/yapi-api';
 import { buildLegacyLogDiff, type LegacyLogDiffItem } from '../utils/legacy-log-diff';
 import { sanitizeHtml } from '../utils/html-sanitize';
-
-const { Text } = Typography;
 
 type TimelineType = 'project' | 'group';
 
@@ -31,7 +29,6 @@ type LogRow = {
 type ApiFilterOption = {
   label: string;
   value: string;
-  searchText: string;
 };
 
 const API_FILTER_INTERFACE_LIMIT = 200;
@@ -131,8 +128,8 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
 
   const apiFilterOptions = useMemo<ApiFilterOption[]>(() => {
     const options: ApiFilterOption[] = [
-      { label: '选择全部', value: '', searchText: '' },
-      { label: 'wiki', value: 'wiki', searchText: 'wiki' }
+      { label: '选择全部', value: '' },
+      { label: 'wiki', value: 'wiki' }
     ];
     interfaces.forEach(item => {
       const id = toNumericId(item._id);
@@ -141,9 +138,8 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
       const title = String(item.title || item.path || id);
       const path = String(item.path || '');
       options.push({
-        label: `${title} [${method}]`,
-        value: String(id),
-        searchText: `${title} ${path} ${method}`.toLowerCase()
+        label: `${title} [${method}] ${path}`.trim(),
+        value: String(id)
       });
     });
     return options;
@@ -152,56 +148,66 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
   return (
     <section className="legacy-timeline-wrap legacy-timeline-shell">
       {props.showApiFilter && props.type === 'project' ? (
-        <div className="legacy-timeline-filter">
-          <Space wrap>
+        <div className="legacy-timeline-filter mb-4">
+          <div className="flex flex-wrap items-center gap-3">
             <Text>选择查询的 Api：</Text>
-            <Select<string>
+            <Select
               value={selectValue}
               onChange={value => setSelectValue(value || '')}
-              options={apiFilterOptions}
-              showSearch
-              filterOption={(input, option) => {
-                const row = option as ApiFilterOption | undefined;
-                if (!row) return false;
-                const q = input.toLowerCase();
-                if (!q) return true;
-                return row.label.toLowerCase().includes(q) || row.searchText.includes(q);
-              }}
-              className="legacy-timeline-api-select"
+              data={apiFilterOptions}
+              searchable
+              className="legacy-timeline-api-select min-w-[280px]"
             />
-          </Space>
+          </div>
         </div>
       ) : null}
 
       {logRows.length === 0 && !query.isFetching ? (
-        <Empty description="暂无动态" />
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+          暂无动态
+        </div>
       ) : (
         <Timeline
           className="legacy-timeline-content"
-          items={logRows.map(item => {
+          bulletSize={44}
+          lineWidth={3}
+          classNames={{
+            item: 'legacy-timeline-row',
+            itemBullet: 'legacy-timeline-bullet',
+            itemBody: 'legacy-timeline-body',
+            itemContent: 'legacy-timeline-item-content',
+            itemTitle: 'legacy-timeline-item-title'
+          }}
+        >
+          {logRows.map(item => {
             const rowType = String(item.type || props.type);
             const uid = toNumericId(item.uid);
             const interfaceDiff = !!item.data && typeof item.data === 'object';
-            return {
-              dot: (
-                <Link to={`/user/profile/${uid}`}>
-                  <Avatar src={`/api/user/avatar?uid=${uid}`} />
-                </Link>
-              ),
-              children: (
-                <div className="legacy-timeline-item">
-                  <div className="legacy-log-head">
+
+            return (
+              <Timeline.Item
+                key={String(item._id || `${uid}-${item.add_time || 0}`)}
+                bullet={
+                  <Link to={`/user/profile/${uid}`}>
+                    <Avatar src={`/api/user/avatar?uid=${uid}`} size={32} />
+                  </Link>
+                }
+              >
+                <div className="legacy-timeline-item space-y-3">
+                  <div className="legacy-log-head flex flex-wrap items-center gap-3">
                     <span className="legacy-log-type legacy-log-chip">{typeLabel(rowType)}动态</span>
                     <span className="legacy-log-time">{formatTime(Number(item.add_time || 0))}</span>
                     <span className="legacy-logo-timeago">{formatTimeAgo(Number(item.add_time || 0))}</span>
                   </div>
                   <span
-                    className="legacy-log-content"
+                    className="legacy-log-content block"
                     dangerouslySetInnerHTML={{ __html: sanitizeHtml(String(item.content || '-')) }}
                   />
                   {interfaceDiff ? (
                     <div className="legacy-timeline-item-actions">
                       <Button
+                        variant="default"
+                        size="compact-sm"
                         onClick={() => {
                           setDiffItems(buildLegacyLogDiff(item.data));
                           setDetailOpen(true);
@@ -212,42 +218,45 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
                     </div>
                   ) : null}
                 </div>
-              )
-            };
+              </Timeline.Item>
+            );
           })}
-        />
+        </Timeline>
       )}
 
-      <div className="legacy-timeline-footer">
+      <div className="legacy-timeline-footer mt-4 flex justify-center">
         {query.isFetching ? (
-          <Text type="secondary">加载中...</Text>
+          <Loader size="sm" />
         ) : hasMore ? (
-          <Button type="link" onClick={() => setPage(prev => prev + 1)}>
+          <Button variant="subtle" onClick={() => setPage(prev => prev + 1)}>
             查看更多
           </Button>
         ) : (
-          <Text type="secondary">以上为全部内容</Text>
+          <Text c="dimmed" size="sm">
+            以上为全部内容
+          </Text>
         )}
       </div>
 
       <Modal
         title="Api 改动日志"
-        open={detailOpen}
-        onCancel={() => setDetailOpen(false)}
-        footer={null}
-        width={900}
+        opened={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        size="xl"
       >
-        <div className="legacy-diff-note">注： 绿色代表新增内容，红色代表删除内容</div>
-        <div className="legacy-diff-content">
+        <div className="legacy-diff-note mb-4 text-sm text-slate-500">注：绿色代表新增内容，红色代表删除内容</div>
+        <div className="legacy-diff-content space-y-4">
           {diffItems.length > 0 ? (
             diffItems.map(item => (
-              <div key={item.title} className="legacy-diff-item">
-                <h3 className="legacy-diff-item-title">{item.title}</h3>
+              <div key={item.title} className="legacy-diff-item space-y-2">
+                <h3 className="legacy-diff-item-title text-base font-semibold text-slate-900">{item.title}</h3>
                 <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.content) }} />
               </div>
             ))
           ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有改动" />
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              没有改动
+            </div>
           )}
         </div>
       </Modal>

@@ -1,9 +1,21 @@
-import { Alert, Button, Input, Modal, Space, Typography, message } from 'antd';
+import { Alert, Button, Stack, Text, TextInput } from '@mantine/core';
+import { modals } from '@mantine/modals';
+import { notifications } from '@mantine/notifications';
 import { useGetProjectQuery, useGetProjectTokenQuery, useUpdateProjectTokenMutation } from '../../../services/yapi-api';
 import { SectionCard } from '../../../components/layout';
 import type { ProjectSettingPageProps } from '../ProjectSettingPage.types';
 
-const { Text } = Typography;
+const message = {
+  warning(text: string) {
+    notifications.show({ color: 'yellow', message: text });
+  },
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  }
+};
 
 export function SettingTokenTab(props: ProjectSettingPageProps) {
   const detailQuery = useGetProjectQuery(
@@ -40,12 +52,11 @@ export function SettingTokenTab(props: ProjectSettingPageProps) {
   }
 
   function handleRegenerateToken() {
-    Modal.confirm({
+    modals.openConfirmModal({
       title: '重新生成key',
-      content: '重新生成之后，之前的key将无法使用，确认重新生成吗？',
-      okText: '确认',
-      cancelText: '取消',
-      onOk: async () => {
+      children: '重新生成之后，之前的key将无法使用，确认重新生成吗？',
+      labels: { confirm: '确认', cancel: '取消' },
+      onConfirm: async () => {
         const response = await updateProjectToken({ projectId: props.projectId }).unwrap();
         if (response.errcode !== 0) {
           message.error(response.errmsg || '更新 token 失败');
@@ -59,33 +70,32 @@ export function SettingTokenTab(props: ProjectSettingPageProps) {
 
   return (
     <SectionCard className="m-panel legacy-project-setting-card">
-      <Space direction="vertical" className="legacy-workspace-stack">
+      <Stack className="legacy-workspace-stack">
         <Alert
-          type="info"
-          showIcon
+          color="blue"
           className="legacy-setting-info-alert"
-          message="Token 用于 OpenAPI 与开放接口访问，请妥善保管并仅在可信环境中使用。"
+          title="Token 用于 OpenAPI 与开放接口访问，请妥善保管并仅在可信环境中使用。"
         />
-        <Text strong>工具标识</Text>
-        <Text type="secondary">
-          每个项目都有唯一 token，可用于请求项目 openapi。
-        </Text>
-        <Input value={String(tokenQuery.data?.data || '')} readOnly />
-        <Space>
-          <Button onClick={handleCopyToken}>复制 Token</Button>
+        <Text fw={700}>工具标识</Text>
+        <Text c="dimmed">每个项目都有唯一 token，可用于请求项目 openapi。</Text>
+        <TextInput value={String(tokenQuery.data?.data || '')} readOnly />
+        <div className="flex flex-wrap gap-3">
+          <Button variant="default" onClick={handleCopyToken}>
+            复制 Token
+          </Button>
           {canDeleteProject ? (
             <Button onClick={handleRegenerateToken} loading={updateTokenState.isLoading}>
               重新生成 Token
             </Button>
           ) : null}
-          <Button onClick={() => tokenQuery.refetch()}>刷新</Button>
-        </Space>
-        <Text strong className="legacy-workspace-text-top">
+          <Button variant="default" onClick={() => tokenQuery.refetch()}>
+            刷新
+          </Button>
+        </div>
+        <Text fw={700} className="legacy-workspace-text-top">
           Open 接口
         </Text>
-        <Text type="secondary">
-          详细说明请查看 OpenAPI 文档，以下为常用接口：
-        </Text>
+        <Text c="dimmed">详细说明请查看 OpenAPI 文档，以下为常用接口：</Text>
         <ul className="legacy-open-api-list">
           <li>/api/open/run_auto_test</li>
           <li>/api/open/import_data</li>
@@ -105,7 +115,7 @@ export function SettingTokenTab(props: ProjectSettingPageProps) {
           <li>/api/spec/import/task/download</li>
           <li>/api/spec/export</li>
         </ul>
-      </Space>
+      </Stack>
     </SectionCard>
   );
 }

@@ -1,13 +1,26 @@
-import { Alert, AutoComplete, Button, Card, Form, Input, Radio, Select, Space, Switch, Tabs, Tooltip, Typography } from 'antd';
-import type { FormInstance } from 'antd';
-import { DeleteOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
+import {
+  Alert,
+  Autocomplete,
+  Button,
+  MultiSelect,
+  SegmentedControl,
+  Select,
+  Stack,
+  Switch,
+  Tabs,
+  Text,
+  TextInput,
+  Textarea,
+  Tooltip
+} from '@mantine/core';
+import { IconHelpCircle, IconTrash } from '@tabler/icons-react';
+import RcForm, { Field, List } from 'rc-field-form';
+import type { FormInstance } from 'rc-field-form';
 import { SectionCard } from '../../../components/layout';
 import { getHttpMethodBadgeClassName } from '../../../utils/http-method';
 import { legacyNameValidator } from '../../../utils/legacy-validation';
 import { SchemaModeEditor } from './SchemaModeEditor';
-
-const { Text } = Typography;
 
 export type InterfaceEditConflictState = {
   status: 'idle' | 'loading' | 'ready' | 'error' | 'locked';
@@ -58,503 +71,707 @@ type InterfaceEditTabProps = {
   saving: boolean;
 };
 
+type FieldLabelProps = {
+  label: string;
+  tip?: string;
+};
+
+function FieldLabel(props: FieldLabelProps) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {props.label}
+      {props.tip ? (
+        <Tooltip label={props.tip} multiline maw={320}>
+          <span className="inline-flex cursor-help text-slate-500">
+            <IconHelpCircle size={16} />
+          </span>
+        </Tooltip>
+      ) : null}
+    </span>
+  );
+}
+
+function DeleteRowButton(props: { onClick: () => void }) {
+  return (
+    <Button
+      color="red"
+      variant="light"
+      size="xs"
+      className="self-end"
+      onClick={props.onClick}
+      aria-label="删除"
+    >
+      <IconTrash size={14} />
+    </Button>
+  );
+}
+
 export function InterfaceEditTab(props: InterfaceEditTabProps) {
-  const methodSelectOptions = props.runMethods.map(item => ({
-    value: item,
-    label: <span className={getHttpMethodBadgeClassName(item)}>{item}</span>
+  const categoryOptions = props.catRows.map(item => ({
+    label: item.name,
+    value: String(Number(item._id || 0))
   }));
+  const tagOptions = props.projectTagOptions.map(item => ({
+    label: String(item.label || item.value || ''),
+    value: String(item.value || '')
+  }));
+  const reqPanelOptions = [
+    ...(props.supportsRequestBody(props.form.getFieldValue('method'))
+      ? [{ label: 'Body', value: 'req-body' as const }]
+      : []),
+    { label: 'Query', value: 'req-query' as const },
+    { label: 'Headers', value: 'req-headers' as const }
+  ];
 
   return (
     <div className="interface-edit">
-      {props.editConflictState.status === 'loading' ? (
-        <Card loading />
-      ) : props.editConflictState.status === 'locked' ? (
-        <Alert
-          type="warning"
-          showIcon
-          message={
-            <span>
-              <Link to={`/user/profile/${props.editConflictState.uid}`}>
-                <b>{props.editConflictState.username}</b>
-              </Link>
-              <span> 正在编辑该接口，请稍后再试...</span>
-            </span>
-          }
-        />
+      {props.editConflictState.status === 'locked' ? (
+        <Alert color="yellow" title="接口正在被其他人编辑">
+          <span>
+            <Link to={`/user/profile/${props.editConflictState.uid}`}>
+              <b>{props.editConflictState.username}</b>
+            </Link>
+            <span> 正在编辑该接口，请稍后再试...</span>
+          </span>
+        </Alert>
       ) : (
         <>
           {props.editConflictState.status === 'error' ? (
-            <Alert
-              className="legacy-edit-conflict-alert"
-              type="warning"
-              showIcon
-              message="多人编辑冲突检测暂时不可用，请稍后重试。"
-            />
+            <Alert className="legacy-edit-conflict-alert" color="yellow" title="多人编辑冲突检测暂时不可用，请稍后重试。" />
           ) : null}
-          <Form<InterfaceEditFormValues> form={props.form} layout="vertical">
-            <SectionCard title="基本设置" className="panel-sub legacy-edit-section">
-              <Form.Item label="接口名称" name="title" rules={[{ required: true, validator: legacyNameValidator('接口') }]}>
-                <Input />
-              </Form.Item>
-              <Form.Item label="选择分类" name="catid" rules={[{ required: true, message: '请选择分类' }]}>
-                <Select
-                  options={props.catRows.map(item => ({
-                    label: item.name,
-                    value: Number(item._id || 0)
-                  }))}
-                />
-              </Form.Item>
-              <Form.Item
-                label={
-                  <span>
-                    接口路径&nbsp;
-                    <Tooltip
-                      title={
-                        <div>
-                          <p>1. 支持动态路由，例如: /api/user/{'{id}'}</p>
-                          <p>2. 支持 ?controller=xxx 的 QueryRouter，普通 Query 参数请配置在 Query 区</p>
-                        </div>
-                      }
-                    >
-                      <span className="legacy-edit-help-trigger">?</span>
-                    </Tooltip>
-                  </span>
-                }
-                required
-              >
-                <Space.Compact className="legacy-edit-path-compact">
-                  <Form.Item name="method" noStyle>
-                    <Select
-                      className="legacy-edit-method-select"
-                      options={methodSelectOptions}
-                      onChange={(nextMethod: string) => {
-                        if (!props.supportsRequestBody(nextMethod) && props.reqRadioType === 'req-body') {
-                          props.onReqRadioTypeChange('req-query');
-                        }
-                      }}
-                    />
-                  </Form.Item>
-                  <Tooltip title="接口基本路径，可在项目设置里修改">
-                    <Input disabled value={props.basepath || ''} className="legacy-edit-basepath-input" />
-                  </Tooltip>
-                  <Form.Item name="path" noStyle rules={[{ required: true, message: '请输入接口路径' }]}>
-                    <Input
-                      placeholder="/api/user/{id}"
-                      onBlur={event => {
-                        props.form.setFieldValue('path', props.normalizePathInput(event.target.value));
-                      }}
-                    />
-                  </Form.Item>
-                </Space.Compact>
-              </Form.Item>
-              <Form.List name="req_params">
-                {fields => (
-                  <Space direction="vertical" className="legacy-edit-full-width-stack">
-                    {fields.length > 0 ? <Text strong>路径参数</Text> : null}
-                    {fields.map(field => (
-                      <Space key={field.key} align="start" wrap className="legacy-edit-row-wrap">
-                        <Form.Item label={field.name === 0 ? '参数名' : ''} name={[field.name, 'name']} className="legacy-edit-field-w220">
-                          <Input disabled />
-                        </Form.Item>
-                        <Form.Item
-                          label={field.name === 0 ? '示例' : ''}
-                          name={[field.name, 'example']}
-                          className="legacy-edit-field-min220-flex"
-                        >
-                          <Input />
-                        </Form.Item>
-                        <Form.Item
-                          label={field.name === 0 ? '备注' : ''}
-                          name={[field.name, 'desc']}
-                          className="legacy-edit-field-min260-flex"
-                        >
-                          <Input />
-                        </Form.Item>
-                      </Space>
-                    ))}
-                  </Space>
-                )}
-              </Form.List>
-              <Space wrap className="legacy-edit-row-wrap">
-                <Form.Item label="状态" name="status" className="legacy-edit-field-min140">
-                  <Select
-                    options={[
-                      { label: '已完成', value: 'done' },
-                      { label: '未完成', value: 'undone' }
-                    ]}
-                  />
-                </Form.Item>
-              </Space>
-              <Form.Item label="Tag" name="tag">
-                <Select
-                  mode="multiple"
-                  placeholder="请选择 Tag"
-                  options={props.projectTagOptions}
-                  popupRender={menu => (
+
+          <RcForm<InterfaceEditFormValues> form={props.form}>
+            <div className="flex flex-col gap-4">
+              <SectionCard title="基本设置" className="panel-sub legacy-edit-section">
+                <div className="flex flex-col gap-4">
+                  <Field<InterfaceEditFormValues> name="title" rules={[{ required: true, validator: legacyNameValidator('接口') }]}>
+                    {(control, meta) => (
+                      <TextInput
+                        label="接口名称"
+                        value={String(control.value ?? '')}
+                        onChange={event => control.onChange(event.currentTarget.value)}
+                        error={meta.errors[0]}
+                      />
+                    )}
+                  </Field>
+
+                  <Field<InterfaceEditFormValues> name="catid" rules={[{ required: true, message: '请选择分类' }]}>
+                    {(control, meta) => (
+                      <Select
+                        label="选择分类"
+                        value={control.value ? String(control.value) : null}
+                        onChange={value => control.onChange(value ? Number(value) : undefined)}
+                        data={categoryOptions}
+                        error={meta.errors[0]}
+                      />
+                    )}
+                  </Field>
+
+                  <div className="flex flex-col gap-2">
+                    <Text fw={500}>
+                      <FieldLabel
+                        label="接口路径"
+                        tip={'1. 支持动态路由，例如: /api/user/{id}\n2. 支持 ?controller=xxx 的 QueryRouter，普通 Query 参数请配置在 Query 区'}
+                      />
+                    </Text>
+                    <div className="legacy-edit-path-compact grid gap-3 md:grid-cols-[140px_180px_minmax(0,1fr)]">
+                      <Field<InterfaceEditFormValues> name="method">
+                        {(control) => (
+                          <Select
+                            className="legacy-edit-method-select"
+                            value={control.value ? String(control.value) : null}
+                            onChange={value => {
+                              control.onChange(value || undefined);
+                              if (value && !props.supportsRequestBody(value) && props.reqRadioType === 'req-body') {
+                                props.onReqRadioTypeChange('req-query');
+                              }
+                            }}
+                            data={props.runMethods.map(item => ({ value: item, label: item }))}
+                          />
+                        )}
+                      </Field>
+                      <Tooltip label="接口基本路径，可在项目设置里修改">
+                        <TextInput readOnly value={props.basepath || ''} className="legacy-edit-basepath-input" />
+                      </Tooltip>
+                      <Field<InterfaceEditFormValues> name="path" rules={[{ required: true, message: '请输入接口路径' }]}>
+                        {(control, meta) => (
+                          <TextInput
+                            value={String(control.value ?? '')}
+                            onChange={event => control.onChange(event.currentTarget.value)}
+                            onBlur={event => control.onChange(props.normalizePathInput(event.currentTarget.value))}
+                            placeholder="/api/user/{id}"
+                            error={meta.errors[0]}
+                          />
+                        )}
+                      </Field>
+                    </div>
+                  </div>
+
+                  <List name="req_params">
+                    {(fields) => (
+                      <div className="flex flex-col gap-3">
+                        {fields.length > 0 ? <Text fw={600}>路径参数</Text> : null}
+                        {fields.map(field => (
+                          <div key={field.key} className="legacy-edit-row-wrap grid gap-3 md:grid-cols-3">
+                            <Field name={[field.name, 'name']}>
+                              {(control) => (
+                                <TextInput
+                                  label="参数名"
+                                  disabled
+                                  value={String(control.value ?? '')}
+                                  onChange={event => control.onChange(event.currentTarget.value)}
+                                />
+                              )}
+                            </Field>
+                            <Field name={[field.name, 'example']}>
+                              {(control) => (
+                                <TextInput
+                                  label="示例"
+                                  value={String(control.value ?? '')}
+                                  onChange={event => control.onChange(event.currentTarget.value)}
+                                />
+                              )}
+                            </Field>
+                            <Field name={[field.name, 'desc']}>
+                              {(control) => (
+                                <TextInput
+                                  label="备注"
+                                  value={String(control.value ?? '')}
+                                  onChange={event => control.onChange(event.currentTarget.value)}
+                                />
+                              )}
+                            </Field>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </List>
+
+                  <div className="legacy-edit-row-wrap max-w-48">
+                    <Field<InterfaceEditFormValues> name="status">
+                      {(control) => (
+                        <Select
+                          label="状态"
+                          value={control.value ? String(control.value) : null}
+                          onChange={value => control.onChange(value || undefined)}
+                          data={[
+                            { label: '已完成', value: 'done' },
+                            { label: '未完成', value: 'undone' }
+                          ]}
+                        />
+                      )}
+                    </Field>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <Field<InterfaceEditFormValues> name="tag">
+                      {(control) => (
+                        <MultiSelect
+                          label="Tag"
+                          searchable
+                          value={Array.isArray(control.value) ? control.value.map(item => String(item)) : []}
+                          onChange={value => control.onChange(value)}
+                          data={tagOptions}
+                          placeholder="请选择 Tag"
+                        />
+                      )}
+                    </Field>
                     <div>
-                      {menu}
-                      <div className="legacy-edit-tag-setting-entry">
-                        <Button type="link" size="small" onClick={props.onOpenTagSetting}>
-                          Tag 设置
+                      <Button variant="default" size="xs" onClick={props.onOpenTagSetting}>
+                        Tag 设置
+                      </Button>
+                    </div>
+                  </div>
+
+                  {props.customField?.enable ? (
+                    <Field<InterfaceEditFormValues> name="custom_field_value">
+                      {(control) => (
+                        <TextInput
+                          label={props.customField.name || '自定义字段'}
+                          value={String(control.value ?? '')}
+                          onChange={event => control.onChange(event.currentTarget.value)}
+                        />
+                      )}
+                    </Field>
+                  ) : null}
+                </div>
+              </SectionCard>
+
+              <SectionCard title="请求参数设置" className="panel-sub legacy-edit-section">
+                <div className="flex flex-col gap-4">
+                  <SegmentedControl
+                    value={props.reqRadioType}
+                    onChange={value => props.onReqRadioTypeChange(value as 'req-body' | 'req-query' | 'req-headers')}
+                    className="legacy-edit-type-switch"
+                    data={reqPanelOptions}
+                  />
+
+                  {props.reqRadioType === 'req-query' ? (
+                    <div className="flex flex-col gap-4">
+                      <div className="legacy-edit-list-toolbar flex flex-wrap gap-2">
+                        <Button
+                          size="xs"
+                          onClick={() => {
+                            const list = props.sanitizeReqQuery(props.form.getFieldValue('req_query'));
+                            props.form.setFieldValue('req_query', [...list, { name: '', required: '1', desc: '', example: '' }]);
+                          }}
+                        >
+                          添加Query参数
+                        </Button>
+                        <Button size="xs" variant="default" onClick={() => props.onOpenBulkImport('req_query')}>
+                          批量添加
                         </Button>
                       </div>
+                      <List name="req_query">
+                        {(fields, { remove }) => (
+                          <div className="flex flex-col gap-3">
+                            {fields.map(field => (
+                              <div key={field.key} className="legacy-edit-row-wrap grid gap-3 md:grid-cols-[1.1fr_120px_1fr_1.2fr_80px]">
+                                <Field name={[field.name, 'name']}>
+                                  {(control) => (
+                                    <TextInput
+                                      label="参数名"
+                                      value={String(control.value ?? '')}
+                                      onChange={event => control.onChange(event.currentTarget.value)}
+                                      placeholder="name"
+                                    />
+                                  )}
+                                </Field>
+                                <Field name={[field.name, 'required']} initialValue="1">
+                                  {(control) => (
+                                    <Select
+                                      label="必需"
+                                      value={control.value ? String(control.value) : '1'}
+                                      onChange={value => control.onChange(value || '1')}
+                                      data={[
+                                        { label: '必需', value: '1' },
+                                        { label: '非必需', value: '0' }
+                                      ]}
+                                    />
+                                  )}
+                                </Field>
+                                <Field name={[field.name, 'example']}>
+                                  {(control) => (
+                                    <TextInput
+                                      label="示例"
+                                      value={String(control.value ?? '')}
+                                      onChange={event => control.onChange(event.currentTarget.value)}
+                                    />
+                                  )}
+                                </Field>
+                                <Field name={[field.name, 'desc']}>
+                                  {(control) => (
+                                    <TextInput
+                                      label="备注"
+                                      value={String(control.value ?? '')}
+                                      onChange={event => control.onChange(event.currentTarget.value)}
+                                    />
+                                  )}
+                                </Field>
+                                <DeleteRowButton onClick={() => remove(field.name)} />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </List>
                     </div>
-                  )}
-                />
-              </Form.Item>
-              {props.customField?.enable ? (
-                <Form.Item label={props.customField.name || '自定义字段'} name="custom_field_value">
-                  <Input />
-                </Form.Item>
-              ) : null}
-            </SectionCard>
+                  ) : null}
 
-            <SectionCard title="请求参数设置" className="panel-sub legacy-edit-section">
-              <Radio.Group
-                value={props.reqRadioType}
-                onChange={event => props.onReqRadioTypeChange(event.target.value)}
-                className="legacy-edit-type-switch"
-              >
-                {props.supportsRequestBody(props.form.getFieldValue('method')) ? <Radio.Button value="req-body">Body</Radio.Button> : null}
-                <Radio.Button value="req-query">Query</Radio.Button>
-                <Radio.Button value="req-headers">Headers</Radio.Button>
-              </Radio.Group>
+                  {props.reqRadioType === 'req-headers' ? (
+                    <div className="flex flex-col gap-4">
+                      <div className="legacy-edit-list-toolbar flex flex-wrap gap-2">
+                        <Button
+                          size="xs"
+                          onClick={() => {
+                            const list = props.sanitizeReqHeaders(props.form.getFieldValue('req_headers'));
+                            props.form.setFieldValue('req_headers', [...list, { name: '', value: '', required: '1', desc: '', example: '' }]);
+                          }}
+                        >
+                          添加Header
+                        </Button>
+                      </div>
+                      <List name="req_headers">
+                        {(fields, { remove }) => (
+                          <div className="flex flex-col gap-3">
+                            {fields.map(field => (
+                              <div key={field.key} className="legacy-edit-row-wrap grid gap-3 md:grid-cols-[1.1fr_1fr_120px_1fr_1fr_80px]">
+                                <Field name={[field.name, 'name']}>
+                                  {(control) => (
+                                    <Autocomplete
+                                      label="参数名"
+                                      value={String(control.value ?? '')}
+                                      onChange={control.onChange}
+                                      data={props.httpRequestHeaders}
+                                      placeholder="name"
+                                    />
+                                  )}
+                                </Field>
+                                <Field name={[field.name, 'value']}>
+                                  {(control) => (
+                                    <TextInput
+                                      label="参数值"
+                                      value={String(control.value ?? '')}
+                                      onChange={event => control.onChange(event.currentTarget.value)}
+                                      placeholder="value"
+                                    />
+                                  )}
+                                </Field>
+                                <Field name={[field.name, 'required']} initialValue="1">
+                                  {(control) => (
+                                    <Select
+                                      label="必需"
+                                      value={control.value ? String(control.value) : '1'}
+                                      onChange={value => control.onChange(value || '1')}
+                                      data={[
+                                        { label: '必需', value: '1' },
+                                        { label: '非必需', value: '0' }
+                                      ]}
+                                    />
+                                  )}
+                                </Field>
+                                <Field name={[field.name, 'example']}>
+                                  {(control) => (
+                                    <TextInput
+                                      label="示例"
+                                      value={String(control.value ?? '')}
+                                      onChange={event => control.onChange(event.currentTarget.value)}
+                                    />
+                                  )}
+                                </Field>
+                                <Field name={[field.name, 'desc']}>
+                                  {(control) => (
+                                    <TextInput
+                                      label="备注"
+                                      value={String(control.value ?? '')}
+                                      onChange={event => control.onChange(event.currentTarget.value)}
+                                    />
+                                  )}
+                                </Field>
+                                <DeleteRowButton onClick={() => remove(field.name)} />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </List>
+                    </div>
+                  ) : null}
 
-              <div className={props.reqRadioType === 'req-query' ? 'legacy-edit-pane-visible' : 'legacy-edit-pane-hidden'}>
-                <Space className="legacy-edit-list-toolbar">
-                  <Button
-                    size="small"
-                    type="primary"
-                    onClick={() => {
-                      const list = props.sanitizeReqQuery(props.form.getFieldValue('req_query'));
-                      props.form.setFieldValue('req_query', [...list, { name: '', required: '1', desc: '', example: '' }]);
-                    }}
-                  >
-                    添加Query参数
-                  </Button>
-                  <Button size="small" onClick={() => props.onOpenBulkImport('req_query')}>
-                    批量添加
-                  </Button>
-                </Space>
-                <Form.List name="req_query">
-                  {(fields, { remove }) => (
-                    <Space direction="vertical" className="legacy-edit-full-width-stack">
-                      {fields.map(field => (
-                        <Space key={field.key} align="start" wrap className="legacy-edit-row-wrap">
-                          <Form.Item label={field.name === 0 ? '参数名' : ''} name={[field.name, 'name']} className="legacy-edit-field-w180">
-                            <Input placeholder="name" />
-                          </Form.Item>
-                          <Form.Item
-                            label={field.name === 0 ? '必需' : ''}
-                            name={[field.name, 'required']}
-                            initialValue="1"
-                            className="legacy-edit-field-w100"
-                          >
-                            <Select options={[{ label: '必需', value: '1' }, { label: '非必需', value: '0' }]} />
-                          </Form.Item>
-                          <Form.Item
-                            label={field.name === 0 ? '示例' : ''}
-                            name={[field.name, 'example']}
-                            className="legacy-edit-field-min180-flex"
-                          >
-                            <Input />
-                          </Form.Item>
-                          <Form.Item
-                            label={field.name === 0 ? '备注' : ''}
-                            name={[field.name, 'desc']}
-                            className="legacy-edit-field-min220-flex"
-                          >
-                            <Input />
-                          </Form.Item>
-                          <Button danger type="text" icon={<DeleteOutlined />} onClick={() => remove(field.name)} />
-                        </Space>
-                      ))}
-                    </Space>
-                  )}
-                </Form.List>
-              </div>
-
-              <div className={props.reqRadioType === 'req-headers' ? 'legacy-edit-pane-visible' : 'legacy-edit-pane-hidden'}>
-                <Space className="legacy-edit-list-toolbar">
-                  <Button
-                    size="small"
-                    type="primary"
-                    onClick={() => {
-                      const list = props.sanitizeReqHeaders(props.form.getFieldValue('req_headers'));
-                      props.form.setFieldValue('req_headers', [...list, { name: '', value: '', required: '1', desc: '', example: '' }]);
-                    }}
-                  >
-                    添加Header
-                  </Button>
-                </Space>
-                <Form.List name="req_headers">
-                  {(fields, { remove }) => (
-                    <Space direction="vertical" className="legacy-edit-full-width-stack">
-                      {fields.map(field => (
-                        <Space key={field.key} align="start" wrap className="legacy-edit-row-wrap">
-                          <Form.Item label={field.name === 0 ? '参数名' : ''} name={[field.name, 'name']} className="legacy-edit-field-w180">
-                            <AutoComplete
-                              options={props.httpRequestHeaders.map(item => ({ label: item, value: item }))}
-                              filterOption={(inputValue, option) =>
-                                String(option?.value || '')
-                                  .toUpperCase()
-                                  .includes(String(inputValue || '').toUpperCase())
-                              }
-                              placeholder="name"
+                  {props.reqRadioType === 'req-body' ? (
+                    <div className="flex flex-col gap-4">
+                      <Field<InterfaceEditFormValues> name="req_body_type">
+                        {(control) => (
+                          <div className="flex flex-col gap-2">
+                            <Text fw={500}>Body 类型</Text>
+                            <SegmentedControl
+                              value={String(control.value || 'form')}
+                              onChange={value => control.onChange(value)}
+                              data={[
+                                { label: 'form', value: 'form' },
+                                { label: 'json', value: 'json' },
+                                { label: 'file', value: 'file' },
+                                { label: 'raw', value: 'raw' }
+                              ]}
                             />
-                          </Form.Item>
-                          <Form.Item label={field.name === 0 ? '参数值' : ''} name={[field.name, 'value']} className="legacy-edit-field-w200">
-                            <Input placeholder="value" />
-                          </Form.Item>
-                          <Form.Item
-                            label={field.name === 0 ? '必需' : ''}
-                            name={[field.name, 'required']}
-                            initialValue="1"
-                            className="legacy-edit-field-w100"
-                          >
-                            <Select options={[{ label: '必需', value: '1' }, { label: '非必需', value: '0' }]} />
-                          </Form.Item>
-                          <Form.Item
-                            label={field.name === 0 ? '示例' : ''}
-                            name={[field.name, 'example']}
-                            className="legacy-edit-field-min140-flex"
-                          >
-                            <Input />
-                          </Form.Item>
-                          <Form.Item
-                            label={field.name === 0 ? '备注' : ''}
-                            name={[field.name, 'desc']}
-                            className="legacy-edit-field-min180-flex"
-                          >
-                            <Input />
-                          </Form.Item>
-                          <Button danger type="text" icon={<DeleteOutlined />} onClick={() => remove(field.name)} />
-                        </Space>
-                      ))}
-                    </Space>
-                  )}
-                </Form.List>
-              </div>
+                          </div>
+                        )}
+                      </Field>
 
-              <div className={props.reqRadioType === 'req-body' ? 'legacy-edit-pane-visible' : 'legacy-edit-pane-hidden'}>
-                <Form.Item label="Body 类型" name="req_body_type">
-                  <Radio.Group>
-                    <Radio value="form">form</Radio>
-                    <Radio value="json">json</Radio>
-                    <Radio value="file">file</Radio>
-                    <Radio value="raw">raw</Radio>
-                  </Radio.Group>
-                </Form.Item>
-
-                {props.editBodyType === 'form' ? (
-                  <>
-                    <Space className="legacy-edit-list-toolbar">
-                      <Button
-                        size="small"
-                        type="primary"
-                        onClick={() => {
-                          const list = props.sanitizeReqBodyForm(props.form.getFieldValue('req_body_form'));
-                          props.form.setFieldValue('req_body_form', [
-                            ...list,
-                            { name: '', type: 'text', required: '1', desc: '', example: '' }
-                          ]);
-                        }}
-                      >
-                        添加form参数
-                      </Button>
-                      <Button size="small" onClick={() => props.onOpenBulkImport('req_body_form')}>
-                        批量添加
-                      </Button>
-                    </Space>
-                    <Form.List name="req_body_form">
-                      {(fields, { remove }) => (
-                        <Space direction="vertical" className="legacy-edit-full-width-stack">
-                          {fields.map(field => (
-                            <Space key={field.key} align="start" wrap className="legacy-edit-row-wrap">
-                              <Form.Item label={field.name === 0 ? '参数名' : ''} name={[field.name, 'name']} className="legacy-edit-field-w180">
-                                <Input />
-                              </Form.Item>
-                              <Form.Item
-                                label={field.name === 0 ? '类型' : ''}
-                                name={[field.name, 'type']}
-                                initialValue="text"
-                                className="legacy-edit-field-w100"
-                              >
-                                <Select options={[{ label: 'text', value: 'text' }, { label: 'file', value: 'file' }]} />
-                              </Form.Item>
-                              <Form.Item
-                                label={field.name === 0 ? '必需' : ''}
-                                name={[field.name, 'required']}
-                                initialValue="1"
-                                className="legacy-edit-field-w100"
-                              >
-                                <Select options={[{ label: '必需', value: '1' }, { label: '非必需', value: '0' }]} />
-                              </Form.Item>
-                              <Form.Item
-                                label={field.name === 0 ? '示例' : ''}
-                                name={[field.name, 'example']}
-                                className="legacy-edit-field-min160-flex"
-                              >
-                                <Input />
-                              </Form.Item>
-                              <Form.Item
-                                label={field.name === 0 ? '备注' : ''}
-                                name={[field.name, 'desc']}
-                                className="legacy-edit-field-min180-flex"
-                              >
-                                <Input />
-                              </Form.Item>
-                              <Button danger type="text" icon={<DeleteOutlined />} onClick={() => remove(field.name)} />
-                            </Space>
-                          ))}
-                        </Space>
-                      )}
-                    </Form.List>
-                  </>
-                ) : props.editBodyType === 'json' ? (
-                  <>
-                    <Form.Item label="JSON-SCHEMA" name="req_body_is_json_schema" valuePropName="checked">
-                      <Switch checkedChildren="开" unCheckedChildren="关" disabled={!props.projectIsJson5} />
-                    </Form.Item>
-                    {props.editValues.req_body_is_json_schema ? (
-                      <>
-                        <SchemaModeEditor
-                          mode={props.reqSchemaEditorMode}
-                          onModeChange={props.onReqSchemaEditorModeChange}
-                          fieldName="req_body_other"
-                          value={String(props.watchedReqBodyOther || '')}
-                          onValueChange={next => props.form.setFieldValue('req_body_other', next)}
-                          textLabel="Body 内容"
-                          textPlaceholder='{"type":"object","properties":{}}'
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <Alert
-                          type="info"
-                          showIcon
-                          className="legacy-edit-json-alert"
-                          message="基于 Json5，参数描述信息可以使用注释方式编写。"
-                        />
-                        <Form.Item label="Body 内容" name="req_body_other">
-                          <Input.TextArea rows={10} placeholder='{"code":0}' />
-                        </Form.Item>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <Form.Item label="Body 内容" name="req_body_other">
-                      <Input.TextArea rows={10} placeholder={props.editBodyType === 'file' ? 'file body' : 'raw body'} />
-                    </Form.Item>
-                  </>
-                )}
-              </div>
-            </SectionCard>
-
-            <SectionCard title="返回数据设置" className="panel-sub legacy-edit-section">
-              <Form.Item label="返回类型" name="res_body_type">
-                <Radio.Group>
-                  <Radio.Button value="json">JSON</Radio.Button>
-                  <Radio.Button value="raw">RAW</Radio.Button>
-                </Radio.Group>
-              </Form.Item>
-              <Form.Item label="JSON-SCHEMA" name="res_body_is_json_schema" valuePropName="checked">
-                <Switch checkedChildren="json-schema" unCheckedChildren="json" disabled={!props.projectIsJson5} />
-              </Form.Item>
-              {String(props.editValues.res_body_type || 'json') === 'json' ? (
-                <Tabs
-                  className="legacy-edit-response-tabs"
-                  activeKey={props.resEditorTab}
-                  onChange={key => props.onResponseEditorTabChange(key as 'tpl' | 'preview')}
-                  items={[
-                    {
-                      key: 'tpl',
-                      label: '模板',
-                      children: (
+                      {props.editBodyType === 'form' ? (
                         <>
-                          {props.editValues.res_body_is_json_schema ? (
-                            <>
-                              <SchemaModeEditor
-                                mode={props.resSchemaEditorMode}
-                                onModeChange={props.onResSchemaEditorModeChange}
-                                fieldName="res_body"
-                                value={String(props.watchedResBody || '')}
-                                onValueChange={next => props.form.setFieldValue('res_body', next)}
-                                textLabel="返回内容"
-                                hiddenFormItemStyle={{ marginBottom: 0 }}
-                                textFormItemStyle={{ marginBottom: 0 }}
+                          <div className="legacy-edit-list-toolbar flex flex-wrap gap-2">
+                            <Button
+                              size="xs"
+                              onClick={() => {
+                                const list = props.sanitizeReqBodyForm(props.form.getFieldValue('req_body_form'));
+                                props.form.setFieldValue('req_body_form', [
+                                  ...list,
+                                  { name: '', type: 'text', required: '1', desc: '', example: '' }
+                                ]);
+                              }}
+                            >
+                              添加form参数
+                            </Button>
+                            <Button size="xs" variant="default" onClick={() => props.onOpenBulkImport('req_body_form')}>
+                              批量添加
+                            </Button>
+                          </div>
+                          <List name="req_body_form">
+                            {(fields, { remove }) => (
+                              <div className="flex flex-col gap-3">
+                                {fields.map(field => (
+                                  <div key={field.key} className="legacy-edit-row-wrap grid gap-3 md:grid-cols-[1.1fr_120px_120px_1fr_1fr_80px]">
+                                    <Field name={[field.name, 'name']}>
+                                      {(control) => (
+                                        <TextInput
+                                          label="参数名"
+                                          value={String(control.value ?? '')}
+                                          onChange={event => control.onChange(event.currentTarget.value)}
+                                        />
+                                      )}
+                                    </Field>
+                                    <Field name={[field.name, 'type']} initialValue="text">
+                                      {(control) => (
+                                        <Select
+                                          label="类型"
+                                          value={control.value ? String(control.value) : 'text'}
+                                          onChange={value => control.onChange(value || 'text')}
+                                          data={[
+                                            { label: 'text', value: 'text' },
+                                            { label: 'file', value: 'file' }
+                                          ]}
+                                        />
+                                      )}
+                                    </Field>
+                                    <Field name={[field.name, 'required']} initialValue="1">
+                                      {(control) => (
+                                        <Select
+                                          label="必需"
+                                          value={control.value ? String(control.value) : '1'}
+                                          onChange={value => control.onChange(value || '1')}
+                                          data={[
+                                            { label: '必需', value: '1' },
+                                            { label: '非必需', value: '0' }
+                                          ]}
+                                        />
+                                      )}
+                                    </Field>
+                                    <Field name={[field.name, 'example']}>
+                                      {(control) => (
+                                        <TextInput
+                                          label="示例"
+                                          value={String(control.value ?? '')}
+                                          onChange={event => control.onChange(event.currentTarget.value)}
+                                        />
+                                      )}
+                                    </Field>
+                                    <Field name={[field.name, 'desc']}>
+                                      {(control) => (
+                                        <TextInput
+                                          label="备注"
+                                          value={String(control.value ?? '')}
+                                          onChange={event => control.onChange(event.currentTarget.value)}
+                                        />
+                                      )}
+                                    </Field>
+                                    <DeleteRowButton onClick={() => remove(field.name)} />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </List>
+                        </>
+                      ) : null}
+
+                      {props.editBodyType === 'json' ? (
+                        <>
+                          <Field<InterfaceEditFormValues> name="req_body_is_json_schema" valuePropName="checked">
+                            {(control) => (
+                              <Switch
+                                label="JSON-SCHEMA"
+                                checked={Boolean(control.value)}
+                                onChange={event => control.onChange(event.currentTarget.checked)}
+                                disabled={!props.projectIsJson5}
                               />
-                            </>
+                            )}
+                          </Field>
+
+                          {props.editValues.req_body_is_json_schema ? (
+                            <SchemaModeEditor
+                              mode={props.reqSchemaEditorMode}
+                              onModeChange={props.onReqSchemaEditorModeChange}
+                              fieldName="req_body_other"
+                              value={String(props.watchedReqBodyOther || '')}
+                              onValueChange={next => props.form.setFieldValue('req_body_other', next)}
+                              textLabel="Body 内容"
+                              textPlaceholder='{"type":"object","properties":{}}'
+                            />
                           ) : (
                             <>
-                              <Alert
-                                type="info"
-                                showIcon
-                                className="legacy-edit-json-alert"
-                                message="基于 mockjs 和 json5，参数描述信息可以使用注释方式编写。"
-                              />
-                              <Form.Item label="返回内容" name="res_body" className="legacy-edit-zero-margin">
-                                <Input.TextArea rows={12} />
-                              </Form.Item>
+                              <Alert color="blue" className="legacy-edit-json-alert" title="基于 Json5，参数描述信息可以使用注释方式编写。" />
+                              <Field<InterfaceEditFormValues> name="req_body_other">
+                                {(control) => (
+                                  <Textarea
+                                    label="Body 内容"
+                                    minRows={10}
+                                    value={String(control.value ?? '')}
+                                    onChange={event => control.onChange(event.currentTarget.value)}
+                                    placeholder='{"code":0}'
+                                  />
+                                )}
+                              </Field>
                             </>
                           )}
                         </>
-                      )
-                    },
-                    {
-                      key: 'preview',
-                      label: '预览',
-                      children: (
-                        <Input.TextArea
-                          rows={12}
+                      ) : null}
+
+                      {props.editBodyType !== 'form' && props.editBodyType !== 'json' ? (
+                        <Field<InterfaceEditFormValues> name="req_body_other">
+                          {(control) => (
+                            <Textarea
+                              label="Body 内容"
+                              minRows={10}
+                              value={String(control.value ?? '')}
+                              onChange={event => control.onChange(event.currentTarget.value)}
+                              placeholder={props.editBodyType === 'file' ? 'file body' : 'raw body'}
+                            />
+                          )}
+                        </Field>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </SectionCard>
+
+              <SectionCard title="返回数据设置" className="panel-sub legacy-edit-section">
+                <div className="flex flex-col gap-4">
+                  <Field<InterfaceEditFormValues> name="res_body_type">
+                    {(control) => (
+                      <div className="flex flex-col gap-2">
+                        <Text fw={500}>返回类型</Text>
+                        <SegmentedControl
+                          value={String(control.value || 'json')}
+                          onChange={value => control.onChange(value)}
+                          data={[
+                            { label: 'JSON', value: 'json' },
+                            { label: 'RAW', value: 'raw' }
+                          ]}
+                        />
+                      </div>
+                    )}
+                  </Field>
+
+                  <Field<InterfaceEditFormValues> name="res_body_is_json_schema" valuePropName="checked">
+                    {(control) => (
+                      <Switch
+                        label="JSON-SCHEMA"
+                        checked={Boolean(control.value)}
+                        onChange={event => control.onChange(event.currentTarget.checked)}
+                        disabled={!props.projectIsJson5}
+                        onLabel="json-schema"
+                        offLabel="json"
+                      />
+                    )}
+                  </Field>
+
+                  {String(props.editValues.res_body_type || 'json') === 'json' ? (
+                    <Tabs
+                      className="legacy-edit-response-tabs"
+                      value={props.resEditorTab}
+                      onChange={value => props.onResponseEditorTabChange((value as 'tpl' | 'preview') || 'tpl')}
+                    >
+                      <Tabs.List>
+                        <Tabs.Tab value="tpl">模板</Tabs.Tab>
+                        <Tabs.Tab value="preview">预览</Tabs.Tab>
+                      </Tabs.List>
+
+                      <Tabs.Panel value="tpl" pt="md">
+                        {props.editValues.res_body_is_json_schema ? (
+                          <SchemaModeEditor
+                            mode={props.resSchemaEditorMode}
+                            onModeChange={props.onResSchemaEditorModeChange}
+                            fieldName="res_body"
+                            value={String(props.watchedResBody || '')}
+                            onValueChange={next => props.form.setFieldValue('res_body', next)}
+                            textLabel="返回内容"
+                            hiddenFormItemStyle={{ marginBottom: 0 }}
+                            textFormItemStyle={{ marginBottom: 0 }}
+                          />
+                        ) : (
+                          <>
+                            <Alert color="blue" className="legacy-edit-json-alert" title="基于 mockjs 和 json5，参数描述信息可以使用注释方式编写。" />
+                            <Field<InterfaceEditFormValues> name="res_body">
+                              {(control) => (
+                                <Textarea
+                                  label="返回内容"
+                                  minRows={12}
+                                  className="legacy-edit-zero-margin"
+                                  value={String(control.value ?? '')}
+                                  onChange={event => control.onChange(event.currentTarget.value)}
+                                />
+                              )}
+                            </Field>
+                          </>
+                        )}
+                      </Tabs.Panel>
+
+                      <Tabs.Panel value="preview" pt="md">
+                        <Textarea
+                          minRows={12}
                           readOnly
                           value={props.resPreviewText}
                           placeholder="切换到预览时会自动生成 mock 预览"
                         />
-                      )
-                    }
-                  ]}
-                />
-              ) : (
-                <Form.Item label="返回内容" name="res_body">
-                  <Input.TextArea rows={12} />
-                </Form.Item>
-              )}
-            </SectionCard>
+                      </Tabs.Panel>
+                    </Tabs>
+                  ) : (
+                    <Field<InterfaceEditFormValues> name="res_body">
+                      {(control) => (
+                        <Textarea
+                          label="返回内容"
+                          minRows={12}
+                          value={String(control.value ?? '')}
+                          onChange={event => control.onChange(event.currentTarget.value)}
+                        />
+                      )}
+                    </Field>
+                  )}
+                </div>
+              </SectionCard>
 
-            <SectionCard title="备注" className="panel-sub legacy-edit-section">
-              <Form.Item label="描述" name="desc">
-                <Input.TextArea rows={6} />
-              </Form.Item>
-            </SectionCard>
+              <SectionCard title="备注" className="panel-sub legacy-edit-section">
+                <Field<InterfaceEditFormValues> name="desc">
+                  {(control) => (
+                    <Textarea
+                      label="描述"
+                      minRows={6}
+                      value={String(control.value ?? '')}
+                      onChange={event => control.onChange(event.currentTarget.value)}
+                    />
+                  )}
+                </Field>
+              </SectionCard>
 
-            <SectionCard title="其他" className="panel-sub legacy-edit-section">
-              <Form.Item
-                label="消息通知"
-                name="switch_notice"
-                valuePropName="checked"
-                extra="开启消息通知，可在项目设置中统一修改"
-              >
-                <Switch checkedChildren="开" unCheckedChildren="关" />
-              </Form.Item>
-              <Form.Item
-                label="开放接口"
-                name="api_opened"
-                valuePropName="checked"
-                extra="开放接口可在导出时按公开状态筛选"
-              >
-                <Switch checkedChildren="开" unCheckedChildren="关" />
-              </Form.Item>
-            </SectionCard>
+              <SectionCard title="其他" className="panel-sub legacy-edit-section">
+                <div className="flex flex-col gap-4">
+                  <Field<InterfaceEditFormValues> name="switch_notice" valuePropName="checked">
+                    {(control) => (
+                      <div>
+                        <Switch
+                          label="消息通知"
+                          checked={Boolean(control.value)}
+                          onChange={event => control.onChange(event.currentTarget.checked)}
+                        />
+                        <Text c="dimmed" size="sm" mt={6}>
+                          开启消息通知，可在项目设置中统一修改
+                        </Text>
+                      </div>
+                    )}
+                  </Field>
+                  <Field<InterfaceEditFormValues> name="api_opened" valuePropName="checked">
+                    {(control) => (
+                      <div>
+                        <Switch
+                          label="开放接口"
+                          checked={Boolean(control.value)}
+                          onChange={event => control.onChange(event.currentTarget.checked)}
+                        />
+                        <Text c="dimmed" size="sm" mt={6}>
+                          开放接口可在导出时按公开状态筛选
+                        </Text>
+                      </div>
+                    )}
+                  </Field>
+                </div>
+              </SectionCard>
 
-            <div className="legacy-edit-footer legacy-edit-footer-sticky">
-              <Text type="secondary">修改后请保存，离开页面时会拦截未保存变更。</Text>
-              <Button type="primary" onClick={props.onSave} loading={props.saving}>
-                保存接口
-              </Button>
+              <div className="legacy-edit-footer legacy-edit-footer-sticky flex flex-wrap items-center justify-between gap-3">
+                <Text c="dimmed">修改后请保存，离开页面时会拦截未保存变更。</Text>
+                <Button onClick={props.onSave} loading={props.saving}>
+                  保存接口
+                </Button>
+              </div>
             </div>
-          </Form>
+          </RcForm>
         </>
       )}
     </div>

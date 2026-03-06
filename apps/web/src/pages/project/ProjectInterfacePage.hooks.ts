@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Form, message } from 'antd';
+import { notifications } from '@mantine/notifications';
+import { useForm as useRcForm, useWatch as useRcWatch } from 'rc-field-form';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
 import { safeApiRequest } from '../../utils/safe-request';
@@ -63,6 +64,18 @@ import {
   mockFlagText
 } from './ProjectInterfacePage.utils';
 
+const message = {
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  },
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  warning(text: string) {
+    notifications.show({ color: 'yellow', message: text });
+  }
+};
+
 export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
   const params = useParams<{ action?: string; actionId?: string }>();
   const action = params.action || 'api';
@@ -70,6 +83,7 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentSearch = searchParams.toString();
+  const pendingSearchSyncRef = useRef(false);
   const parsePage = (value: string | null) => {
     const nextPage = Number(value || 1);
     return Number.isFinite(nextPage) && nextPage > 0 ? nextPage : 1;
@@ -147,28 +161,48 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
   );
   const [editConflictState, setEditConflictState] = useState<EditConflictState>({ status: 'idle' });
 
-  const [form] = Form.useForm<EditForm>();
-  const [addInterfaceForm] = Form.useForm<AddInterfaceForm>();
-  const [addCatForm] = Form.useForm<AddCatForm>();
-  const [editCatForm] = Form.useForm<EditCatForm>();
-  const [colForm] = Form.useForm<ColForm>();
-  const [addCaseForm] = Form.useForm<AddCaseForm>();
-  const [caseForm] = Form.useForm<CaseEditForm>();
-  const [commonSettingForm] = Form.useForm<CommonSettingForm>();
+  const [form] = useRcForm<EditForm>();
+  const [addInterfaceForm] = useRcForm<AddInterfaceForm>();
+  const [addCatForm] = useRcForm<AddCatForm>();
+  const [editCatForm] = useRcForm<EditCatForm>();
+  const [colForm] = useRcForm<ColForm>();
+  const [addCaseForm] = useRcForm<AddCaseForm>();
+  const [caseForm] = useRcForm<CaseEditForm>();
+  const [commonSettingForm] = useRcForm<CommonSettingForm>();
 
-  const watchedValues = Form.useWatch([], form);
-  const watchedReqBodyOther = Form.useWatch('req_body_other', form);
-  const watchedResBody = Form.useWatch('res_body', form);
+  const watchedValues = useRcWatch([], form);
+  const watchedReqBodyOther = useRcWatch('req_body_other', form);
+  const watchedResBody = useRcWatch('res_body', form);
+
+  const setTabWithSearchSync = useCallback((next: string) => {
+    pendingSearchSyncRef.current = true;
+    setTab(next);
+  }, []);
+
+  const setListKeywordWithSearchSync = useCallback((next: string) => {
+    pendingSearchSyncRef.current = true;
+    setListKeyword(next);
+  }, []);
+
+  const setListPageWithSearchSync = useCallback((next: number) => {
+    pendingSearchSyncRef.current = true;
+    setListPage(next);
+  }, []);
+
+  const setStatusFilterWithSearchSync = useCallback((next: 'all' | 'done' | 'undone') => {
+    pendingSearchSyncRef.current = true;
+    setStatusFilter(next);
+  }, []);
 
   useEffect(() => {
+    if (pendingSearchSyncRef.current) {
+      return;
+    }
+
     const nextTab = searchParams.get('tab') || 'view';
     const nextListKeyword = searchParams.get('q') || '';
     const nextListPage = parsePage(searchParams.get('page'));
     const nextStatusFilter = searchParams.get('status');
-    const nextReqPanel = searchParams.get('reqPanel');
-    const nextReqSchema = searchParams.get('reqSchema');
-    const nextResTab = searchParams.get('resTab');
-    const nextResSchema = searchParams.get('resSchema');
 
     if (tab !== nextTab) setTab(nextTab);
     if (listKeyword !== nextListKeyword) setListKeyword(nextListKeyword);
@@ -177,29 +211,9 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
       setStatusFilter(nextStatusFilter);
     }
     if (statusFilter !== 'all' && !nextStatusFilter) setStatusFilter('all');
-    if (reqRadioType !== nextReqPanel && (nextReqPanel === 'req-query' || nextReqPanel === 'req-body' || nextReqPanel === 'req-headers')) {
-      setReqRadioType(nextReqPanel);
-    }
-    if (reqRadioType !== 'req-query' && !nextReqPanel) setReqRadioType('req-query');
-    if (reqSchemaEditorMode !== nextReqSchema && (nextReqSchema === 'text' || nextReqSchema === 'visual')) {
-      setReqSchemaEditorMode(nextReqSchema);
-    }
-    if (reqSchemaEditorMode !== 'visual' && !nextReqSchema) setReqSchemaEditorMode('visual');
-    if (resEditorTab !== nextResTab && (nextResTab === 'tpl' || nextResTab === 'preview')) {
-      setResEditorTab(nextResTab);
-    }
-    if (resEditorTab !== 'tpl' && !nextResTab) setResEditorTab('tpl');
-    if (resSchemaEditorMode !== nextResSchema && (nextResSchema === 'text' || nextResSchema === 'visual')) {
-      setResSchemaEditorMode(nextResSchema);
-    }
-    if (resSchemaEditorMode !== 'visual' && !nextResSchema) setResSchemaEditorMode('visual');
   }, [
     listKeyword,
     listPage,
-    reqRadioType,
-    reqSchemaEditorMode,
-    resEditorTab,
-    resSchemaEditorMode,
     searchParams,
     statusFilter,
     tab
@@ -219,23 +233,20 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     syncParam('q', listKeyword.trim(), '');
     syncParam('status', statusFilter, 'all');
     syncParam('page', listPage > 1 ? String(listPage) : '', '');
-    syncParam('reqPanel', reqRadioType, 'req-query');
-    syncParam('reqSchema', reqSchemaEditorMode, 'visual');
-    syncParam('resTab', resEditorTab, 'tpl');
-    syncParam('resSchema', resSchemaEditorMode, 'visual');
 
     const nextSearch = nextSearchParams.toString();
     if (nextSearch !== currentSearch) {
       setSearchParams(nextSearchParams, { replace: true });
+      return;
+    }
+
+    if (pendingSearchSyncRef.current) {
+      pendingSearchSyncRef.current = false;
     }
   }, [
     currentSearch,
     listKeyword,
     listPage,
-    reqRadioType,
-    reqSchemaEditorMode,
-    resEditorTab,
-    resSchemaEditorMode,
     setSearchParams,
     statusFilter,
     tab
@@ -408,7 +419,7 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     setBulkOpen,
     setEditBaseline,
     serializeEditValues,
-    setTab,
+    setTab: setTabWithSearchSync,
     setResPreviewText,
     setResEditorTab,
     navigate,
@@ -579,7 +590,7 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
   } = useProjectInterfaceNavigationGuard({
     dirty,
     navigate,
-    setTab,
+    setTab: setTabWithSearchSync,
     tab
   });
 
@@ -671,9 +682,9 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     statusFilter,
     listPage,
     catSelectOptions,
-    setListKeyword,
-    setStatusFilter,
-    setListPage,
+    setListKeyword: setListKeywordWithSearchSync,
+    setStatusFilter: setStatusFilterWithSearchSync,
+    setListPage: setListPageWithSearchSync,
     openAddCatModal,
     handleInterfaceListStatusChange,
     handleInterfaceListCatChange,

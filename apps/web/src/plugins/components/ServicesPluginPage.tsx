@@ -1,14 +1,14 @@
-import { safeExecute, normalizePath, parseJsonSafe, parseMaybeJson, isValidRouteContract, toObject, inferPrimitiveSchema, mergeInferredSchemas, inferSchemaFromSample, inferDraft4SchemaTextFromJsonText, toStringValue, postJson, getJson, DRAFT4_SCHEMA_URI } from '../index';
-import type { LegacyRouteContract } from '../../types/legacy-contract';
-import type { HeaderMenuItem, SubNavItem, SubSettingNavItem, InterfaceTabItem, ImportDataItem, ExportDataItem, RequestLifecycleMeta } from '../index';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Spin, Switch, Table, Tabs, Tag, Typography, message } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import json5 from 'json5';
+import { useEffect, useState } from 'react';
+import { Anchor, Code, Loader, Stack, Text, Title } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { getJson, toStringValue } from '../index';
 
-const { Text, Paragraph } = Typography;
+const message = {
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  }
+};
 
-// Extracted from index.tsx
 export function ServicesPluginPage(props: { projectId: number }) {
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
@@ -46,34 +46,28 @@ export function ServicesPluginPage(props: { projectId: number }) {
   const modernUrl = `${origin}/api/open/plugin/export-full?type=json&pid=${props.projectId}&status=all&token=${token}`;
 
   return (
-    <Space direction="vertical" className="legacy-workspace-stack">
+    <Stack className="legacy-workspace-stack">
       {loading ? (
-        <Space>
-          <Spin size="small" />
+        <div className="inline-flex items-center gap-2">
+          <Loader size="sm" />
           <Text>加载项目 token...</Text>
-        </Space>
+        </div>
       ) : null}
-      <Typography.Title level={5}>生成 TS Services</Typography.Title>
-      <Paragraph>
-        <Text>1. 安装工具：</Text>
-      </Paragraph>
-      <pre>npm i sm2tsservice -D</pre>
-      <Paragraph>
-        <Text>2. 创建配置文件 `json2service.json`：</Text>
-      </Paragraph>
-      <pre>{`{
+      <Title order={5}>生成 TS Services</Title>
+      <Text>1. 安装工具：</Text>
+      <Code block>npm i sm2tsservice -D</Code>
+      <Text>2. 创建配置文件 `json2service.json`：</Text>
+      <Code block>{`{
   "url": "yapi-swagger.json",
   "remoteUrl": "${modernUrl}",
   "type": "yapi",
   "swaggerParser": {}
-}`}</pre>
-      <Paragraph>
-        <Text>3. 生成代码：</Text>
-      </Paragraph>
-      <pre>npx sm2tsservice --clear</pre>
-      <a href="https://github.com/gogoyqj/sm2tsservice" target="_blank" rel="noopener noreferrer">
+}`}</Code>
+      <Text>3. 生成代码：</Text>
+      <Code block>npx sm2tsservice --clear</Code>
+      <Anchor href="https://github.com/gogoyqj/sm2tsservice" target="_blank" rel="noopener noreferrer">
         查看 sm2tsservice 文档
-      </a>
-    </Space>
+      </Anchor>
+    </Stack>
   );
 }

@@ -1,4 +1,3 @@
-import { Breadcrumb } from 'antd';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { useGetGroupQuery, useGetProjectQuery } from '../services/yapi-api';
 
@@ -60,13 +59,21 @@ export function LegacyBreadcrumb() {
   const groupMode = path.startsWith('/group');
 
   return (
-    <div className={`legacy-breadcrumb-wrap${groupMode ? ' group-mode' : ''}`}>
-      <Breadcrumb
-        items={crumbs.map((item, idx) => ({
-          key: `${item.label}-${idx}`,
-          title: item.to ? <Link to={item.to}>{item.label}</Link> : item.label
-        }))}
-      />
+    <div className={`min-w-0 flex-1 ${groupMode ? 'text-lg md:text-2xl' : 'text-sm'}`}>
+      <div className="flex flex-wrap items-center gap-2 text-white/90">
+        {crumbs.map((item, idx) => (
+          <span key={`${item.label}-${idx}`} className="inline-flex items-center gap-2">
+            {idx > 0 ? <span className="text-white/45">/</span> : null}
+            {item.to ? (
+              <Link to={item.to} className="transition hover:text-white">
+                {item.label}
+              </Link>
+            ) : (
+              <span className={groupMode ? 'font-light tracking-wide' : 'text-white/80'}>{item.label}</span>
+            )}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

@@ -1,23 +1,24 @@
 import { useMemo, useState } from 'react';
 import {
   Avatar,
+  Badge,
   Button,
-  Input,
+  Loader,
   Modal,
-  Popconfirm,
+  MultiSelect,
   Select,
-  Space,
   Switch,
   Table,
-  Tag,
-  Tooltip,
-  Typography,
-  message
-} from 'antd';
+  Text,
+  TextInput,
+  Tooltip
+} from '@mantine/core';
+import { modals } from '@mantine/modals';
+import { notifications } from '@mantine/notifications';
 import {
   useAddProjectMemberMutation,
-  useChangeProjectMemberRoleMutation,
   useChangeProjectMemberEmailNoticeMutation,
+  useChangeProjectMemberRoleMutation,
   useDelProjectMemberMutation,
   useGetGroupMemberListQuery,
   useGetGroupQuery,
@@ -30,23 +31,43 @@ import {
 import { LegacyErrMsg } from '../../components/LegacyErrMsg';
 import { PageHeader, SectionCard } from '../../components/layout';
 
-import './ProjectSetting.scss';
-
-const { Text } = Typography;
-
 type ProjectMembersPageProps = {
   projectId: number;
 };
 
 type MemberRole = 'owner' | 'dev' | 'guest';
+type MemberRow = Record<string, unknown> & {
+  uid?: number;
+  username?: string;
+  email?: string;
+  role?: string;
+  email_notice?: boolean;
+};
+
+const roleOptions = [
+  { value: 'owner', label: '组长' },
+  { value: 'dev', label: '开发者' },
+  { value: 'guest', label: '访客' }
+] as const;
+
+function showNotification(color: 'teal' | 'red' | 'yellow', message: string) {
+  notifications.show({ color, message });
+}
+
+function normalizeRole(role?: string): string {
+  if (role === 'owner') return '组长';
+  if (role === 'dev') return '开发者';
+  if (role === 'guest') return '访客';
+  return role || '-';
+}
 
 export function ProjectMembersPage(props: ProjectMembersPageProps) {
   const [memberUid, setMemberUid] = useState('');
-  const [selectedMemberUids, setSelectedMemberUids] = useState<number[]>([]);
+  const [selectedMemberUids, setSelectedMemberUids] = useState<string[]>([]);
   const [memberRole, setMemberRole] = useState<MemberRole>('dev');
   const [addMemberModalOpen, setAddMemberModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
-  const [selectedImportProjectId, setSelectedImportProjectId] = useState<number | null>(null);
+  const [selectedImportProjectId, setSelectedImportProjectId] = useState<string | null>(null);
 
   const statusQuery = useGetUserStatusQuery();
   const currentUid = Number(statusQuery.data?.data?._id || statusQuery.data?.data?.uid || 0);
@@ -80,7 +101,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
   const [changeRole, roleState] = useChangeProjectMemberRoleMutation();
   const [changeEmailNotice, emailNoticeState] = useChangeProjectMemberEmailNoticeMutation();
 
-  const rows = useMemo(() => {
+  const rows = useMemo<MemberRow[]>(() => {
     const rank = (role?: string) => {
       if (role === 'owner') return 0;
       if (role === 'dev') return 1;
@@ -100,11 +121,11 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
           const username = String(item.username || uid);
           const email = String(item.email || '');
           return {
-            value: uid,
+            value: String(uid),
             label: email ? `${username} (${email})` : `${username} (${uid})`
           };
         })
-        .filter(Boolean) as Array<{ value: number; label: string }>,
+        .filter(Boolean) as Array<{ value: string; label: string }>,
     [groupMembers]
   );
   const importProjectOptions = useMemo(() => {
@@ -112,26 +133,21 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
     return list
       .filter(item => Number(item._id || 0) !== props.projectId)
       .map(item => ({
-        value: Number(item._id || 0),
+        value: String(item._id || 0),
         label: item.name || String(item._id || 0)
       }));
   }, [groupProjectListQuery.data, props.projectId]);
-
-  function normalizeRole(role?: string): string {
-    if (role === 'owner') return '组长';
-    if (role === 'dev') return '开发者';
-    if (role === 'guest') return '访客';
-    return role || '-';
-  }
 
   async function handleAdd() {
     const uidListFromInput = memberUid
       .split(/[,，]/)
       .map(item => Number(item.trim()))
       .filter(item => Number.isFinite(item) && item > 0);
-    const memberUids = Array.from(new Set([...selectedMemberUids, ...uidListFromInput]));
+    const memberUids = Array.from(
+      new Set([...selectedMemberUids.map(item => Number(item)), ...uidListFromInput])
+    );
     if (memberUids.length === 0) {
-      message.error('请输入合法 UID，可使用逗号分隔多个 UID');
+      showNotification('red', '请输入合法 UID，可使用逗号分隔多个 UID');
       return;
     }
     const response = await addMember({
@@ -140,7 +156,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
       role: memberRole
     }).unwrap();
     if (response.errcode !== 0) {
-      message.error(response.errmsg || '添加成员失败');
+      showNotification('red', response.errmsg || '添加成员失败');
       return;
     }
     const payload = (response.data || {}) as Record<string, unknown>;
@@ -149,11 +165,12 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
     setMemberUid('');
     setSelectedMemberUids([]);
     setAddMemberModalOpen(false);
-    if (addMembers > 0 || existMembers > 0) {
-      message.success(`添加成功，已成功添加 ${addMembers} 人，其中 ${existMembers} 人已存在`);
-    } else {
-      message.success('成员已添加');
-    }
+    showNotification(
+      'teal',
+      addMembers > 0 || existMembers > 0
+        ? `添加成功，已成功添加 ${addMembers} 人，其中 ${existMembers} 人已存在`
+        : '成员已添加'
+    );
     await listQuery.refetch();
   }
 
@@ -167,13 +184,13 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
   async function handleBatchImportMembers() {
     const targetProjectId = Number(selectedImportProjectId || 0);
     if (!targetProjectId) {
-      message.error('请选择项目');
+      showNotification('red', '请选择项目');
       return;
     }
 
     const response = await loadProjectMembers({ id: targetProjectId }).unwrap();
     if (response.errcode !== 0) {
-      message.error(response.errmsg || '读取项目成员失败');
+      showNotification('red', response.errmsg || '读取项目成员失败');
       return;
     }
 
@@ -182,7 +199,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
       .map(item => Number(item.uid || 0))
       .filter(uid => Number.isFinite(uid) && uid > 0);
     if (memberUids.length === 0) {
-      message.warning('所选项目没有可导入成员');
+      showNotification('yellow', '所选项目没有可导入成员');
       return;
     }
 
@@ -192,15 +209,41 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
       role: 'dev'
     }).unwrap();
     if (importResponse.errcode !== 0) {
-      message.error(importResponse.errmsg || '批量导入成员失败');
+      showNotification('red', importResponse.errmsg || '批量导入成员失败');
       return;
     }
 
     setImportModalOpen(false);
     setSelectedImportProjectId(null);
-    message.success('批量导入成员成功');
+    showNotification('teal', '批量导入成员成功');
     await listQuery.refetch();
   }
+
+  function confirmDelete(uid: number) {
+    modals.openConfirmModal({
+      title: '你确定要删除吗?',
+      labels: { confirm: '确定', cancel: '取消' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        const response = await delMember({
+          id: props.projectId,
+          member_uid: uid
+        }).unwrap();
+        if (response.errcode !== 0) {
+          showNotification('red', response.errmsg || '删除成员失败');
+          return;
+        }
+        showNotification('teal', '成员已移除');
+        await listQuery.refetch();
+      }
+    });
+  }
+
+  const loading =
+    listQuery.isLoading ||
+    delState.isLoading ||
+    roleState.isLoading ||
+    emailNoticeState.isLoading;
 
   return (
     <div className="legacy-page-shell legacy-members-page">
@@ -209,161 +252,136 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
         subtitle={`项目 ${project?.name || props.projectId} · 当前成员 ${rows.length} 人${canManage ? '' : '（只读）'}`}
         actions={
           canManage ? (
-            <Space size={8}>
-              <Button type="primary" onClick={openAddMemberModal}>
-                添加成员
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={openAddMemberModal}>添加成员</Button>
+              <Button variant="default" onClick={() => setImportModalOpen(true)}>
+                批量导入成员
               </Button>
-              <Button onClick={() => setImportModalOpen(true)}>批量导入成员</Button>
-            </Space>
+            </div>
           ) : null
         }
       />
 
       <SectionCard title="项目成员" className="legacy-members-main-card">
-        <Table
-          className="setting-project-member"
-          rowKey={(item: { uid?: number }) => Number(item.uid || 0)}
-          loading={
-            listQuery.isLoading ||
-            delState.isLoading ||
-            roleState.isLoading ||
-            emailNoticeState.isLoading
-          }
-          dataSource={rows as Array<Record<string, unknown>>}
-          pagination={false}
-          locale={{
-            emptyText: <LegacyErrMsg type="noMemberInProject" />
-          }}
-          columns={[
-            {
-              title: '成员',
-              dataIndex: 'username',
-              render: (value, row: Record<string, unknown>) => {
-                const uid = Number(row.uid || 0);
-                const canSwitchNotice = canManage || uid === currentUid;
-                const displayName = String(value || row.email || uid);
-                return (
-                  <div className="legacy-member-cell">
-                    <Avatar src={`/api/user/avatar?uid=${uid}`} size={32} />
-                    <span>{displayName}</span>
-                    {uid === currentUid ? <Tag color="blue">我</Tag> : null}
-                    <Tooltip placement="top" title="消息通知">
-                      <span>
-                        <Switch
-                          checkedChildren="开"
-                          unCheckedChildren="关"
-                          checked={Boolean(row.email_notice)}
-                          disabled={!canSwitchNotice}
-                          onChange={async checked => {
-                            const response = await changeEmailNotice({
-                              id: props.projectId,
-                              member_uid: uid,
-                              notice: checked
-                            }).unwrap();
-                            if (response.errcode !== 0) {
-                              message.error(response.errmsg || '更新通知设置失败');
-                              return;
-                            }
-                            await listQuery.refetch();
-                          }}
-                        />
-                      </span>
-                    </Tooltip>
-                  </div>
-                );
-              }
-            },
-            {
-              title: '角色',
-              width: 200,
-              render: (_, row: Record<string, unknown>) => {
-                const uid = Number(row.uid || 0);
-                const role = String(row.role || '');
-                if (canManage) {
+        {loading && rows.length === 0 ? (
+          <div className="flex justify-center py-12">
+            <Loader />
+          </div>
+        ) : rows.length === 0 ? (
+          <LegacyErrMsg type="noMemberInProject" />
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <Table striped highlightOnHover withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>成员</Table.Th>
+                  <Table.Th>角色</Table.Th>
+                  <Table.Th className="text-right">操作</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {rows.map(row => {
+                  const uid = Number(row.uid || 0);
+                  const role = String(row.role || '');
+                  const canSwitchNotice = canManage || uid === currentUid;
+                  const displayName = String(row.username || row.email || uid);
+
                   return (
-                    <Select<MemberRole>
-                      value={(role as MemberRole) || 'dev'}
-                      className="select legacy-members-role-select"
-                      onChange={async newRole => {
-                        const response = await changeRole({
-                          id: props.projectId,
-                          member_uid: uid,
-                          role: newRole
-                        }).unwrap();
-                        if (response.errcode !== 0) {
-                          message.error(response.errmsg || '修改角色失败');
-                          return;
-                        }
-                        message.success('成员角色已更新');
-                        await listQuery.refetch();
-                      }}
-                      options={[
-                        { value: 'owner', label: '组长' },
-                        { value: 'dev', label: '开发者' },
-                        { value: 'guest', label: '访客' }
-                      ]}
-                    />
+                    <Table.Tr key={uid}>
+                      <Table.Td>
+                        <div className="legacy-member-cell flex flex-wrap items-center gap-3">
+                          <Avatar src={`/api/user/avatar?uid=${uid}`} size={32} />
+                          <span>{displayName}</span>
+                          {uid === currentUid ? <Badge color="blue">我</Badge> : null}
+                          <Tooltip label="消息通知">
+                            <div>
+                              <Switch
+                                checked={Boolean(row.email_notice)}
+                                disabled={!canSwitchNotice}
+                                onChange={async event => {
+                                  const response = await changeEmailNotice({
+                                    id: props.projectId,
+                                    member_uid: uid,
+                                    notice: event.currentTarget.checked
+                                  }).unwrap();
+                                  if (response.errcode !== 0) {
+                                    showNotification('red', response.errmsg || '更新通知设置失败');
+                                    return;
+                                  }
+                                  await listQuery.refetch();
+                                }}
+                              />
+                            </div>
+                          </Tooltip>
+                        </div>
+                      </Table.Td>
+                      <Table.Td>
+                        {canManage ? (
+                          <Select
+                            value={(role as MemberRole) || 'dev'}
+                            className="legacy-members-role-select"
+                            data={roleOptions.map(item => ({ ...item }))}
+                            onChange={async newRole => {
+                              if (!newRole) return;
+                              const response = await changeRole({
+                                id: props.projectId,
+                                member_uid: uid,
+                                role: newRole
+                              }).unwrap();
+                              if (response.errcode !== 0) {
+                                showNotification('red', response.errmsg || '修改角色失败');
+                                return;
+                              }
+                              showNotification('teal', '成员角色已更新');
+                              await listQuery.refetch();
+                            }}
+                          />
+                        ) : (
+                          <Badge variant="light">{normalizeRole(role)}</Badge>
+                        )}
+                      </Table.Td>
+                      <Table.Td>
+                        <div className="flex justify-end">
+                          {canManage ? (
+                            <Button color="red" variant="light" size="xs" onClick={() => confirmDelete(uid)}>
+                              删除
+                            </Button>
+                          ) : (
+                            '-'
+                          )}
+                        </div>
+                      </Table.Td>
+                    </Table.Tr>
                   );
-                }
-                return <Tag>{normalizeRole(role)}</Tag>;
-              }
-            },
-            {
-              title: '操作',
-              width: 96,
-              align: 'right',
-              render: (_, row: Record<string, unknown>) => {
-                const uid = Number(row.uid || 0);
-                if (!canManage) {
-                  return '-';
-                }
-                return (
-                  <Popconfirm
-                    placement="topRight"
-                    title="你确定要删除吗?"
-                    okText="确定"
-                    cancelText="取消"
-                    onConfirm={async () => {
-                      const response = await delMember({
-                        id: props.projectId,
-                        member_uid: uid
-                      }).unwrap();
-                      if (response.errcode !== 0) {
-                        message.error(response.errmsg || '删除成员失败');
-                        return;
-                      }
-                      message.success('成员已移除');
-                      await listQuery.refetch();
-                    }}
-                  >
-                    <Button danger className="btn-danger">
-                      删除
-                    </Button>
-                  </Popconfirm>
-                );
-              }
-            }
-          ]}
-        />
+                })}
+              </Table.Tbody>
+            </Table>
+          </div>
+        )}
       </SectionCard>
 
       <SectionCard
         title={`${groupQuery.data?.data?.group_name || '分组'} 成员池`}
-        extra={<Text type="secondary">{groupMembers.length} 人</Text>}
+        extra={<Text c="dimmed">{groupMembers.length} 人</Text>}
         className="legacy-group-members-card"
       >
         {groupMembers.length === 0 ? (
           <LegacyErrMsg type="noMemberInGroup" />
         ) : (
-          <div className="legacy-group-members-grid">
+          <div className="legacy-group-members-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {groupMembers.map(item => (
-              <div key={Number(item.uid || 0)} className="legacy-group-member-item">
+              <div
+                key={Number(item.uid || 0)}
+                className="legacy-group-member-item rounded-[22px] border border-slate-200 bg-slate-50 p-4"
+              >
                 <Avatar size={40} src={`/api/user/avatar?uid=${item.uid}`} />
-                <div className="legacy-group-member-name">
+                <div className="legacy-group-member-name mt-3 flex items-center gap-2 font-medium text-slate-900">
                   {String(item.username || item.uid || '-')}
-                  {Number(item.uid || 0) === currentUid ? <Tag color="blue">我</Tag> : null}
+                  {Number(item.uid || 0) === currentUid ? <Badge color="blue">我</Badge> : null}
                 </div>
-                <div className="legacy-group-member-role">{normalizeRole(item.role)}</div>
+                <div className="legacy-group-member-role mt-1 text-sm text-slate-500">
+                  {normalizeRole(item.role)}
+                </div>
               </div>
             ))}
           </div>
@@ -372,69 +390,75 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
 
       <Modal
         title="添加成员"
-        open={addMemberModalOpen}
-        onCancel={() => setAddMemberModalOpen(false)}
-        onOk={() => void handleAdd()}
-        okButtonProps={{ loading: addState.isLoading }}
+        opened={addMemberModalOpen}
+        onClose={() => setAddMemberModalOpen(false)}
       >
-        <Space direction="vertical" className="legacy-members-modal-stack">
-          <Select
-            mode="multiple"
-            allowClear
-            showSearch
+        <div className="space-y-4">
+          <MultiSelect
+            searchable
+            clearable
             value={selectedMemberUids}
-            onChange={value => {
-              const next = (value as Array<number | string>)
-                .map(item => Number(item))
-                .filter(item => Number.isFinite(item) && item > 0);
-              setSelectedMemberUids(next);
-            }}
+            onChange={setSelectedMemberUids}
             placeholder="从分组成员中选择"
-            options={groupMemberOptions}
-            optionFilterProp="label"
+            data={groupMemberOptions}
             className="legacy-members-modal-select"
           />
-          <Input
+          <TextInput
             value={memberUid}
-            onChange={event => setMemberUid(event.target.value)}
+            onChange={event => setMemberUid(event.currentTarget.value)}
             placeholder="手动补充 UID（多个请用逗号分隔）"
           />
-          <Select<MemberRole>
+          <Select
             value={memberRole}
-            onChange={setMemberRole}
-            options={[
-              { value: 'owner', label: '组长' },
-              { value: 'dev', label: '开发者' },
-              { value: 'guest', label: '访客' }
-            ]}
+            onChange={value => setMemberRole((value as MemberRole) || 'dev')}
+            data={roleOptions.map(item => ({ ...item }))}
             className="legacy-members-modal-select"
           />
-        </Space>
+          <div className="flex justify-end gap-2">
+            <Button variant="default" onClick={() => setAddMemberModalOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={() => void handleAdd()} loading={addState.isLoading}>
+              添加
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       <Modal
         title="批量导入成员"
-        open={importModalOpen}
-        onCancel={() => {
+        opened={importModalOpen}
+        onClose={() => {
           setImportModalOpen(false);
           setSelectedImportProjectId(null);
         }}
-        onOk={() => void handleBatchImportMembers()}
-        okText="导入"
       >
-        <Space direction="vertical" className="legacy-members-modal-stack">
-          <Text type="secondary">从同分组项目导入成员到当前项目。</Text>
-          <Select<number>
-            showSearch
+        <div className="space-y-4">
+          <Text c="dimmed" size="sm">
+            从同分组项目导入成员到当前项目。
+          </Text>
+          <Select
+            searchable
             placeholder="请选择项目名称"
-            value={selectedImportProjectId ?? undefined}
-            loading={groupProjectListQuery.isFetching}
-            onChange={value => setSelectedImportProjectId(value)}
-            options={importProjectOptions}
+            value={selectedImportProjectId}
+            disabled={groupProjectListQuery.isFetching}
+            onChange={setSelectedImportProjectId}
+            data={importProjectOptions}
             className="legacy-members-modal-select"
-            optionFilterProp="label"
           />
-        </Space>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="default"
+              onClick={() => {
+                setImportModalOpen(false);
+                setSelectedImportProjectId(null);
+              }}
+            >
+              取消
+            </Button>
+            <Button onClick={() => void handleBatchImportMembers()}>导入</Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

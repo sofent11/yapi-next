@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Alert } from 'antd';
+import { Alert } from '@mantine/core';
 import json5 from 'json5';
 import { SchemaVisualEditor } from './SchemaVisualEditor';
 
@@ -48,10 +48,9 @@ export function LegacySchemaEditor(props: LegacySchemaEditorProps) {
     return (
       <>
         <Alert
-          type="warning"
-          showIcon
-          className="legacy-schema-editor-alert"
-          message="当前 schema 文本格式有误，已暂不启用可视化编辑。修正后会自动同步。"
+          color="yellow"
+          className="legacy-schema-editor-alert mb-4"
+          title="当前 schema 文本格式有误，已暂不启用可视化编辑。修正后会自动同步。"
         />
         <SchemaVisualEditor value={normalized.text} onChange={props.onChange} />
       </>

@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import pkg from './package.json';
 
 const webPort = Number(process.env.VITE_PORT || 5173);
@@ -11,14 +12,14 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version)
   },
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   build: {
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined;
-          if (id.includes('/antd/') || id.includes('/@ant-design/')) {
-            return 'antd';
+          if (id.includes('/@mantine/')) {
+            return 'mantine';
           }
           return undefined;
         }

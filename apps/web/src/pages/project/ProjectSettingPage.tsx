@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
+import { Tabs } from '@mantine/core';
 import { useSearchParams } from 'react-router-dom';
-import { Tabs } from 'antd';
 import { useGetProjectQuery } from '../../services/yapi-api';
 import { webPlugins, type SubSettingNavItem } from '../../plugins';
 import { PageHeader, SectionCard } from '../../components/layout';
@@ -11,8 +11,6 @@ import { SettingEnvTab } from './components/SettingEnvTab';
 import { SettingRequestTab } from './components/SettingRequestTab';
 import { SettingTokenTab } from './components/SettingTokenTab';
 import { SettingMockTab } from './components/SettingMockTab';
-
-import './ProjectSetting.scss';
 
 export function ProjectSettingPage(props: ProjectSettingPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -99,10 +97,9 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
         meta={project ? `${project.name || `项目 #${props.projectId}`} · 角色 ${project.role || 'guest'}` : undefined}
       />
       <Tabs
-        type="card"
-        className="has-affix-footer tabs-large legacy-setting-tabs"
-        activeKey={activeTab}
+        value={activeTab}
         onChange={key => {
+          if (!key) return;
           const nextParams = new URLSearchParams(searchParams.toString());
           if (key === 'message') {
             nextParams.delete('tab');
@@ -111,8 +108,21 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
           }
           setSearchParams(nextParams, { replace: true });
         }}
-        items={tabItems}
-      />
+        className="rounded-[28px] border border-slate-200 bg-white/95 p-4 shadow-sm"
+      >
+        <Tabs.List>
+          {tabItems.map(item => (
+            <Tabs.Tab key={item.key} value={item.key}>
+              {item.label}
+            </Tabs.Tab>
+          ))}
+        </Tabs.List>
+        {tabItems.map(item => (
+          <Tabs.Panel key={item.key} value={item.key} pt="md">
+            {item.children}
+          </Tabs.Panel>
+        ))}
+      </Tabs>
     </div>
   );
 }

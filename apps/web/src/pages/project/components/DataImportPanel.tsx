@@ -1,41 +1,55 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, App as AntdApp, Button, Input, Select, Space, Switch, Tooltip, Typography, Upload } from 'antd';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Button, Select, Stack, Switch, Text, Textarea, TextInput, Tooltip } from '@mantine/core';
+import { modals } from '@mantine/modals';
+import { notifications } from '@mantine/notifications';
+import { IconHelpCircle, IconUpload } from '@tabler/icons-react';
 import type { SpecImportResult } from '@yapi-next/shared-types';
 import { useGetCatMenuQuery, useImportSpecMutation, useInterUploadMutation } from '../../../services/yapi-api';
 import { webPlugins, type ImportDataItem } from '../../../plugins';
 import { safeApiRequest } from '../../../utils/safe-request';
 import { SectionCard } from '../../../components/layout';
 import type { ImportInputOverrides, SpecFormat, SpecSource, SyncMode } from '../ProjectDataPage.types';
-import { asObject, buildOpenApiFromLegacyImport, normalizeLegacyImportPayload, parseMaybeJsonText, syncModeLabel } from '../ProjectDataPage.utils';
+import {
+  asObject,
+  buildOpenApiFromLegacyImport,
+  normalizeLegacyImportPayload,
+  parseMaybeJsonText,
+  syncModeLabel
+} from '../ProjectDataPage.utils';
 
-const { Text, Paragraph } = Typography;
+const message = {
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  },
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  info(text: string) {
+    notifications.show({ color: 'blue', message: text });
+  },
+  warning(text: string) {
+    notifications.show({ color: 'yellow', message: text });
+  }
+};
 
-async function confirmImport(
-  summary: SpecImportResult,
-  syncMode: SyncMode,
-  modalApi: Pick<ReturnType<typeof AntdApp.useApp>['modal'], 'confirm'>
-): Promise<boolean> {
+async function confirmImport(summary: SpecImportResult, syncMode: SyncMode): Promise<boolean> {
   if (syncMode !== 'merge' && syncMode !== 'good') return true;
   return new Promise(resolve => {
-    const modal = modalApi.confirm({
+    modals.openConfirmModal({
       title: '确认执行规范导入',
-      okType: 'danger',
-      okText: '确认',
-      cancelText: '取消',
-      content: (
-        <Space direction="vertical">
+      labels: { confirm: '确认', cancel: '取消' },
+      confirmProps: { color: 'red' },
+      children: (
+        <div className="flex flex-col gap-2">
           <Text>检测格式：{summary.detectedFormat || 'unknown'}</Text>
           <Text>分类数量：{summary.categories || 0}</Text>
           <Text>接口数量：{summary.interfaces || 0}</Text>
           <Text>BasePath：{summary.basePath || '/'}</Text>
           <Text>同步模式：{syncModeLabel(syncMode)}</Text>
-        </Space>
+        </div>
       ),
-      onOk: () => resolve(true),
-      onCancel: () => {
-        resolve(false);
-        modal.destroy();
-      }
+      onConfirm: () => resolve(true),
+      onCancel: () => resolve(false)
     });
   });
 }
@@ -47,10 +61,10 @@ export interface DataImportPanelProps {
 }
 
 export default function DataImportPanel({ projectId, token, onTaskStart }: DataImportPanelProps) {
-  const { message: messageApi, modal } = AntdApp.useApp();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [source, setSource] = useState<SpecSource>('json');
   const [importMethod, setImportMethod] = useState('swagger');
-  const [format, setFormat] = useState<SpecFormat>('auto');
+  const [format] = useState<SpecFormat>('auto');
   const [syncMode, setSyncMode] = useState<SyncMode>('merge');
   const [jsonText, setJsonText] = useState(`{\n  "openapi": "3.0.0",\n  "info": {"title":"demo","version":"1.0.0"},\n  "paths": {}\n}`);
   const [urlText, setUrlText] = useState('');
@@ -63,14 +77,11 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
 
   const callApi = useCallback(
     <T extends { errcode?: number; errmsg?: string }>(request: Promise<T>, fallback: string) =>
-      safeApiRequest(request, { fallback, onError: msg => messageApi.error(msg) }),
-    [messageApi]
+      safeApiRequest(request, { fallback, onError: msg => message.error(msg) }),
+    []
   );
 
-  const catMenuQuery = useGetCatMenuQuery(
-    { projectId, token },
-    { skip: projectId <= 0 }
-  );
+  const catMenuQuery = useGetCatMenuQuery({ projectId, token }, { skip: projectId <= 0 });
 
   const catList = useMemo(
     () => (Array.isArray(catMenuQuery.data?.data) ? catMenuQuery.data?.data : []),
@@ -122,13 +133,13 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
     const nextUrlText = (overrides?.urlText ?? urlText).trim();
     if (source === 'url') {
       if (!nextUrlText) {
-        messageApi.error('请输入规范 URL');
+        message.error('请输入规范 URL');
         return false;
       }
       return true;
     }
     if (!nextJsonText.trim()) {
-      messageApi.error('请输入或上传规范 JSON');
+      message.error('请输入或上传规范 JSON');
       return false;
     }
     return true;
@@ -138,7 +149,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
     const text = await file.text();
     setJsonText(text);
     setImportFileName(file.name);
-    messageApi.success(`已加载文件: ${file.name}`);
+    message.success(`已加载文件: ${file.name}`);
     return text;
   }
 
@@ -148,7 +159,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
     if (!response) return;
     const data = (response.data || null) as SpecImportResult | null;
     setPreview(data);
-    messageApi.success('预检完成');
+    message.success('预检完成');
   }
 
   async function handleImport(overrides?: ImportInputOverrides) {
@@ -159,9 +170,9 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
     const dryRunData = (dryRunResponse.data || null) as SpecImportResult | null;
     if (dryRunData) {
       setPreview(dryRunData);
-      const ok = await confirmImport(dryRunData, syncMode, modal);
+      const ok = await confirmImport(dryRunData, syncMode);
       if (!ok) {
-        messageApi.info('已取消导入');
+        message.info('已取消导入');
         return;
       }
     }
@@ -173,11 +184,11 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
     const nextTaskId = String(payload.task_id || '');
     if (nextTaskId) {
       onTaskStart(nextTaskId);
-      messageApi.success(response.errmsg || '导入任务已提交');
+      message.success(response.errmsg || '导入任务已提交');
       return;
     }
 
-    messageApi.success(response.errmsg || '导入成功');
+    message.success(response.errmsg || '导入成功');
   }
 
   async function handleCompatImport(overrides?: ImportInputOverrides) {
@@ -197,7 +208,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
       '兼容导入失败'
     );
     if (!response) return;
-    messageApi.success(response.errmsg || '兼容导入成功');
+    message.success(response.errmsg || '兼容导入成功');
   }
 
   async function handlePluginImport(moduleKey: string, overrides?: ImportInputOverrides) {
@@ -207,30 +218,33 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
       if (importer.route) {
         window.open(importer.route, '_blank', 'noopener,noreferrer');
       } else {
-        messageApi.warning('该导入插件未提供可执行入口');
+        message.warning('该导入插件未提供可执行入口');
       }
       return;
     }
+
     let importSourceText = '';
     const nextJsonText = overrides?.jsonText ?? jsonText;
     const nextUrlText = (overrides?.urlText ?? urlText).trim();
+
     if (source === 'url') {
       if (!nextUrlText) {
-        messageApi.error('请输入规范 URL');
+        message.error('请输入规范 URL');
         return;
       }
       try {
         const response = await fetch(nextUrlText, { method: 'GET' });
         importSourceText = await response.text();
       } catch (err) {
-        messageApi.error((err as Error)?.message || '下载 URL 内容失败');
+        message.error((err as Error)?.message || '下载 URL 内容失败');
         return;
       }
     } else {
       importSourceText = nextJsonText;
     }
+
     if (!String(importSourceText || '').trim()) {
-      messageApi.error('请先输入或上传待转换的内容（JSON 文本）');
+      message.error('请先输入或上传待转换的内容（JSON 文本）');
       return;
     }
 
@@ -238,11 +252,11 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
     try {
       converted = await importer.run(importSourceText);
     } catch (err) {
-      messageApi.error((err as Error)?.message || '插件导入转换失败');
+      message.error((err as Error)?.message || '插件导入转换失败');
       return;
     }
     if (converted == null) {
-      messageApi.error('插件导入转换结果为空');
+      message.error('插件导入转换结果为空');
       return;
     }
 
@@ -294,7 +308,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
       `${importer.name} 导入失败`
     );
     if (!response) return;
-    messageApi.success(response.errmsg || `${importer.name} 导入成功`);
+    message.success(response.errmsg || `${importer.name} 导入成功`);
   }
 
   async function handleImportByMethod(overrides?: ImportInputOverrides) {
@@ -348,170 +362,176 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
         </a>
       }
     >
-      <div className="dataImportTile">
-        <Select
-          placeholder="请选择导入数据的方式"
-          value={importMethod}
-          onChange={setImportMethod}
-          className="legacy-workspace-control"
-          options={mergedImportOptions}
-        />
-      </div>
+      <Stack>
+        <div className="dataImportTile">
+          <Select
+            placeholder="请选择导入数据的方式"
+            value={importMethod}
+            onChange={value => {
+              if (value) setImportMethod(value);
+            }}
+            className="legacy-workspace-control"
+            data={mergedImportOptions}
+          />
+        </div>
 
-      <div className="catidSelect">
-        <Select<number>
-          className="legacy-workspace-control"
-          placeholder="请选择数据导入的默认分类"
-          value={defaultCatId > 0 ? defaultCatId : undefined}
-          onChange={value => setDefaultCatId(Number(value || 0))}
-          loading={catMenuQuery.isFetching}
-          options={catList.map(item => ({
-            label: String((item as Record<string, unknown>).name || ''),
-            value: Number((item as Record<string, unknown>)._id || 0)
-          }))}
-        />
-      </div>
+        <div className="catidSelect">
+          <Select
+            className="legacy-workspace-control"
+            placeholder="请选择数据导入的默认分类"
+            value={defaultCatId > 0 ? String(defaultCatId) : null}
+            onChange={value => setDefaultCatId(Number(value || 0))}
+            disabled={catMenuQuery.isFetching}
+            data={catList.map(item => ({
+              label: String((item as Record<string, unknown>).name || ''),
+              value: String(Number((item as Record<string, unknown>)._id || 0))
+            }))}
+          />
+        </div>
 
-      <div className="dataSync">
-        <span className="label">
-          数据同步
-          <Tooltip
-            title={
-              <div>
-                <h3 className="legacy-data-tooltip-title">普通模式</h3>
-                <p>不导入已存在的接口</p>
-                <br />
-                <h3 className="legacy-data-tooltip-title">智能合并</h3>
-                <p>合并已存在接口的返回结构，适合保留手工维护内容。</p>
-                <br />
-                <h3 className="legacy-data-tooltip-title">完全覆盖</h3>
-                <p>使用新文档覆盖旧定义，适合后端主导接口结构的场景。</p>
-              </div>
-            }
-          >
-            <Typography.Text type="secondary" className="legacy-inline-help">
-              <span className="anticon anticon-question-circle-o" />
-            </Typography.Text>
-          </Tooltip>
-        </span>
-        <Select<SyncMode>
-          value={syncMode}
-          onChange={setSyncMode}
-          className="legacy-workspace-control"
-          options={[
-            { value: 'normal', label: '普通模式' },
-            { value: 'good', label: '智能合并' },
-            { value: 'merge', label: '完全覆盖' }
-          ]}
-        />
-      </div>
-
-      {supportsUrlImport ? (
-        <div className="dataSync">
-          <span className="label">
-            开启 URL 导入
-            <Tooltip title="使用 swagger/openapi 链接地址导入">
-              <Typography.Text type="secondary" className="legacy-inline-help">
-                <span className="anticon anticon-question-circle-o" />
-              </Typography.Text>
+        <div className="dataSync flex flex-wrap items-center justify-between gap-3">
+          <span className="label inline-flex items-center gap-1">
+            数据同步
+            <Tooltip
+              label={
+                <div className="space-y-2">
+                  <div>
+                    <div className="font-semibold">普通模式</div>
+                    <div>不导入已存在的接口</div>
+                  </div>
+                  <div>
+                    <div className="font-semibold">智能合并</div>
+                    <div>合并已存在接口的返回结构，适合保留手工维护内容。</div>
+                  </div>
+                  <div>
+                    <div className="font-semibold">完全覆盖</div>
+                    <div>使用新文档覆盖旧定义，适合后端主导接口结构的场景。</div>
+                  </div>
+                </div>
+              }
+              multiline
+              maw={320}
+            >
+              <span className="legacy-inline-help inline-flex text-slate-500">
+                <IconHelpCircle size={16} />
+              </span>
             </Tooltip>
           </span>
-          <Switch checked={source === 'url'} onChange={checked => setSource(checked ? 'url' : 'json')} />
-        </div>
-      ) : null}
-
-      {source === 'url' ? (
-        <div className="import-content url-import-content">
-          <Input
-            placeholder="http://demo.swagger.io/v2/swagger.json"
-            value={urlText}
-            onChange={e => setUrlText(e.target.value)}
-          />
-          <Space className="url-btn" wrap>
-            <Button
-              onClick={() => void handlePreview()}
-              disabled={!previewSupported}
-              loading={importState.isLoading}
-            >
-              预检
-            </Button>
-            <Button
-              type="primary"
-              onClick={() => void handleImportByMethod()}
-              loading={importState.isLoading || uploadState.isLoading}
-            >
-              执行导入
-            </Button>
-          </Space>
-        </div>
-      ) : (
-        <div className="import-content">
-          <Upload.Dragger
-            maxCount={1}
-            showUploadList={false}
-            beforeUpload={async file => {
-              try {
-                await readTextFile(file as File);
-              } catch (error) {
-                messageApi.error((error as Error)?.message || '读取文件失败');
-              }
-              return false;
+          <Select
+            value={syncMode}
+            onChange={value => {
+              if (value) setSyncMode(value as SyncMode);
             }}
-          >
-            <p className="ant-upload-drag-icon">
-              <span className="anticon anticon-inbox" />
-            </p>
-            <p className="ant-upload-text">点击或者拖拽文件到上传区域</p>
-          </Upload.Dragger>
-          <Input.TextArea
-            rows={10}
-            value={jsonText}
-            onChange={event => setJsonText(event.target.value)}
-            placeholder='粘贴 OpenAPI/Swagger JSON，例如：{"openapi":"3.0.0","paths":{}}'
+            className="legacy-workspace-control"
+            data={[
+              { value: 'normal', label: '普通模式' },
+              { value: 'good', label: '智能合并' },
+              { value: 'merge', label: '完全覆盖' }
+            ]}
           />
-          <Space wrap>
-            <Button
-              onClick={() => void handlePreview()}
-              disabled={!previewSupported}
-              loading={importState.isLoading}
-            >
-              预检
-            </Button>
-            <Button
-              type="primary"
-              onClick={() => void handleImportByMethod()}
-              loading={importState.isLoading || uploadState.isLoading}
-            >
-              执行导入
-            </Button>
-          </Space>
-          {importMethodDesc ? (
-            <Paragraph type="secondary" className="legacy-workspace-paragraph-top-compact">
-              {importMethodDesc}
-            </Paragraph>
-          ) : null}
-          {importFileName ? (
-            <Typography.Paragraph type="secondary" className="legacy-workspace-paragraph-top">
-              {importFileName}
-            </Typography.Paragraph>
-          ) : null}
         </div>
-      )}
-      {preview ? (
-        <Alert
-          showIcon
-          type="info"
-          message={`预检结果：${preview.detectedFormat || 'unknown'}`}
-          description={
-            <Space direction="vertical" size={2}>
+
+        {supportsUrlImport ? (
+          <div className="dataSync flex flex-wrap items-center justify-between gap-3">
+            <span className="label inline-flex items-center gap-1">
+              开启 URL 导入
+              <Tooltip label="使用 swagger/openapi 链接地址导入">
+                <span className="legacy-inline-help inline-flex text-slate-500">
+                  <IconHelpCircle size={16} />
+                </span>
+              </Tooltip>
+            </span>
+            <Switch checked={source === 'url'} onChange={event => setSource(event.currentTarget.checked ? 'url' : 'json')} />
+          </div>
+        ) : null}
+
+        {source === 'url' ? (
+          <div className="import-content url-import-content flex flex-col gap-3">
+            <TextInput
+              placeholder="http://demo.swagger.io/v2/swagger.json"
+              value={urlText}
+              onChange={event => setUrlText(event.currentTarget.value)}
+            />
+            <div className="url-btn flex flex-wrap gap-3">
+              <Button onClick={() => void handlePreview()} disabled={!previewSupported} loading={importState.isLoading}>
+                预检
+              </Button>
+              <Button onClick={() => void handleImportByMethod()} loading={importState.isLoading || uploadState.isLoading}>
+                执行导入
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="import-content flex flex-col gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.txt,.yaml,.yml"
+              className="hidden"
+              onChange={async event => {
+                const file = event.currentTarget.files?.[0];
+                if (!file) return;
+                try {
+                  await readTextFile(file);
+                } catch (error) {
+                  message.error((error as Error)?.message || '读取文件失败');
+                } finally {
+                  event.currentTarget.value = '';
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center transition hover:border-slate-400 hover:bg-slate-100"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <span className="mb-2 inline-flex">
+                <IconUpload size={20} />
+              </span>
+              <div className="text-sm font-medium text-slate-800">点击选择规范文件</div>
+              <div className="mt-1 text-sm text-slate-500">支持 JSON / YAML / TXT，选择后会自动填充到下方文本框</div>
+            </button>
+            <Textarea
+              minRows={10}
+              value={jsonText}
+              onChange={event => setJsonText(event.currentTarget.value)}
+              placeholder='粘贴 OpenAPI/Swagger JSON，例如：{"openapi":"3.0.0","paths":{}}'
+            />
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={() => void handlePreview()} disabled={!previewSupported} loading={importState.isLoading}>
+                预检
+              </Button>
+              <Button onClick={() => void handleImportByMethod()} loading={importState.isLoading || uploadState.isLoading}>
+                执行导入
+              </Button>
+            </div>
+            {importMethodDesc ? (
+              <Text c="dimmed" className="legacy-workspace-paragraph-top-compact">
+                {importMethodDesc}
+              </Text>
+            ) : null}
+            {importFileName ? (
+              <Text c="dimmed" className="legacy-workspace-paragraph-top">
+                {importFileName}
+              </Text>
+            ) : null}
+          </div>
+        )}
+
+        {preview ? (
+          <Alert
+            color="blue"
+            title={`预检结果：${preview.detectedFormat || 'unknown'}`}
+          >
+            <div className="flex flex-col gap-1">
               <span>分类数量：{preview.categories || 0}</span>
               <span>接口数量：{preview.interfaces || 0}</span>
               <span>BasePath：{preview.basePath || '/'}</span>
               <span>同步模式：{syncModeLabel(syncMode)}</span>
-            </Space>
-          }
-        />
-      ) : null}
+            </div>
+          </Alert>
+        ) : null}
+      </Stack>
     </SectionCard>
   );
 }

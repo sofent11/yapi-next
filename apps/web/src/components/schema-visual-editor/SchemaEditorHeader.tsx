@@ -1,11 +1,11 @@
-import { Button, Input, Select, Space, Switch, Tooltip } from 'antd';
+import { ActionIcon, Select, Switch, TextInput, Tooltip } from '@mantine/core';
 import {
-  DownOutlined,
-  FileTextOutlined,
-  PlusOutlined,
-  RightOutlined,
-  UploadOutlined
-} from '@ant-design/icons';
+  IconChevronDown,
+  IconChevronRight,
+  IconFileText,
+  IconPlus,
+  IconUpload
+} from '@tabler/icons-react';
 
 type Props = {
   rootCollapsed: boolean;
@@ -25,31 +25,40 @@ export function SchemaEditorHeader({
   return (
     <div className="legacy-schema-editor-head-wrap">
       <div className="legacy-schema-editor-head-grid">
-        <div className="legacy-schema-editor-head-name">
-          <Button
-            type="text"
-            size="small"
+        <div className="legacy-schema-editor-head-name flex items-center gap-2">
+          <ActionIcon
+            variant="subtle"
+            size="sm"
             className="legacy-schema-editor-toggle-btn"
-            icon={rootCollapsed ? <RightOutlined /> : <DownOutlined />}
             onClick={onToggleRootCollapse}
-          />
-          <Input value="root" readOnly />
+          >
+            {rootCollapsed ? <IconChevronRight size={16} /> : <IconChevronDown size={16} />}
+          </ActionIcon>
+          <TextInput value="root" readOnly />
         </div>
-        <Switch size="small" checked={false} disabled />
-        <Select value="object" disabled options={[{ value: 'object', label: 'object' }]} />
-        <Input value="mock" disabled />
-        <Input value="description" disabled />
-        <Space size={0}>
-          <Tooltip title="导入 JSON 生成 Schema">
-            <Button type="text" icon={<UploadOutlined />} onClick={onImportJson} />
+        <div className="flex items-center">
+          <Switch size="sm" checked={false} disabled />
+        </div>
+        <Select value="object" disabled data={[{ value: 'object', label: 'object' }]} />
+        <TextInput value="mock" disabled />
+        <TextInput value="description" disabled />
+        <div className="flex items-center gap-1">
+          <Tooltip label="导入 JSON 生成 Schema">
+            <ActionIcon variant="subtle" onClick={onImportJson}>
+              <IconUpload size={16} />
+            </ActionIcon>
           </Tooltip>
-          <Tooltip title="查看/编辑 Schema 文件">
-            <Button type="text" icon={<FileTextOutlined />} onClick={onOpenSchema} />
+          <Tooltip label="查看/编辑 Schema 文件">
+            <ActionIcon variant="subtle" onClick={onOpenSchema}>
+              <IconFileText size={16} />
+            </ActionIcon>
           </Tooltip>
-          <Tooltip title="添加子节点">
-            <Button type="text" icon={<PlusOutlined />} onClick={onAddTopRow} />
+          <Tooltip label="添加子节点">
+            <ActionIcon variant="subtle" onClick={onAddTopRow}>
+              <IconPlus size={16} />
+            </ActionIcon>
           </Tooltip>
-        </Space>
+        </div>
       </div>
     </div>
   );

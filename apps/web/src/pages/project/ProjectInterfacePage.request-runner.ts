@@ -1,7 +1,16 @@
 import { useCallback, useState } from 'react';
-import { message } from 'antd';
+import { notifications } from '@mantine/notifications';
 
 import { webPlugins } from '../../plugins';
+
+const message = {
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  },
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  }
+};
 
 type RequestMeta = {
   type: 'inter' | 'case';

@@ -1,18 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Alert, Button, Tabs, Text } from '@mantine/core';
+import { modals } from '@mantine/modals';
+import { notifications } from '@mantine/notifications';
+import { IconUser } from '@tabler/icons-react';
+import { useForm as useRcForm, useWatch as useRcWatch } from 'rc-field-form';
 import type { GroupListItem, ProjectListItem, UserSearchItem } from '@yapi-next/shared-types';
-import { UserOutlined } from '@ant-design/icons';
-import {
-  Button,
-  Alert,
-  Form,
-  Layout,
-  Modal,
-  Space,
-  Tag,
-  Tabs,
-  message
-} from 'antd';
 import {
   useAddFollowMutation,
   useAddGroupMemberMutation,
@@ -52,9 +45,25 @@ import {
   isConsoleTabKey,
   normalizeGroups
 } from './ProjectConsolePage.utils';
-import './Group.scss';
 
-const { Content, Sider } = Layout;
+function showNotification(color: 'red' | 'teal' | 'yellow' | 'blue', message: string) {
+  notifications.show({ color, message });
+}
+
+const message = {
+  success(text: string) {
+    showNotification('teal', text);
+  },
+  error(text: string) {
+    showNotification('red', text);
+  },
+  warning(text: string) {
+    showNotification('yellow', text);
+  },
+  info(text: string) {
+    showNotification('blue', text);
+  }
+};
 
 export function ProjectConsolePage() {
   const navigate = useNavigate();
@@ -62,11 +71,11 @@ export function ProjectConsolePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const routeGroupId = Number(params.groupId || 0);
 
-  const [createGroupForm] = Form.useForm<CreateGroupForm>();
-  const [settingGroupForm] = Form.useForm<GroupSettingForm>();
-  const [copyForm] = Form.useForm<CopyForm>();
-  const customFieldName = Form.useWatch('custom_field1_name', settingGroupForm);
-  const customFieldEnable = Form.useWatch('custom_field1_enable', settingGroupForm);
+  const [createGroupForm] = useRcForm<CreateGroupForm>();
+  const [settingGroupForm] = useRcForm<GroupSettingForm>();
+  const [copyForm] = useRcForm<CopyForm>();
+  const customFieldName = useRcWatch('custom_field1_name', settingGroupForm);
+  const customFieldEnable = useRcWatch('custom_field1_enable', settingGroupForm);
 
   const [groupKeyword, setGroupKeyword] = useState('');
   const [groupId, setGroupId] = useState<number>(Number.isFinite(routeGroupId) ? routeGroupId : 0);
@@ -207,7 +216,10 @@ export function ProjectConsolePage() {
   const guideVisible = guide.active;
   const personalSpaceTip = (
     <div className="legacy-guide-tip-title">
-      <h3><UserOutlined /> 个人空间</h3>
+      <h3 className="flex items-center gap-2">
+        <IconUser size={18} />
+        个人空间
+      </h3>
       <p>先从个人空间开始，你可以在这里管理自己的项目与接口。</p>
     </div>
   );
@@ -296,23 +308,19 @@ export function ProjectConsolePage() {
       message.error('分组名称有误');
       return;
     }
-    Modal.confirm({
+    modals.openConfirmModal({
       title: `确认删除 ${selectedGroup.group_name} 分组吗？`,
-      okText: '确认删除',
-      cancelText: '取消',
-      okType: 'danger',
-      okButtonProps: { loading: delGroupState.isLoading },
-      content: (
-        <Space direction="vertical" className="legacy-console-danger-confirm-content">
-          <Alert
-            type="warning"
-            showIcon
-            message="此操作会删除该分组下所有项目和接口，且无法恢复。"
-          />
-          <div>已确认分组名: <b>{inputName}</b></div>
-        </Space>
+      labels: { confirm: '确认删除', cancel: '取消' },
+      confirmProps: { color: 'red', loading: delGroupState.isLoading },
+      children: (
+        <div className="legacy-console-danger-confirm-content space-y-3">
+          <Alert color="yellow" title="此操作会删除该分组下所有项目和接口，且无法恢复。" />
+          <div>
+            已确认分组名: <b>{inputName}</b>
+          </div>
+        </div>
       ),
-      onOk: async () => {
+      onConfirm: async () => {
         const response = await callApi(delGroup({ id: groupId }).unwrap(), '删除分组失败');
         if (!response) {
           throw new Error('delete_group_failed');
@@ -374,7 +382,7 @@ export function ProjectConsolePage() {
     await projectListQuery.refetch();
   }
 
-  async function handleToggleFollow(project: ProjectListItem, event: React.MouseEvent) {
+  async function handleToggleFollow(project: ProjectListItem, event: ReactMouseEvent<HTMLElement>) {
     event.stopPropagation();
     const pid = Number(project._id || 0);
     if (pid <= 0) return;
@@ -475,7 +483,12 @@ export function ProjectConsolePage() {
 
   const groupMemberCountTitle = `${selectedGroup?.group_name || '当前'} 分组成员 (${groupMembers.length}) 人`;
   const sortedMembers = [...groupMembers].sort((a, b) => {
-    const rank = (r?: string) => { if (r === 'owner') return 0; if (r === 'dev') return 1; if (r === 'guest') return 2; return 99; };
+    const rank = (r?: string) => {
+      if (r === 'owner') return 0;
+      if (r === 'dev') return 1;
+      if (r === 'guest') return 2;
+      return 99;
+    };
     return rank(a.role) - rank(b.role);
   });
 
@@ -524,7 +537,6 @@ export function ProjectConsolePage() {
       label: '项目列表',
       children: (
         <ProjectList
-          selectedGroupName={selectedGroup?.group_name || ''}
           groupType={groupType}
           projectRows={projectRows}
           normalProjects={normalProjects}
@@ -605,31 +617,22 @@ export function ProjectConsolePage() {
       <PageHeader
         eyebrow="分组工作台"
         title="项目控制台"
-        subtitle={`${selectedGroup?.group_name || '当前分组'} · ${projectRows.length} 个项目 · ${groups.length} 个分组`}
-        meta={
-          <Space size={[8, 8]} wrap>
-            <Tag bordered={false} color={groupType === 'private' ? 'purple' : 'blue'}>
-              {groupType === 'private' ? '个人空间' : '公共分组'}
-            </Tag>
-            {groupRole ? <Tag bordered={false}>{`当前角色：${groupRole}`}</Tag> : null}
-            <Tag bordered={false} color="green">{`${projectRows.length} 个项目`}</Tag>
-          </Space>
-        }
+        subtitle={selectedGroup?.group_desc || `${selectedGroup?.group_name || '当前分组'} 的项目、成员和动态总览`}
         actions={
-          <Space>
-            <Button onClick={openCreateGroupModal}>新建分组</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="default" onClick={openCreateGroupModal}>
+              新建分组
+            </Button>
             {canCreateProject ? (
-              <Button type="primary" onClick={() => navigate('/add-project')}>
-                新建项目
-              </Button>
+              <Button onClick={() => navigate('/add-project')}>新建项目</Button>
             ) : null}
-          </Space>
+          </div>
         }
       />
 
       <div className="projectGround">
-        <Layout className="legacy-project-console-layout">
-          <Sider className="legacy-project-console-sider" width={200}>
+        <div className="legacy-project-console-layout flex flex-col gap-4 lg:flex-row">
+          <aside className="legacy-project-console-sider w-full lg:w-[260px] lg:flex-none">
             <GroupOverview
               guideVisible={guideVisible}
               guideStep={guide.step}
@@ -637,8 +640,6 @@ export function ProjectConsolePage() {
               selectedGroupType={selectedGroup?.type}
               selectedGroupName={selectedGroup?.group_name}
               selectedGroupDesc={selectedGroup?.group_desc}
-              selectedGroupRole={groupRole}
-              projectCount={projectRows.length}
               groupKeyword={groupKeyword}
               onGroupKeywordChange={setGroupKeyword}
               loading={groupListQuery.isLoading}
@@ -649,30 +650,39 @@ export function ProjectConsolePage() {
               onGuideNext={guide.next}
               onGuideExit={guide.finish}
             />
-          </Sider>
+          </aside>
 
-          <Layout>
-            <Content className="legacy-project-console-content">
-              <Tabs
-                type="card"
-                className="m-tab tabs-large legacy-project-console-tabs"
-                activeKey={activeTab}
-                onChange={key => {
-                  if (isConsoleTabKey(key)) {
-                    const nextParams = new URLSearchParams(searchParams.toString());
-                    if (key === 'projects') {
-                      nextParams.delete('tab');
-                    } else {
-                      nextParams.set('tab', key);
-                    }
-                    setSearchParams(nextParams, { replace: true });
+          <section className="legacy-project-console-content min-w-0 flex-1">
+            <Tabs
+              className="m-tab tabs-large legacy-project-console-tabs"
+              value={activeTab}
+              onChange={key => {
+                if (key && isConsoleTabKey(key)) {
+                  const nextParams = new URLSearchParams(searchParams.toString());
+                  if (key === 'projects') {
+                    nextParams.delete('tab');
+                  } else {
+                    nextParams.set('tab', key);
                   }
-                }}
-                items={tabItems}
-              />
-            </Content>
-          </Layout>
-        </Layout>
+                  setSearchParams(nextParams, { replace: true });
+                }
+              }}
+            >
+              <Tabs.List>
+                {tabItems.map(item => (
+                  <Tabs.Tab key={item.key} value={item.key}>
+                    {item.label}
+                  </Tabs.Tab>
+                ))}
+              </Tabs.List>
+              {tabItems.map(item => (
+                <Tabs.Panel key={item.key} value={item.key} pt="md">
+                  {item.children}
+                </Tabs.Panel>
+              ))}
+            </Tabs>
+          </section>
+        </div>
       </div>
 
       <ProjectConsoleModals

@@ -1,18 +1,21 @@
-import { safeExecute, normalizePath, parseJsonSafe, parseMaybeJson, isValidRouteContract, toObject, inferPrimitiveSchema, mergeInferredSchemas, inferSchemaFromSample, inferDraft4SchemaTextFromJsonText, toStringValue, postJson, getJson, DRAFT4_SCHEMA_URI } from '../index';
-import type { LegacyRouteContract } from '../../types/legacy-contract';
-import type { HeaderMenuItem, SubNavItem, SubSettingNavItem, InterfaceTabItem, ImportDataItem, ExportDataItem, RequestLifecycleMeta } from '../index';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Spin, Switch, Table, Tabs, Tag, Typography, message } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import json5 from 'json5';
+import { useEffect, useState } from 'react';
+import { Alert, Button, Card, Loader, Stack, Text, Textarea } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { useParams } from 'react-router-dom';
+import { getJson, postJson, toStringValue } from '../index';
 
-const { Text, Paragraph } = Typography;
-
-// Extracted from index.tsx
 type WikiDoc = {
   desc?: string;
   markdown?: string;
+};
+
+const message = {
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  }
 };
 
 export function ProjectWikiPluginPage() {
@@ -70,28 +73,31 @@ export function ProjectWikiPluginPage() {
   }
 
   return (
-    <Space direction="vertical" className="legacy-workspace-stack">
+    <Stack className="legacy-workspace-stack">
       {loading ? (
-        <Space>
-          <Spin size="small" />
+        <div className="inline-flex items-center gap-2">
+          <Loader size="sm" />
           <Text>加载 Wiki...</Text>
-        </Space>
+        </div>
       ) : null}
-      <Alert type="info" showIcon message="Markdown 编辑已切换为新实现（兼容保存旧版字段）。" />
-      <Input.TextArea
-        rows={18}
+      <Alert color="blue" title="Markdown 编辑已切换为新实现（兼容保存旧版字段）。" />
+      <Textarea
+        minRows={18}
         value={markdown}
-        onChange={event => setMarkdown(event.target.value)}
+        onChange={event => setMarkdown(event.currentTarget.value)}
         placeholder="输入项目 Wiki（Markdown）"
       />
-      <Space>
-        <Button type="primary" loading={saving} onClick={() => void handleSave()}>
+      <div>
+        <Button loading={saving} onClick={() => void handleSave()}>
           保存 Wiki
         </Button>
-      </Space>
-      <Card size="small" title="预览（纯文本）">
+      </div>
+      <Card padding="lg" radius="lg" withBorder>
+        <Text fw={600} mb="sm">
+          预览（纯文本）
+        </Text>
         <pre className="legacy-plugin-pre">{markdown || '暂无内容'}</pre>
       </Card>
-    </Space>
+    </Stack>
   );
 }

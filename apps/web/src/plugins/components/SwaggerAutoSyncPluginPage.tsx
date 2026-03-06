@@ -1,14 +1,9 @@
-import { safeExecute, normalizePath, parseJsonSafe, parseMaybeJson, isValidRouteContract, toObject, inferPrimitiveSchema, mergeInferredSchemas, inferSchemaFromSample, inferDraft4SchemaTextFromJsonText, toStringValue, postJson, getJson, DRAFT4_SCHEMA_URI } from '../index';
-import type { LegacyRouteContract } from '../../types/legacy-contract';
-import type { HeaderMenuItem, SubNavItem, SubSettingNavItem, InterfaceTabItem, ImportDataItem, ExportDataItem, RequestLifecycleMeta } from '../index';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Descriptions, Form, Input, InputNumber, Modal, Popconfirm, Radio, Select, Space, Spin, Switch, Table, Tabs, Tag, Typography, message } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import json5 from 'json5';
+import { useEffect, useState } from 'react';
+import { Button, Loader, Select, Stack, Switch, Text, TextInput } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import RcForm, { Field, useForm as useRcForm } from 'rc-field-form';
+import { postJson, getJson, toStringValue } from '../index';
 
-const { Text, Paragraph } = Typography;
-
-// Extracted from index.tsx
 type AutoSyncForm = {
   is_sync_open: boolean;
   sync_mode: 'normal' | 'good' | 'merge';
@@ -16,8 +11,17 @@ type AutoSyncForm = {
   sync_cron: string;
 };
 
+const message = {
+  error(text: string) {
+    notifications.show({ color: 'red', message: text });
+  },
+  success(text: string) {
+    notifications.show({ color: 'teal', message: text });
+  }
+};
+
 export function SwaggerAutoSyncPluginPage(props: { projectId: number }) {
-  const [form] = Form.useForm<AutoSyncForm>();
+  const [form] = useRcForm<AutoSyncForm>();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [recordId, setRecordId] = useState<string>('');
@@ -84,7 +88,6 @@ export function SwaggerAutoSyncPluginPage(props: { projectId: number }) {
       if (nextId) {
         setRecordId(nextId);
       } else if (!recordId) {
-        // Keep id in sync for first-time create when backend returns write result object.
         await (async () => {
           try {
             const latest = await getJson<Record<string, unknown>>(
@@ -107,43 +110,71 @@ export function SwaggerAutoSyncPluginPage(props: { projectId: number }) {
   }
 
   return (
-    <Space direction="vertical" className="legacy-workspace-stack">
+    <Stack className="legacy-workspace-stack">
       {loading ? (
-        <Space>
-          <Spin size="small" />
+        <div className="inline-flex items-center gap-2">
+          <Loader size="sm" />
           <Text>加载自动同步配置...</Text>
-        </Space>
+        </div>
       ) : null}
-      <Form<AutoSyncForm> layout="vertical" form={form}>
-        <Form.Item label="是否开启自动同步" name="is_sync_open" valuePropName="checked">
-          <Switch checkedChildren="开" unCheckedChildren="关" />
-        </Form.Item>
-        {lastSyncAt > 0 ? (
-          <Text type="secondary">上次同步时间：{new Date(lastSyncAt * 1000).toLocaleString()}</Text>
-        ) : null}
-        <Form.Item label="同步模式" name="sync_mode" rules={[{ required: true, message: '请选择同步模式' }]}>
-          <Select
-            options={[
-              { label: '普通模式', value: 'normal' },
-              { label: '智能合并', value: 'good' },
-              { label: '完全覆盖', value: 'merge' }
-            ]}
-          />
-        </Form.Item>
-        <Form.Item
-          label="Swagger/OpenAPI URL"
-          name="sync_json_url"
-          rules={[{ required: true, message: '请输入规范 URL' }]}
-        >
-          <Input placeholder="https://example.com/openapi.json" />
-        </Form.Item>
-        <Form.Item label="Cron 表达式" name="sync_cron" rules={[{ required: true, message: '请输入 cron 表达式' }]}>
-          <Input placeholder="*/10 * * * *" />
-        </Form.Item>
-        <Button type="primary" onClick={() => void handleSave()} loading={saving}>
-          保存
-        </Button>
-      </Form>
-    </Space>
+      <RcForm<AutoSyncForm> form={form}>
+        <Stack>
+          <Field<AutoSyncForm> name="is_sync_open" valuePropName="checked">
+            {(control) => (
+              <Switch
+                label="是否开启自动同步"
+                checked={Boolean(control.value)}
+                onChange={event => control.onChange(event.currentTarget.checked)}
+              />
+            )}
+          </Field>
+          {lastSyncAt > 0 ? (
+            <Text c="dimmed">上次同步时间：{new Date(lastSyncAt * 1000).toLocaleString()}</Text>
+          ) : null}
+          <Field<AutoSyncForm> name="sync_mode" rules={[{ required: true, message: '请选择同步模式' }]}>
+            {(control, meta) => (
+              <Select
+                label="同步模式"
+                value={control.value}
+                onChange={value => control.onChange(value || 'normal')}
+                data={[
+                  { label: '普通模式', value: 'normal' },
+                  { label: '智能合并', value: 'good' },
+                  { label: '完全覆盖', value: 'merge' }
+                ]}
+                error={meta.errors[0]}
+              />
+            )}
+          </Field>
+          <Field<AutoSyncForm> name="sync_json_url" rules={[{ required: true, message: '请输入规范 URL' }]}>
+            {(control, meta) => (
+              <TextInput
+                label="Swagger/OpenAPI URL"
+                value={control.value}
+                onChange={event => control.onChange(event.currentTarget.value)}
+                placeholder="https://example.com/openapi.json"
+                error={meta.errors[0]}
+              />
+            )}
+          </Field>
+          <Field<AutoSyncForm> name="sync_cron" rules={[{ required: true, message: '请输入 cron 表达式' }]}>
+            {(control, meta) => (
+              <TextInput
+                label="Cron 表达式"
+                value={control.value}
+                onChange={event => control.onChange(event.currentTarget.value)}
+                placeholder="*/10 * * * *"
+                error={meta.errors[0]}
+              />
+            )}
+          </Field>
+          <div>
+            <Button loading={saving} onClick={() => void handleSave()}>
+              保存
+            </Button>
+          </div>
+        </Stack>
+      </RcForm>
+    </Stack>
   );
 }
