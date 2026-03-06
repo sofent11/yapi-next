@@ -28,7 +28,7 @@ import {
   useGetUserStatusQuery,
   useLazyGetProjectMemberListQuery
 } from '../../services/yapi-api';
-import { LegacyErrMsg } from '../../components/LegacyErrMsg';
+import { AppEmptyState } from '../../components/AppEmptyState';
 import { PageHeader, SectionCard } from '../../components/layout';
 
 type ProjectMembersPageProps = {
@@ -268,7 +268,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
             <Loader />
           </div>
         ) : rows.length === 0 ? (
-          <LegacyErrMsg type="noMemberInProject" />
+          <AppEmptyState type="noMemberInProject" />
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <Table striped highlightOnHover withTableBorder>
@@ -366,7 +366,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
         className="group-members-card"
       >
         {groupMembers.length === 0 ? (
-          <LegacyErrMsg type="noMemberInGroup" />
+          <AppEmptyState type="noMemberInGroup" />
         ) : (
           <div className="group-members-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {groupMembers.map(item => (

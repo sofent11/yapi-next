@@ -1,5 +1,5 @@
 import { normalizeHeaderRow, normalizeSimpleParam, safeExecute, normalizePath, parseJsonSafe, parseMaybeJson, isValidRouteContract, toObject, inferPrimitiveSchema, mergeInferredSchemas, inferSchemaFromSample, inferDraft4SchemaTextFromJsonText, toStringValue, postJson, getJson, DRAFT4_SCHEMA_URI } from '../index';
-import type { LegacyRouteContract } from '../../types/legacy-contract';
+import type { AppRouteContract } from '../../types/route-contract';
 import type { HeaderMenuItem, SubNavItem, SubSettingNavItem, InterfaceTabItem, ImportDataItem, ExportDataItem, RequestLifecycleMeta } from '../index';
 
 // Extracted from index.tsx

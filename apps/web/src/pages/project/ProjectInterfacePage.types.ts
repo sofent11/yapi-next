@@ -1,4 +1,4 @@
-import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../types/interface-dto';
 
 export type ProjectInterfacePageProps = {
   projectId: number;
@@ -143,7 +143,7 @@ export type CommonSettingForm = {
 export type InterfaceNodePageResponse = {
   errcode: number;
   errmsg?: string;
-  data?: { list?: LegacyInterfaceDTO[]; total?: number };
+  data?: { list?: InterfaceDTO[]; total?: number };
 };
 
 export type SchemaRow = {

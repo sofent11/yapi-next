@@ -1,6 +1,6 @@
 import json5 from 'json5';
 
-export type LegacyLogDiffItem = {
+export type ActivityLogDiffItem = {
   title: string;
   content: string;
 };
@@ -96,7 +96,7 @@ function diffArray(left: unknown, right: unknown): string | null {
   return diffJson(leftList, rightList);
 }
 
-function pushIfHasContent(list: LegacyLogDiffItem[], title: string, content: string | null) {
+function pushIfHasContent(list: ActivityLogDiffItem[], title: string, content: string | null) {
   if (!content) return;
   list.push({ title, content });
 }
@@ -106,12 +106,12 @@ function toEntity(input: unknown): DiffEntity {
   return input as DiffEntity;
 }
 
-export function buildLegacyLogDiff(payload: unknown): LegacyLogDiffItem[] {
+export function buildActivityLogDiff(payload: unknown): ActivityLogDiffItem[] {
   const source = toEntity(payload) as DiffPayload;
   const current = toEntity(source.current);
   const old = toEntity(source.old);
   const type = String(source.type || '');
-  const result: LegacyLogDiffItem[] = [];
+  const result: ActivityLogDiffItem[] = [];
 
   if (!source.current || !source.old) return result;
 

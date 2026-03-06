@@ -2,7 +2,7 @@ import { Button, Card, Loader, Text, Tooltip } from '@mantine/core';
 import { IconCopy, IconStar } from '@tabler/icons-react';
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import type { ProjectListItem } from '@yapi-next/shared-types';
-import { LegacyErrMsg } from '../../../components/LegacyErrMsg';
+import { AppEmptyState } from '../../../components/AppEmptyState';
 import { renderProjectIcon, resolveProjectColor, resolveProjectColorKey } from '../../../utils/project-visual';
 
 interface ProjectListProps {
@@ -152,7 +152,7 @@ export function ProjectList(props: ProjectListProps) {
             <Loader />
           </div>
         ) : props.projectRows.length === 0 ? (
-          <LegacyErrMsg type="noProject" />
+          <AppEmptyState type="noProject" />
         ) : props.groupType === 'private' ? (
           <div className="space-y-6">
             <section className="console-project-section">

@@ -1,5 +1,5 @@
 import json5 from 'json5';
-import type { LegacyRouteContract } from '../types/legacy-contract';
+import type { AppRouteContract } from '../types/route-contract';
 
 export const DRAFT4_SCHEMA_URI = 'http://json-schema.org/draft-04/schema#';
 
@@ -37,7 +37,7 @@ export function parseMaybeJson(text: string): unknown {
   }
 }
 
-export function isValidRouteContract(route: LegacyRouteContract | undefined): route is LegacyRouteContract {
+export function isValidRouteContract(route: AppRouteContract | undefined): route is AppRouteContract {
   if (!route) return false;
   if (typeof route.path !== 'string' || !route.path.startsWith('/')) return false;
   if (typeof route.component !== 'function') return false;

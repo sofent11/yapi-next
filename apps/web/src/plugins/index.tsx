@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ComponentType } from 'react';
 import type { AnyAction, Reducer } from '@reduxjs/toolkit';
 import { useParams } from 'react-router-dom';
-import type { LegacyRouteContract } from '../types/legacy-contract';
+import type { AppRouteContract } from '../types/route-contract';
 
 import { isValidRouteContract } from './utils';
 export * from './utils';
@@ -67,7 +67,7 @@ type ImportDataFactory = (context?: PluginContext) => ImportDataItem | null | un
 type ExportDataFactory = (context?: PluginContext) => ExportDataItem | null | undefined;
 
 type PluginHooks = {
-  appRouteExtenders: Array<{ pluginId: string; fn: MapExtender<Record<string, LegacyRouteContract>> }>;
+  appRouteExtenders: Array<{ pluginId: string; fn: MapExtender<Record<string, AppRouteContract>> }>;
   headerMenuExtenders: Array<{ pluginId: string; fn: MapExtender<Record<string, HeaderMenuItem>> }>;
   subNavExtenders: Array<{ pluginId: string; fn: MapExtender<Record<string, SubNavItem>> }>;
   subSettingExtenders: Array<{ pluginId: string; fn: MapExtender<Record<string, SubSettingNavItem>> }>;
@@ -80,7 +80,7 @@ type PluginHooks = {
 
 type PluginRegistryApi = {
   registerThirdLogin(component: ComponentType): void;
-  extendAppRoutes(extender: MapExtender<Record<string, LegacyRouteContract>>): void;
+  extendAppRoutes(extender: MapExtender<Record<string, AppRouteContract>>): void;
   extendHeaderMenu(extender: MapExtender<Record<string, HeaderMenuItem>>): void;
   extendSubNav(extender: MapExtender<Record<string, SubNavItem>>): void;
   extendSubSettingNav(extender: MapExtender<Record<string, SubSettingNavItem>>): void;
@@ -189,7 +189,7 @@ class WebPluginRuntime {
     return this.thirdLogin;
   }
 
-  applyAppRoutes(routes: Record<string, LegacyRouteContract>, context?: PluginContext) {
+  applyAppRoutes(routes: Record<string, AppRouteContract>, context?: PluginContext) {
     this.hooks.appRouteExtenders.forEach(item => {
       safeExecute(item.pluginId, 'extendAppRoutes', () => item.fn(routes, context));
       Object.keys(routes).forEach(routeKey => {

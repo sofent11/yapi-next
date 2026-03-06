@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { notifications } from '@mantine/notifications';
-import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceTreeNode } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../types/interface-dto';
 
 import {
   useAddInterfaceCatMutation,
@@ -76,9 +77,9 @@ type UseProjectInterfaceDataParams = {
   listKeyword: string;
   statusFilter: 'all' | 'done' | 'undone';
   colKeyword: string;
-  catInterfaceMap: Record<number, LegacyInterfaceDTO[]>;
+  catInterfaceMap: Record<number, InterfaceDTO[]>;
   catLoadingMap: Record<number, boolean>;
-  importCatInterfaceMap: Record<number, LegacyInterfaceDTO[]>;
+  importCatInterfaceMap: Record<number, InterfaceDTO[]>;
   importCatLoadingMap: Record<number, boolean>;
   importSelectedRowKeys: Array<string | number>;
   autoTestReport: AutoTestReport | null;
@@ -86,9 +87,9 @@ type UseProjectInterfaceDataParams = {
   catLoadedRef: React.MutableRefObject<Record<number, boolean>>;
   importCatLoadingRef: React.MutableRefObject<Record<number, boolean>>;
   importCatLoadedRef: React.MutableRefObject<Record<number, boolean>>;
-  setCatInterfaceMap: React.Dispatch<React.SetStateAction<Record<number, LegacyInterfaceDTO[]>>>;
+  setCatInterfaceMap: React.Dispatch<React.SetStateAction<Record<number, InterfaceDTO[]>>>;
   setCatLoadingMap: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
-  setImportCatInterfaceMap: React.Dispatch<React.SetStateAction<Record<number, LegacyInterfaceDTO[]>>>;
+  setImportCatInterfaceMap: React.Dispatch<React.SetStateAction<Record<number, InterfaceDTO[]>>>;
   setImportCatLoadingMap: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
 };
 
@@ -210,10 +211,10 @@ export function useProjectInterfaceData(params: UseProjectInterfaceDataParams) {
   );
   const [fetchImportTreeNode] = useLazyGetInterfaceTreeNodeQuery();
 
-  const allInterfaces = (listQuery.data?.data?.list || STABLE_EMPTY_ARRAY) as LegacyInterfaceDTO[];
+  const allInterfaces = (listQuery.data?.data?.list || STABLE_EMPTY_ARRAY) as InterfaceDTO[];
   const treeRows = (treeQuery.data?.data?.list || STABLE_EMPTY_ARRAY) as InterfaceTreeNode[];
   const catRows = (catMenuQuery.data?.data || STABLE_EMPTY_ARRAY) as Array<{ _id: number; name: string; desc?: string }>;
-  const currentInterface = (detailQuery.data?.data || null) as LegacyInterfaceDTO | null;
+  const currentInterface = (detailQuery.data?.data || null) as InterfaceDTO | null;
   const colRows = (colListQuery.data?.data || STABLE_EMPTY_ARRAY) as any[];
   const caseRows = (caseListQuery.data?.data || STABLE_EMPTY_ARRAY) as any[];
   const canEdit = /(admin|owner|dev)/.test(String(params.props.projectRole || ''));

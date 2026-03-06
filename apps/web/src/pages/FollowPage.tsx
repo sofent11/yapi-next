@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDelFollowMutation, useGetFollowListQuery } from '../services/yapi-api';
 import { renderProjectIcon, resolveProjectColor, resolveProjectColorKey } from '../utils/project-visual';
 import { AppShell, PageHeader, SectionCard } from '../components/layout';
-import { LegacyErrMsg } from '../components/LegacyErrMsg';
+import { AppEmptyState } from '../components/AppEmptyState';
 
 export function FollowPage() {
   const followQuery = useGetFollowListQuery();
@@ -124,7 +124,7 @@ export function FollowPage() {
             <Loader />
           </div>
         ) : rows.length === 0 ? (
-          <LegacyErrMsg type="noFollow" />
+          <AppEmptyState type="noFollow" />
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{rows.map(item => renderProjectCard(item))}</div>
         )}

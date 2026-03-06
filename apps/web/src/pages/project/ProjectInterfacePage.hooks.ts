@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import { useForm as useRcForm, useWatch as useRcWatch } from 'rc-field-form';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../types/interface-dto';
 import { safeApiRequest } from '../../utils/safe-request';
 import { useProjectInterfaceNavigationGuard } from './ProjectInterfacePage.navigation';
 import { useProjectInterfaceRequestRunner } from './ProjectInterfacePage.request-runner';
@@ -107,7 +107,7 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
   const [listPage, setListPage] = useState(initialListPage);
   const [menuKeyword, setMenuKeyword] = useState('');
   const [expandedCatIds, setExpandedCatIds] = useState<number[]>([]);
-  const [catInterfaceMap, setCatInterfaceMap] = useState<Record<number, LegacyInterfaceDTO[]>>({});
+  const [catInterfaceMap, setCatInterfaceMap] = useState<Record<number, InterfaceDTO[]>>({});
   const [catLoadingMap, setCatLoadingMap] = useState<Record<number, boolean>>({});
   const catLoadingRef = useRef<Record<number, boolean>>({});
   const catLoadedRef = useRef<Record<number, boolean>>({});
@@ -130,7 +130,7 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
   const [importColId, setImportColId] = useState(0);
   const [importProjectId, setImportProjectId] = useState(0);
   const [importSelectedRowKeys, setImportSelectedRowKeys] = useState<Array<string | number>>([]);
-  const [importCatInterfaceMap, setImportCatInterfaceMap] = useState<Record<number, LegacyInterfaceDTO[]>>({});
+  const [importCatInterfaceMap, setImportCatInterfaceMap] = useState<Record<number, InterfaceDTO[]>>({});
   const [importCatLoadingMap, setImportCatLoadingMap] = useState<Record<number, boolean>>({});
   const importCatLoadingRef = useRef<Record<number, boolean>>({});
   const importCatLoadedRef = useRef<Record<number, boolean>>({});

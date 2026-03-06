@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Avatar, Button, Loader, Select, Text } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { LegacyErrMsg } from '../../components/LegacyErrMsg';
+import { AppEmptyState } from '../../components/AppEmptyState';
 
 type GroupMemberRole = 'owner' | 'dev' | 'guest';
 
@@ -55,7 +55,7 @@ export function ProjectConsoleMembersTab(props: ProjectConsoleMembersTabProps) {
           <Loader />
         </div>
       ) : props.members.length === 0 ? (
-        <LegacyErrMsg type="noMemberInGroup" />
+        <AppEmptyState type="noMemberInGroup" />
       ) : (
         <div className="overflow-x-auto">
           <table className="console-members-table min-w-full">

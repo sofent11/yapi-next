@@ -1,5 +1,5 @@
 import json5 from 'json5';
-import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../types/interface-dto';
 import type { 
   InterfaceNodePageResponse, SchemaRow, ParamRow,
   EditFormParam, EditFormHeaderParam, EditFormBodyParam
@@ -20,12 +20,12 @@ export const CAT_MENU_LOAD_CONCURRENCY = 4;
 export async function fetchAllCatInterfaces(
   fetchPage: (page: number) => Promise<InterfaceNodePageResponse>,
   errorMessage: string
-): Promise<LegacyInterfaceDTO[]> {
+): Promise<InterfaceDTO[]> {
   const firstResponse = await fetchPage(1);
   if (firstResponse.errcode !== 0) {
     throw new Error(firstResponse.errmsg || errorMessage);
   }
-  const firstNodeData = (firstResponse.data || {}) as { list?: LegacyInterfaceDTO[]; total?: number };
+  const firstNodeData = (firstResponse.data || {}) as { list?: InterfaceDTO[]; total?: number };
   const firstRows = Array.isArray(firstNodeData.list) ? firstNodeData.list : [];
   const totalPageCount = Number(firstNodeData.total || 1);
   const total = Number.isFinite(totalPageCount) && totalPageCount > 0 ? totalPageCount : 1;
@@ -33,7 +33,7 @@ export async function fetchAllCatInterfaces(
     return firstRows;
   }
 
-  const pageRows = new Map<number, LegacyInterfaceDTO[]>();
+  const pageRows = new Map<number, InterfaceDTO[]>();
   pageRows.set(1, firstRows);
   const pageQueue: number[] = [];
   for (let page = 2; page <= total; page += 1) {
@@ -47,14 +47,14 @@ export async function fetchAllCatInterfaces(
       if (response.errcode !== 0) {
         throw new Error(response.errmsg || errorMessage);
       }
-      const nodeData = (response.data || {}) as { list?: LegacyInterfaceDTO[]; total?: number };
+      const nodeData = (response.data || {}) as { list?: InterfaceDTO[]; total?: number };
       const rows = Array.isArray(nodeData.list) ? nodeData.list : [];
       pageRows.set(page, rows);
     }
   });
   await Promise.all(workers);
 
-  const merged: LegacyInterfaceDTO[] = [];
+  const merged: InterfaceDTO[] = [];
   for (let page = 1; page <= total; page += 1) {
     merged.push(...(pageRows.get(page) || STABLE_EMPTY_ARRAY));
   }

@@ -15,7 +15,7 @@ function usePathGroupId(): number {
   return Number.isFinite(id) ? id : 0;
 }
 
-export function LegacyBreadcrumb() {
+export function AppBreadcrumb() {
   const location = useLocation();
   const projectId = usePathProjectId();
   const groupId = usePathGroupId();

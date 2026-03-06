@@ -92,7 +92,7 @@ export interface SpecImportTaskDTO {
     start_time?: number;
     end_time?: number;
 }
-export interface LegacyInterfaceDTO {
+export interface InterfaceDTO {
     _id?: number;
     uid?: number;
     username?: string;
@@ -121,6 +121,7 @@ export interface LegacyInterfaceDTO {
     operation_oas3?: string;
     import_meta?: string;
 }
+export type LegacyInterfaceDTO = InterfaceDTO;
 export interface InterfaceTreeNode {
     _id: number;
     name: string;
@@ -128,7 +129,7 @@ export interface InterfaceTreeNode {
     index?: number;
     project_id?: number;
     interface_count?: number;
-    list?: LegacyInterfaceDTO[];
+    list?: InterfaceDTO[];
 }
 export interface InterfaceTreeQuery {
     project_id: number;
@@ -152,7 +153,7 @@ export interface InterfaceTreeNodeResult {
     total: number;
     page: number;
     limit: number;
-    list: LegacyInterfaceDTO[];
+    list: InterfaceDTO[];
 }
 export interface UserLoginRequest {
     email: string;

@@ -32,7 +32,7 @@ import { MemberList } from './project/components/MemberList';
 import { ProjectList } from './project/components/ProjectList';
 import { GroupOverview } from './project/components/GroupOverview';
 import { AppShell, PageHeader } from '../components/layout';
-import { useLegacyGuide } from '../context/LegacyGuideContext';
+import { useGuide } from '../context/GuideContext';
 import { safeApiRequest } from '../utils/safe-request';
 import type {
   ConsoleTabKey,
@@ -107,7 +107,7 @@ export function ProjectConsolePage() {
   const [changeGroupMemberRole, changeGroupMemberRoleState] = useChangeGroupMemberRoleMutation();
   const [searchUsers] = useLazySearchUsersQuery();
   const [ownerUserOptions, setOwnerUserOptions] = useState<Array<{ label: string; value: number }>>([]);
-  const guide = useLegacyGuide();
+  const guide = useGuide();
   const callApi = useCallback(
     <T extends { errcode?: number; errmsg?: string }>(request: Promise<T>, fallback: string) =>
       safeApiRequest(request, { fallback, onError: msg => message.error(msg) }),

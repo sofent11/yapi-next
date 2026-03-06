@@ -27,7 +27,7 @@ components = glob.glob("components/*.tsx")
 importers = glob.glob("importers/*.ts")
 
 utils_import_str = f"import {{ {', '.join(utils_to_export)} }} from '../index';\n"
-types_import_str = "import type { LegacyRouteContract } from '../../types/legacy-contract';\n"
+types_import_str = "import type { AppRouteContract } from '../../types/route-contract';\n"
 types_import_str += "import type { HeaderMenuItem, SubNavItem, SubSettingNavItem, InterfaceTabItem, ImportDataItem, ExportDataItem, RequestLifecycleMeta } from '../index';\n"
 
 for d in components + importers:

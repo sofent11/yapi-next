@@ -11,8 +11,8 @@ import { SectionCard } from '../../../components/layout';
 import type { ImportInputOverrides, SpecFormat, SpecSource, SyncMode } from '../ProjectDataPage.types';
 import {
   asObject,
-  buildOpenApiFromLegacyImport,
-  normalizeLegacyImportPayload,
+  buildOpenApiFromImportPayload,
+  normalizeImportPayload,
   parseMaybeJsonText,
   syncModeLabel
 } from '../ProjectDataPage.utils';
@@ -264,11 +264,11 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
     let importFormat: SpecFormat = 'auto';
     if (typeof converted === 'string') {
       const parsed = parseMaybeJsonText(converted);
-      const legacy = normalizeLegacyImportPayload(parsed);
+      const legacy = normalizeImportPayload(parsed);
       if (legacy) {
         const defaultCatName = catNameMap.get(defaultCatId) || '默认分类';
         interfaceData = JSON.stringify(
-          buildOpenApiFromLegacyImport({
+          buildOpenApiFromImportPayload({
             projectId,
             defaultCatName,
             payload: legacy
@@ -280,11 +280,11 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
       }
     } else {
       const objectValue = asObject(converted);
-      const legacy = normalizeLegacyImportPayload(objectValue);
+      const legacy = normalizeImportPayload(objectValue);
       if (legacy) {
         const defaultCatName = catNameMap.get(defaultCatId) || '默认分类';
         interfaceData = JSON.stringify(
-          buildOpenApiFromLegacyImport({
+          buildOpenApiFromImportPayload({
             projectId,
             defaultCatName,
             payload: legacy

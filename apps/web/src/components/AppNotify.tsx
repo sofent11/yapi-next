@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert } from '@mantine/core';
 
-type LegacyNotifyProps = {
+type AppNotifyProps = {
   enabled?: boolean;
 };
 
@@ -12,7 +12,7 @@ type VersionResponse = {
 const VERSION_SOURCE =
   'https://www.fastmock.site/mock/1529fa78fa4c4880ad153d115084a940/yapi/versions';
 
-export function LegacyNotify(props: LegacyNotifyProps) {
+export function AppNotify(props: AppNotifyProps) {
   const [latestVersion, setLatestVersion] = useState('');
   const currentVersion = useMemo(() => String(__APP_VERSION__ || '').trim(), []);
 

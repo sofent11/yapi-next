@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { FormInstance } from 'rc-field-form';
-import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceTreeNode } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../types/interface-dto';
 
 import type { InterfaceTabItem } from '../../plugins';
 import { getHttpMethodBadgeClassName } from '../../utils/http-method';
@@ -57,13 +58,13 @@ type BuildApiWorkspaceParams = {
   handleDropOnInterface: (catIdNum: number, ifaceId: number) => void;
   openEditCatModal: (cat: InterfaceTreeNode) => void;
   confirmDeleteCat: (cat: InterfaceTreeNode) => void;
-  copyInterfaceRow: (item: LegacyInterfaceDTO) => void | Promise<void>;
+  copyInterfaceRow: (item: InterfaceDTO) => void | Promise<void>;
   confirmDeleteInterface: (id: number) => void;
   detailLoading: boolean;
-  currentInterface: LegacyInterfaceDTO | null;
+  currentInterface: InterfaceDTO | null;
   currentCat: { _id?: number; name?: string; desc?: string } | null;
   currentCatName: string;
-  filteredList: LegacyInterfaceDTO[];
+  filteredList: InterfaceDTO[];
   currentListLoading: boolean;
   listKeyword: string;
   statusFilter: 'all' | 'done' | 'undone';

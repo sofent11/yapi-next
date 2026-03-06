@@ -19,7 +19,7 @@ import RcForm, { Field, List } from 'rc-field-form';
 import type { FormInstance } from 'rc-field-form';
 import { SectionCard } from '../../../components/layout';
 import { getHttpMethodBadgeClassName } from '../../../utils/http-method';
-import { legacyNameValidator } from '../../../utils/legacy-validation';
+import { createNameValidator } from '../../../utils/name-validator';
 import { SchemaModeEditor } from './SchemaModeEditor';
 
 export type InterfaceEditConflictState = {
@@ -144,7 +144,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
             <div className="flex flex-col gap-4">
               <SectionCard title="基本设置" className="panel-sub interface-edit-section">
                 <div className="flex flex-col gap-4">
-                  <Field<InterfaceEditFormValues> name="title" rules={[{ required: true, validator: legacyNameValidator('接口') }]}>
+                  <Field<InterfaceEditFormValues> name="title" rules={[{ required: true, validator: createNameValidator('接口') }]}>
                     {(control, meta) => (
                       <TextInput
                         label="接口名称"

@@ -525,10 +525,7 @@
   .project-console-content,
   .project-console-sider,
   .interface-workspace-layout,
-  .interface-workspace-drawer,
-  .case-workspace,
-  .compat-workspace,
-  .spec-workspace {
+  .interface-workspace-drawer {
     @apply min-w-0;
   }
 

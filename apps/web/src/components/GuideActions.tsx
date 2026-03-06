@@ -1,12 +1,12 @@
 import { Button, Group } from '@mantine/core';
 
-type LegacyGuideActionsProps = {
+type GuideActionsProps = {
   isLast?: boolean;
   onNext: () => void;
   onExit: () => void;
 };
 
-export function LegacyGuideActions(props: LegacyGuideActionsProps) {
+export function GuideActions(props: GuideActionsProps) {
   return (
     <Group gap={8} wrap="nowrap">
       <Button size="xs" radius="xl" onClick={props.onNext}>

@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { Radio, Stack, Textarea, Text } from '@mantine/core';
 import { Field } from 'rc-field-form';
-import { LegacySchemaEditor } from '../../../components/LegacySchemaEditor';
+import { SchemaEditor } from '../../../components/SchemaEditor';
 
 type SchemaModeEditorProps = {
   mode: 'visual' | 'text';
@@ -42,7 +42,7 @@ export function SchemaModeEditor(props: SchemaModeEditorProps) {
               />
             )}
           </Field>
-          <LegacySchemaEditor value={props.value} onChange={props.onValueChange} />
+          <SchemaEditor value={props.value} onChange={props.onValueChange} />
         </>
       ) : (
         <Field name={props.fieldName}>

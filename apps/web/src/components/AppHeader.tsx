@@ -26,12 +26,12 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useLazySearchProjectQuery, useLogoutMutation } from '../services/yapi-api';
 import { webPlugins, type HeaderMenuItem } from '../plugins';
-import { LegacyBreadcrumb } from './LegacyBreadcrumb';
-import { LegacyGuideActions } from './LegacyGuideActions';
-import { useLegacyGuide } from '../context/LegacyGuideContext';
+import { AppBreadcrumb } from './AppBreadcrumb';
+import { GuideActions } from './GuideActions';
+import { useGuide } from '../context/GuideContext';
 import LogoSVG from './LogoSVG';
 
-type LegacyHeaderProps = {
+type AppHeaderProps = {
   uid: number;
   username?: string;
   email?: string;
@@ -76,13 +76,13 @@ function mapIcon(icon?: string) {
   }
 }
 
-export function LegacyHeader(props: LegacyHeaderProps) {
+export function AppHeader(props: AppHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [keyword, setKeyword] = useState('');
   const [search, searchState] = useLazySearchProjectQuery();
   const [logout, logoutState] = useLogoutMutation();
-  const guide = useLegacyGuide();
+  const guide = useGuide();
 
   const headerMenu = useMemo(() => {
     const next: Record<string, HeaderMenuItem> = { ...defaultHeaderMenu };
@@ -245,7 +245,7 @@ export function LegacyHeader(props: LegacyHeaderProps) {
         </div>
       </Link>
 
-      <LegacyBreadcrumb />
+      <AppBreadcrumb />
 
       <div className="flex items-center gap-3">
         <Autocomplete
@@ -289,7 +289,7 @@ export function LegacyHeader(props: LegacyHeaderProps) {
           <Popover.Dropdown>
             <div className="space-y-3">
               {tipFollow}
-              <LegacyGuideActions onNext={guide.next} onExit={guide.finish} />
+              <GuideActions onNext={guide.next} onExit={guide.finish} />
             </div>
           </Popover.Dropdown>
         </Popover>
@@ -314,7 +314,7 @@ export function LegacyHeader(props: LegacyHeaderProps) {
           <Popover.Dropdown>
             <div className="space-y-3">
               {tipAdd}
-              <LegacyGuideActions onNext={guide.next} onExit={guide.finish} />
+              <GuideActions onNext={guide.next} onExit={guide.finish} />
             </div>
           </Popover.Dropdown>
         </Popover>
@@ -341,7 +341,7 @@ export function LegacyHeader(props: LegacyHeaderProps) {
           <Popover.Dropdown>
             <div className="space-y-3">
               {tipDoc}
-              <LegacyGuideActions isLast onNext={guide.next} onExit={guide.finish} />
+              <GuideActions isLast onNext={guide.next} onExit={guide.finish} />
             </div>
           </Popover.Dropdown>
         </Popover>

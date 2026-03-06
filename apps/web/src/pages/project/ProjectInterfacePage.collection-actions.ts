@@ -3,7 +3,7 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import type { FormInstance } from 'rc-field-form';
 import type { NavigateFunction } from 'react-router-dom';
-import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../types/interface-dto';
 
 import { webPlugins } from '../../plugins';
 import type {
@@ -658,7 +658,7 @@ export function useProjectInterfaceCollectionActions(params: UseProjectInterface
         '获取接口详情失败'
       );
       if (!detailRes?.data) return;
-      const detail = detailRes.data as LegacyInterfaceDTO & Record<string, unknown>;
+      const detail = detailRes.data as InterfaceDTO & Record<string, unknown>;
       const response = await params.callApi(
         params.addColCase({
           casename: values.casename.trim() || String(detail.title || `case-${interfaceId}`),

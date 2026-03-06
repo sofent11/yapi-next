@@ -16,7 +16,7 @@ export type ImportInputOverrides = Partial<{
   urlText: string;
 }>;
 
-export type LegacyImportParam = Record<string, unknown> & {
+export type ImportParam = Record<string, unknown> & {
   name?: string;
   value?: unknown;
   example?: unknown;
@@ -25,17 +25,17 @@ export type LegacyImportParam = Record<string, unknown> & {
   desc?: string;
 };
 
-export type LegacyImportApi = Record<string, unknown> & {
+export type ImportApi = Record<string, unknown> & {
   title?: string;
   path?: string;
   method?: string;
   catname?: string;
   desc?: string;
-  req_params?: LegacyImportParam[];
-  req_query?: LegacyImportParam[];
-  req_headers?: LegacyImportParam[];
+  req_params?: ImportParam[];
+  req_query?: ImportParam[];
+  req_headers?: ImportParam[];
   req_body_type?: string;
-  req_body_form?: LegacyImportParam[];
+  req_body_form?: ImportParam[];
   req_body_other?: string;
   req_body_is_json_schema?: boolean;
   res_body_type?: string;
@@ -43,7 +43,7 @@ export type LegacyImportApi = Record<string, unknown> & {
   res_body_is_json_schema?: boolean;
 };
 
-export type LegacyImportPayload = {
+export type ImportPayload = {
   cats: Array<{ name?: string; desc?: string }>;
-  apis: LegacyImportApi[];
+  apis: ImportApi[];
 };

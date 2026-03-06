@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceTreeNode } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../types/interface-dto';
 
 import type {
   AutoTestResultItem,
@@ -17,9 +18,9 @@ type CategoryRow = {
 type CollectionRow = Record<string, unknown>;
 
 type ApiSectionParams = {
-  allInterfaces: LegacyInterfaceDTO[];
+  allInterfaces: InterfaceDTO[];
   treeRows: InterfaceTreeNode[];
-  catInterfaceMap: Record<number, LegacyInterfaceDTO[]>;
+  catInterfaceMap: Record<number, InterfaceDTO[]>;
   catRows: CategoryRow[];
   catId: number;
   catLoadingMap: Record<number, boolean>;
@@ -33,7 +34,7 @@ type ApiSectionParams = {
 
 export function useProjectInterfaceApiSection(params: ApiSectionParams) {
   const allInterfaceMapByCat = useMemo(() => {
-    const map = new Map<number, LegacyInterfaceDTO[]>();
+    const map = new Map<number, InterfaceDTO[]>();
     params.allInterfaces.forEach(item => {
       const key = Number(item.catid || 0);
       if (key <= 0) return;
@@ -158,10 +159,10 @@ type CollectionSectionParams = {
   importProjectRows: CollectionRow[];
   projectId: number;
   importTreeRows: InterfaceTreeNode[];
-  importCatInterfaceMap: Record<number, LegacyInterfaceDTO[]>;
+  importCatInterfaceMap: Record<number, InterfaceDTO[]>;
   importCatLoadingMap: Record<number, boolean>;
   importSelectedRowKeys: Array<string | number>;
-  allInterfaces: LegacyInterfaceDTO[];
+  allInterfaces: InterfaceDTO[];
   caseInterfaceTotal: number;
   autoTestReport: { list?: AutoTestResultItem[] } | null;
   caseEnvProjects: CaseEnvProjectItem[];

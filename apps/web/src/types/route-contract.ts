@@ -1,39 +1,39 @@
 import type { ComponentType } from 'react';
 import type { GroupListItem, ProjectListItem, UserProfile } from '@yapi-next/shared-types';
 
-export type LegacyRouteContract = {
+export type AppRouteContract = {
   path: string;
   component: ComponentType;
   protected?: boolean;
 };
 
-export type LegacyLayoutState = {
+export type AppLayoutState = {
   isLoggedIn: boolean;
   activeGroupId?: number;
   activeProjectId?: number;
 };
 
-export type LegacyHeaderAction = {
+export type HeaderAction = {
   key: string;
   label: string;
   path?: string;
   adminOnly?: boolean;
 };
 
-export type LegacyGroupViewModel = {
+export type GroupViewModel = {
   currentGroup?: GroupListItem;
   groups: GroupListItem[];
   projects: ProjectListItem[];
 };
 
-export type LegacyProjectViewModel = {
+export type ProjectViewModel = {
   project?: ProjectListItem;
   user?: UserProfile | null;
   canEdit: boolean;
 };
 
 export type PluginHookContract = {
-  app_route: Record<string, LegacyRouteContract>;
+  app_route: Record<string, AppRouteContract>;
   header_menu: Record<string, { path: string; name: string; icon?: string; adminFlag?: boolean }>;
   sub_nav: Record<string, { name: string; path: string; component?: ComponentType }>;
   sub_setting_nav: Record<string, { name: string; component: ComponentType<{ projectId: number }> }>;

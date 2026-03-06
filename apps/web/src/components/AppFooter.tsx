@@ -1,4 +1,4 @@
-export function LegacyFooter() {
+export function AppFooter() {
   const currentYear = new Date().getFullYear();
   const yearText = currentYear > 2026 ? `2018-${currentYear}` : '2018-2026';
 

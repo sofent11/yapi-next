@@ -1,7 +1,7 @@
 import { Avatar, Badge, Button, Table, Text, Tooltip } from '@mantine/core';
 import { IconCopy } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
-import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../../types/interface-dto';
 import { SectionCard } from '../../../components/layout/SectionCard';
 import { sanitizeHtml } from '../../../utils/html-sanitize';
 
@@ -9,7 +9,7 @@ type ParamRow = Record<string, unknown>;
 type ParamColumns = Array<Record<string, unknown>>;
 
 type InterfaceViewTabProps = {
-  currentInterface: LegacyInterfaceDTO;
+  currentInterface: InterfaceDTO;
   method: string;
   fullPath: string;
   mockUrl: string;

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { ActionIcon, Loader, Popover, Text, TextInput, Tooltip } from '@mantine/core';
 import { IconFolderOpen, IconFolderPlus, IconSearch, IconUser, IconX } from '@tabler/icons-react';
 import type { GroupListItem } from '@yapi-next/shared-types';
-import { LegacyGuideActions } from '../../components/LegacyGuideActions';
+import { GuideActions } from '../../components/GuideActions';
 
 type ProjectConsoleSidebarProps = {
   guideVisible: boolean;
@@ -105,7 +105,7 @@ export function ProjectConsoleSidebar(props: ProjectConsoleSidebarProps) {
                   <Popover.Target>{button}</Popover.Target>
                   <Popover.Dropdown className="guide-popover">
                     {props.personalSpaceTip}
-                    <LegacyGuideActions onNext={props.onGuideNext} onExit={props.onGuideExit} />
+                    <GuideActions onNext={props.onGuideNext} onExit={props.onGuideExit} />
                   </Popover.Dropdown>
                 </Popover>
               );

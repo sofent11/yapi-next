@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Avatar, Button, Loader, Modal, Select, Text, Timeline } from '@mantine/core';
 import { Link } from 'react-router-dom';
-import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../types/interface-dto';
 import { useGetInterfaceListQuery, useGetLogListQuery } from '../services/yapi-api';
-import { buildLegacyLogDiff, type LegacyLogDiffItem } from '../utils/legacy-log-diff';
+import { buildActivityLogDiff, type ActivityLogDiffItem } from '../utils/activity-log-diff';
 import { sanitizeHtml } from '../utils/html-sanitize';
 
 type TimelineType = 'project' | 'group';
 
-type LegacyTimelineProps = {
+type ActivityTimelineProps = {
   type: TimelineType;
   typeid: number;
   projectIdForApiFilter?: number;
@@ -73,12 +73,12 @@ function toNumericId(value: unknown): number {
   return id;
 }
 
-export function LegacyTimeline(props: LegacyTimelineProps) {
+export function ActivityTimeline(props: ActivityTimelineProps) {
   const [page, setPage] = useState(1);
   const [logRows, setLogRows] = useState<LogRow[]>([]);
   const [selectValue, setSelectValue] = useState('');
   const [detailOpen, setDetailOpen] = useState(false);
-  const [diffItems, setDiffItems] = useState<LegacyLogDiffItem[]>([]);
+  const [diffItems, setDiffItems] = useState<ActivityLogDiffItem[]>([]);
 
   const query = useGetLogListQuery(
     {
@@ -105,7 +105,7 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
       skip: !(props.showApiFilter && props.type === 'project' && props.typeid > 0)
     }
   );
-  const interfaces = (interfaceQuery.data?.data?.list || []) as LegacyInterfaceDTO[];
+  const interfaces = (interfaceQuery.data?.data?.list || []) as InterfaceDTO[];
 
   useEffect(() => {
     setPage(1);
@@ -209,7 +209,7 @@ export function LegacyTimeline(props: LegacyTimelineProps) {
                         variant="default"
                         size="compact-sm"
                         onClick={() => {
-                          setDiffItems(buildLegacyLogDiff(item.data));
+                          setDiffItems(buildActivityLogDiff(item.data));
                           setDetailOpen(true);
                         }}
                       >

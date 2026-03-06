@@ -4,7 +4,6 @@ import type {
   FollowItem,
   GroupListItem,
   ProjectCopyRequest,
-  LegacyInterfaceDTO,
   InterfaceTreeNode,
   InterfaceTreeNodeResult,
   InterfaceTreePageResult,
@@ -30,6 +29,7 @@ import type {
   UserSearchItem,
   UserStatusResult
 } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../types/interface-dto';
 
 type ImportTaskListResult = {
   count: number;
@@ -812,7 +812,7 @@ export const yapiApi = createApi({
       }
     }),
     getInterfaceList: builder.query<
-      ApiResult<{ count: number; total: number; list: LegacyInterfaceDTO[] }>,
+      ApiResult<{ count: number; total: number; list: InterfaceDTO[] }>,
       {
         projectId: number;
         token?: string;
@@ -842,7 +842,7 @@ export const yapiApi = createApi({
       }
     }),
     getInterface: builder.query<
-      ApiResult<LegacyInterfaceDTO & { username?: string }>,
+      ApiResult<InterfaceDTO & { username?: string }>,
       { id: number; projectId?: number; token?: string }
     >({
       query: args => ({
@@ -865,8 +865,8 @@ export const yapiApi = createApi({
       }
     }),
     addInterface: builder.mutation<
-      ApiResult<LegacyInterfaceDTO>,
-      Partial<LegacyInterfaceDTO> & { project_id: number; catid: number; title: string; path: string; method: string; token?: string }
+      ApiResult<InterfaceDTO>,
+      Partial<InterfaceDTO> & { project_id: number; catid: number; title: string; path: string; method: string; token?: string }
     >({
       query: payload => ({
         url: '/interface/add',
@@ -877,7 +877,7 @@ export const yapiApi = createApi({
     }),
     saveInterface: builder.mutation<
       ApiResult<Record<string, unknown>>,
-      Partial<LegacyInterfaceDTO> & { project_id: number; catid: number; title: string; path: string; method: string; token?: string; dataSync?: string }
+      Partial<InterfaceDTO> & { project_id: number; catid: number; title: string; path: string; method: string; token?: string; dataSync?: string }
     >({
       query: payload => ({
         url: '/interface/save',
@@ -888,7 +888,7 @@ export const yapiApi = createApi({
     }),
     updateInterface: builder.mutation<
       ApiResult<Record<string, unknown>>,
-      Partial<LegacyInterfaceDTO> & { id: number; token?: string }
+      Partial<InterfaceDTO> & { id: number; token?: string }
     >({
       query: payload => ({
         url: '/interface/up',
@@ -1267,37 +1267,6 @@ export const yapiApi = createApi({
         body: payload
       })
     }),
-    getOpenProjectInterfaceData: builder.query<
-      ApiResult<{
-        project: Record<string, unknown> | null;
-        stats: { categories: number; interfaces: number };
-        categories: Array<Record<string, unknown>>;
-        interfaces: Array<Record<string, unknown>>;
-      }>,
-      { projectId?: number; token?: string } | void
-    >({
-      query: args => ({
-        url: `/open/project_interface_data?${encodeQuery({
-          project_id: args?.projectId,
-          token: args?.token
-        })}`
-      })
-    }),
-    runOpenAutoTest: builder.mutation<
-      Record<string, unknown>,
-      { id: number; token: string; mode?: 'json' | 'html'; projectId?: number; download?: boolean }
-    >({
-      query: args => ({
-        url: `/open/run_auto_test?${encodeQuery({
-          id: args.id,
-          token: args.token,
-          mode: args.mode || 'json',
-          project_id: args.projectId,
-          download: args.download
-        })}`,
-        method: 'GET'
-      })
-    }),
     getLogList: builder.query<
       ApiResult<LogListResult>,
       { type: 'project' | 'group'; typeid: number; page?: number; limit?: number; selectValue?: string }
@@ -1310,16 +1279,6 @@ export const yapiApi = createApi({
           limit: args.limit || 20,
           selectValue: args.selectValue
         })}`
-      })
-    }),
-    getLogListByUpdate: builder.mutation<
-      ApiResult<Array<Record<string, unknown>>>,
-      { type: 'project' | 'group'; typeid: number; apis: Array<{ method: string; path: string }> }
-    >({
-      query: payload => ({
-        url: '/log/list_by_update',
-        method: 'POST',
-        body: payload
       })
     }),
     interUpload: builder.mutation<
@@ -1341,34 +1300,6 @@ export const yapiApi = createApi({
       query: payload => ({
         url: '/interface/interUpload',
         method: 'POST',
-        body: payload
-      })
-    }),
-    testPostCompat: builder.mutation<ApiResult<Record<string, unknown>>, Record<string, unknown>>({
-      query: payload => ({
-        url: '/test/post',
-        method: 'POST',
-        body: payload
-      })
-    }),
-    testPutCompat: builder.mutation<ApiResult<Record<string, unknown>>, Record<string, unknown>>({
-      query: payload => ({
-        url: '/test/put',
-        method: 'PUT',
-        body: payload
-      })
-    }),
-    testPatchCompat: builder.mutation<ApiResult<Record<string, unknown>>, Record<string, unknown>>({
-      query: payload => ({
-        url: '/test/patch',
-        method: 'PATCH',
-        body: payload
-      })
-    }),
-    testDeleteCompat: builder.mutation<ApiResult<Record<string, unknown>>, Record<string, unknown>>({
-      query: payload => ({
-        url: '/test/delete',
-        method: 'DELETE',
         body: payload
       })
     })
@@ -1469,14 +1400,6 @@ export const {
   useUpColCaseIndexMutation,
   useUpColIndexMutation,
   useRunColCaseScriptMutation,
-  useGetOpenProjectInterfaceDataQuery,
-  useRunOpenAutoTestMutation,
   useGetLogListQuery,
-  useLazyGetLogListQuery,
-  useGetLogListByUpdateMutation,
   useInterUploadMutation,
-  useTestPostCompatMutation,
-  useTestPutCompatMutation,
-  useTestPatchCompatMutation,
-  useTestDeleteCompatMutation
 } = yapiApi;

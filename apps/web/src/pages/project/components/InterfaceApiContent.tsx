@@ -1,8 +1,8 @@
 import { Card, Loader } from '@mantine/core';
 import type { FormInstance } from 'rc-field-form';
-import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../../types/interface-dto';
 import type { InterfaceTabItem } from '../../../plugins';
-import { LegacyErrMsg } from '../../../components/LegacyErrMsg';
+import { AppEmptyState } from '../../../components/AppEmptyState';
 import { InterfaceApiDetailTabs } from './InterfaceApiDetailTabs';
 import type { InterfaceEditConflictState } from './InterfaceEditTab';
 import { InterfaceListPanel } from './InterfaceListPanel';
@@ -11,12 +11,12 @@ export type InterfaceApiContentProps = {
   projectId: number;
   interfaceId: number;
   detailLoading: boolean;
-  currentInterface: LegacyInterfaceDTO | null;
+  currentInterface: InterfaceDTO | null;
   basepath?: string;
   canEdit: boolean;
   currentCat: { _id?: number; name?: string; desc?: string } | null;
   currentCatName: string;
-  filteredList: LegacyInterfaceDTO[];
+  filteredList: InterfaceDTO[];
   currentListLoading: boolean;
   listKeyword: string;
   statusFilter: 'all' | 'done' | 'undone';
@@ -33,7 +33,7 @@ export type InterfaceApiContentProps = {
   onNavigateInterface: (id: number) => void;
   onUpdateStatus: (id: number, status: 'done' | 'undone') => Promise<void>;
   onUpdateCategory: (id: number, catid: number) => Promise<void>;
-  onCopyInterface: (row: LegacyInterfaceDTO) => void;
+  onCopyInterface: (row: InterfaceDTO) => void;
   onDeleteInterface: (id: number) => void;
   methodClassName: (method?: string) => string;
   tab: string;
@@ -148,7 +148,7 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
   }
 
   if (!props.currentInterface) {
-    return <LegacyErrMsg type="noInterface" />;
+    return <AppEmptyState type="noInterface" />;
   }
 
   const method = String(props.currentInterface.method || 'GET').toUpperCase();

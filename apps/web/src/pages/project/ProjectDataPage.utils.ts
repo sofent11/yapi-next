@@ -1,9 +1,9 @@
 import json5 from 'json5';
 import type {
   SyncMode,
-  LegacyImportPayload,
-  LegacyImportApi,
-  LegacyImportParam,
+  ImportPayload,
+  ImportApi,
+  ImportParam,
 } from './ProjectDataPage.types';
 
 export function syncModeLabel(mode: SyncMode): string {
@@ -80,18 +80,18 @@ export function inferSchemaFromValue(value: unknown): Record<string, unknown> {
   return { type: 'string' };
 }
 
-export function normalizeLegacyImportPayload(input: unknown): LegacyImportPayload | null {
+export function normalizeImportPayload(input: unknown): ImportPayload | null {
   const source = asObject(input);
-  const apis = Array.isArray(source.apis) ? (source.apis as LegacyImportApi[]) : [];
+  const apis = Array.isArray(source.apis) ? (source.apis as ImportApi[]) : [];
   if (apis.length === 0) return null;
   const cats = Array.isArray(source.cats) ? (source.cats as Array<{ name?: string; desc?: string }>) : [];
   return { cats, apis };
 }
 
-export function buildOpenApiFromLegacyImport(params: {
+export function buildOpenApiFromImportPayload(params: {
   projectId: number;
   defaultCatName: string;
-  payload: LegacyImportPayload;
+  payload: ImportPayload;
 }): Record<string, unknown> {
   const tagDescMap = new Map<string, string>();
   params.payload.cats.forEach(item => {
@@ -119,7 +119,7 @@ export function buildOpenApiFromLegacyImport(params: {
     };
 
     const parameters = operation.parameters as Array<Record<string, unknown>>;
-    const addParam = (inType: 'path' | 'query' | 'header', rows: LegacyImportParam[] | undefined) => {
+    const addParam = (inType: 'path' | 'query' | 'header', rows: ImportParam[] | undefined) => {
       if (!Array.isArray(rows)) return;
       rows.forEach(row => {
         const name = String(row?.name || '').trim();

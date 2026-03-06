@@ -1,7 +1,7 @@
 import { Button, Modal, Select, Stack, Text, TextInput, Textarea } from '@mantine/core';
 import RcForm, { Field } from 'rc-field-form';
 import type { FormInstance } from 'rc-field-form';
-import { legacyNameValidator } from '../../../utils/legacy-validation';
+import { createNameValidator } from '../../../utils/name-validator';
 
 const modalClassNames = { title: 'app-modal-title' };
 
@@ -139,7 +139,7 @@ export function InterfaceCoreModals(props: InterfaceCoreModalsProps) {
           <Stack>
             <Field<AddInterfaceModalForm>
               name="title"
-              rules={[{ required: true, validator: legacyNameValidator('接口') }]}
+              rules={[{ required: true, validator: createNameValidator('接口') }]}
             >
               {(control, meta) => (
                 <TextInput

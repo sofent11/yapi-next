@@ -3,7 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { FormInstance } from 'rc-field-form';
 import type { NavigateFunction } from 'react-router-dom';
 import json5 from 'json5';
-import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../types/interface-dto';
 
 import { generateMockStringFromJsonSchema } from '../../utils/schema-mock';
 import type {
@@ -41,13 +41,13 @@ type UseProjectInterfaceMenuSyncEffectsParams = {
   loadCatInterfaces: (catid: number) => Promise<void>;
   catLoadingRef: MutableRefObject<Record<number, boolean>>;
   catLoadedRef: MutableRefObject<Record<number, boolean>>;
-  setCatInterfaceMap: Dispatch<SetStateAction<Record<number, LegacyInterfaceDTO[]>>>;
+  setCatInterfaceMap: Dispatch<SetStateAction<Record<number, InterfaceDTO[]>>>;
   setCatLoadingMap: Dispatch<SetStateAction<Record<number, boolean>>>;
   setExpandedColIds: Dispatch<SetStateAction<number[]>>;
   setImportProjectId: (value: number) => void;
   importCatLoadingRef: MutableRefObject<Record<number, boolean>>;
   importCatLoadedRef: MutableRefObject<Record<number, boolean>>;
-  setImportCatInterfaceMap: Dispatch<SetStateAction<Record<number, LegacyInterfaceDTO[]>>>;
+  setImportCatInterfaceMap: Dispatch<SetStateAction<Record<number, InterfaceDTO[]>>>;
   setImportCatLoadingMap: Dispatch<SetStateAction<Record<number, boolean>>>;
   loadImportCatInterfaces: (catid: number, options?: { force?: boolean; notifyError?: boolean }) => Promise<void>;
   addCaseForm: FormInstance<AddCaseForm>;
@@ -204,7 +204,7 @@ type UseProjectInterfacePageSyncEffectsParams = {
   caseId: string;
   colIdFromRoute: number;
   interfaceId: number;
-  currentInterface: LegacyInterfaceDTO | null;
+  currentInterface: InterfaceDTO | null;
   selectedColId: number;
   colRows: any[];
   caseDetailData: Record<string, unknown> | null;
@@ -278,14 +278,14 @@ type UseProjectInterfaceEditSyncEffectsParams = {
   action: string;
   interfaceId: number;
   tab: string;
-  currentInterface: LegacyInterfaceDTO | null;
+  currentInterface: InterfaceDTO | null;
   basepath?: string;
   watchedValues: EditForm;
   reqRadioType: 'req-body' | 'req-query' | 'req-headers';
   form: FormInstance<EditForm>;
   caseForm: FormInstance<CaseEditForm>;
   caseDetailData: Record<string, unknown> | null;
-  buildEditFormValues: (source: LegacyInterfaceDTO | null) => EditForm;
+  buildEditFormValues: (source: InterfaceDTO | null) => EditForm;
   serializeEditValues: (values: EditForm | undefined) => string;
   resetInterfaceRequestRunner: (value: {
     method?: string;

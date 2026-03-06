@@ -3,7 +3,8 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import type { FormInstance } from 'rc-field-form';
 import type { NavigateFunction } from 'react-router-dom';
-import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceTreeNode } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../types/interface-dto';
 
 import type {
   AddCatForm,
@@ -46,7 +47,7 @@ type UseProjectInterfaceApiActionsParams = {
   projectId: number;
   token?: string;
   projectTag?: Array<{ name?: string; desc?: string }>;
-  currentInterface: LegacyInterfaceDTO | null;
+  currentInterface: InterfaceDTO | null;
   interfaceId: number;
   catId: number;
   catRows: Array<{ _id?: number; name?: string }>;
@@ -376,7 +377,7 @@ export function useProjectInterfaceApiActions(params: UseProjectInterfaceApiActi
     });
   }, [params]);
 
-  const copyInterfaceRow = useCallback(async (row: LegacyInterfaceDTO) => {
+  const copyInterfaceRow = useCallback(async (row: InterfaceDTO) => {
     const sourceId = Number(row._id || 0);
     if (sourceId <= 0) {
       message.error('接口数据不完整，无法复制');
@@ -391,7 +392,7 @@ export function useProjectInterfaceApiActions(params: UseProjectInterfaceApiActi
       '获取接口详情失败'
     );
     if (!detailRes?.data) return;
-    const source = detailRes.data as LegacyInterfaceDTO & Record<string, unknown>;
+    const source = detailRes.data as InterfaceDTO & Record<string, unknown>;
     const pathBase = String(source.path || '/copy').replace(/\/+$/, '') || '/copy';
     const copyPayload = {
       project_id: params.projectId,

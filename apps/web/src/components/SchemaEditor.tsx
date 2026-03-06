@@ -5,7 +5,7 @@ import { SchemaVisualEditor } from './SchemaVisualEditor';
 
 const DRAFT4_SCHEMA_URI = 'http://json-schema.org/draft-04/schema#';
 
-type LegacySchemaEditorProps = {
+type SchemaEditorProps = {
   value?: string;
   onChange: (nextValue: string) => void;
 };
@@ -41,7 +41,7 @@ function normalizeSchemaText(input?: string): { text: string; valid: boolean } {
   }
 }
 
-export function LegacySchemaEditor(props: LegacySchemaEditorProps) {
+export function SchemaEditor(props: SchemaEditorProps) {
   const normalized = useMemo(() => normalizeSchemaText(props.value), [props.value]);
 
   if (!normalized.valid) {

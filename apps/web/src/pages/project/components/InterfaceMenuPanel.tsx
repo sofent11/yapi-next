@@ -9,7 +9,8 @@ import {
   IconTrash,
   IconEdit
 } from '@tabler/icons-react';
-import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceTreeNode } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../../types/interface-dto';
 import { FilterBar } from '../../../components/layout';
 
 type InterfaceMenuPanelProps = {
@@ -38,7 +39,7 @@ type InterfaceMenuPanelProps = {
   onEditCat: (cat: InterfaceTreeNode) => void;
   onDeleteCat: (cat: InterfaceTreeNode) => void;
   onNavigateInterface: (interfaceId: number) => void;
-  onCopyInterface: (row: LegacyInterfaceDTO) => void;
+  onCopyInterface: (row: InterfaceDTO) => void;
   onDeleteInterface: (interfaceId: number) => void;
   methodClassName: (method?: string) => string;
 };

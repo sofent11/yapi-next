@@ -1,4 +1,4 @@
-import { LegacyTimeline } from '../../components/LegacyTimeline';
+import { ActivityTimeline } from '../../components/ActivityTimeline';
 
 type ProjectActivityPageProps = {
   projectId: number;
@@ -8,7 +8,7 @@ export function ProjectActivityPage(props: ProjectActivityPageProps) {
   return (
     <div className="g-row">
       <section className="news-box m-panel">
-        <LegacyTimeline
+        <ActivityTimeline
           type="project"
           typeid={props.projectId}
           projectIdForApiFilter={props.projectId}

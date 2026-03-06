@@ -1,6 +1,6 @@
 import { Badge, Button, Card, Tabs, Text } from '@mantine/core';
 import type { FormInstance } from 'rc-field-form';
-import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../../types/interface-dto';
 import type { InterfaceTabItem } from '../../../plugins';
 import { InterfaceEditTab } from './InterfaceEditTab';
 import type { InterfaceEditConflictState } from './InterfaceEditTab';
@@ -9,7 +9,7 @@ import { InterfaceViewTab } from './InterfaceViewTab';
 
 type InterfaceApiDetailTabsProps = {
   projectId: number;
-  currentInterface: LegacyInterfaceDTO;
+  currentInterface: InterfaceDTO;
   tab: string;
   interfaceTabs: Record<string, InterfaceTabItem>;
   onSwitchTab: (next: string) => void;

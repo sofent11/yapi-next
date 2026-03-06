@@ -1,6 +1,6 @@
 import { Card, Loader } from '@mantine/core';
 import type { FormInstance } from 'rc-field-form';
-import { LegacyErrMsg } from '../../../components/LegacyErrMsg';
+import { AppEmptyState } from '../../../components/AppEmptyState';
 import { CaseDetailPanel } from './CaseDetailPanel';
 import { CollectionOverviewPanel } from './CollectionOverviewPanel';
 import type {
@@ -86,7 +86,7 @@ export type InterfaceCollectionContentProps = {
 export function InterfaceCollectionContent(props: InterfaceCollectionContentProps) {
   if (props.action === 'col') {
     if (props.selectedColId <= 0) {
-      return <LegacyErrMsg title="请选择测试集合" desc="先在左侧选择一个测试集合。" />;
+      return <AppEmptyState title="请选择测试集合" desc="先在左侧选择一个测试集合。" />;
     }
     const currentCol =
       props.colRows.find(item => Number(item._id || 0) === props.selectedColId) || null;
@@ -122,7 +122,7 @@ export function InterfaceCollectionContent(props: InterfaceCollectionContentProp
   }
 
   if (!props.caseId) {
-    return <LegacyErrMsg title="请选择测试用例" desc="先在左侧选择一个测试用例。" />;
+    return <AppEmptyState title="请选择测试用例" desc="先在左侧选择一个测试用例。" />;
   }
 
   if (props.caseDetailLoading) {
@@ -137,7 +137,7 @@ export function InterfaceCollectionContent(props: InterfaceCollectionContentProp
 
   const detail = props.caseDetailData;
   if (!detail || Object.keys(detail).length === 0) {
-    return <LegacyErrMsg title="测试用例不存在" desc="该用例可能已被删除，请重新选择。" />;
+    return <AppEmptyState title="测试用例不存在" desc="该用例可能已被删除，请重新选择。" />;
   }
 
   const caseKey = String(props.caseId || '');

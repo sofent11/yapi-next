@@ -1,6 +1,7 @@
 import React from 'react';
 import type { FormInstance } from 'rc-field-form';
-import type { InterfaceTreeNode, LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceTreeNode } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../../types/interface-dto';
 import { InterfaceMenuPanel } from './InterfaceMenuPanel';
 import { getHttpMethodBadgeClassName } from '../../../utils/http-method';
 import type { MenuDragItem } from '../ProjectInterfacePage.types';
@@ -28,7 +29,7 @@ export type ProjectInterfaceApiMenuProps = {
   handleDropOnInterface: (catIdNum: number, ifaceId: number) => void;
   openEditCatModal: (cat: InterfaceTreeNode) => void;
   confirmDeleteCat: (cat: InterfaceTreeNode) => void;
-  copyInterfaceRow: (item: LegacyInterfaceDTO) => void;
+  copyInterfaceRow: (item: InterfaceDTO) => void;
   confirmDeleteInterface: (id: number) => void;
 };
 

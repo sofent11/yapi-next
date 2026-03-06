@@ -32,7 +32,7 @@ import {
   resolveProjectColor,
   resolveProjectColorKey
 } from '../../../utils/project-visual';
-import { legacyNameValidator } from '../../../utils/legacy-validation';
+import { createNameValidator } from '../../../utils/name-validator';
 import { SectionCard } from '../../../components/layout';
 import type { ProjectForm, ProjectSettingPageProps } from '../ProjectSettingPage.types';
 
@@ -252,7 +252,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
             <Text fw={500}>项目ID</Text>
             <Text>{String(project?._id || '-')}</Text>
           </div>
-          <Field<ProjectForm> name="name" rules={[{ required: true, validator: legacyNameValidator('项目') }]}>
+          <Field<ProjectForm> name="name" rules={[{ required: true, validator: createNameValidator('项目') }]}>
             {(control, meta) => (
               <TextInput
                 label="项目名称"

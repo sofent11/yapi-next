@@ -2,7 +2,7 @@ import { Button, Stack, Text, ThemeIcon, Title } from '@mantine/core';
 import { IconMoodEmpty, IconMoodSad } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 
-type LegacyErrMsgType =
+type AppEmptyStateType =
   | 'noFollow'
   | 'noInterface'
   | 'noMemberInProject'
@@ -11,13 +11,13 @@ type LegacyErrMsgType =
   | 'noData'
   | 'noChange';
 
-type LegacyErrMsgProps = {
-  type?: LegacyErrMsgType;
+type AppEmptyStateProps = {
+  type?: AppEmptyStateType;
   title?: string;
   desc?: string;
 };
 
-function resolveContent(type?: LegacyErrMsgType): { title: string; desc: string; icon: 'frown' | 'meh' } {
+function resolveContent(type?: AppEmptyStateType): { title: string; desc: string; icon: 'frown' | 'meh' } {
   switch (type) {
     case 'noFollow':
       return {
@@ -65,7 +65,7 @@ function resolveContent(type?: LegacyErrMsgType): { title: string; desc: string;
   }
 }
 
-export function LegacyErrMsg(props: LegacyErrMsgProps) {
+export function AppEmptyState(props: AppEmptyStateProps) {
   const navigate = useNavigate();
   const fallback = resolveContent(props.type);
   const title = props.title || fallback.title;

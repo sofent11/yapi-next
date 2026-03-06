@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../types/interface-dto';
 
 import type { ColDragItem, MenuDragItem } from './ProjectInterfacePage.types';
 import { buildCaseIndexPayload, buildIndexPayload, reorderByCaseId, reorderById } from './ProjectInterfacePage.utils';
@@ -10,7 +10,7 @@ type MutationTrigger = (args: any) => { unwrap: () => Promise<any> };
 type UseProjectInterfaceDndActionsParams = {
   projectId: number;
   token?: string;
-  menuRows: Array<{ _id?: number; list?: LegacyInterfaceDTO[] }>;
+  menuRows: Array<{ _id?: number; list?: InterfaceDTO[] }>;
   colRows: Array<{ _id?: number }>;
   colDisplayRows: Array<{ _id?: number; caseList?: Array<Record<string, unknown>> }>;
   menuDragEnabled: boolean;
@@ -113,7 +113,7 @@ export function useProjectInterfaceDndActions(params: UseProjectInterfaceDndActi
       }
 
       const cat = params.menuRows.find(item => Number(item._id || 0) === targetCatId);
-      const list = (cat?.list || []) as LegacyInterfaceDTO[];
+      const list = (cat?.list || []) as InterfaceDTO[];
       if (list.length === 0) return;
       const reordered = reorderById(list, drag.id, targetInterfaceId);
       const payload = buildIndexPayload(reordered);

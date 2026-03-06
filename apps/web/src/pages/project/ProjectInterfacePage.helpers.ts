@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { notifications } from '@mantine/notifications';
 import type { FormInstance } from 'rc-field-form';
-import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
+import type { InterfaceDTO } from '../../types/interface-dto';
 
 import {
   stringifyPretty,
@@ -62,7 +62,7 @@ export function useProjectInterfaceEditHelpers(params: UseProjectInterfaceEditHe
     return JSON.stringify(data);
   }, []);
 
-  const buildEditFormValues = useCallback((source: LegacyInterfaceDTO | null): EditForm => {
+  const buildEditFormValues = useCallback((source: InterfaceDTO | null): EditForm => {
     if (!source) {
       return {
         catid: Number(params.catRows[0]?._id || 0),
@@ -129,7 +129,7 @@ export function useProjectInterfaceEditHelpers(params: UseProjectInterfaceEditHe
 }
 
 type UseProjectInterfaceRunHelpersParams = {
-  currentInterface: LegacyInterfaceDTO | null;
+  currentInterface: InterfaceDTO | null;
   projectId: number;
   caseId: string;
   caseForm: FormInstance<any>;

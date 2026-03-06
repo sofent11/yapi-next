@@ -2,12 +2,12 @@ import { Suspense, lazy, useMemo, type ComponentType } from 'react';
 import { matchPath, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Alert, Button, Center, Loader, Stack, Title } from '@mantine/core';
 import { useGetUserStatusQuery } from './services/yapi-api';
-import { LegacyHeader } from './components/LegacyHeader';
-import { LegacyFooter } from './components/LegacyFooter';
-import { LegacyNotify } from './components/LegacyNotify';
-import { LegacyGuideProvider } from './context/LegacyGuideContext';
+import { AppHeader } from './components/AppHeader';
+import { AppFooter } from './components/AppFooter';
+import { AppNotify } from './components/AppNotify';
+import { GuideProvider } from './context/GuideContext';
 import { webPlugins } from './plugins';
-import type { LegacyRouteContract } from './types/legacy-contract';
+import type { AppRouteContract } from './types/route-contract';
 
 const pageShellClassName = 'min-h-screen bg-slate-50 text-slate-900 flex flex-col';
 const contentClassName = 'flex-1 px-6 py-6';
@@ -118,7 +118,7 @@ function renderBrowserHint(show: boolean) {
   );
 }
 
-function isValidRouteContract(route: LegacyRouteContract | undefined): route is LegacyRouteContract {
+function isValidRouteContract(route: AppRouteContract | undefined): route is AppRouteContract {
   if (!route) return false;
   if (typeof route.path !== 'string' || !route.path.startsWith('/')) return false;
   if (typeof route.component !== 'function') return false;
@@ -126,8 +126,8 @@ function isValidRouteContract(route: LegacyRouteContract | undefined): route is 
   return true;
 }
 
-function sanitizeRoutes(routes: Record<string, LegacyRouteContract>): Record<string, LegacyRouteContract> {
-  const safeRoutes: Record<string, LegacyRouteContract> = {};
+function sanitizeRoutes(routes: Record<string, AppRouteContract>): Record<string, AppRouteContract> {
+  const safeRoutes: Record<string, AppRouteContract> = {};
   Object.keys(routes).forEach(key => {
     const route = routes[key];
     if (!isValidRouteContract(route)) {
@@ -141,7 +141,7 @@ function sanitizeRoutes(routes: Record<string, LegacyRouteContract>): Record<str
 }
 
 function renderRoutes(
-  routes: Record<string, LegacyRouteContract>,
+  routes: Record<string, AppRouteContract>,
   mode: 'public' | 'protected' | 'all'
 ) {
   return Object.keys(routes).map(key => {
@@ -154,7 +154,7 @@ function renderRoutes(
   });
 }
 
-function isPublicPath(pathname: string, routes: Record<string, LegacyRouteContract>): boolean {
+function isPublicPath(pathname: string, routes: Record<string, AppRouteContract>): boolean {
   if (pathname === '/' || pathname === '/login') return true;
   const publicRoutes = Object.values(routes).filter(
     route => route.protected === false && route.path !== '/' && route.path !== '/login'
@@ -173,8 +173,8 @@ export function App() {
   const isStatusLoading = statusQuery.isLoading && !statusQuery.data;
   const isStatusError = statusQuery.isError;
 
-  const appRoutes = useMemo<Record<string, LegacyRouteContract>>(() => {
-    const routes: Record<string, LegacyRouteContract> = {
+  const appRoutes = useMemo<Record<string, AppRouteContract>>(() => {
+    const routes: Record<string, AppRouteContract> = {
       home: { path: '/', component: HomePage, protected: false },
       group: { path: '/group', component: GroupRedirectPage, protected: true },
       groupDetail: { path: '/group/:groupId', component: ProjectConsolePage, protected: true },
@@ -220,20 +220,20 @@ export function App() {
   }
 
   return (
-    <LegacyGuideProvider
+    <GuideProvider
       uid={Number(user?._id || user?.uid || 0)}
       study={Boolean((user as unknown as Record<string, unknown> | null)?.study)}
     >
       <AppShell>
         <SkipLink />
-        <LegacyHeader
+        <AppHeader
           uid={Number(user?._id || user?.uid || 0)}
           username={user?.username}
           email={user?.email}
           role={user?.role}
           study={Boolean((user as unknown as Record<string, unknown> | null)?.study)}
         />
-        <LegacyNotify enabled={String(user?.role || '') === 'admin'} />
+        <AppNotify enabled={String(user?.role || '') === 'admin'} />
         {renderBrowserHint(browserHint)}
         <Suspense fallback={<LoadingView />}>
           <AppContent>
@@ -245,8 +245,8 @@ export function App() {
             </Routes>
           </AppContent>
         </Suspense>
-        <LegacyFooter />
+        <AppFooter />
       </AppShell>
-    </LegacyGuideProvider>
+    </GuideProvider>
   );
 }

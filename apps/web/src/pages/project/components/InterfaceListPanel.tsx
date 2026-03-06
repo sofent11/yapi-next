@@ -1,7 +1,7 @@
 import { Alert, Badge, Button, Select, Table, Text, TextInput, Tooltip } from '@mantine/core';
 import { IconCopy, IconEye, IconSearch, IconTrash } from '@tabler/icons-react';
-import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
-import { LegacyErrMsg } from '../../../components/LegacyErrMsg';
+import type { InterfaceDTO } from '../../../types/interface-dto';
+import { AppEmptyState } from '../../../components/AppEmptyState';
 import { FilterBar } from '../../../components/layout/FilterBar';
 
 type InterfaceCategoryOption = {
@@ -16,7 +16,7 @@ type InterfaceListPanelProps = {
   activeInterfaceId: number;
   currentCat: InterfaceCategoryOption | null;
   currentCatName: string;
-  filteredList: LegacyInterfaceDTO[];
+  filteredList: InterfaceDTO[];
   currentListLoading: boolean;
   listKeyword: string;
   statusFilter: 'all' | 'done' | 'undone';
@@ -33,7 +33,7 @@ type InterfaceListPanelProps = {
   onNavigateInterface: (id: number) => void;
   onUpdateStatus: (id: number, status: 'done' | 'undone') => Promise<void>;
   onUpdateCategory: (id: number, catid: number) => Promise<void>;
-  onCopyInterface: (row: LegacyInterfaceDTO) => void;
+  onCopyInterface: (row: InterfaceDTO) => void;
   onDeleteInterface: (id: number) => void;
   methodClassName: (method?: string) => string;
 };
@@ -111,9 +111,9 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
 
       {props.filteredList.length === 0 ? (
         props.filteredList.length === 0 && !props.listKeyword.trim() && props.statusFilter === 'all' ? (
-          <LegacyErrMsg type="noInterface" />
+          <AppEmptyState type="noInterface" />
         ) : (
-          <LegacyErrMsg type="noData" />
+          <AppEmptyState type="noData" />
         )
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200">

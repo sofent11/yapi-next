@@ -1,5 +1,5 @@
 import { Text } from '@mantine/core';
-import { LegacyTimeline } from '../../components/LegacyTimeline';
+import { ActivityTimeline } from '../../components/ActivityTimeline';
 
 type ProjectConsoleActivityTabProps = {
   groupId: number;
@@ -12,7 +12,7 @@ export function ProjectConsoleActivityTab(props: ProjectConsoleActivityTabProps)
         <Text fw={700}>分组动态</Text>
         <Text c="dimmed">查看该分组内项目与接口的最新变更记录。</Text>
       </div>
-      <LegacyTimeline type="group" typeid={props.groupId} />
+      <ActivityTimeline type="group" typeid={props.groupId} />
     </div>
   );
 }

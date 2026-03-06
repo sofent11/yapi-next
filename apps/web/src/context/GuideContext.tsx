@@ -1,17 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useUpdateStudyMutation } from '../services/yapi-api';
 
-type LegacyGuideContextValue = {
+type GuideContextValue = {
   active: boolean;
   step: number;
   next: () => void;
   finish: () => void;
 };
 
-const LEGACY_GUIDE_MAX_STEP = 3;
-const LEGACY_GUIDE_STORAGE_PREFIX = 'yapi_legacy_study_tip';
+const GUIDE_MAX_STEP = 3;
+const GUIDE_STORAGE_PREFIX = 'yapi_legacy_study_tip';
 
-const LegacyGuideContext = createContext<LegacyGuideContextValue>({
+const GuideContext = createContext<GuideContextValue>({
   active: false,
   step: -1,
   next: () => undefined,
@@ -19,7 +19,7 @@ const LegacyGuideContext = createContext<LegacyGuideContextValue>({
 });
 
 function buildStorageKey(uid: number): string {
-  return `${LEGACY_GUIDE_STORAGE_PREFIX}:${uid > 0 ? uid : 'guest'}`;
+  return `${GUIDE_STORAGE_PREFIX}:${uid > 0 ? uid : 'guest'}`;
 }
 
 function readGuideStep(uid: number, study: boolean): number {
@@ -31,7 +31,7 @@ function readGuideStep(uid: number, study: boolean): number {
     const value = Number(raw);
     if (!Number.isFinite(value)) return 0;
     if (value < 0) return -1;
-    if (value > LEGACY_GUIDE_MAX_STEP) return LEGACY_GUIDE_MAX_STEP;
+    if (value > GUIDE_MAX_STEP) return GUIDE_MAX_STEP;
     return value;
   } catch (_err) {
     return 0;
@@ -46,13 +46,13 @@ function persistGuideStep(uid: number, step: number) {
   }
 }
 
-type LegacyGuideProviderProps = {
+type GuideProviderProps = {
   uid: number;
   study: boolean;
   children: ReactNode;
 };
 
-export function LegacyGuideProvider(props: LegacyGuideProviderProps) {
+export function GuideProvider(props: GuideProviderProps) {
   const [step, setStep] = useState<number>(() => readGuideStep(props.uid, props.study));
   const [updateStudy] = useUpdateStudyMutation();
 
@@ -85,7 +85,7 @@ export function LegacyGuideProvider(props: LegacyGuideProviderProps) {
     setStep(prev => {
       if (prev < 0) return prev;
       const nextStep = prev + 1;
-      if (nextStep > LEGACY_GUIDE_MAX_STEP) {
+      if (nextStep > GUIDE_MAX_STEP) {
         persistGuideStep(props.uid, -1);
         syncStudy();
         return -1;
@@ -95,7 +95,7 @@ export function LegacyGuideProvider(props: LegacyGuideProviderProps) {
     });
   }, [props.uid, syncStudy]);
 
-  const value = useMemo<LegacyGuideContextValue>(
+  const value = useMemo<GuideContextValue>(
     () => ({
       active: !props.study && step >= 0,
       step,
@@ -105,9 +105,9 @@ export function LegacyGuideProvider(props: LegacyGuideProviderProps) {
     [finish, next, props.study, step]
   );
 
-  return <LegacyGuideContext.Provider value={value}>{props.children}</LegacyGuideContext.Provider>;
+  return <GuideContext.Provider value={value}>{props.children}</GuideContext.Provider>;
 }
 
-export function useLegacyGuide() {
-  return useContext(LegacyGuideContext);
+export function useGuide() {
+  return useContext(GuideContext);
 }
