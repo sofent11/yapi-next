@@ -16,7 +16,7 @@ type CategoryModalForm = {
   desc?: string;
 };
 
-type InterfaceCoreModalsProps = {
+export type InterfaceCoreModalsProps = {
   confirmOpen: boolean;
   onCancelConfirm: () => void;
   onConfirmLeave: () => void;

@@ -28,7 +28,7 @@ type AutoTestReport = {
   runTime?: string;
 };
 
-type AutoTestResultModalsProps = {
+export type AutoTestResultModalsProps = {
   reportOpen: boolean;
   onCloseReport: () => void;
   detailItem: AutoTestResultItem | null;

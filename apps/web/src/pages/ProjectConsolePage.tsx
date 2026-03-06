@@ -30,62 +30,30 @@ import {
   useGetUserStatusQuery,
   useUpdateGroupMutation
 } from '../services/yapi-api';
-import { ProjectConsoleActivityTab } from './components/ProjectConsoleActivityTab';
-import { ProjectConsoleMembersTab } from './components/ProjectConsoleMembersTab';
 import { ProjectConsoleModals } from './components/ProjectConsoleModals';
-import { ProjectConsoleProjectTab } from './components/ProjectConsoleProjectTab';
 import { ProjectConsoleSettingTab } from './components/ProjectConsoleSettingTab';
 import type { GroupSettingForm } from './components/ProjectConsoleSettingTab';
-import { ProjectConsoleSidebar } from './components/ProjectConsoleSidebar';
+import { ActivityList } from './project/components/ActivityList';
+import { MemberList } from './project/components/MemberList';
+import { ProjectList } from './project/components/ProjectList';
+import { GroupOverview } from './project/components/GroupOverview';
 import { AppShell, PageHeader } from '../components/layout';
 import { useLegacyGuide } from '../context/LegacyGuideContext';
 import { safeApiRequest } from '../utils/safe-request';
+import type {
+  ConsoleTabKey,
+  CopyForm,
+  CreateGroupForm,
+  GroupMemberRole
+} from './ProjectConsolePage.types';
+import {
+  canShowGroupSetting,
+  isConsoleTabKey,
+  normalizeGroups
+} from './ProjectConsolePage.utils';
 import './Group.scss';
 
 const { Content, Sider } = Layout;
-
-type CreateGroupForm = {
-  group_name: string;
-  group_desc?: string;
-  owner_uids?: number[];
-  owner_uids_text?: string;
-  custom_field1_name?: string;
-  custom_field1_enable?: boolean;
-};
-
-type GroupMemberRole = 'owner' | 'dev' | 'guest';
-
-type CopyForm = {
-  project_name: string;
-};
-
-type ConsoleTabKey = 'projects' | 'members' | 'activity' | 'setting';
-
-function isConsoleTabKey(key: string): key is ConsoleTabKey {
-  return key === 'projects' || key === 'members' || key === 'activity' || key === 'setting';
-}
-
-function normalizeGroups(myGroup: GroupListItem | undefined, groups: GroupListItem[]): GroupListItem[] {
-  const result: GroupListItem[] = [];
-  const used = new Set<number>();
-
-  if (myGroup && Number.isFinite(Number(myGroup._id))) {
-    result.push(myGroup);
-    used.add(Number(myGroup._id));
-  }
-
-  for (const group of groups) {
-    const id = Number(group._id);
-    if (!Number.isFinite(id) || used.has(id)) continue;
-    result.push(group);
-    used.add(id);
-  }
-  return result;
-}
-
-function canShowGroupSetting(userRole?: string, groupRole?: string, groupType?: string) {
-  return (userRole === 'admin' || groupRole === 'owner') && groupType !== 'private';
-}
 
 export function ProjectConsolePage() {
   const navigate = useNavigate();
@@ -550,7 +518,7 @@ export function ProjectConsolePage() {
       key: 'projects',
       label: '项目列表',
       children: (
-        <ProjectConsoleProjectTab
+        <ProjectList
           selectedGroupName={selectedGroup?.group_name || ''}
           groupType={groupType}
           projectRows={projectRows}
@@ -578,7 +546,7 @@ export function ProjectConsolePage() {
       key: 'members',
       label: '成员列表',
       children: (
-        <ProjectConsoleMembersTab
+        <MemberList
           groupMemberCountTitle={groupMemberCountTitle}
           canManageGroupMembers={canManageGroupMembers}
           members={sortedMembers}
@@ -599,7 +567,7 @@ export function ProjectConsolePage() {
     tabItems.push({
       key: 'activity',
       label: '分组动态',
-      children: <ProjectConsoleActivityTab groupId={groupId} />
+      children: <ActivityList groupId={groupId} />
     });
   }
 
@@ -647,7 +615,7 @@ export function ProjectConsolePage() {
       <div className="projectGround">
         <Layout className="legacy-project-console-layout">
           <Sider className="legacy-project-console-sider" width={200}>
-            <ProjectConsoleSidebar
+            <GroupOverview
               guideVisible={guideVisible}
               guideStep={guide.step}
               personalSpaceTip={personalSpaceTip}

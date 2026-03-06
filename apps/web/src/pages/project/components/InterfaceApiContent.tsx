@@ -7,7 +7,7 @@ import { InterfaceApiDetailTabs } from './InterfaceApiDetailTabs';
 import type { InterfaceEditConflictState } from './InterfaceEditTab';
 import { InterfaceListPanel } from './InterfaceListPanel';
 
-type InterfaceApiContentProps = {
+export type InterfaceApiContentProps = {
   projectId: number;
   interfaceId: number;
   detailLoading: boolean;

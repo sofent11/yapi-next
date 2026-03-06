@@ -13,7 +13,7 @@ import type {
   CollectionRow
 } from './collection-types';
 
-type InterfaceCollectionContentProps = {
+export type InterfaceCollectionContentProps = {
   action: string;
   projectId: number;
   selectedColId: number;

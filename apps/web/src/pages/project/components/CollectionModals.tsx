@@ -16,7 +16,7 @@ type ImportInterfaceRow = {
   children?: ImportInterfaceRow[];
 };
 
-type CollectionModalsProps = {
+export type CollectionModalsProps = {
   colModalType: 'add' | 'edit';
   colModalOpen: boolean;
   colForm: FormInstance<ColFormValues>;
