@@ -59,7 +59,7 @@ $color-blue: #2395f1;
         top: 4px;
         font-size: 24px;
         color: #999;
-        transition: all .3s;
+        transition: color .3s ease, opacity .3s ease;
     }
 
     .dynamic-delete-button:hover {
@@ -75,12 +75,12 @@ $color-blue: #2395f1;
     .card-container {
         position: relative;
         user-select: none;
-        transition: all .2s;
+        transition: transform .2s ease, box-shadow .2s ease;
 
         .m-card,
         .card-btns {
             transform: translateY(0);
-            transition: all .2s;
+            transition: transform .2s ease, box-shadow .2s ease, background-color .2s ease;
         }
 
         &:hover {
@@ -180,7 +180,7 @@ $color-blue: #2395f1;
         cursor: pointer;
         text-align: center;
         margin-bottom: 16px;
-        transition: all .4s;
+        transition: transform .4s ease, box-shadow .4s ease, border-color .4s ease;
         position: relative;
 
         .ant-card-body {
@@ -188,7 +188,7 @@ $color-blue: #2395f1;
             border-radius: 4px;
             padding-top: calc(24px + 16px + 100px);
             box-shadow: 0 4px 6px rgba(255, 255, 255, .11), 0 1px 3px rgba(255, 255, 255, .08);
-            transition: all .2s;
+            transition: background-color .2s ease, box-shadow .2s ease, transform .2s ease;
         }
 
         .ui-logo {
@@ -269,14 +269,12 @@ $color-blue: #2395f1;
     }
 
     /* GroupList.scss */
-    .group-bar {
+        .group-bar {
         min-height: 500px;
 
         .curr-group {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-                SimSun, sans-serif;
-            background-color: $color-bg-dark;
+            font-family: var(--font-sans);
+            background: linear-gradient(160deg, #0f172a 0%, #17315f 100%);
             color: $color-white;
             padding: 24px 24px 0;
 
@@ -303,6 +301,7 @@ $color-blue: #2395f1;
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
+                    font-weight: 600;
                 }
 
                 .editSet {
@@ -343,7 +342,7 @@ $color-blue: #2395f1;
                 color: $color-white-secondary;
                 font-size: 13px;
                 max-height: 54px;
-                margin-top: 16px;
+                margin-top: 12px;
                 text-overflow: ellipsis;
                 overflow: hidden;
                 -webkit-line-clamp: 3;
@@ -360,7 +359,7 @@ $color-blue: #2395f1;
                 border: 1px solid $color-white;
                 padding: 6px 12px;
                 border-radius: 4px;
-                transition: all .2s;
+                transition: background-color .2s ease, border-color .2s ease, color .2s ease;
             }
 
             .delete-group:hover,
@@ -374,7 +373,7 @@ $color-blue: #2395f1;
             padding: 16px 24px;
             display: flex;
             justify-content: space-around;
-            background-color: $color-bg-dark;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(15, 23, 42, 0.94) 100%);
 
             .search {
                 flex-grow: 1;
@@ -382,8 +381,8 @@ $color-blue: #2395f1;
 
             .ant-input {
                 color: $color-white;
-                background-color: $color-bg-dark;
-                border-color: #555;
+                background-color: rgba(255, 255, 255, 0.08);
+                border-color: rgba(255, 255, 255, 0.14);
             }
 
             .ant-input::-webkit-input-placeholder {
@@ -398,7 +397,7 @@ $color-blue: #2395f1;
         .group-list {
             overflow-x: hidden;
             border-bottom: 1px solid #e9e9e9;
-            padding-bottom: 24px;
+            padding: 12px 12px 24px;
             border: none;
 
             .group-item {

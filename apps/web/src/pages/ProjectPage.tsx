@@ -1,6 +1,7 @@
 import { Suspense, lazy, useMemo, type ComponentType } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Menu, Spin } from 'antd';
+import { ArrowLeftOutlined } from '@ant-design/icons';
+import { Button, Menu, Space, Spin, Tag } from 'antd';
 import type { MenuProps } from 'antd';
 import { useGetGroupQuery, useGetProjectQuery } from '../services/yapi-api';
 import { webPlugins, type SubNavItem } from '../plugins';
@@ -49,7 +50,8 @@ export function ProjectPage() {
   const project = projectQuery.data?.data;
   const projectGroupId = Number(project?.group_id || 0);
   const groupQuery = useGetGroupQuery({ id: projectGroupId }, { skip: projectGroupId <= 0 });
-  const hideMembers = groupQuery.data?.data?.type === 'private';
+  const group = groupQuery.data?.data;
+  const hideMembers = group?.type === 'private';
 
   const subNavMap = useMemo<Record<string, SubNavItem>>(() => {
     const routes: Record<string, SubNavItem> = {
@@ -159,11 +161,30 @@ export function ProjectPage() {
   return (
     <AppShell className="legacy-project-page-root">
       <PageHeader
+        eyebrow="项目工作区"
         title={String(project?.name || `项目 #${projectId}`)}
         subtitle={
           project?.basepath
             ? `BasePath: ${project.basepath}`
             : '接口、测试、数据与成员配置统一管理'
+        }
+        meta={
+          <Space size={[8, 8]} wrap>
+            <Tag bordered={false} color="blue">
+              {group?.group_name || '未分组项目'}
+            </Tag>
+            {project?.role ? <Tag bordered={false}>{`角色：${project.role}`}</Tag> : null}
+            <Tag bordered={false} color={hideMembers ? 'default' : 'green'}>
+              {hideMembers ? '私有成员模式' : '团队协作模式'}
+            </Tag>
+          </Space>
+        }
+        actions={
+          projectGroupId > 0 ? (
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(`/group/${projectGroupId}`)}>
+              返回分组
+            </Button>
+          ) : null
         }
       />
       <div className="m-subnav">
@@ -173,14 +194,10 @@ export function ProjectPage() {
           className="g-row m-subnav-menu legacy-project-subnav"
           items={Object.keys(subNavMap).map(key => {
             const item = subNavMap[key];
-            let name = item.name;
-            if (name.length === 2) {
-              name = name[0] + ' ' + name[1];
-            }
             return {
               key,
               className: 'item',
-              label: <Link to={item.path}>{name}</Link>
+              label: <Link to={item.path}>{item.name}</Link>
             };
           })}
         />

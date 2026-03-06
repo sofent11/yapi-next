@@ -2,10 +2,31 @@
   margin-bottom: 16px;
 }
 
+.legacy-project-setting-page {
+  padding-bottom: 8px;
+}
+
+.legacy-setting-tabs .ant-tabs-content-holder {
+  padding-top: 4px;
+}
+
+.legacy-setting-tabs .ant-tabs-tabpane {
+  border-radius: 16px;
+}
+
+.legacy-setting-info-alert {
+  margin-bottom: 16px;
+}
+
+.legacy-project-setting-form .ant-form-item-label > label {
+  font-weight: 600;
+  color: #203048;
+}
+
 .card-danger {
   border: 1px solid #ffd8bf;
-  border-radius: 12px;
-  background: #fffaf7;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffaf7 0%, #fff6f0 100%);
 
   .ant-card-body {
     display: flex;
@@ -57,11 +78,11 @@
 .legacy-setting-actions {
   display: flex;
   justify-content: center;
-  padding: 12px 0 4px;
+  padding: 16px 0 4px;
 }
 
 .legacy-setting-actions .btn-save {
-  min-width: 136px;
+  min-width: 160px;
   letter-spacing: 0.08em;
   font-weight: 600;
 }

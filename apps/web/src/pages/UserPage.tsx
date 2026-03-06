@@ -221,8 +221,10 @@ export function UserPage() {
     return (
       <div className="legacy-page-shell legacy-user-page">
         <PageHeader
+          eyebrow="组织管理"
           title="用户管理"
           subtitle={isAdmin ? `当前共有 ${totalUsers} 位用户` : '当前账号权限受限，仅可查看个人中心。'}
+          meta={isAdmin ? '支持按用户名或邮箱快速检索并维护用户资料。' : '当前仅开放个人资料查看入口。'}
           actions={
             currentUid > 0 ? (
               <Button onClick={() => navigate(`/user/profile/${currentUid}`)}>个人中心</Button>
@@ -239,7 +241,8 @@ export function UserPage() {
                 value={keyword}
                 onChange={event => setKeyword(event.target.value)}
                 onSearch={() => void handleSearch()}
-                placeholder="请输入用户名或邮箱"
+                placeholder="输入用户名或邮箱搜索…"
+                aria-label="按用户名或邮箱搜索用户"
                 enterButton
               />
             }
@@ -340,8 +343,10 @@ export function UserPage() {
   return (
     <div className="legacy-page-shell legacy-user-page">
       <PageHeader
+        eyebrow="个人资料"
         title={targetUid === currentUid ? '个人设置' : `${profileData?.username || targetUid} 资料设置`}
         subtitle={findUserState.isFetching ? '正在加载用户信息...' : '可在此更新基础资料、头像和密码。'}
+        meta={profileData?.email ? `当前邮箱 ${profileData.email}` : undefined}
         actions={<Button onClick={() => navigate('/user/list')}>返回用户列表</Button>}
       />
 
@@ -393,10 +398,12 @@ export function UserPage() {
               <div className="legacy-user-edit-label">用户名</div>
               <Space.Compact className="legacy-user-edit-control">
                 <Input
+                  aria-label="用户名"
                   value={usernameInput}
                   onChange={e => setUsernameInput(e.target.value)}
                   disabled={!canEditBasic}
-                  placeholder="用户名"
+                  placeholder="请输入用户名…"
+                  spellCheck={false}
                 />
                 {canEditBasic ? (
                   <Button type="primary" onClick={() => void handleSaveProfile()} loading={updateUserState.isLoading}>
@@ -410,10 +417,14 @@ export function UserPage() {
               <div className="legacy-user-edit-label">Email</div>
               <Space.Compact className="legacy-user-edit-control">
                 <Input
+                  aria-label="邮箱"
+                  type="email"
+                  inputMode="email"
                   value={emailInput}
                   onChange={e => setEmailInput(e.target.value)}
                   disabled={!canEditBasic}
-                  placeholder="Email"
+                  placeholder="例如：name@example.com…"
+                  spellCheck={false}
                 />
                 {canEditBasic ? (
                   <Button type="primary" onClick={() => void handleSaveProfile()} loading={updateUserState.isLoading}>
@@ -454,20 +465,20 @@ export function UserPage() {
                     id="old_password"
                     value={oldPassword}
                     onChange={event => setOldPassword(event.target.value)}
-                    placeholder="旧密码"
+                    placeholder="请输入旧密码…"
                   />
                 )}
                 <Input.Password
                   id="password"
                   value={newPassword}
                   onChange={event => setNewPassword(event.target.value)}
-                  placeholder="新密码"
+                  placeholder="请输入新密码…"
                 />
                 <Input.Password
                   id="verify_pass"
                   value={confirmPassword}
                   onChange={event => setConfirmPassword(event.target.value)}
-                  placeholder="确认密码"
+                  placeholder="请再次输入新密码…"
                 />
                 <Button
                   type="primary"

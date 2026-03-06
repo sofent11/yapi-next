@@ -118,25 +118,33 @@ export function LoginPage() {
                         <Form<LoginFormValues>
                           onFinish={handleLogin}
                           initialValues={{ email: '', password: '' }}
+                          layout="vertical"
                         >
                           <Form.Item
+                            label="邮箱"
                             name="email"
                             rules={EMAIL_RULES}
                           >
                             <Input
+                              name="email"
                               prefix={<MailOutlined className="login-form-icon" />}
-                              placeholder="Email"
+                              type="email"
+                              inputMode="email"
+                              placeholder="例如：name@example.com…"
                               autoComplete="email"
+                              spellCheck={false}
                               className="login-form-input"
                             />
                           </Form.Item>
                           <Form.Item
+                            label="密码"
                             name="password"
                             rules={[{ required: true, message: '请输入密码!' }]}
                           >
                             <Input.Password
+                              name="password"
                               prefix={<LockOutlined className="login-form-icon" />}
-                              placeholder="Password"
+                              placeholder="请输入登录密码…"
                               autoComplete="current-password"
                               className="login-form-input"
                             />
@@ -169,35 +177,47 @@ export function LoginPage() {
                         <Form<RegisterFormValues>
                           onFinish={handleRegister}
                           initialValues={{ email: '', password: '', username: '' }}
+                          layout="vertical"
                         >
                           <Form.Item
+                            label="用户名"
                             name="username"
                             rules={[{ required: true, message: '请输入用户名!' }]}
                           >
                             <Input
+                              name="username"
                               prefix={<UserOutlined className="login-form-icon" />}
-                              placeholder="Username"
+                              placeholder="例如：zhangsan…"
+                              autoComplete="username"
+                              spellCheck={false}
                               className="login-form-input"
                             />
                           </Form.Item>
                           <Form.Item
+                            label="邮箱"
                             name="email"
                             rules={EMAIL_RULES}
                           >
                             <Input
+                              name="register-email"
                               prefix={<MailOutlined className="login-form-icon" />}
-                              placeholder="Email"
+                              type="email"
+                              inputMode="email"
+                              placeholder="例如：name@example.com…"
                               autoComplete="email"
+                              spellCheck={false}
                               className="login-form-input"
                             />
                           </Form.Item>
                           <Form.Item
+                            label="密码"
                             name="password"
                             rules={[{ required: true, message: '请输入密码!' }]}
                           >
                             <Input.Password
+                              name="new-password"
                               prefix={<LockOutlined className="login-form-icon" />}
-                              placeholder="Password"
+                              placeholder="请设置登录密码…"
                               autoComplete="new-password"
                               className="login-form-input"
                             />

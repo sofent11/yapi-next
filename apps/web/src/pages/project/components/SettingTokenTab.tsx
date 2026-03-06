@@ -1,4 +1,4 @@
-import { Button, Input, Modal, Space, Typography, message } from 'antd';
+import { Alert, Button, Input, Modal, Space, Typography, message } from 'antd';
 import { useGetProjectQuery, useGetProjectTokenQuery, useUpdateProjectTokenMutation } from '../../../services/yapi-api';
 import { SectionCard } from '../../../components/layout';
 import type { ProjectSettingPageProps } from '../ProjectSettingPage.types';
@@ -60,16 +60,22 @@ export function SettingTokenTab(props: ProjectSettingPageProps) {
   return (
     <SectionCard className="m-panel legacy-project-setting-card">
       <Space direction="vertical" className="legacy-workspace-stack">
+        <Alert
+          type="info"
+          showIcon
+          className="legacy-setting-info-alert"
+          message="Token 用于 OpenAPI 与开放接口访问，请妥善保管并仅在可信环境中使用。"
+        />
         <Text strong>工具标识</Text>
         <Text type="secondary">
           每个项目都有唯一 token，可用于请求项目 openapi。
         </Text>
         <Input value={String(tokenQuery.data?.data || '')} readOnly />
         <Space>
-          <Button onClick={handleCopyToken}>复制 token</Button>
+          <Button onClick={handleCopyToken}>复制 Token</Button>
           {canDeleteProject ? (
             <Button onClick={handleRegenerateToken} loading={updateTokenState.isLoading}>
-              重新生成
+              重新生成 Token
             </Button>
           ) : null}
           <Button onClick={() => tokenQuery.refetch()}>刷新</Button>

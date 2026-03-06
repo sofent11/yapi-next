@@ -251,6 +251,7 @@ export function LegacyHeader(props: LegacyHeaderProps) {
             }}
             prefix={<SearchOutlined />}
             placeholder="搜索分组/项目/接口"
+            aria-label="搜索分组、项目或接口"
           />
         </AutoComplete>
         <Popover
@@ -261,7 +262,11 @@ export function LegacyHeader(props: LegacyHeaderProps) {
           overlayClassName="legacy-guide-popover"
         >
           <Tooltip title="我的关注">
-            <Link to="/follow" className={`legacy-icon-link${inFollow ? ' active' : ''}`}>
+            <Link
+              to="/follow"
+              className={`legacy-icon-link${inFollow ? ' active' : ''}`}
+              aria-label="进入我的关注"
+            >
               <StarOutlined />
             </Link>
           </Tooltip>
@@ -274,7 +279,11 @@ export function LegacyHeader(props: LegacyHeaderProps) {
           overlayClassName="legacy-guide-popover"
         >
           <Tooltip title="新建项目">
-            <Link to="/add-project" className={`legacy-icon-link${inAddProject ? ' active' : ''}`}>
+            <Link
+              to="/add-project"
+              className={`legacy-icon-link${inAddProject ? ' active' : ''}`}
+              aria-label="新建项目"
+            >
               <PlusCircleOutlined />
             </Link>
           </Tooltip>
@@ -292,6 +301,7 @@ export function LegacyHeader(props: LegacyHeaderProps) {
               target="_blank"
               rel="noreferrer"
               className="legacy-icon-link"
+              aria-label="打开使用文档"
             >
               <QuestionCircleOutlined />
             </a>
@@ -303,7 +313,12 @@ export function LegacyHeader(props: LegacyHeaderProps) {
           placement="bottomRight"
           trigger={['click']}
         >
-          <button type="button" className="legacy-user-btn" disabled={logoutState.isLoading}>
+          <button
+            type="button"
+            className="legacy-user-btn"
+            disabled={logoutState.isLoading}
+            aria-label="打开用户菜单"
+          >
             <Avatar src={avatarUrl} size={30} style={{ backgroundColor: '#1677ff', color: '#fff' }}>
               {(props.username || props.email || 'U').slice(0, 1).toUpperCase()}
             </Avatar>

@@ -226,11 +226,18 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
           <h2 className="legacy-project-setting-head-title">
             {(currentGroupName ? `${currentGroupName} / ` : '') + (project?.name || '')}
           </h2>
+          <Text type="secondary">点击图标可调整项目视觉样式，帮助团队更快识别项目。</Text>
         </div>
       </div>
+      <Alert
+        showIcon
+        type="info"
+        className="legacy-setting-info-alert"
+        message="这里维护项目基础信息、访问权限与行为开关，调整公开权限前请先确认协作范围。"
+      />
       <hr className="legacy-breakline" />
 
-      <Form<ProjectForm> form={projectForm} onFinish={handleSubmit} labelCol={{ lg: { offset: 1, span: 3 }, xs: { span: 24 }, sm: { span: 6 } }} wrapperCol={{ lg: { span: 19 }, xs: { span: 24 }, sm: { span: 14 } }}>
+      <Form<ProjectForm> className="legacy-project-setting-form" form={projectForm} onFinish={handleSubmit} labelCol={{ lg: { offset: 1, span: 3 }, xs: { span: 24 }, sm: { span: 6 } }} wrapperCol={{ lg: { span: 19 }, xs: { span: 24 }, sm: { span: 14 } }}>
         <Form.Item label="项目ID" className="form-item">
           <span>{project?._id || '-'}</span>
         </Form.Item>
@@ -240,7 +247,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
           rules={[{ required: true, validator: legacyNameValidator('项目') }]}
           className="form-item"
         >
-          <Input />
+          <Input placeholder="例如：支付中心 API…" />
         </Form.Item>
         <Form.Item
           label="所属分组"
@@ -252,7 +259,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
             options={groupOptions}
             loading={groupListQuery.isLoading}
             disabled={!canChangeProjectGroup}
-            placeholder="请选择所属分组"
+            placeholder="请选择所属分组…"
           />
         </Form.Item>
         <Form.Item
@@ -267,7 +274,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
           name="basepath"
           className="form-item"
         >
-          <Input placeholder="/api/v1" />
+          <Input placeholder="/api/v1…" />
         </Form.Item>
         <Form.Item
           label={
@@ -283,7 +290,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
           <Input value={mockUrl} disabled />
         </Form.Item>
         <Form.Item label="描述" name="desc" className="form-item">
-          <Input.TextArea rows={8} />
+          <Input.TextArea rows={8} placeholder="简要说明项目职责、接口范围或协作说明…" />
         </Form.Item>
         <Form.Item
           label={
@@ -340,7 +347,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
 
       <div className="legacy-setting-actions">
         <Button className="btn-save" type="primary" size="large" onClick={() => void projectForm.submit()} loading={updateState.isLoading}>
-          保 存
+          保存项目配置
         </Button>
       </div>
 
@@ -386,6 +393,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
           <Input
             value={deleteConfirmText}
             onChange={event => setDeleteConfirmText(event.target.value)}
+            placeholder={`输入 ${projectName} 以确认删除…`}
           />
         </Space>
       </Modal>

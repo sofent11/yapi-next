@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Form, message } from 'antd';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
 import { safeApiRequest } from '../../utils/safe-request';
 import { useProjectInterfaceNavigationGuard } from './ProjectInterfacePage.navigation';
@@ -68,14 +68,29 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
   const action = params.action || 'api';
   const actionId = params.actionId;
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentSearch = searchParams.toString();
+  const parsePage = (value: string | null) => {
+    const nextPage = Number(value || 1);
+    return Number.isFinite(nextPage) && nextPage > 0 ? nextPage : 1;
+  };
 
-  const [tab, setTab] = useState<string>('view');
+  const initialTab = searchParams.get('tab') || 'view';
+  const initialListKeyword = searchParams.get('q') || '';
+  const initialListPage = parsePage(searchParams.get('page'));
+  const initialStatusFilter = searchParams.get('status');
+  const initialReqPanel = searchParams.get('reqPanel');
+  const initialResTab = searchParams.get('resTab');
+  const initialReqSchema = searchParams.get('reqSchema');
+  const initialResSchema = searchParams.get('resSchema');
+
+  const [tab, setTab] = useState<string>(initialTab);
   const interfaceRequestRunner = useProjectInterfaceRequestRunner();
   const caseRequestRunner = useProjectInterfaceRequestRunner();
   const resetInterfaceRequestRunner = interfaceRequestRunner.reset;
   const resetCaseRequestRunner = caseRequestRunner.reset;
-  const [listKeyword, setListKeyword] = useState('');
-  const [listPage, setListPage] = useState(1);
+  const [listKeyword, setListKeyword] = useState(initialListKeyword);
+  const [listPage, setListPage] = useState(initialListPage);
   const [menuKeyword, setMenuKeyword] = useState('');
   const [expandedCatIds, setExpandedCatIds] = useState<number[]>([]);
   const [catInterfaceMap, setCatInterfaceMap] = useState<Record<number, LegacyInterfaceDTO[]>>({});
@@ -83,7 +98,9 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
   const catLoadingRef = useRef<Record<number, boolean>>({});
   const catLoadedRef = useRef<Record<number, boolean>>({});
   const [draggingMenuItem, setDraggingMenuItem] = useState<MenuDragItem | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'done' | 'undone'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'done' | 'undone'>(
+    initialStatusFilter === 'done' || initialStatusFilter === 'undone' ? initialStatusFilter : 'all'
+  );
   const [colKeyword, setColKeyword] = useState('');
   const [expandedColIds, setExpandedColIds] = useState<number[]>([]);
   const [draggingColItem, setDraggingColItem] = useState<ColDragItem | null>(null);
@@ -109,17 +126,25 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
   const [autoTestDetailItem, setAutoTestDetailItem] = useState<AutoTestResultItem | null>(null);
   const [selectedRunEnvByProject, setSelectedRunEnvByProject] = useState<Record<number, string>>({});
   const [commonSettingOpen, setCommonSettingOpen] = useState(false);
-  const [reqRadioType, setReqRadioType] = useState<'req-body' | 'req-query' | 'req-headers'>('req-query');
+  const [reqRadioType, setReqRadioType] = useState<'req-body' | 'req-query' | 'req-headers'>(
+    initialReqPanel === 'req-body' || initialReqPanel === 'req-headers' ? initialReqPanel : 'req-query'
+  );
   const [editBaseline, setEditBaseline] = useState('');
   const [tagSettingOpen, setTagSettingOpen] = useState(false);
   const [tagSettingInput, setTagSettingInput] = useState('');
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkFieldName, setBulkFieldName] = useState<'req_query' | 'req_body_form' | null>(null);
   const [bulkValue, setBulkValue] = useState('');
-  const [resEditorTab, setResEditorTab] = useState<'tpl' | 'preview'>('tpl');
+  const [resEditorTab, setResEditorTab] = useState<'tpl' | 'preview'>(
+    initialResTab === 'preview' ? 'preview' : 'tpl'
+  );
   const [resPreviewText, setResPreviewText] = useState('');
-  const [reqSchemaEditorMode, setReqSchemaEditorMode] = useState<'text' | 'visual'>('visual');
-  const [resSchemaEditorMode, setResSchemaEditorMode] = useState<'text' | 'visual'>('visual');
+  const [reqSchemaEditorMode, setReqSchemaEditorMode] = useState<'text' | 'visual'>(
+    initialReqSchema === 'text' ? 'text' : 'visual'
+  );
+  const [resSchemaEditorMode, setResSchemaEditorMode] = useState<'text' | 'visual'>(
+    initialResSchema === 'text' ? 'text' : 'visual'
+  );
   const [editConflictState, setEditConflictState] = useState<EditConflictState>({ status: 'idle' });
 
   const [form] = Form.useForm<EditForm>();
@@ -134,6 +159,87 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
   const watchedValues = Form.useWatch([], form);
   const watchedReqBodyOther = Form.useWatch('req_body_other', form);
   const watchedResBody = Form.useWatch('res_body', form);
+
+  useEffect(() => {
+    const nextTab = searchParams.get('tab') || 'view';
+    const nextListKeyword = searchParams.get('q') || '';
+    const nextListPage = parsePage(searchParams.get('page'));
+    const nextStatusFilter = searchParams.get('status');
+    const nextReqPanel = searchParams.get('reqPanel');
+    const nextReqSchema = searchParams.get('reqSchema');
+    const nextResTab = searchParams.get('resTab');
+    const nextResSchema = searchParams.get('resSchema');
+
+    if (tab !== nextTab) setTab(nextTab);
+    if (listKeyword !== nextListKeyword) setListKeyword(nextListKeyword);
+    if (listPage !== nextListPage) setListPage(nextListPage);
+    if (statusFilter !== nextStatusFilter && (nextStatusFilter === 'all' || nextStatusFilter === 'done' || nextStatusFilter === 'undone')) {
+      setStatusFilter(nextStatusFilter);
+    }
+    if (statusFilter !== 'all' && !nextStatusFilter) setStatusFilter('all');
+    if (reqRadioType !== nextReqPanel && (nextReqPanel === 'req-query' || nextReqPanel === 'req-body' || nextReqPanel === 'req-headers')) {
+      setReqRadioType(nextReqPanel);
+    }
+    if (reqRadioType !== 'req-query' && !nextReqPanel) setReqRadioType('req-query');
+    if (reqSchemaEditorMode !== nextReqSchema && (nextReqSchema === 'text' || nextReqSchema === 'visual')) {
+      setReqSchemaEditorMode(nextReqSchema);
+    }
+    if (reqSchemaEditorMode !== 'visual' && !nextReqSchema) setReqSchemaEditorMode('visual');
+    if (resEditorTab !== nextResTab && (nextResTab === 'tpl' || nextResTab === 'preview')) {
+      setResEditorTab(nextResTab);
+    }
+    if (resEditorTab !== 'tpl' && !nextResTab) setResEditorTab('tpl');
+    if (resSchemaEditorMode !== nextResSchema && (nextResSchema === 'text' || nextResSchema === 'visual')) {
+      setResSchemaEditorMode(nextResSchema);
+    }
+    if (resSchemaEditorMode !== 'visual' && !nextResSchema) setResSchemaEditorMode('visual');
+  }, [
+    listKeyword,
+    listPage,
+    reqRadioType,
+    reqSchemaEditorMode,
+    resEditorTab,
+    resSchemaEditorMode,
+    searchParams,
+    statusFilter,
+    tab
+  ]);
+
+  useEffect(() => {
+    const nextSearchParams = new URLSearchParams(currentSearch);
+    const syncParam = (key: string, value: string | null, fallback?: string) => {
+      if (!value || value === fallback) {
+        nextSearchParams.delete(key);
+        return;
+      }
+      nextSearchParams.set(key, value);
+    };
+
+    syncParam('tab', tab, 'view');
+    syncParam('q', listKeyword.trim(), '');
+    syncParam('status', statusFilter, 'all');
+    syncParam('page', listPage > 1 ? String(listPage) : '', '');
+    syncParam('reqPanel', reqRadioType, 'req-query');
+    syncParam('reqSchema', reqSchemaEditorMode, 'visual');
+    syncParam('resTab', resEditorTab, 'tpl');
+    syncParam('resSchema', resSchemaEditorMode, 'visual');
+
+    const nextSearch = nextSearchParams.toString();
+    if (nextSearch !== currentSearch) {
+      setSearchParams(nextSearchParams, { replace: true });
+    }
+  }, [
+    currentSearch,
+    listKeyword,
+    listPage,
+    reqRadioType,
+    reqSchemaEditorMode,
+    resEditorTab,
+    resSchemaEditorMode,
+    setSearchParams,
+    statusFilter,
+    tab
+  ]);
 
   const interfaceId = action === 'api' ? parseInterfaceId(actionId) : 0;
   const catId = action === 'api' && actionId?.startsWith('cat_') ? Number(actionId.slice(4)) : 0;

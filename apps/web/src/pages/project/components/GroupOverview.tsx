@@ -13,6 +13,8 @@ interface GroupOverviewProps {
   selectedGroupType?: string;
   selectedGroupName?: string;
   selectedGroupDesc?: string;
+  selectedGroupRole?: string;
+  projectCount: number;
   groupKeyword: string;
   onGroupKeywordChange: (value: string) => void;
   loading: boolean;
@@ -57,7 +59,7 @@ export function GroupOverview(props: GroupOverviewProps) {
   return (
     <div className="m-group">
       {props.guideVisible && props.guideStep === 0 ? <div className="legacy-study-mask" /> : null}
-      <div className="group-bar">
+        <div className="group-bar">
         <div className="curr-group">
           <div className="curr-group-name">
             <span className="name">
@@ -68,19 +70,25 @@ export function GroupOverview(props: GroupOverviewProps) {
                 type="button"
                 className="editSet legacy-console-add-group-btn"
                 onClick={props.onOpenCreateGroup}
+                aria-label="新建分组"
               >
                 <FolderAddOutlined className="btn" />
               </button>
             </Tooltip>
           </div>
-          <div className="curr-group-desc">简介: {props.selectedGroupDesc || ''}</div>
+          <div className="curr-group-desc">{props.selectedGroupDesc || '当前分组尚未填写简介。'}</div>
+          <div className="legacy-console-group-badges">
+            {props.selectedGroupRole ? <Text className="legacy-console-group-badge">{`角色 ${props.selectedGroupRole}`}</Text> : null}
+            <Text className="legacy-console-group-badge">{`${props.projectCount} 个项目`}</Text>
+          </div>
         </div>
         <div className="group-operate">
           <div className="search">
             <Input.Search
               value={props.groupKeyword}
               onChange={event => props.onGroupKeywordChange(event.target.value)}
-              placeholder="搜索分类"
+              placeholder="搜索分组…"
+              aria-label="搜索分组"
               allowClear
             />
           </div>

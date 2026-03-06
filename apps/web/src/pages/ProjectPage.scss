@@ -3,7 +3,7 @@
 }
 
 .m-subnav {
-    margin-bottom: 16px;
+    margin-bottom: 18px;
     background-color: transparent;
     font-size: 14px;
     border: none;
@@ -14,17 +14,25 @@
 
     .m-subnav-menu {
         border: 1px solid #dbe4ef;
-        border-radius: 12px;
-        padding: 0 16px;
+        border-radius: 16px;
+        padding: 6px;
         width: 100%;
         margin: 0 auto;
-        background: #fff;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 20px rgba(15, 23, 42, 0.06);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 255, 0.96) 100%);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 28px rgba(15, 23, 42, 0.08);
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+
+        &::-webkit-scrollbar {
+            display: none;
+        }
 
         .item {
-            line-height: 52px;
-            padding: 0 24px;
-            font-weight: 500;
+            line-height: 44px;
+            padding: 0 18px;
+            font-weight: 600;
+            border-radius: 12px;
         }
     }
 }
@@ -32,5 +40,18 @@
 @media (max-width: 900px) {
     .legacy-project-page-root {
         padding: 12px;
+    }
+
+    .m-subnav {
+        margin-bottom: 14px;
+
+        .m-subnav-menu {
+            border-radius: 12px;
+            padding: 4px;
+
+            .item {
+                padding: 0 14px;
+            }
+        }
     }
 }

@@ -67,21 +67,28 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
       ) : null}
       <FilterBar
         className="legacy-interface-list-toolbar"
-        left={<Text strong>{props.currentCatName} 共 ({props.filteredList.length}) 个接口</Text>}
+        left={
+          <div className="legacy-interface-list-toolbar-copy">
+            <Text strong>{props.currentCatName}</Text>
+            <Text type="secondary">{`${props.filteredList.length} 个接口`}</Text>
+          </div>
+        }
         right={
           <Space size={8}>
             <Input
               value={props.listKeyword}
               onChange={event => props.onListKeywordChange(event.target.value)}
-              placeholder="搜索接口"
+              placeholder="按名称或路径搜索接口…"
               prefix={<SearchOutlined />}
               allowClear
               className="legacy-interface-list-search"
+              aria-label="搜索接口"
             />
             <Select<'all' | 'done' | 'undone'>
               value={props.statusFilter}
               onChange={props.onStatusFilterChange}
               className="legacy-interface-list-status-filter"
+              aria-label="按状态筛选接口"
               options={[
                 { value: 'all', label: '全部状态' },
                 { value: 'done', label: '已完成' },
@@ -93,7 +100,7 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
             </Button>
             {props.canEdit ? (
               <>
-                <Button onClick={props.onOpenAddInterface} disabled={!props.hasCategories}>
+                <Button type="primary" onClick={props.onOpenAddInterface} disabled={!props.hasCategories}>
                   添加接口
                 </Button>
                 <Button onClick={props.onOpenAddCat}>

@@ -44,6 +44,14 @@ export function ProjectList(props: ProjectListProps) {
       String(project.basepath || '').trim() ||
       String(project.desc || '').trim() ||
       '未设置描述';
+    const updatedAt = Number(project.up_time || 0)
+      ? new Date(Number(project.up_time || 0) * 1000).toLocaleString('zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      : '未知';
     return (
       <div className="card-container" key={pid}>
         <Card
@@ -62,6 +70,10 @@ export function ProjectList(props: ProjectListProps) {
           </div>
           <h4 className="ui-title" title={project.name || ''}>{project.name}</h4>
           <p className="legacy-console-project-subtitle" title={secondaryText}>{secondaryText}</p>
+          <div className="legacy-console-project-meta">
+            <Text type="secondary">{`更新于 ${updatedAt}`}</Text>
+            <Text type="secondary">{`角色 ${project.role || '-'}`}</Text>
+          </div>
         </Card>
         <button
           type="button"
@@ -96,8 +108,10 @@ export function ProjectList(props: ProjectListProps) {
     <div className="m-panel card-panel card-panel-s project-list legacy-console-project-panel">
       <Row className="project-list-header legacy-console-project-header" gutter={[12, 12]}>
         <Col xs={24} md={16} className="legacy-console-project-header-main">
-          <Text strong>{props.selectedGroupName || '分组'}</Text>
-          <Text type="secondary">共 {props.projectRows.length} 个项目</Text>
+          <div className="legacy-console-project-header-copy">
+            <Text strong>{props.selectedGroupName || '分组'}</Text>
+            <Text type="secondary">共 {props.projectRows.length} 个项目</Text>
+          </div>
         </Col>
         <Col xs={24} md={8} className="legacy-console-project-header-actions">
           {props.canCreateProject ? (

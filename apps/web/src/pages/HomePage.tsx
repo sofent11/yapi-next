@@ -53,6 +53,12 @@ const valueHighlights = [
   }
 ];
 
+const productSignals = [
+  '统一接口设计、调试、Mock 与测试链路',
+  '支持 OpenAPI/Swagger 导入导出与兼容迁移',
+  '适合中后台团队持续协作与规范治理'
+];
+
 export function HomePage() {
   const navigate = useNavigate();
   const ThirdLogin = useMemo(() => webPlugins.getThirdLoginComponent() as ComponentType | null, []);
@@ -110,6 +116,13 @@ export function HomePage() {
               </a>
               {ThirdLogin ? <ThirdLogin /> : null}
             </Space>
+            <div className="home-v2-signal-row">
+              {productSignals.map(item => (
+                <span key={item} className="home-v2-signal-chip">
+                  {item}
+                </span>
+              ))}
+            </div>
           </div>
           <div className="home-v2-hero-panel">
             <Card bordered={false}>
@@ -120,6 +133,9 @@ export function HomePage() {
                 <Text>3. 测试集合、自动测试和报告查看</Text>
                 <Text>4. OpenAPI 导入导出与回归支持</Text>
               </Space>
+              <div className="home-v2-panel-note">
+                <Text type="secondary">适合需要统一接口协作、Mock 与回归测试链路的团队。</Text>
+              </div>
             </Card>
           </div>
         </section>

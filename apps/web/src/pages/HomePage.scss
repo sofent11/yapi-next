@@ -87,6 +87,27 @@
   margin-bottom: 20px;
 }
 
+.home-v2-signal-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.home-v2-signal-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(22, 119, 255, 0.08);
+  border: 1px solid rgba(22, 119, 255, 0.14);
+  color: #24415f;
+  font-size: 13px;
+  font-weight: 500;
+}
+
 .home-v2-hero-panel {
   display: flex;
   align-items: stretch;
@@ -103,6 +124,12 @@
   color: #334155;
 }
 
+.home-v2-panel-note {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e5ecf6;
+}
+
 .home-v2-features {
   margin-bottom: 24px;
 }
@@ -111,6 +138,7 @@
   height: 100%;
   border: 1px solid #e1eaf6;
   background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 }
 
 .home-v2-feature-card .ant-card-body {
@@ -145,6 +173,7 @@
   height: 100%;
   border: 1px solid #dce6f4;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
 }
 
 .home-v2-value-head {

@@ -22,6 +22,15 @@
   background: rgba(255, 255, 255, 0.94);
 }
 
+.card-login::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 6px;
+  border-radius: 16px 16px 0 0;
+  background: linear-gradient(90deg, #1677ff 0%, #3b82ff 42%, #0ea472 100%);
+}
+
 .card-login .login-logo {
   position: absolute;
   left: 50%;
@@ -45,6 +54,11 @@
   font-weight: 700;
   letter-spacing: 0.02em;
   color: #142138;
+}
+
+.login-form .ant-form-item-label > label {
+  font-weight: 600;
+  color: #203048;
 }
 
 .login-form .ant-tabs-nav {
@@ -83,6 +97,10 @@
   border-radius: 10px;
   box-shadow: 0 8px 16px rgba(22, 119, 255, 0.25);
   background: linear-gradient(130deg, #1677ff 0%, #3b82ff 100%) !important;
+}
+
+.login-form-button:hover {
+  transform: translateY(-1px);
 }
 
 .login-third-party {

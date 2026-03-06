@@ -63,7 +63,13 @@ export function SettingEnvTab(props: ProjectSettingPageProps) {
   return (
     <SectionCard className="m-panel legacy-project-setting-card">
       <Space direction="vertical" className="legacy-workspace-stack">
-        <Space>
+        <Alert
+          type="info"
+          showIcon
+          className="legacy-setting-info-alert"
+          message="为不同环境维护域名、Header 与全局变量，便于调试时快速切换。"
+        />
+        <Space wrap>
           <Button
             onClick={() =>
               setEnvEditors(prev => [
@@ -110,7 +116,7 @@ export function SettingEnvTab(props: ProjectSettingPageProps) {
                     prev.map((env, i) => (i === index ? { ...env, name: event.target.value } : env))
                   )
                 }
-                placeholder="环境名称"
+                placeholder="例如：开发环境…"
               />
               <Input
                 value={item.domain}
@@ -119,7 +125,7 @@ export function SettingEnvTab(props: ProjectSettingPageProps) {
                     prev.map((env, i) => (i === index ? { ...env, domain: event.target.value } : env))
                   )
                 }
-                placeholder="环境域名"
+                placeholder="例如：https://dev.example.com…"
               />
               <Text type="secondary">Header(JSON 数组)</Text>
               <Input.TextArea

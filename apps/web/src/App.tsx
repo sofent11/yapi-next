@@ -168,6 +168,9 @@ export function App() {
   if (!isLoggedIn) {
     return (
       <>
+        <a href="#app-main-content" className="legacy-skip-link">
+          跳转到主内容
+        </a>
         {browserHint ? (
           <Alert
             banner
@@ -195,6 +198,9 @@ export function App() {
       study={Boolean((user as unknown as Record<string, unknown> | null)?.study)}
     >
       <Layout className="legacy-app-root">
+        <a href="#app-main-content" className="legacy-skip-link">
+          跳转到主内容
+        </a>
         <LegacyHeader
           uid={Number(user?._id || user?.uid || 0)}
           username={user?.username}
@@ -212,7 +218,7 @@ export function App() {
             className="legacy-browser-hint"
           />
         ) : null}
-        <Content className="legacy-content-wrap">
+        <Content className="legacy-content-wrap" id="app-main-content" role="main" tabIndex={-1}>
           <Suspense fallback={<LoadingView />}>
             <Routes>
               <Route path="/" element={<Navigate to="/group" replace />} />

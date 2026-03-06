@@ -1,4 +1,4 @@
-import { Card, Tabs } from 'antd';
+import { Button, Card, Space, Tabs, Tag, Typography } from 'antd';
 import type { FormInstance } from 'antd';
 import type { TabsProps } from 'antd';
 import type { LegacyInterfaceDTO } from '@yapi-next/shared-types';
@@ -91,6 +91,12 @@ type InterfaceApiDetailTabsProps = {
 };
 
 export function InterfaceApiDetailTabs(props: InterfaceApiDetailTabsProps) {
+  const updatedAt = props.formatUnixTime(props.currentInterface.up_time);
+  const statusText = props.statusLabel(String(props.currentInterface.status || 'undone'));
+  const tagCount = Array.isArray((props.currentInterface as unknown as Record<string, unknown>).tag)
+    ? ((props.currentInterface as unknown as Record<string, unknown>).tag as unknown[]).length
+    : 0;
+
   const items: TabsProps['items'] = Object.keys(props.interfaceTabs).flatMap(key => {
     const tabItem = props.interfaceTabs[key];
     if (key === 'view') {
@@ -216,6 +222,30 @@ export function InterfaceApiDetailTabs(props: InterfaceApiDetailTabsProps) {
 
   return (
     <Card>
+      <div className="legacy-interface-summary">
+        <div className="legacy-interface-summary-main">
+          <Space size={[8, 8]} wrap>
+            <span className={props.methodClassName(props.method)}>{props.method}</span>
+            <Typography.Text className="legacy-interface-summary-path" copyable={{ text: props.fullPath }}>
+              {props.fullPath}
+            </Typography.Text>
+            <Tag bordered={false} color={props.currentInterface.status === 'done' ? 'success' : 'default'}>
+              {statusText}
+            </Tag>
+            <Tag bordered={false}>{`更新于 ${updatedAt}`}</Tag>
+            {tagCount > 0 ? (
+              <Tag bordered={false} color="blue">
+                {`${tagCount} 个标签`}
+              </Tag>
+            ) : null}
+          </Space>
+        </div>
+        <div className="legacy-interface-summary-actions">
+          <Button size="small" onClick={() => props.onCopyText(props.mockUrl, 'Mock 地址已复制')}>
+            复制 Mock URL
+          </Button>
+        </div>
+      </div>
       <Tabs
         type="card"
         className="legacy-interface-content-tabs"

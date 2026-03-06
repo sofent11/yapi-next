@@ -284,7 +284,12 @@ a {
 .ant-picker,
 .ant-tabs-tab,
 .ant-menu-item {
-  transition: all var(--motion-fast) ease;
+  transition:
+    color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
 }
 
 .ant-card,

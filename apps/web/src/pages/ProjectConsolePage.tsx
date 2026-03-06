@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { GroupListItem, ProjectListItem, UserSearchItem } from '@yapi-next/shared-types';
 import { UserOutlined } from '@ant-design/icons';
 import {
@@ -9,6 +9,7 @@ import {
   Layout,
   Modal,
   Space,
+  Tag,
   Tabs,
   message
 } from 'antd';
@@ -58,6 +59,7 @@ const { Content, Sider } = Layout;
 export function ProjectConsolePage() {
   const navigate = useNavigate();
   const params = useParams<{ groupId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const routeGroupId = Number(params.groupId || 0);
 
   const [createGroupForm] = Form.useForm<CreateGroupForm>();
@@ -67,7 +69,8 @@ export function ProjectConsolePage() {
   const customFieldEnable = Form.useWatch('custom_field1_enable', settingGroupForm);
 
   const [groupKeyword, setGroupKeyword] = useState('');
-  const [activeTab, setActiveTab] = useState<ConsoleTabKey>('projects');
+  const initialTab = searchParams.get('tab') || '';
+  const [activeTab, setActiveTab] = useState<ConsoleTabKey>(isConsoleTabKey(initialTab) ? initialTab : 'projects');
   const [groupId, setGroupId] = useState<number>(Number.isFinite(routeGroupId) ? routeGroupId : 0);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [copyModalOpen, setCopyModalOpen] = useState(false);
@@ -467,6 +470,33 @@ export function ProjectConsolePage() {
     }
   }, [activeTab, showActivity, showMembers, showSetting]);
 
+  useEffect(() => {
+    const nextTab = searchParams.get('tab') || '';
+    if (!isConsoleTabKey(nextTab)) {
+      if (activeTab !== 'projects') {
+        setActiveTab('projects');
+      }
+      return;
+    }
+    if (nextTab !== activeTab) {
+      setActiveTab(nextTab);
+    }
+  }, [activeTab, searchParams]);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    if (activeTab === 'projects') {
+      nextParams.delete('tab');
+    } else {
+      nextParams.set('tab', activeTab);
+    }
+    const current = searchParams.toString();
+    const next = nextParams.toString();
+    if (current !== next) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [activeTab, searchParams, setSearchParams]);
+
   const groupMemberCountTitle = `${selectedGroup?.group_name || '当前'} 分组成员 (${groupMembers.length}) 人`;
   const sortedMembers = [...groupMembers].sort((a, b) => {
     const rank = (r?: string) => { if (r === 'owner') return 0; if (r === 'dev') return 1; if (r === 'guest') return 2; return 99; };
@@ -598,8 +628,18 @@ export function ProjectConsolePage() {
   return (
     <AppShell className="legacy-project-console-page">
       <PageHeader
+        eyebrow="分组工作台"
         title="项目控制台"
         subtitle={`${selectedGroup?.group_name || '当前分组'} · ${projectRows.length} 个项目 · ${groups.length} 个分组`}
+        meta={
+          <Space size={[8, 8]} wrap>
+            <Tag bordered={false} color={groupType === 'private' ? 'purple' : 'blue'}>
+              {groupType === 'private' ? '个人空间' : '公共分组'}
+            </Tag>
+            {groupRole ? <Tag bordered={false}>{`当前角色：${groupRole}`}</Tag> : null}
+            <Tag bordered={false} color="green">{`${projectRows.length} 个项目`}</Tag>
+          </Space>
+        }
         actions={
           <Space>
             <Button onClick={openCreateGroupModal}>新建分组</Button>
@@ -622,6 +662,8 @@ export function ProjectConsolePage() {
               selectedGroupType={selectedGroup?.type}
               selectedGroupName={selectedGroup?.group_name}
               selectedGroupDesc={selectedGroup?.group_desc}
+              selectedGroupRole={groupRole}
+              projectCount={projectRows.length}
               groupKeyword={groupKeyword}
               onGroupKeywordChange={setGroupKeyword}
               loading={groupListQuery.isLoading}
