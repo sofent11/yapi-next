@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Tabs } from 'antd';
 import { useGetProjectQuery } from '../../services/yapi-api';
@@ -16,7 +16,6 @@ import './ProjectSetting.scss';
 
 export function ProjectSettingPage(props: ProjectSettingPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'message');
 
   const detailQuery = useGetProjectQuery(
     { projectId: props.projectId },
@@ -74,18 +73,22 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
       };
     })
   ];
+  const requestedTab = searchParams.get('tab') || 'message';
+  const activeTab = tabItems.some(item => item.key === requestedTab) ? requestedTab : 'message';
 
   useEffect(() => {
-    if (tabItems.some(item => item.key === activeTab)) return;
-    setActiveTab('message');
-  }, [activeTab, tabItems]);
-
-  useEffect(() => {
-    const nextTab = searchParams.get('tab') || 'message';
-    if (nextTab !== activeTab && tabItems.some(item => item.key === nextTab)) {
-      setActiveTab(nextTab);
+    const nextParams = new URLSearchParams(searchParams.toString());
+    if (activeTab === 'message') {
+      nextParams.delete('tab');
+    } else {
+      nextParams.set('tab', activeTab);
     }
-  }, [activeTab, searchParams, tabItems]);
+    const current = searchParams.toString();
+    const next = nextParams.toString();
+    if (current !== next) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [activeTab, searchParams, setSearchParams]);
 
   return (
     <div className="legacy-page-shell legacy-project-setting-page">
@@ -100,7 +103,6 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
         className="has-affix-footer tabs-large legacy-setting-tabs"
         activeKey={activeTab}
         onChange={key => {
-          setActiveTab(key);
           const nextParams = new URLSearchParams(searchParams.toString());
           if (key === 'message') {
             nextParams.delete('tab');

@@ -69,8 +69,6 @@ export function ProjectConsolePage() {
   const customFieldEnable = Form.useWatch('custom_field1_enable', settingGroupForm);
 
   const [groupKeyword, setGroupKeyword] = useState('');
-  const initialTab = searchParams.get('tab') || '';
-  const [activeTab, setActiveTab] = useState<ConsoleTabKey>(isConsoleTabKey(initialTab) ? initialTab : 'projects');
   const [groupId, setGroupId] = useState<number>(Number.isFinite(routeGroupId) ? routeGroupId : 0);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [copyModalOpen, setCopyModalOpen] = useState(false);
@@ -116,7 +114,6 @@ export function ProjectConsolePage() {
     if (!Number.isFinite(routeGroupId) || routeGroupId <= 0) return;
     if (routeGroupId !== groupId) {
       setGroupId(routeGroupId);
-      setActiveTab('projects');
     }
   }, [routeGroupId, groupId]);
 
@@ -156,6 +153,17 @@ export function ProjectConsolePage() {
   const groupType = selectedGroup?.type || 'public';
   const groupRole = selectedGroup?.role || '';
   const userRole = userStatusQuery.data?.data?.role || '';
+  const showMembers = groupType === 'public';
+  const showActivity = /(admin|owner|dev|guest)/.test(groupRole) || userRole === 'admin';
+  const showSetting = canShowGroupSetting(userRole, groupRole, groupType);
+  const requestedTab = searchParams.get('tab') || '';
+  const activeTab: ConsoleTabKey = useMemo(() => {
+    const nextTab = isConsoleTabKey(requestedTab) ? requestedTab : 'projects';
+    if (nextTab === 'members' && !showMembers) return 'projects';
+    if (nextTab === 'activity' && !showActivity) return 'projects';
+    if (nextTab === 'setting' && !showSetting) return 'projects';
+    return nextTab;
+  }, [requestedTab, showActivity, showMembers, showSetting]);
 
   useEffect(() => {
     if (!selectedGroup) return;
@@ -312,7 +320,6 @@ export function ProjectConsolePage() {
         message.success('删除分组成功');
         setDangerConfirmName('');
         setShowDangerOptions(false);
-        setActiveTab('projects');
         const [groupListResult, myGroupResult] = await Promise.all([
           groupListQuery.refetch(),
           myGroupQuery.refetch()
@@ -451,37 +458,6 @@ export function ProjectConsolePage() {
   const canCopyProject = /(admin|owner|dev)/.test(groupRole) || userRole === 'admin';
   const canManageGroupMembers = userRole === 'admin' || groupRole === 'owner';
   const canDeleteGroup = userRole === 'admin' && groupType !== 'private';
-  const showMembers = groupType === 'public';
-  const showActivity = /(admin|owner|dev|guest)/.test(groupRole) || userRole === 'admin';
-  const showSetting = canShowGroupSetting(userRole, groupRole, groupType);
-
-  useEffect(() => {
-    if (activeTab === 'projects') return;
-    if (activeTab === 'members' && !showMembers) {
-      setActiveTab('projects');
-      return;
-    }
-    if (activeTab === 'activity' && !showActivity) {
-      setActiveTab('projects');
-      return;
-    }
-    if (activeTab === 'setting' && !showSetting) {
-      setActiveTab('projects');
-    }
-  }, [activeTab, showActivity, showMembers, showSetting]);
-
-  useEffect(() => {
-    const nextTab = searchParams.get('tab') || '';
-    if (!isConsoleTabKey(nextTab)) {
-      if (activeTab !== 'projects') {
-        setActiveTab('projects');
-      }
-      return;
-    }
-    if (nextTab !== activeTab) {
-      setActiveTab(nextTab);
-    }
-  }, [activeTab, searchParams]);
 
   useEffect(() => {
     const nextParams = new URLSearchParams(searchParams.toString());
@@ -519,7 +495,6 @@ export function ProjectConsolePage() {
 
   function handleSelectGroup(nextGroupId: number) {
     setGroupId(nextGroupId);
-    setActiveTab('projects');
     navigate(`/group/${nextGroupId}`, { replace: true });
   }
 
@@ -684,7 +659,13 @@ export function ProjectConsolePage() {
                 activeKey={activeTab}
                 onChange={key => {
                   if (isConsoleTabKey(key)) {
-                    setActiveTab(key);
+                    const nextParams = new URLSearchParams(searchParams.toString());
+                    if (key === 'projects') {
+                      nextParams.delete('tab');
+                    } else {
+                      nextParams.set('tab', key);
+                    }
+                    setSearchParams(nextParams, { replace: true });
                   }
                 }}
                 items={tabItems}
