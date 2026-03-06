@@ -1,6 +1,6 @@
 @layer components {
   .interface-workspace-pane {
-    @apply flex h-full flex-col gap-4;
+    @apply flex h-full min-h-0 flex-col gap-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-2rem)];
   }
 
   .interface-workspace-switch {
@@ -36,8 +36,12 @@
     @apply min-h-0 rounded-[28px] border border-slate-200 bg-white/94 p-6 shadow-sm backdrop-blur;
   }
 
+  .interface-workspace-body {
+    @apply xl:flex xl:flex-1 xl:min-h-0 xl:flex-col xl:overflow-hidden;
+  }
+
   .interface-nav {
-    @apply flex flex-col gap-4;
+    @apply flex h-full min-h-0 flex-col gap-4;
   }
 
   .interface-nav-filter {
@@ -80,6 +84,10 @@
 
   .interface-nav-list {
     @apply flex flex-col gap-3;
+  }
+
+  .interface-workspace-body .interface-nav-list {
+    @apply xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pr-1;
   }
 
   .interface-nav-group {
