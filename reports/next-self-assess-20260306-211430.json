@@ -1,0 +1,195 @@
+{
+  "generatedAt": "2026-03-06T13:14:51Z",
+  "baseUrl": "http://127.0.0.1:3302",
+  "dataset": {
+    "menuProjectId": 11,
+    "menuSeedApiCount": 10000,
+    "importProjectId": 12,
+    "importApiCount": 1000,
+    "roundtripProjectId": 13,
+    "roundtripSpecFile": "/Users/sofent/work/yapi/test/swagger.v3.json"
+  },
+  "thresholds": {
+    "menuP95Ms": 500,
+    "exportP95Ms": 2000,
+    "importDurationMs": 60000,
+    "roundtripConsistencyRatio": 99
+  },
+  "results": {
+    "indexMigration": {
+      "pass1Log": "[skip] interface.project_id_1_path_1_method_1|[skip] interface.project_id_1_catid_1_index_1|[skip] interface.project_id_1_type_1_method_1|[skip] interface.project_id_1_status_1_tag_1_index_1|[skip] interface.query_path.path_1_project_id_1_method_1|[skip] token.token_1|[skip] token.project_id_1|[skip] follow.uid_1_projectid_1|[skip] spec_import_task.project_id_1_add_time_-1|[skip] spec_import_task.status_1_up_time_-1|[done] index migration finished for db=yapi_next_self_assess",
+      "pass2Log": "[skip] interface.project_id_1_path_1_method_1|[skip] interface.project_id_1_catid_1_index_1|[skip] interface.project_id_1_type_1_method_1|[skip] interface.project_id_1_status_1_tag_1_index_1|[skip] interface.query_path.path_1_project_id_1_method_1|[skip] token.token_1|[skip] token.project_id_1|[skip] follow.uid_1_projectid_1|[skip] spec_import_task.project_id_1_add_time_-1|[skip] spec_import_task.status_1_up_time_-1|[done] index migration finished for db=yapi_next_self_assess",
+      "pass2CreatedCount": 0
+    },
+    "indexCheck": {
+  "title": "db.indexes",
+  "ok": true,
+  "requiredCount": 8,
+  "foundCount": 8,
+  "missing": []
+},
+    "queryPlanCheck": {
+  "title": "db.queryPlans",
+  "ok": true,
+  "checks": [
+    {
+      "name": "interface.project_cat_menu_query",
+      "ok": true,
+      "query": {
+        "project_id": 11
+      },
+      "sort": {
+        "catid": 1,
+        "index": 1
+      },
+      "limit": 200,
+      "hasCollscan": false,
+      "indexNames": [
+        "project_id_1_catid_1_index_1"
+      ],
+      "totalDocsExamined": 200,
+      "totalKeysExamined": 200,
+      "nReturned": 200
+    },
+    {
+      "name": "interface.project_cid_node_query",
+      "ok": true,
+      "query": {
+        "project_id": 11,
+        "catid": 11
+      },
+      "sort": {
+        "index": 1,
+        "_id": 1
+      },
+      "limit": 200,
+      "hasCollscan": false,
+      "indexNames": [
+        "project_id_1_catid_1_index_1"
+      ],
+      "totalDocsExamined": 0,
+      "totalKeysExamined": 0,
+      "nReturned": 0
+    },
+    {
+      "name": "interface.project_path_method_query",
+      "ok": true,
+      "query": {
+        "project_id": 11,
+        "path": "/perf/v1/resource/0",
+        "method": "GET"
+      },
+      "sort": null,
+      "limit": 1,
+      "hasCollscan": false,
+      "indexNames": [
+        "project_id_1_path_1_method_1"
+      ],
+      "totalDocsExamined": 1,
+      "totalKeysExamined": 1,
+      "nReturned": 1
+    },
+    {
+      "name": "interface.query_path_project_method_query",
+      "ok": true,
+      "query": {
+        "query_path.path": "/perf/v1/resource/0",
+        "project_id": 11,
+        "method": "GET"
+      },
+      "sort": null,
+      "limit": 1,
+      "hasCollscan": false,
+      "indexNames": [
+        "query_path.path_1_project_id_1_method_1"
+      ],
+      "totalDocsExamined": 1,
+      "totalKeysExamined": 1,
+      "nReturned": 1
+    }
+  ]
+},
+    "seedImport": {
+      "batchSize": 1000,
+      "batchCount": 10,
+      "totalDurationMs": 2415,
+      "maxBatchDurationMs": 629,
+      "lastBatch": {
+  "title": "spec.import",
+  "targetMs": 9999999,
+  "ok": true,
+  "durationMs": 134,
+  "errcode": 0,
+  "errmsg": "成功！"
+}
+    },
+    "menu": {
+  "title": "interface.list_menu",
+  "thresholdP95Ms": 500,
+  "ok": true,
+  "count": 300,
+  "min": 22,
+  "max": 235,
+  "mean": 109.23,
+  "p50": 108,
+  "p95": 165,
+  "p99": 190,
+  "totalMs": 1691,
+  "success": 300,
+  "failed": 0,
+  "rps": 177.41
+},
+    "export": {
+  "title": "spec.export.openapi3",
+  "thresholdP95Ms": 2000,
+  "ok": true,
+  "count": 50,
+  "min": 745,
+  "max": 2103,
+  "mean": 1355.04,
+  "p50": 1344,
+  "p95": 1667,
+  "p99": 2103,
+  "totalMs": 8909,
+  "success": 50,
+  "failed": 0,
+  "rps": 5.61
+},
+    "import": {
+  "title": "spec.import",
+  "targetMs": 60000,
+  "ok": true,
+  "durationMs": 144,
+  "errcode": 0,
+  "errmsg": "成功！"
+},
+    "roundtrip": {
+  "title": "spec.roundtrip",
+  "targetRatio": 99,
+  "ok": true,
+  "importDurationMs": 33,
+  "exportDurationMs": 5,
+  "sourceOperationCount": 20,
+  "exportedOperationCount": 20,
+  "totalChecks": 120,
+  "matchedChecks": 120,
+  "consistencyRatio": 100,
+  "missingOperations": [],
+  "driftedOperations": []
+}
+  },
+  "summary": {
+    "menuP95Ms": 165,
+    "exportP95Ms": 1667,
+    "importDurationMs": 144,
+    "roundtripConsistencyRatio": 100,
+    "menuPass": true,
+    "exportPass": true,
+    "importPass": true,
+    "roundtripPass": true,
+    "indexPlanPass": true,
+    "queryPlanPass": true,
+    "indexIdempotentPass": true,
+    "overallPass": true
+  }
+}

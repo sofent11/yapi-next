@@ -151,8 +151,16 @@ export class SpecService {
     projectId: number;
     format: SpecExportFormat;
     status: 'all' | 'open';
+    catId?: number;
+    interfaceId?: number;
   }): Promise<string> {
-    return this.exportService.export(params.projectId, params.format, params.status);
+    return this.exportService.export({
+      projectId: params.projectId,
+      format: params.format,
+      status: params.status,
+      catId: params.catId,
+      interfaceId: params.interfaceId
+    });
   }
 
   private firstCatId(map: Map<string, number>): number {

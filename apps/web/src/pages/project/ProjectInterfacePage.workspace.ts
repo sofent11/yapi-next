@@ -76,6 +76,11 @@ type BuildApiWorkspaceParams = {
   openAddCatModal: () => void;
   handleInterfaceListStatusChange: (id: number, status: 'done' | 'undone') => Promise<void>;
   handleInterfaceListCatChange: (id: number, catid: number) => Promise<void>;
+  copyCatSwaggerJson: (catId: number) => void | Promise<void>;
+  copyCatOpenApiJson: (catId: number) => void | Promise<void>;
+  copyInterfaceSwaggerJson: (interfaceId: number) => void | Promise<void>;
+  copyInterfaceOpenApiJson: (interfaceId: number) => void | Promise<void>;
+  copyingSpec: boolean;
   tab: string;
   interfaceTabs: Record<string, InterfaceTabItem>;
   handleSwitch: (next: string) => void;
@@ -227,6 +232,19 @@ export function buildProjectInterfaceApiWorkspace(
     onNavigateInterface: id => params.navigateWithGuard(`/project/${params.projectId}/interface/api/${id}`),
     onUpdateStatus: params.handleInterfaceListStatusChange,
     onUpdateCategory: params.handleInterfaceListCatChange,
+    onCopyCatSwaggerJson: catId => {
+      void params.copyCatSwaggerJson(catId);
+    },
+    onCopyCatOpenApiJson: catId => {
+      void params.copyCatOpenApiJson(catId);
+    },
+    onCopyInterfaceSwaggerJson: interfaceId => {
+      void params.copyInterfaceSwaggerJson(interfaceId);
+    },
+    onCopyInterfaceOpenApiJson: interfaceId => {
+      void params.copyInterfaceOpenApiJson(interfaceId);
+    },
+    copyingSpec: params.copyingSpec,
     onCopyInterface: row => void params.copyInterfaceRow(row),
     onDeleteInterface: params.confirmDeleteInterface,
     methodClassName: getHttpMethodBadgeClassName,

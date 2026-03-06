@@ -33,6 +33,9 @@ type InterfaceApiDetailTabsProps = {
   formatUnixTime: (value: unknown) => string;
   mockFlagText: (mockOpen?: boolean, strict?: boolean) => string;
   onCopyText: (text: string, successText: string) => void;
+  onCopySwaggerJson: (interfaceId: number) => void;
+  onCopyOpenApiJson: (interfaceId: number) => void;
+  copyingSpec: boolean;
   editConflictState: InterfaceEditConflictState;
   form: FormInstance;
   catRows: Array<{ _id: number; name: string }>;
@@ -245,6 +248,24 @@ export function InterfaceApiDetailTabs(props: InterfaceApiDetailTabsProps) {
           </Button>
           <Button size="compact-sm" onClick={() => props.onCopyText(props.mockUrl, 'Mock 地址已复制')}>
             复制 Mock URL
+          </Button>
+          <Button
+            size="compact-sm"
+            variant="default"
+            onClick={() => props.onCopySwaggerJson(Number(props.currentInterface._id || 0))}
+            loading={props.copyingSpec}
+            disabled={Number(props.currentInterface._id || 0) <= 0}
+          >
+            复制 Swagger JSON
+          </Button>
+          <Button
+            size="compact-sm"
+            variant="default"
+            onClick={() => props.onCopyOpenApiJson(Number(props.currentInterface._id || 0))}
+            loading={props.copyingSpec}
+            disabled={Number(props.currentInterface._id || 0) <= 0}
+          >
+            复制 OpenAPI 3.0
           </Button>
         </div>
       </div>

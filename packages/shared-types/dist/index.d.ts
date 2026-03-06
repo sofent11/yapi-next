@@ -64,6 +64,8 @@ export interface SpecExportQuery {
     format?: SpecExportFormat;
     status?: InterfacePublishStatus;
     withWiki?: boolean;
+    cat_id?: number;
+    interface_id?: number;
     token?: string;
 }
 export interface SpecImportTaskProgress {

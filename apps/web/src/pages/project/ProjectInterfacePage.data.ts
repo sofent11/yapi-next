@@ -190,7 +190,7 @@ export function useProjectInterfaceData(params: UseProjectInterfaceDataParams) {
 
   const projectTokenQuery = useGetProjectTokenQuery(
     { projectId: params.props.projectId },
-    { skip: params.props.projectId <= 0 || params.action === 'api' }
+    { skip: params.props.projectId <= 0 }
   );
 
   const projectListQuery = useGetProjectListQuery(

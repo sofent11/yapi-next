@@ -201,12 +201,16 @@ export class SpecController {
         format: this.normalizeExportFormat(pickString(query.format)),
         status: this.normalizeStatus(pickString(query.status)),
         withWiki: pickBoolean(query.withWiki) || pickBoolean(query.with_wiki),
+        cat_id: pickNumber(query.cat_id),
+        interface_id: pickNumber(query.interface_id),
         token
       };
       const result = await this.specService.export({
         projectId: exportRequest.project_id,
         format: exportRequest.format || 'openapi3',
-        status: exportRequest.status || 'all'
+        status: exportRequest.status || 'all',
+        catId: exportRequest.cat_id,
+        interfaceId: exportRequest.interface_id
       });
       this.metricsService.incCounter(
         'yapi_api_spec_export_total',

@@ -33,6 +33,11 @@ export type InterfaceApiContentProps = {
   onNavigateInterface: (id: number) => void;
   onUpdateStatus: (id: number, status: 'done' | 'undone') => Promise<void>;
   onUpdateCategory: (id: number, catid: number) => Promise<void>;
+  onCopyCatSwaggerJson: (catId: number) => void;
+  onCopyCatOpenApiJson: (catId: number) => void;
+  onCopyInterfaceSwaggerJson: (interfaceId: number) => void;
+  onCopyInterfaceOpenApiJson: (interfaceId: number) => void;
+  copyingSpec: boolean;
   onCopyInterface: (row: InterfaceDTO) => void;
   onDeleteInterface: (id: number) => void;
   methodClassName: (method?: string) => string;
@@ -129,6 +134,9 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
           onNavigateInterface={props.onNavigateInterface}
           onUpdateStatus={props.onUpdateStatus}
           onUpdateCategory={props.onUpdateCategory}
+          onCopyCatSwaggerJson={props.onCopyCatSwaggerJson}
+          onCopyCatOpenApiJson={props.onCopyCatOpenApiJson}
+          copyingSpec={props.copyingSpec}
           onCopyInterface={props.onCopyInterface}
           onDeleteInterface={props.onDeleteInterface}
           methodClassName={props.methodClassName}
@@ -247,6 +255,9 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
       formatUnixTime={props.formatUnixTime}
       mockFlagText={props.mockFlagText}
       onCopyText={props.onCopyText}
+      onCopySwaggerJson={props.onCopyInterfaceSwaggerJson}
+      onCopyOpenApiJson={props.onCopyInterfaceOpenApiJson}
+      copyingSpec={props.copyingSpec}
       editConflictState={props.editConflictState}
       form={props.form}
       catRows={props.catRows}

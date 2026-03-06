@@ -33,6 +33,9 @@ type InterfaceListPanelProps = {
   onNavigateInterface: (id: number) => void;
   onUpdateStatus: (id: number, status: 'done' | 'undone') => Promise<void>;
   onUpdateCategory: (id: number, catid: number) => Promise<void>;
+  onCopyCatSwaggerJson: (catId: number) => void;
+  onCopyCatOpenApiJson: (catId: number) => void;
+  copyingSpec: boolean;
   onCopyInterface: (row: InterfaceDTO) => void;
   onDeleteInterface: (id: number) => void;
   methodClassName: (method?: string) => string;
@@ -73,6 +76,24 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
         }
         right={
           <div className="flex flex-wrap gap-2">
+            {props.currentCat ? (
+              <>
+                <Button
+                  variant="default"
+                  onClick={() => props.onCopyCatSwaggerJson(props.currentCat._id)}
+                  loading={props.copyingSpec}
+                >
+                  复制 Swagger JSON
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={() => props.onCopyCatOpenApiJson(props.currentCat._id)}
+                  loading={props.copyingSpec}
+                >
+                  复制 OpenAPI 3.0
+                </Button>
+              </>
+            ) : null}
             <TextInput
               value={props.listKeyword}
               onChange={event => props.onListKeywordChange(event.currentTarget.value)}

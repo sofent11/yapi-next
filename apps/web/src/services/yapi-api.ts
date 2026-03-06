@@ -732,7 +732,9 @@ export const yapiApi = createApi({
           token: payload.token,
           format: payload.format,
           status: payload.status,
-          withWiki: payload.withWiki
+          withWiki: payload.withWiki,
+          cat_id: payload.cat_id,
+          interface_id: payload.interface_id
         })}`,
         method: 'GET'
       })

@@ -3,6 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { useForm as useRcForm, useWatch as useRcWatch } from 'rc-field-form';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { InterfaceDTO } from '../../types/interface-dto';
+import { useExportSpecMutation } from '../../services/yapi-api';
 import { safeApiRequest } from '../../utils/safe-request';
 import { useProjectInterfaceNavigationGuard } from './ProjectInterfacePage.navigation';
 import { useProjectInterfaceRequestRunner } from './ProjectInterfacePage.request-runner';
@@ -160,6 +161,7 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     initialResSchema === 'text' ? 'text' : 'visual'
   );
   const [editConflictState, setEditConflictState] = useState<EditConflictState>({ status: 'idle' });
+  const [exportSpec, exportSpecState] = useExportSpecMutation();
 
   const [form] = useRcForm<EditForm>();
   const [addInterfaceForm] = useRcForm<AddInterfaceForm>();
@@ -647,6 +649,63 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     autoTestResultMap
   });
 
+  const copyExportedSpec = useCallback(async (
+    format: 'swagger2' | 'openapi3',
+    target: { catId?: number; interfaceId?: number },
+    successText: string
+  ) => {
+    const exportToken = projectTokenValue || props.token;
+    if (!exportToken) {
+      message.warning('项目 token 读取中，请稍后重试');
+      return;
+    }
+    const response = await callApi(
+      exportSpec({
+        project_id: props.projectId,
+        token: exportToken,
+        format,
+        status: 'all',
+        cat_id: target.catId,
+        interface_id: target.interfaceId
+      }).unwrap(),
+      '复制规范失败'
+    );
+    if (!response) return;
+    await copyText(JSON.stringify(response.data || {}, null, 2), successText);
+  }, [callApi, copyText, exportSpec, projectTokenValue, props.projectId, props.token]);
+
+  const copyCatSwaggerJson = useCallback(async (targetCatId: number) => {
+    if (targetCatId <= 0) {
+      message.warning('请先选择分类');
+      return;
+    }
+    await copyExportedSpec('swagger2', { catId: targetCatId }, '分类 Swagger JSON 已复制');
+  }, [copyExportedSpec]);
+
+  const copyCatOpenApiJson = useCallback(async (targetCatId: number) => {
+    if (targetCatId <= 0) {
+      message.warning('请先选择分类');
+      return;
+    }
+    await copyExportedSpec('openapi3', { catId: targetCatId }, '分类 OpenAPI 3.0 已复制');
+  }, [copyExportedSpec]);
+
+  const copyInterfaceSwaggerJson = useCallback(async (targetInterfaceId: number) => {
+    if (targetInterfaceId <= 0) {
+      message.warning('请先选择接口');
+      return;
+    }
+    await copyExportedSpec('swagger2', { interfaceId: targetInterfaceId }, '接口 Swagger JSON 已复制');
+  }, [copyExportedSpec]);
+
+  const copyInterfaceOpenApiJson = useCallback(async (targetInterfaceId: number) => {
+    if (targetInterfaceId <= 0) {
+      message.warning('请先选择接口');
+      return;
+    }
+    await copyExportedSpec('openapi3', { interfaceId: targetInterfaceId }, '接口 OpenAPI 3.0 已复制');
+  }, [copyExportedSpec]);
+
   const { apiMenuProps, apiContentProps } = buildProjectInterfaceApiWorkspace({
     projectId: props.projectId,
     basepath: props.basepath,
@@ -688,6 +747,11 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     openAddCatModal,
     handleInterfaceListStatusChange,
     handleInterfaceListCatChange,
+    copyCatSwaggerJson,
+    copyCatOpenApiJson,
+    copyInterfaceSwaggerJson,
+    copyInterfaceOpenApiJson,
+    copyingSpec: exportSpecState.isLoading,
     tab,
     interfaceTabs,
     handleSwitch,

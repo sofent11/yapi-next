@@ -16,23 +16,59 @@ export class SpecExportService {
     private readonly interfaceModel: Model<InterfaceEntity>
   ) {}
 
-  async export(projectId: number, format: 'openapi3' | 'swagger2', status: 'all' | 'open'): Promise<string> {
-    const project = await this.projectModel.findOne({ _id: projectId }).lean();
+  async export(params: {
+    projectId: number;
+    format: 'openapi3' | 'swagger2';
+    status: 'all' | 'open';
+    catId?: number;
+    interfaceId?: number;
+  }): Promise<string> {
+    const project = await this.projectModel.findOne({ _id: params.projectId }).lean();
     if (!project) {
       throw new Error('项目不存在');
     }
     const option: Record<string, unknown> = {
-      project_id: projectId
+      project_id: params.projectId
     };
-    if (status === 'open') {
+    if (params.status === 'open') {
       option.api_opened = true;
     }
-    const [cats, interfaces] = await Promise.all([
-      this.catModel.find({ project_id: projectId }).sort({ index: 1, _id: 1 }).lean(),
-      this.interfaceModel.find(option).sort({ catid: 1, index: 1, title: 1 }).lean()
-    ]);
+    const interfaceId = Number(params.interfaceId || 0);
+    const catId = Number(params.catId || 0);
+    let selectedInterfaceCatId = 0;
+    if (interfaceId > 0) {
+      const targetInterface = await this.interfaceModel.findOne({
+        _id: interfaceId,
+        project_id: params.projectId
+      }).lean();
+      if (!targetInterface) {
+        throw new Error('接口不存在');
+      }
+      selectedInterfaceCatId = Number(targetInterface.catid || 0);
+      option._id = interfaceId;
+    } else if (catId > 0) {
+      const targetCat = await this.catModel.findOne({
+        _id: catId,
+        project_id: params.projectId
+      }).lean();
+      if (!targetCat) {
+        throw new Error('分类不存在');
+      }
+      option.catid = catId;
+    }
 
-    if (format === 'swagger2') {
+    const interfaces = await this.interfaceModel.find(option).sort({ catid: 1, index: 1, title: 1 }).lean();
+    const catIds = interfaceId > 0
+      ? (selectedInterfaceCatId > 0 ? [selectedInterfaceCatId] : [])
+      : catId > 0
+        ? [catId]
+        : [];
+    const catsQuery = catIds.length > 0
+      ? { project_id: params.projectId, _id: { $in: catIds } }
+      : { project_id: params.projectId };
+    const cats = await this.catModel.find(catsQuery).sort({ index: 1, _id: 1 }).lean();
+
+    if (params.format === 'swagger2') {
       return JSON.stringify(this.toSwagger2(project, cats, interfaces), null, 2);
     }
     return JSON.stringify(this.toOpenApi3(project, cats, interfaces), null, 2);
