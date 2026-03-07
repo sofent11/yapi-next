@@ -79,11 +79,11 @@
   }
 
   .interface-nav-summary {
-    @apply px-1 text-sm text-slate-500;
+    @apply px-1 text-xs text-slate-400;
   }
 
   .interface-nav-list {
-    @apply flex flex-col gap-3;
+    @apply flex flex-col gap-2;
   }
 
   .interface-workspace-body .interface-nav-list {
@@ -91,11 +91,11 @@
   }
 
   .interface-nav-group {
-    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/60 p-2;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/60 p-1.5;
   }
 
   .interface-nav-group-title {
-    @apply flex min-h-9 items-center justify-between gap-2 rounded-[var(--radius-md)] px-3 py-2 text-slate-700 transition-all duration-150;
+    @apply flex min-h-8 items-center justify-between gap-1.5 rounded-[var(--radius-md)] px-2.5 py-1.5 text-slate-700 transition-all duration-150;
   }
 
   .interface-nav-group-title:hover {
@@ -127,7 +127,7 @@
   }
 
   .interface-nav-group-name {
-    @apply truncate text-[14px] font-semibold tracking-tight;
+    @apply truncate text-[13px] font-medium tracking-tight;
   }
 
   .interface-nav-group-actions {
@@ -143,7 +143,7 @@
   }
 
   .interface-nav-item {
-    @apply ml-7 mt-2 flex min-h-10 items-center gap-2 rounded-2xl border border-transparent bg-white/96 px-3 py-2.5 text-slate-700 shadow-sm transition-all duration-150;
+    @apply ml-7 mt-1.5 flex min-h-8 items-center gap-1.5 rounded-2xl border border-transparent bg-white/96 px-3 py-1.5 text-slate-700 shadow-sm transition-all duration-150;
   }
 
   .interface-nav-item:hover {
@@ -171,7 +171,7 @@
   }
 
   .interface-link-button {
-    @apply inline-flex items-center gap-2 rounded-xl px-2 py-2 text-[15px] font-semibold text-slate-700 transition-colors;
+    @apply inline-flex items-center gap-2 rounded-xl px-2 py-2 text-[14px] font-medium text-slate-700 transition-colors;
   }
 
   .interface-link-button:hover {

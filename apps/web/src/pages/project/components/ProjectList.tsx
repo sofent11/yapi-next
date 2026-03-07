@@ -132,27 +132,6 @@ export function ProjectList(props: ProjectListProps) {
           </div>
         }
       />
-      <div className="console-project-stats">
-        {props.groupType === 'private' ? (
-          <>
-            <Text c="dimmed" className="console-project-stat-chip">
-              我的项目 {myProjectCount}
-            </Text>
-            <Text c="dimmed" className="console-project-stat-chip">
-              我的关注 {followProjectCount}
-            </Text>
-          </>
-        ) : (
-          <>
-            <Text c="dimmed" className="console-project-stat-chip">
-              全部项目 {props.mixedPublicProjects.length}
-            </Text>
-            <Text c="dimmed" className="console-project-stat-chip">
-              已关注 {publicFollowCount}
-            </Text>
-          </>
-        )}
-      </div>
       <div className="console-project-grid">
         {props.projectListFetching && props.projectRows.length === 0 ? (
           <AsyncState state="loading" title="正在加载项目列表" description="项目概览和关注状态正在准备中。" />

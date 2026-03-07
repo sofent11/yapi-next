@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Button, Drawer, SegmentedControl } from '@mantine/core';
+import { ActionIcon, Drawer, SegmentedControl, Tooltip } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import {
   IconLayoutSidebarLeftCollapse,
@@ -7,7 +7,6 @@ import {
   IconListDetails,
   IconFolders
 } from '@tabler/icons-react';
-import { SplitWorkspace } from '../../../components/layout';
 
 type InterfaceWorkspaceLayoutProps = {
   action: string;
@@ -28,21 +27,6 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
     () => (
       <div className="interface-workspace-pane">
         <div className="interface-workspace-switch">
-          {!isMobile ? (
-            <div className="interface-workspace-switch-actions">
-              <Button
-                variant="subtle"
-                size="compact-sm"
-                leftSection={
-                  leftHidden ? <IconLayoutSidebarLeftExpand size={16} /> : <IconLayoutSidebarLeftCollapse size={16} />
-                }
-                onClick={() => setLeftHidden(value => !value)}
-                aria-label={leftHidden ? '展开资源目录' : '收起资源目录'}
-              >
-                {leftHidden ? '展开目录' : '收起目录'}
-              </Button>
-            </div>
-          ) : null}
           <SegmentedControl
             fullWidth
             value={activeKey}
@@ -67,45 +51,35 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
         </div>
       </div>
     ),
-    [activeKey, isMobile, leftHidden, props]
+    [activeKey, props]
   );
 
-  return (
-    <>
-      <SplitWorkspace
-        className="interface-workspace-layout"
-        leftWidth={336}
-        leftHidden={!isMobile && leftHidden}
-        left={isMobile ? <div /> : sidePanel}
-        right={
+  if (isMobile) {
+    return (
+      <>
+        <div className="interface-workspace-layout flex flex-col">
+          <div className="flex items-center gap-2 py-2">
+            <Tooltip label="展开目录">
+              <ActionIcon
+                variant="light"
+                color="gray"
+                radius="xl"
+                size="lg"
+                onClick={() => setMobileOpen(true)}
+                aria-label="展开目录"
+              >
+                <IconLayoutSidebarLeftExpand size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </div>
           <div className="interface-workspace-content">
             <div className="interface-workspace-main">
-              {isMobile || leftHidden ? (
-                <div className="interface-workspace-actions">
-                  <Button
-                    variant="default"
-                    leftSection={<IconLayoutSidebarLeftExpand size={16} />}
-                    onClick={() => {
-                      if (isMobile) {
-                        setMobileOpen(true);
-                        return;
-                      }
-                      setLeftHidden(false);
-                    }}
-                  >
-                    {isMobile ? '打开目录' : '显示目录'}
-                  </Button>
-                </div>
-              ) : null}
               <div className="interface-workspace-card">
                 {props.action === 'api' ? props.apiContent : props.collectionContent}
               </div>
             </div>
           </div>
-        }
-      />
-
-      {isMobile ? (
+        </div>
         <Drawer
           title="资源目录"
           position="left"
@@ -116,7 +90,47 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
         >
           {sidePanel}
         </Drawer>
+      </>
+    );
+  }
+
+  return (
+    <div className="interface-workspace-layout flex gap-0">
+      {!leftHidden ? (
+        <aside
+          className="flex-none transition-all duration-200 ease-in-out w-[336px] opacity-100"
+        >
+          {sidePanel}
+        </aside>
       ) : null}
-    </>
+      <div className="flex flex-none flex-col items-center pt-2">
+        <Tooltip label={leftHidden ? '展开目录' : '收起目录'}>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            radius="xl"
+            size="sm"
+            onClick={() => setLeftHidden(v => !v)}
+            aria-label={leftHidden ? '展开目录' : '收起目录'}
+          >
+            {leftHidden ? (
+              <IconLayoutSidebarLeftExpand size={16} />
+            ) : (
+              <IconLayoutSidebarLeftCollapse size={16} />
+            )}
+          </ActionIcon>
+        </Tooltip>
+      </div>
+      <section className="min-w-0 flex-1">
+        <div className="interface-workspace-content">
+          <div className="interface-workspace-main">
+            <div className="interface-workspace-card">
+              {props.action === 'api' ? props.apiContent : props.collectionContent}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
+

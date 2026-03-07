@@ -186,7 +186,6 @@ export function ProjectPage() {
       />
       <SecondaryNav
         items={navItems}
-        summary={project?.name ? `${project.name} 的核心工作区导航` : '切换当前项目的工作区模块'}
       />
 
       <Suspense

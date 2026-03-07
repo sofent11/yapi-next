@@ -71,8 +71,7 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
 
       <DataToolbar
         className="interface-table-toolbar"
-        title={props.currentCatName}
-        summary={`${props.filteredList.length} 个接口`}
+        title={`${props.currentCatName}（${props.filteredList.length}）`}
         actions={
           <div className="flex flex-wrap gap-2">
             {currentCat ? (

@@ -210,131 +210,136 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
 
   return (
     <div className="caseContainer space-y-4">
-      <SectionCard title="基本信息" className="panel-view interface-view-panel">
-        <InfoGrid className="interface-view-descriptions">
-          <InfoGridItem
-            label="接口名称"
-            value={<span className="interface-view-name" title={String(props.currentInterface.title || '-')}>{props.currentInterface.title || '-'}</span>}
-          />
-          <InfoGridItem
-            label="创建人"
-            value={
-              uid > 0 ? (
-                <Link className="user-name inline-flex items-center gap-2" to={`/user/profile/${uid}`}>
-                  <Avatar className="user-img" size={28} src={`/api/user/avatar?uid=${uid}`} />
+      <div className="flex flex-col gap-4 rounded-[var(--radius-xl)] border border-slate-200 bg-white p-5 shadow-sm">
+        {/* Top Info Row */}
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge 
+              variant="light"
+              color={props.currentInterface.status === 'done' ? 'teal' : 'yellow'} 
+              size="md" 
+              radius="sm"
+            >
+              {props.statusLabel(props.currentInterface.status)}
+            </Badge>
+            <span className="text-lg font-bold text-slate-900">{props.currentInterface.title || '-'}</span>
+            {tags.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 ml-1">
+                {tags.map(tag => (
+                  <Badge key={tag} variant="outline" color="gray" size="sm" radius="sm">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          
+          <div className="flex items-center gap-4 text-[13px] text-slate-500">
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400">创建人:</span>
+              {uid > 0 ? (
+                <Link className="inline-flex items-center gap-1.5 text-slate-600 hover:text-blue-600 transition-colors" to={`/user/profile/${uid}`}>
+                  <Avatar size={18} src={`/api/user/avatar?uid=${uid}`} radius="xl" />
                   {String((props.currentInterface as unknown as Record<string, unknown>).username || '-')}
                 </Link>
               ) : (
-                String((props.currentInterface as unknown as Record<string, unknown>).username || '-')
-              )
-            }
-          />
-          <InfoGridItem
-            label="状态"
-            value={
-              <span className={`status-chip ${props.currentInterface.status === 'done' ? 'done' : 'undone'}`}>
-                {props.statusLabel(props.currentInterface.status)}
-              </span>
-            }
-          />
-          <InfoGridItem
-            label="更新时间"
-            value={props.formatUnixTime((props.currentInterface as unknown as Record<string, unknown>).up_time)}
-          />
-          {tags.length > 0 ? (
-            <InfoGridItem
-              label="Tag"
-              span
-              value={
-                <div className="flex flex-wrap gap-2">
-                  {tags.map(tag => (
-                    <Badge key={tag} variant="light">{tag}</Badge>
-                  ))}
-                </div>
-              }
-            />
-          ) : null}
-          <InfoGridItem
-            label="接口路径"
-            span
-            value={
-              <div className="interface-view-code-row flex flex-wrap items-center gap-2">
-                <span className={`${props.methodClassName(props.method)} tag-method`}>{props.method}</span>
-                <code className="interface-view-code">{props.fullPath}</code>
-                <Tooltip label="复制路径">
-                  <Button
-                    size="compact-sm"
-                    variant="subtle"
-                    onClick={() => props.onCopyText(props.fullPath, '接口路径已复制')}
-                  >
-                    <IconCopy size={14} />
-                  </Button>
-                </Tooltip>
-              </div>
-            }
-          />
-          <InfoGridItem
-            label="Mock地址"
-            span
-            value={
-              <div className="interface-view-code-row flex flex-wrap items-center gap-2">
-                {mockFlag ? <Text c="dimmed">{mockFlag}</Text> : null}
-                {props.mockUrl ? (
-                  <a href={props.mockUrl} target="_blank" rel="noopener noreferrer" className="interface-view-link-button">
-                    {props.mockUrl}
-                  </a>
-                ) : (
-                  <span className="interface-view-link">-</span>
-                )}
-                {props.mockUrl ? (
-                  <Tooltip label="复制Mock地址">
-                    <Button
-                      size="compact-sm"
-                      variant="subtle"
-                      onClick={() => props.onCopyText(props.mockUrl, 'Mock地址已复制')}
-                    >
-                      <IconCopy size={14} />
-                    </Button>
-                  </Tooltip>
-                ) : null}
-              </div>
-            }
-          />
+                <span className="text-slate-600">{String((props.currentInterface as unknown as Record<string, unknown>).username || '-')}</span>
+              )}
+            </div>
+            <div className="h-3 w-px bg-slate-200"></div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400">更新于:</span>
+              <span className="text-slate-600">{props.formatUnixTime((props.currentInterface as unknown as Record<string, unknown>).up_time)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Path and Mock Details */}
+        <div className="flex flex-col gap-3">
+          {/* Path Row */}
+          <div className="flex items-center gap-4">
+            <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500">接口路径</div>
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-slate-50 px-3 py-1.5 border border-slate-100">
+              <span className={`${props.methodClassName(props.method)} text-[12px] font-bold leading-none shrink-0`}>{props.method}</span>
+              <code className="min-w-0 flex-1 truncate font-mono text-[13px] text-slate-700">{props.fullPath}</code>
+              <ActionIcon 
+                size="sm" 
+                variant="subtle" 
+                color="gray"
+                onClick={() => props.onCopyText(props.fullPath, '接口路径已复制')}
+                title="复制路径"
+              >
+                <IconCopy size={14} />
+              </ActionIcon>
+            </div>
+          </div>
+
+          {/* Mock URL Row */}
+          <div className="flex items-center gap-4">
+            <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500">Mock</div>
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-slate-50 px-3 py-1.5 border border-slate-100">
+              {mockFlag ? <span className="shrink-0 text-[12px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">{mockFlag}</span> : null}
+              {props.mockUrl ? (
+                <a href={props.mockUrl} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate font-mono text-[13px] text-blue-600 hover:text-blue-700 hover:underline">
+                  {props.mockUrl}
+                </a>
+              ) : (
+                <span className="min-w-0 flex-1 text-[13px] text-slate-400">-</span>
+              )}
+              {props.mockUrl ? (
+                <ActionIcon 
+                  size="sm" 
+                  variant="subtle" 
+                  color="gray"
+                  onClick={() => props.onCopyText(props.mockUrl, 'Mock地址已复制')}
+                  title="复制Mock地址"
+                >
+                  <IconCopy size={14} />
+                </ActionIcon>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Custom Field Row (if applicable) */}
           {props.customField?.enable && String(props.currentInterface.custom_field_value || '').trim() ? (
-            <InfoGridItem
-              label={props.customField.name || '自定义字段'}
-              span
-              value={String(props.currentInterface.custom_field_value || '')}
-            />
-          ) : null}
-          <InfoGridItem
-            label="规格导出"
-            span
-            value={
-              <div className="interface-view-actions">
-                <Button
-                  size="compact-sm"
-                  variant="default"
-                  onClick={() => props.onCopySwaggerJson(interfaceId)}
-                  loading={props.copyingSpec}
-                  disabled={interfaceId <= 0}
-                >
-                  复制 Swagger JSON
-                </Button>
-                <Button
-                  size="compact-sm"
-                  variant="default"
-                  onClick={() => props.onCopyOpenApiJson(interfaceId)}
-                  loading={props.copyingSpec}
-                  disabled={interfaceId <= 0}
-                >
-                  复制 OpenAPI 3.0
-                </Button>
+            <div className="flex items-center gap-4">
+              <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500">{props.customField.name || '自定义'}</div>
+              <div className="flex min-w-0 flex-1 items-center rounded-lg bg-slate-50 px-3 py-1.5 border border-slate-100 text-[13px] text-slate-700">
+                {String(props.currentInterface.custom_field_value || '')}
               </div>
-            }
-          />
-        </InfoGrid>
-      </SectionCard>
+            </div>
+          ) : null}
+
+          {/* Actions Row */}
+          <div className="flex items-center gap-4 mt-1">
+            <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500">规格导出</div>
+            <div className="flex flex-1 items-center gap-2">
+              <Button
+                size="xs"
+                variant="default"
+                radius="md"
+                className="font-medium bg-white hover:bg-slate-50"
+                onClick={() => props.onCopySwaggerJson(interfaceId)}
+                loading={props.copyingSpec}
+                disabled={interfaceId <= 0}
+              >
+                复制 Swagger
+              </Button>
+              <Button
+                size="xs"
+                variant="default"
+                radius="md"
+                className="font-medium bg-white hover:bg-slate-50"
+                onClick={() => props.onCopyOpenApiJson(interfaceId)}
+                loading={props.copyingSpec}
+                disabled={interfaceId <= 0}
+              >
+                复制 OpenAPI
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {props.currentInterface.desc ? (
         <SectionCard title="备注" className="interface-view-section">
