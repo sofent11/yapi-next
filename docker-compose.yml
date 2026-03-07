@@ -1,0 +1,35 @@
+
+
+services:
+  mongo:
+    image: mongo:latest
+    restart: always
+    volumes:
+      - ./mongo_data:/data/db
+    ports:
+      - "27018:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=yapi
+
+  api:
+    build:
+      context: .
+      target: api
+    restart: always
+    ports:
+      - "3300:3300"
+    environment:
+      - PORT=3300
+      - MONGO_URL=mongodb://mongo:27017/yapi
+    depends_on:
+      - mongo
+
+  web:
+    build:
+      context: .
+      target: web
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      - api

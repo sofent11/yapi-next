@@ -1,4 +1,4 @@
-﻿# kdiff3 ignore
+# kdiff3 ignore
 *.orig
 
 # maven ignore
@@ -44,3 +44,6 @@ runtime/
 tsconfig.json
 .vscode
 /iconfont
+
+# Docker Data
+mongo_data/
