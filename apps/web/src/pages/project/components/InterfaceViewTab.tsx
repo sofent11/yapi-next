@@ -1,12 +1,27 @@
-import { Avatar, Badge, Button, Table, Text, Tooltip } from '@mantine/core';
-import { IconCopy } from '@tabler/icons-react';
+import { useMemo, useState } from 'react';
+import { ActionIcon, Avatar, Badge, Button, Table, Text, Tooltip } from '@mantine/core';
+import { IconChevronDown, IconChevronRight, IconCopy } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
+import { CopyableTextPanel } from '../../../components/patterns/CopyableTextPanel';
+import { InfoGrid, InfoGridItem } from '../../../components/patterns/InfoGrid';
 import type { InterfaceDTO } from '../../../types/interface-dto';
 import { SectionCard } from '../../../components/layout/SectionCard';
 import { sanitizeHtml } from '../../../utils/html-sanitize';
 
 type ParamRow = Record<string, unknown>;
 type ParamColumns = Array<Record<string, unknown>>;
+type SchemaTableRow = Record<string, unknown> & {
+  key?: string;
+  name?: string;
+  type?: string;
+  children?: SchemaTableRow[];
+};
+type VisibleSchemaRow = {
+  row: SchemaTableRow;
+  depth: number;
+  key: string;
+  hasChildren: boolean;
+};
 
 type InterfaceViewTabProps = {
   currentInterface: InterfaceDTO;
@@ -30,6 +45,9 @@ type InterfaceViewTabProps = {
   formatUnixTime: (value: unknown) => string;
   mockFlagText: (mockOpen?: boolean, strict?: boolean) => string;
   onCopyText: (text: string, successText: string) => void;
+  onCopySwaggerJson: (interfaceId: number) => void;
+  onCopyOpenApiJson: (interfaceId: number) => void;
+  copyingSpec: boolean;
 };
 
 function renderCell(record: ParamRow, column: Record<string, unknown>) {
@@ -74,11 +92,104 @@ function renderParamTable(title: string, columns: ParamColumns, rows: ParamRow[]
   );
 }
 
-function InfoRow(props: { label: string; value: React.ReactNode; span?: boolean }) {
+function normalizeSchemaChildren(input: unknown): SchemaTableRow[] {
+  if (!Array.isArray(input)) return [];
+  return input.filter((item): item is SchemaTableRow => Boolean(item) && typeof item === 'object');
+}
+
+function flattenSchemaRows(
+  rows: SchemaTableRow[],
+  expandedKeys: Set<string>,
+  depth = 0
+): VisibleSchemaRow[] {
+  return rows.flatMap((row, index) => {
+    const key = String(row.key || `${depth}-${index}-${String(row.name || 'row')}`);
+    const children = normalizeSchemaChildren(row.children);
+    const rowType = String(row.type || '').toLowerCase();
+    const hasChildren = children.length > 0 && (rowType === 'object' || rowType === 'array');
+    const current: VisibleSchemaRow = { row, depth, key, hasChildren };
+    if (!hasChildren || !expandedKeys.has(key)) {
+      return [current];
+    }
+    return [current, ...flattenSchemaRows(children, expandedKeys, depth + 1)];
+  });
+}
+
+function SchemaParamTable(props: { title: string; columns: ParamColumns; rows: SchemaTableRow[] }) {
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
+
+  const visibleRows = useMemo(
+    () => flattenSchemaRows(props.rows, expandedKeys),
+    [props.rows, expandedKeys]
+  );
+
+  const toggleExpanded = (key: string) => {
+    setExpandedKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
   return (
-    <div className={props.span ? 'md:col-span-2' : ''}>
-      <div className="text-sm text-slate-500">{props.label}</div>
-      <div className="mt-1 text-sm text-slate-900">{props.value}</div>
+    <div className="interface-view-block space-y-3">
+      <h3 className="interface-view-subtitle text-base font-semibold text-slate-900">{props.title}</h3>
+      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+        <Table withTableBorder striped highlightOnHover>
+          <Table.Thead>
+            <Table.Tr>
+              {props.columns.map((column, index) => (
+                <Table.Th key={`${props.title}-head-${String(column.key || column.dataIndex || index)}`}>
+                  {String(column.title || '-')}
+                </Table.Th>
+              ))}
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {visibleRows.map(({ row, depth, key, hasChildren }) => {
+              const expanded = hasChildren && expandedKeys.has(key);
+              return (
+                <Table.Tr key={key}>
+                  {props.columns.map((column, columnIndex) => {
+                    const columnKey = String(column.key || column.dataIndex || columnIndex);
+                    const isNameColumn = String(column.dataIndex || '') === 'name';
+                    return (
+                      <Table.Td key={`${key}-${columnKey}`}>
+                        {isNameColumn ? (
+                          <div className="flex items-center gap-2" style={{ paddingLeft: `${depth * 18}px` }}>
+                            <ActionIcon
+                              variant="subtle"
+                              size="sm"
+                              onClick={() => hasChildren && toggleExpanded(key)}
+                              disabled={!hasChildren}
+                              aria-label={expanded ? '收起子级字段' : '展开子级字段'}
+                            >
+                              {hasChildren ? (
+                                expanded ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />
+                              ) : (
+                                <span className="block h-4 w-4" />
+                              )}
+                            </ActionIcon>
+                            <span className={depth > 0 ? 'font-mono text-[13px]' : undefined}>
+                              {String(row.name || '-')}
+                            </span>
+                          </div>
+                        ) : (
+                          renderCell(row, column)
+                        )}
+                      </Table.Td>
+                    );
+                  })}
+                </Table.Tr>
+              );
+            })}
+          </Table.Tbody>
+        </Table>
+      </div>
     </div>
   );
 }
@@ -89,6 +200,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
     ? props.currentInterface.tag.map(item => String(item)).filter(Boolean)
     : [];
   const mockFlag = props.mockFlagText(props.projectIsMockOpen, props.projectStrict);
+  const interfaceId = Number(props.currentInterface._id || 0);
   const hasRequestParams =
     props.reqParamsRows.length > 0 ||
     props.reqHeadersRows.length > 0 ||
@@ -99,12 +211,12 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
   return (
     <div className="caseContainer space-y-4">
       <SectionCard title="基本信息" className="panel-view interface-view-panel">
-        <div className="interface-view-descriptions grid gap-4 md:grid-cols-2">
-          <InfoRow
+        <InfoGrid className="interface-view-descriptions">
+          <InfoGridItem
             label="接口名称"
             value={<span className="interface-view-name" title={String(props.currentInterface.title || '-')}>{props.currentInterface.title || '-'}</span>}
           />
-          <InfoRow
+          <InfoGridItem
             label="创建人"
             value={
               uid > 0 ? (
@@ -117,7 +229,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
               )
             }
           />
-          <InfoRow
+          <InfoGridItem
             label="状态"
             value={
               <span className={`status-chip ${props.currentInterface.status === 'done' ? 'done' : 'undone'}`}>
@@ -125,12 +237,12 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
               </span>
             }
           />
-          <InfoRow
+          <InfoGridItem
             label="更新时间"
             value={props.formatUnixTime((props.currentInterface as unknown as Record<string, unknown>).up_time)}
           />
           {tags.length > 0 ? (
-            <InfoRow
+            <InfoGridItem
               label="Tag"
               span
               value={
@@ -142,7 +254,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
               }
             />
           ) : null}
-          <InfoRow
+          <InfoGridItem
             label="接口路径"
             span
             value={
@@ -161,7 +273,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
               </div>
             }
           />
-          <InfoRow
+          <InfoGridItem
             label="Mock地址"
             span
             value={
@@ -189,13 +301,39 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
             }
           />
           {props.customField?.enable && String(props.currentInterface.custom_field_value || '').trim() ? (
-            <InfoRow
+            <InfoGridItem
               label={props.customField.name || '自定义字段'}
               span
               value={String(props.currentInterface.custom_field_value || '')}
             />
           ) : null}
-        </div>
+          <InfoGridItem
+            label="规格导出"
+            span
+            value={
+              <div className="interface-view-actions">
+                <Button
+                  size="compact-sm"
+                  variant="default"
+                  onClick={() => props.onCopySwaggerJson(interfaceId)}
+                  loading={props.copyingSpec}
+                  disabled={interfaceId <= 0}
+                >
+                  复制 Swagger JSON
+                </Button>
+                <Button
+                  size="compact-sm"
+                  variant="default"
+                  onClick={() => props.onCopyOpenApiJson(interfaceId)}
+                  loading={props.copyingSpec}
+                  disabled={interfaceId <= 0}
+                >
+                  复制 OpenAPI 3.0
+                </Button>
+              </div>
+            }
+          />
+        </InfoGrid>
       </SectionCard>
 
       {props.currentInterface.desc ? (
@@ -221,27 +359,15 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
                 Body({props.currentInterface.req_body_type || 'raw'})
               </h3>
               {props.schemaRowsRequest.length > 0 ? (
-                renderParamTable('请求 Schema', props.schemaColumns, props.schemaRowsRequest)
+                <SchemaParamTable title="请求 Schema" columns={props.schemaColumns} rows={props.schemaRowsRequest as SchemaTableRow[]} />
               ) : (
-                <div className="interface-view-raw-block space-y-3">
-                  <div className="workspace-section-head flex items-center justify-between gap-3">
-                    <Text fw={700}>原始 Body</Text>
-                    <Tooltip label="复制 Body 内容">
-                      <Button
-                        size="compact-sm"
-                        variant="subtle"
-                        onClick={() => props.onCopyText(String(props.currentInterface.req_body_other || ''), 'Body 内容已复制')}
-                      >
-                        <IconCopy size={14} />
-                      </Button>
-                    </Tooltip>
-                  </div>
-                  <textarea
-                    className="min-h-[180px] w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"
-                    value={String(props.currentInterface.req_body_other || '')}
-                    readOnly
-                  />
-                </div>
+                <CopyableTextPanel
+                  title="原始 Body"
+                  value={String(props.currentInterface.req_body_other || '')}
+                  onCopy={() => props.onCopyText(String(props.currentInterface.req_body_other || ''), 'Body 内容已复制')}
+                  rows={8}
+                  monospace
+                />
               )}
             </div>
           ) : null}
@@ -252,27 +378,15 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
         <SectionCard title="返回数据" className="interface-view-section">
           <div className="interface-view-block">
             {props.schemaRowsResponse.length > 0 ? (
-              renderParamTable('响应 Schema', props.schemaColumns, props.schemaRowsResponse)
+              <SchemaParamTable title="响应 Schema" columns={props.schemaColumns} rows={props.schemaRowsResponse as SchemaTableRow[]} />
             ) : (
-              <div className="interface-view-raw-block space-y-3">
-                <div className="workspace-section-head flex items-center justify-between gap-3">
-                  <Text fw={700}>原始响应</Text>
-                  <Tooltip label="复制返回数据">
-                    <Button
-                      size="compact-sm"
-                      variant="subtle"
-                      onClick={() => props.onCopyText(String(props.currentInterface.res_body || ''), '返回数据已复制')}
-                    >
-                      <IconCopy size={14} />
-                    </Button>
-                  </Tooltip>
-                </div>
-                <textarea
-                  className="min-h-[240px] w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm"
-                  value={String(props.currentInterface.res_body || '')}
-                  readOnly
-                />
-              </div>
+              <CopyableTextPanel
+                title="原始响应"
+                value={String(props.currentInterface.res_body || '')}
+                onCopy={() => props.onCopyText(String(props.currentInterface.res_body || ''), '返回数据已复制')}
+                rows={10}
+                monospace
+              />
             )}
           </div>
         </SectionCard>

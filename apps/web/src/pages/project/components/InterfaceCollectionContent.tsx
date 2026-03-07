@@ -1,6 +1,6 @@
-import { Card, Loader } from '@mantine/core';
+import { Button } from '@mantine/core';
 import type { FormInstance } from 'rc-field-form';
-import { AppEmptyState } from '../../../components/AppEmptyState';
+import { AsyncRetryAction, AsyncState } from '../../../components/patterns/AsyncState';
 import { CaseDetailPanel } from './CaseDetailPanel';
 import { CollectionOverviewPanel } from './CollectionOverviewPanel';
 import type {
@@ -86,7 +86,13 @@ export type InterfaceCollectionContentProps = {
 export function InterfaceCollectionContent(props: InterfaceCollectionContentProps) {
   if (props.action === 'col') {
     if (props.selectedColId <= 0) {
-      return <AppEmptyState title="请选择测试集合" desc="先在左侧选择一个测试集合。" />;
+      return (
+        <AsyncState
+          state="empty"
+          title="请选择测试集合"
+          description="先在左侧选择一个测试集合，再查看用例列表、环境配置和自动化测试结果。"
+        />
+      );
     }
     const currentCol =
       props.colRows.find(item => Number(item._id || 0) === props.selectedColId) || null;
@@ -122,22 +128,39 @@ export function InterfaceCollectionContent(props: InterfaceCollectionContentProp
   }
 
   if (!props.caseId) {
-    return <AppEmptyState title="请选择测试用例" desc="先在左侧选择一个测试用例。" />;
+    return (
+      <AsyncState
+        state="empty"
+        title="请选择测试用例"
+        description="先从左侧集合树中选择一个测试用例，再查看请求参数、脚本和测试结果。"
+        action={<AsyncRetryAction onRetry={props.onNavigateCollection} label="返回集合概览" />}
+      />
+    );
   }
 
   if (props.caseDetailLoading) {
-    return (
-      <Card padding="lg" radius="lg" withBorder>
-        <div className="flex justify-center py-10">
-          <Loader />
-        </div>
-      </Card>
-    );
+    return <AsyncState state="loading" title="正在加载测试用例" description="用例详情和调试数据正在准备中。" />;
   }
 
   const detail = props.caseDetailData;
   if (!detail || Object.keys(detail).length === 0) {
-    return <AppEmptyState title="测试用例不存在" desc="该用例可能已被删除，请重新选择。" />;
+    return (
+      <AsyncState
+        state="empty"
+        title="测试用例不存在"
+        description="该用例可能已被删除或移动。你可以返回集合概览重新选择，或者新增一个用例。"
+        action={
+          <div className="flex flex-wrap justify-center gap-2">
+            <AsyncRetryAction onRetry={props.onNavigateCollection} label="返回集合概览" />
+            {props.canEdit ? (
+              <Button variant="light" onClick={props.onOpenAddCase}>
+                新增用例
+              </Button>
+            ) : null}
+          </div>
+        }
+      />
+    );
   }
 
   const caseKey = String(props.caseId || '');

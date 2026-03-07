@@ -23,6 +23,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import LogoSVG from '../components/LogoSVG';
 import { webPlugins } from '../plugins';
 import { useGetUserStatusQuery } from '../services/yapi-api';
+import { PublicShell } from '../app/shells/PublicShell';
 
 const featureCards = [
   {
@@ -87,11 +88,16 @@ export function HomePage() {
   }, [isLogin, navigate]);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-50">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,197,94,0.16),_transparent_32%),radial-gradient(circle_at_80%_10%,_rgba(59,130,246,0.2),_transparent_28%),linear-gradient(180deg,_#020617_0%,_#0f172a_42%,_#111827_100%)]" />
-      <div className="absolute inset-x-0 top-0 h-80 bg-[linear-gradient(180deg,rgba(15,23,42,0.1),rgba(15,23,42,0))]" />
-
-      <Container size="xl" className="relative z-10 px-6 py-6 md:px-8 md:py-8">
+    <PublicShell
+      backdrop={
+        <>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,197,94,0.16),_transparent_32%),radial-gradient(circle_at_80%_10%,_rgba(59,130,246,0.2),_transparent_28%),linear-gradient(180deg,_#020617_0%,_#0f172a_42%,_#111827_100%)]" />
+          <div className="absolute inset-x-0 top-0 h-80 bg-[linear-gradient(180deg,rgba(15,23,42,0.1),rgba(15,23,42,0))]" />
+        </>
+      }
+      containerClassName="py-6 md:py-8"
+    >
+      <Container size="xl" className="px-0">
         <header className="flex flex-col gap-4 rounded-[28px] border border-white/10 bg-white/6 px-5 py-4 backdrop-blur md:flex-row md:items-center md:justify-between md:px-7">
           <Group gap="sm" wrap="nowrap">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-900 shadow-[0_12px_32px_rgba(255,255,255,0.14)]">
@@ -265,6 +271,6 @@ export function HomePage() {
           </SimpleGrid>
         </section>
       </Container>
-    </div>
+    </PublicShell>
   );
 }

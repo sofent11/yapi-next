@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, Stack, Text, TextInput, Textarea } from '@mantine/core';
+import { Alert, Button, Stack, Text, TextInput, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useGetProjectEnvQuery, useUpdateProjectEnvMutation, useGetProjectQuery } from '../../../services/yapi-api';
-import { SectionCard } from '../../../components/layout';
+import { ProjectSettingsActions } from '../../../domains/project/ProjectSettingsActions';
+import { ProjectSettingsEditorCard } from '../../../domains/project/ProjectSettingsEditorCard';
+import { ProjectSettingsIntro } from '../../../domains/project/ProjectSettingsIntro';
+import { ProjectSettingsPanel } from '../../../domains/project/ProjectSettingsPanel';
 import { parseJsonArray, toJsonText } from '../ProjectSettingPage.utils';
 import type { EnvEditorItem, ProjectSettingPageProps } from '../ProjectSettingPage.types';
 
@@ -69,14 +72,10 @@ export function SettingEnvTab(props: ProjectSettingPageProps) {
   }
 
   return (
-    <SectionCard className="m-panel project-settings-card">
+    <ProjectSettingsPanel>
       <Stack className="workspace-stack">
-        <Alert
-          color="blue"
-          className="project-settings-info-alert"
-          title="为不同环境维护域名、Header 与全局变量，便于调试时快速切换。"
-        />
-        <div className="flex flex-wrap gap-3">
+        <ProjectSettingsIntro title="为不同环境维护域名、Header 与全局变量，便于调试时快速切换。" />
+        <div className="project-settings-toolbar">
           <Button
             variant="default"
             onClick={() =>
@@ -99,16 +98,13 @@ export function SettingEnvTab(props: ProjectSettingPageProps) {
           </Button>
         </div>
         {envEditors.length === 0 ? (
-          <Alert color="blue" title="暂无环境，点击“添加环境”开始配置。" />
+          <Alert color="blue" className="project-settings-empty-alert" title="暂无环境，点击“添加环境”开始配置。" />
         ) : null}
         {envEditors.map((item, index) => (
-          <Card
+          <ProjectSettingsEditorCard
             key={item.key}
-            withBorder
-            radius="lg"
-          >
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <Text fw={600}>{`环境 ${index + 1}`}</Text>
+            title={`环境 ${index + 1}`}
+            actions={
               <Button
                 color="red"
                 variant="light"
@@ -116,7 +112,8 @@ export function SettingEnvTab(props: ProjectSettingPageProps) {
               >
                 删除
               </Button>
-            </div>
+            }
+          >
             <Stack className="workspace-stack">
               <TextInput
                 value={item.name}
@@ -161,9 +158,16 @@ export function SettingEnvTab(props: ProjectSettingPageProps) {
                 }
               />
             </Stack>
-          </Card>
+          </ProjectSettingsEditorCard>
         ))}
+        {envEditors.length > 0 ? (
+          <ProjectSettingsActions>
+            <Button onClick={() => void handleSaveEnv()} loading={updateEnvState.isLoading}>
+              保存环境
+            </Button>
+          </ProjectSettingsActions>
+        ) : null}
       </Stack>
-    </SectionCard>
+    </ProjectSettingsPanel>
   );
 }

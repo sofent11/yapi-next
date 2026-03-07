@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   Alert,
   Button,
@@ -99,7 +100,7 @@ export function CollectionModals(props: CollectionModalsProps) {
     props.onImportSelectedRowKeysChange(Array.from(next));
   }
 
-  function renderImportRows(rows: ImportInterfaceRow[], depth = 0): React.ReactNode {
+  function renderImportRows(rows: ImportInterfaceRow[], depth = 0): ReactNode[] {
     return rows.flatMap(row => {
       const leafKeys = collectLeafKeys(row);
       const selectedCount = leafKeys.filter(key => selectedKeySet.has(key)).length;

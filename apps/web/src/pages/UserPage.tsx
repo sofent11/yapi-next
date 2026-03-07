@@ -12,6 +12,12 @@ import {
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { AppEmptyState } from '../components/AppEmptyState';
+import { AdaptiveDataView } from '../components/patterns/AdaptiveDataView';
+import { AsyncState } from '../components/patterns/AsyncState';
+import { DataPagination } from '../components/patterns/DataPagination';
+import { DataToolbar } from '../components/patterns/DataToolbar';
+import { InfoGrid, InfoGridItem } from '../components/patterns/InfoGrid';
 import {
   useChangePasswordMutation,
   useDeleteUserMutation,
@@ -22,7 +28,7 @@ import {
   useUpdateUserMutation,
   useUploadAvatarMutation
 } from '../services/yapi-api';
-import { FilterBar, PageHeader, SectionCard } from '../components/layout';
+import { PageHeader, SectionCard } from '../components/layout';
 
 type UserRow = Record<string, unknown> & {
   _id?: number;
@@ -140,6 +146,7 @@ export function UserPage() {
   const canChangePassword = canEditBasic && (profileData?.type || 'site') === 'site';
   const totalUsers = Number(userListQuery.data?.data?.count || tableRows.length || 0);
   const totalPages = Math.max(1, Math.ceil(totalUsers / limit));
+  const listLoading = userListQuery.isLoading || searchUsersState.isFetching;
 
   async function handleSearch() {
     const q = keyword.trim();
@@ -265,42 +272,46 @@ export function UserPage() {
           }
         />
 
-        <SectionCard title={`用户列表 (${totalUsers})`} className="user-list-card">
-          <FilterBar
+        <SectionCard className="user-list-card">
+          <DataToolbar
+            title={`用户列表 (${totalUsers})`}
+            summary={isAdmin ? '支持按用户名或邮箱快速检索，并在桌面和移动端查看统一结果。' : '当前账号仅可进入个人中心查看资料。'}
             className="user-search-bar"
-            left={
-              <div className="flex w-full flex-col gap-3 md:flex-row">
-                <TextInput
-                  className="w-full md:max-w-xl"
-                  value={keyword}
-                  onChange={event => setKeyword(event.currentTarget.value)}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      void handleSearch();
-                    }
-                  }}
-                  placeholder="输入用户名或邮箱搜索…"
-                  aria-label="按用户名或邮箱搜索用户"
-                />
-                <Button onClick={() => void handleSearch()} loading={searchUsersState.isFetching}>
-                  搜索
-                </Button>
+            actions={
+              <div className="flex w-full flex-col gap-3 md:flex-row md:justify-end">
+                {isAdmin ? (
+                  <>
+                    <TextInput
+                      className="w-full md:max-w-xl"
+                      value={keyword}
+                      onChange={event => setKeyword(event.currentTarget.value)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          void handleSearch();
+                        }
+                      }}
+                      placeholder="输入用户名或邮箱搜索…"
+                      aria-label="按用户名或邮箱搜索用户"
+                    />
+                    <Button onClick={() => void handleSearch()} loading={searchUsersState.isFetching}>
+                      搜索
+                    </Button>
+                  </>
+                ) : null}
+                {isSearching ? (
+                  <Button
+                    variant="default"
+                    onClick={() => {
+                      setKeyword('');
+                      setIsSearching(false);
+                      setSearchRows([]);
+                    }}
+                  >
+                    清空搜索
+                  </Button>
+                ) : null}
               </div>
-            }
-            right={
-              isSearching ? (
-                <Button
-                  variant="default"
-                  onClick={() => {
-                    setKeyword('');
-                    setIsSearching(false);
-                    setSearchRows([]);
-                  }}
-                >
-                  清空搜索
-                </Button>
-              ) : null
             }
           />
 
@@ -310,82 +321,142 @@ export function UserPage() {
             </Alert>
           ) : null}
 
-          <div className="overflow-x-auto rounded-2xl border border-slate-200">
-            <Table striped highlightOnHover withTableBorder>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>用户名</Table.Th>
-                  <Table.Th>Email</Table.Th>
-                  <Table.Th>角色</Table.Th>
-                  <Table.Th>更新时间</Table.Th>
-                  {isAdmin ? <Table.Th className="text-center">操作</Table.Th> : null}
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {tableRows.length === 0 ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={isAdmin ? 5 : 4}>
-                      <div className="py-8 text-center text-sm text-slate-500">
-                        {userListQuery.isLoading || deleteUserState.isLoading || searchUsersState.isFetching
-                          ? '正在加载用户列表...'
-                          : '暂无用户数据'}
+          {listLoading && tableRows.length === 0 ? (
+            <AsyncState state="loading" title="正在加载用户列表" description="用户资料和检索结果正在准备中。" />
+          ) : tableRows.length === 0 ? (
+            <AppEmptyState type="noData" title={isSearching ? '没有匹配的用户' : '暂无用户数据'} desc={isSearching ? '试试更换用户名、邮箱关键词，或清空搜索后重试。' : '当前还没有可展示的用户记录。'} />
+          ) : (
+            <AdaptiveDataView
+              desktop={
+                <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                  <Table striped highlightOnHover withTableBorder>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>用户名</Table.Th>
+                        <Table.Th>Email</Table.Th>
+                        <Table.Th>角色</Table.Th>
+                        <Table.Th>更新时间</Table.Th>
+                        {isAdmin ? <Table.Th className="text-center">操作</Table.Th> : null}
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {tableRows.map(row => (
+                        <Table.Tr key={row.key || getUserId(row)}>
+                          <Table.Td>
+                            <Link to={`/user/profile/${getUserId(row)}`}>{String(row.username || '-')}</Link>
+                          </Table.Td>
+                          <Table.Td>{String(row.email || '-')}</Table.Td>
+                          <Table.Td>{String(row.role || '-')}</Table.Td>
+                          <Table.Td>{formatTime(row.up_time)}</Table.Td>
+                          {isAdmin ? (
+                            <Table.Td>
+                              <div className="flex justify-center">
+                                <Button
+                                  variant="subtle"
+                                  color="red"
+                                  size="compact-sm"
+                                  onClick={() => confirmDelete(getUserId(row))}
+                                  loading={deleteUserState.isLoading}
+                                >
+                                  删除
+                                </Button>
+                              </div>
+                            </Table.Td>
+                          ) : null}
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </div>
+              }
+              mobile={
+                <div className="adaptive-data-view-mobile">
+                  {tableRows.map(row => (
+                    <div key={row.key || getUserId(row)} className="adaptive-data-card">
+                      <div className="adaptive-data-card-head">
+                        <div className="min-w-0">
+                          <Link className="truncate font-medium text-slate-900" to={`/user/profile/${getUserId(row)}`}>
+                            {String(row.username || '-')}
+                          </Link>
+                          <div className="text-sm text-slate-500">{String(row.email || '-')}</div>
+                        </div>
                       </div>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : (
-                  tableRows.map(row => (
-                    <Table.Tr key={row.key || getUserId(row)}>
-                      <Table.Td>
-                        <Link to={`/user/profile/${getUserId(row)}`}>{String(row.username || '-')}</Link>
-                      </Table.Td>
-                      <Table.Td>{String(row.email || '-')}</Table.Td>
-                      <Table.Td>{String(row.role || '-')}</Table.Td>
-                      <Table.Td>{formatTime(row.up_time)}</Table.Td>
+                      <div className="adaptive-data-card-grid">
+                        <div>
+                          <span className="adaptive-data-card-label">角色</span>
+                          <span>{String(row.role || '-')}</span>
+                        </div>
+                        <div>
+                          <span className="adaptive-data-card-label">更新时间</span>
+                          <span>{formatTime(row.up_time)}</span>
+                        </div>
+                      </div>
                       {isAdmin ? (
-                        <Table.Td>
-                          <div className="flex justify-center">
-                            <Button
-                              variant="subtle"
-                              color="red"
-                              size="compact-sm"
-                              onClick={() => confirmDelete(getUserId(row))}
-                            >
-                              删除
-                            </Button>
-                          </div>
-                        </Table.Td>
+                        <div className="adaptive-data-card-actions">
+                          <Button
+                            variant="subtle"
+                            color="red"
+                            size="xs"
+                            onClick={() => confirmDelete(getUserId(row))}
+                            loading={deleteUserState.isLoading}
+                          >
+                            删除
+                          </Button>
+                        </div>
                       ) : null}
-                    </Table.Tr>
-                  ))
-                )}
-              </Table.Tbody>
-            </Table>
-          </div>
+                    </div>
+                  ))}
+                </div>
+              }
+            />
+          )}
 
           {!isSearching && isAdmin ? (
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <Text size="sm" c="dimmed">
-                第 {page} / {totalPages} 页，共 {totalUsers} 位用户
-              </Text>
-              <div className="flex gap-2">
-                <Button
-                  variant="default"
-                  disabled={page <= 1}
-                  onClick={() => setPage(current => Math.max(1, current - 1))}
-                >
-                  上一页
-                </Button>
-                <Button
-                  variant="default"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage(current => Math.min(totalPages, current + 1))}
-                >
-                  下一页
-                </Button>
-              </div>
-            </div>
+            <DataPagination
+              page={page}
+              totalPages={totalPages}
+              totalItems={totalUsers}
+              itemLabel="用户"
+              onPageChange={setPage}
+            />
           ) : null}
         </SectionCard>
+      </div>
+    );
+  }
+
+  if (findUserState.isFetching && !profileData) {
+    return (
+      <div className="page-shell user-page">
+        <PageHeader
+          eyebrow="个人资料"
+          title={targetUid === currentUid ? '个人设置' : `用户 ${targetUid} 资料设置`}
+          subtitle="正在加载用户信息..."
+          actions={
+            <Button variant="default" onClick={() => navigate('/user/list')}>
+              返回用户列表
+            </Button>
+          }
+        />
+        <AsyncState state="loading" title="正在加载用户资料" description="基础信息、头像和账号状态正在准备中。" />
+      </div>
+    );
+  }
+
+  if (!profileData) {
+    return (
+      <div className="page-shell user-page">
+        <PageHeader
+          eyebrow="个人资料"
+          title="用户资料不可用"
+          subtitle="当前用户不存在，或你没有权限查看该资料。"
+          actions={
+            <Button variant="default" onClick={() => navigate('/user/list')}>
+              返回用户列表
+            </Button>
+          }
+        />
+        <AsyncState state="empty" title="未找到用户资料" description="请检查用户 ID 是否正确，或返回列表重新选择用户。" />
       </div>
     );
   }
@@ -394,9 +465,9 @@ export function UserPage() {
     <div className="page-shell user-page">
       <PageHeader
         eyebrow="个人资料"
-        title={targetUid === currentUid ? '个人设置' : `${profileData?.username || targetUid} 资料设置`}
-        subtitle={findUserState.isFetching ? '正在加载用户信息...' : '可在此更新基础资料、头像和密码。'}
-        meta={profileData?.email ? `当前邮箱 ${profileData.email}` : undefined}
+        title={targetUid === currentUid ? '个人设置' : `${profileData.username || targetUid} 资料设置`}
+        subtitle="可在此更新基础资料、头像和密码。"
+        meta={profileData.email ? `当前邮箱 ${profileData.email}` : undefined}
         actions={
           <Button variant="default" onClick={() => navigate('/user/list')}>
             返回用户列表
@@ -443,30 +514,22 @@ export function UserPage() {
               ) : null}
             </div>
 
-            <dl className="space-y-3 rounded-[24px] border border-slate-200 bg-slate-50 p-5 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-slate-500">用户ID</dt>
-                <dd className="font-medium text-slate-900">{targetUid || '-'}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-slate-500">登陆方式</dt>
-                <dd className="font-medium text-slate-900">
-                  {profileData?.type === 'site' ? '站点登陆' : '第三方登陆'}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-slate-500">创建时间</dt>
-                <dd className="font-medium text-slate-900">{formatTime(profileData?.add_time)}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-slate-500">更新时间</dt>
-                <dd className="font-medium text-slate-900">{formatTime(profileData?.up_time)}</dd>
-              </div>
-            </dl>
+            <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+              <Text fw={600} mb="md">
+                账号摘要
+              </Text>
+              <InfoGrid>
+                <InfoGridItem label="用户 ID" value={targetUid || '-'} />
+                <InfoGridItem label="登录方式" value={profileData.type === 'site' ? '站点登录' : '第三方登录'} />
+                <InfoGridItem label="创建时间" value={formatTime(profileData.add_time)} />
+                <InfoGridItem label="更新时间" value={formatTime(profileData.up_time)} />
+              </InfoGrid>
+            </div>
           </div>
 
           <div className="space-y-6">
             <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+              <Text fw={600}>基础资料</Text>
               <div className="grid gap-4 md:grid-cols-[96px_minmax(0,1fr)_auto] md:items-center">
                 <Text fw={500}>用户名</Text>
                 <TextInput
@@ -556,7 +619,7 @@ export function UserPage() {
                 </Button>
               </div>
             ) : (
-              <Alert color="blue" title="密码管理">
+              <Alert color="blue" title="密码管理" className="project-settings-info-alert">
                 当前账号为第三方登陆，不支持站内密码修改。
               </Alert>
             )}

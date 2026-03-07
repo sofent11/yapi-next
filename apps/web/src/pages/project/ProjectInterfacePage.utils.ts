@@ -278,7 +278,7 @@ export function safeJsonPretty(input: unknown): string {
   }
 }
 
-export function normalizePathInput(path: string): string {
+export function normalizePathInput(path?: string): string {
   const value = String(path || '').trim();
   if (!value) return '';
   if (value === '/') return '';
@@ -417,7 +417,7 @@ export function schemaNodeToRow(
           ([childName, childNode], index) =>
             schemaNodeToRow(
               ensureSchemaNodeType(toRecord(childNode)),
-              `${name}[].${childName}`,
+              childName,
               Array.isArray(itemNode.required)
                 ? (itemNode.required as unknown[]).map(item => String(item)).includes(childName)
                 : false,
@@ -425,6 +425,8 @@ export function schemaNodeToRow(
             )
         )
         : []) as SchemaRow[];
+    } else if (Object.keys(itemNode).length > 0) {
+      row.children = [schemaNodeToRow(itemNode, 'items', true, `${key}-arr-item`)];
     }
     return row;
   }

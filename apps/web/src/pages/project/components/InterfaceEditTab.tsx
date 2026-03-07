@@ -107,6 +107,7 @@ function DeleteRowButton(props: { onClick: () => void }) {
 }
 
 export function InterfaceEditTab(props: InterfaceEditTabProps) {
+  const customFieldName = props.customField?.name || '自定义字段';
   const categoryOptions = props.catRows.map(item => ({
     label: item.name,
     value: String(Number(item._id || 0))
@@ -287,7 +288,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                     <Field<InterfaceEditFormValues> name="custom_field_value">
                       {(control) => (
                         <TextInput
-                          label={props.customField.name || '自定义字段'}
+                          label={customFieldName}
                           value={String(control.value ?? '')}
                           onChange={event => control.onChange(event.currentTarget.value)}
                         />

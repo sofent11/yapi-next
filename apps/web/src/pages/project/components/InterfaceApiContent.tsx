@@ -1,6 +1,8 @@
-import { Card, Loader } from '@mantine/core';
+import { Button, Card, Text, Title } from '@mantine/core';
 import type { FormInstance } from 'rc-field-form';
+import { AsyncRetryAction, AsyncState } from '../../../components/patterns/AsyncState';
 import type { InterfaceDTO } from '../../../types/interface-dto';
+import { InterfaceDetailHeader } from '../../../domains/interface/InterfaceDetailHeader';
 import type { InterfaceTabItem } from '../../../plugins';
 import { AppEmptyState } from '../../../components/AppEmptyState';
 import { InterfaceApiDetailTabs } from './InterfaceApiDetailTabs';
@@ -30,6 +32,7 @@ export type InterfaceApiContentProps = {
   onOpenAddInterface: () => void;
   onOpenAddCat: () => void;
   onOpenEditCat: (cat?: { _id?: number; name?: string; desc?: string } | null) => void;
+  onNavigateAllInterfaces: () => void;
   onNavigateInterface: (id: number) => void;
   onUpdateStatus: (id: number, status: 'done' | 'undone') => Promise<void>;
   onUpdateCategory: (id: number, catid: number) => Promise<void>;
@@ -110,53 +113,78 @@ export type InterfaceApiContentProps = {
 export function InterfaceApiContent(props: InterfaceApiContentProps) {
   if (props.interfaceId <= 0) {
     return (
-      <Card>
-        <InterfaceListPanel
-          basepath={props.basepath}
-          canEdit={props.canEdit}
-          activeInterfaceId={props.interfaceId}
-          currentCat={props.currentCat as any}
-          currentCatName={props.currentCatName}
-          filteredList={props.filteredList}
-          currentListLoading={props.currentListLoading}
-          listKeyword={props.listKeyword}
-          statusFilter={props.statusFilter}
-          listPage={props.listPage}
-          catOptions={props.catOptions}
-          hasCategories={props.hasCategories}
-          onListKeywordChange={props.onListKeywordChange}
-          onStatusFilterChange={props.onStatusFilterChange}
-          onResetFilters={props.onResetFilters}
-          onListPageChange={props.onListPageChange}
-          onOpenAddInterface={props.onOpenAddInterface}
-          onOpenAddCat={props.onOpenAddCat}
-          onOpenEditCat={() => props.onOpenEditCat(props.currentCat)}
-          onNavigateInterface={props.onNavigateInterface}
-          onUpdateStatus={props.onUpdateStatus}
-          onUpdateCategory={props.onUpdateCategory}
-          onCopyCatSwaggerJson={props.onCopyCatSwaggerJson}
-          onCopyCatOpenApiJson={props.onCopyCatOpenApiJson}
-          copyingSpec={props.copyingSpec}
-          onCopyInterface={props.onCopyInterface}
-          onDeleteInterface={props.onDeleteInterface}
-          methodClassName={props.methodClassName}
-        />
+      <Card padding="lg" radius="lg" withBorder>
+        <div className="interface-index-panel">
+          <section className="interface-index-intro">
+            <Text className="interface-index-eyebrow">接口工作台</Text>
+            <Title order={2} className="interface-index-title">
+              从目录进入详情，或先在这里集中筛选和整理接口
+            </Title>
+            <Text c="dimmed" className="max-w-3xl leading-7">
+              {props.currentCat
+                ? `当前聚焦分类“${props.currentCat.name}”，共筛出 ${props.filteredList.length} 个接口。`
+                : `当前展示 ${props.filteredList.length} 个接口，你可以按名称、路径和状态快速定位目标。`}
+            </Text>
+          </section>
+          <InterfaceListPanel
+            basepath={props.basepath}
+            canEdit={props.canEdit}
+            activeInterfaceId={props.interfaceId}
+            currentCat={props.currentCat as any}
+            currentCatName={props.currentCatName}
+            filteredList={props.filteredList}
+            currentListLoading={props.currentListLoading}
+            listKeyword={props.listKeyword}
+            statusFilter={props.statusFilter}
+            listPage={props.listPage}
+            catOptions={props.catOptions}
+            hasCategories={props.hasCategories}
+            onListKeywordChange={props.onListKeywordChange}
+            onStatusFilterChange={props.onStatusFilterChange}
+            onResetFilters={props.onResetFilters}
+            onListPageChange={props.onListPageChange}
+            onOpenAddInterface={props.onOpenAddInterface}
+            onOpenAddCat={props.onOpenAddCat}
+            onOpenEditCat={() => props.onOpenEditCat(props.currentCat)}
+            onNavigateInterface={props.onNavigateInterface}
+            onUpdateStatus={props.onUpdateStatus}
+            onUpdateCategory={props.onUpdateCategory}
+            onCopyCatSwaggerJson={props.onCopyCatSwaggerJson}
+            onCopyCatOpenApiJson={props.onCopyCatOpenApiJson}
+            copyingSpec={props.copyingSpec}
+            onCopyInterface={props.onCopyInterface}
+            onDeleteInterface={props.onDeleteInterface}
+            methodClassName={props.methodClassName}
+          />
+        </div>
       </Card>
     );
   }
 
   if (props.detailLoading) {
     return (
-      <Card padding="lg" radius="lg" withBorder>
-        <div className="flex justify-center py-10">
-          <Loader />
-        </div>
-      </Card>
+      <AsyncState state="loading" title="正在加载接口详情" description="文档、编辑器和调试面板正在准备中。" />
     );
   }
 
   if (!props.currentInterface) {
-    return <AppEmptyState type="noInterface" />;
+    return (
+      <AsyncState
+        state="empty"
+        title="没有找到对应接口"
+        description="当前接口可能已被删除或移动。你可以返回列表重新选择，或者直接新建接口。"
+        action={
+          <div className="flex flex-wrap justify-center gap-2">
+            <AsyncRetryAction onRetry={props.onNavigateAllInterfaces} label="返回接口列表" />
+            {props.canEdit ? (
+              <Button variant="light" onClick={props.onOpenAddInterface}>
+                新建接口
+              </Button>
+            ) : null}
+          </div>
+        }
+      />
+    );
   }
 
   const method = String(props.currentInterface.method || 'GET').toUpperCase();
@@ -229,89 +257,108 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
   ];
 
   return (
-    <InterfaceApiDetailTabs
-      projectId={props.projectId}
-      currentInterface={props.currentInterface}
-      tab={props.tab}
-      interfaceTabs={props.interfaceTabs}
-      onSwitchTab={props.onSwitchTab}
-      method={method}
-      fullPath={fullPath}
-      mockUrl={mockUrl}
-      projectIsMockOpen={props.projectIsMockOpen}
-      projectStrict={props.projectStrict}
-      customField={props.customField}
-      reqParamsRows={reqParamsRows}
-      reqHeadersRows={reqHeadersRows}
-      reqQueryRows={reqQueryRows}
-      reqBodyFormRows={reqBodyFormRows}
-      schemaRowsRequest={schemaRowsRequest}
-      schemaRowsResponse={schemaRowsResponse}
-      paramColumns={paramColumns}
-      bodyParamColumns={bodyParamColumns}
-      schemaColumns={schemaColumns}
-      methodClassName={props.methodClassName}
-      statusLabel={props.statusLabel}
-      formatUnixTime={props.formatUnixTime}
-      mockFlagText={props.mockFlagText}
-      onCopyText={props.onCopyText}
-      onCopySwaggerJson={props.onCopyInterfaceSwaggerJson}
-      onCopyOpenApiJson={props.onCopyInterfaceOpenApiJson}
-      copyingSpec={props.copyingSpec}
-      editConflictState={props.editConflictState}
-      form={props.form}
-      catRows={props.catRows}
-      runMethods={props.runMethods}
-      supportsRequestBody={props.supportsRequestBody}
-      reqRadioType={props.reqRadioType}
-      onReqRadioTypeChange={props.onReqRadioTypeChange}
-      basepath={props.basepath}
-      normalizePathInput={props.normalizePathInput}
-      projectTagOptions={props.projectTagOptions}
-      onOpenTagSetting={props.onOpenTagSetting}
-      sanitizeReqQuery={props.sanitizeReqQuery}
-      sanitizeReqHeaders={props.sanitizeReqHeaders}
-      sanitizeReqBodyForm={props.sanitizeReqBodyForm}
-      onOpenBulkImport={props.onOpenBulkImport}
-      httpRequestHeaders={props.httpRequestHeaders}
-      editBodyType={editBodyType}
-      projectIsJson5={props.projectIsJson5}
-      reqSchemaEditorMode={props.reqSchemaEditorMode}
-      onReqSchemaEditorModeChange={props.onReqSchemaEditorModeChange}
-      watchedReqBodyOther={props.watchedReqBodyOther}
-      editValues={props.editValues}
-      resEditorTab={props.resEditorTab}
-      onResponseEditorTabChange={props.onResponseEditorTabChange}
-      resSchemaEditorMode={props.resSchemaEditorMode}
-      onResSchemaEditorModeChange={props.onResSchemaEditorModeChange}
-      watchedResBody={props.watchedResBody}
-      resPreviewText={props.resPreviewText}
-      onSave={props.onSave}
-      saving={props.saving}
-      runMethod={props.runMethod}
-      runPath={props.runPath}
-      runQuery={props.runQuery}
-      runHeaders={props.runHeaders}
-      runBody={props.runBody}
-      runResponse={props.runResponse}
-      runLoading={props.runLoading}
-      onSetRunMethod={props.onSetRunMethod}
-      onSetRunPath={props.onSetRunPath}
-      onSetRunQuery={props.onSetRunQuery}
-      onSetRunHeaders={props.onSetRunHeaders}
-      onSetRunBody={props.onSetRunBody}
-      onRun={props.onRun}
-      onFormatRunQuery={props.onFormatRunQuery}
-      onFormatRunHeaders={props.onFormatRunHeaders}
-      onFormatRunBody={props.onFormatRunBody}
-      onCopyRunQuery={props.onCopyRunQuery}
-      onCopyRunHeaders={props.onCopyRunHeaders}
-      onCopyRunBody={props.onCopyRunBody}
-      onClearRunQuery={props.onClearRunQuery}
-      onClearRunHeaders={props.onClearRunHeaders}
-      onClearRunBody={props.onClearRunBody}
-      onCopyRunResponse={props.onCopyRunResponse}
-      onClearResponse={props.onClearResponse}
-    />
+    <Card padding="lg" radius="lg" withBorder>
+      <div className="interface-detail-panel">
+        {props.tab !== 'view' ? (
+          <InterfaceDetailHeader
+            currentInterface={props.currentInterface}
+            method={method}
+            fullPath={fullPath}
+            mockUrl={mockUrl}
+            methodClassName={props.methodClassName}
+            statusLabel={props.statusLabel}
+            formatUnixTime={props.formatUnixTime}
+            onCopyText={props.onCopyText}
+            onCopySwaggerJson={props.onCopyInterfaceSwaggerJson}
+            onCopyOpenApiJson={props.onCopyInterfaceOpenApiJson}
+            copyingSpec={props.copyingSpec}
+          />
+        ) : null}
+        <InterfaceApiDetailTabs
+          projectId={props.projectId}
+          currentInterface={props.currentInterface}
+          tab={props.tab}
+          interfaceTabs={props.interfaceTabs}
+          onSwitchTab={props.onSwitchTab}
+          method={method}
+          fullPath={fullPath}
+          mockUrl={mockUrl}
+          projectIsMockOpen={props.projectIsMockOpen}
+          projectStrict={props.projectStrict}
+          customField={props.customField}
+          reqParamsRows={reqParamsRows}
+          reqHeadersRows={reqHeadersRows}
+          reqQueryRows={reqQueryRows}
+          reqBodyFormRows={reqBodyFormRows}
+          schemaRowsRequest={schemaRowsRequest}
+          schemaRowsResponse={schemaRowsResponse}
+          paramColumns={paramColumns}
+          bodyParamColumns={bodyParamColumns}
+          schemaColumns={schemaColumns}
+          methodClassName={props.methodClassName}
+          statusLabel={props.statusLabel}
+          formatUnixTime={props.formatUnixTime}
+          mockFlagText={props.mockFlagText}
+          onCopyText={props.onCopyText}
+          onCopyInterfaceSwaggerJson={props.onCopyInterfaceSwaggerJson}
+          onCopyInterfaceOpenApiJson={props.onCopyInterfaceOpenApiJson}
+          copyingSpec={props.copyingSpec}
+          editConflictState={props.editConflictState}
+          form={props.form}
+          catRows={props.catRows}
+          runMethods={props.runMethods}
+          supportsRequestBody={props.supportsRequestBody}
+          reqRadioType={props.reqRadioType}
+          onReqRadioTypeChange={props.onReqRadioTypeChange}
+          basepath={props.basepath}
+          normalizePathInput={props.normalizePathInput}
+          projectTagOptions={props.projectTagOptions}
+          onOpenTagSetting={props.onOpenTagSetting}
+          sanitizeReqQuery={props.sanitizeReqQuery}
+          sanitizeReqHeaders={props.sanitizeReqHeaders}
+          sanitizeReqBodyForm={props.sanitizeReqBodyForm}
+          onOpenBulkImport={props.onOpenBulkImport}
+          httpRequestHeaders={props.httpRequestHeaders}
+          editBodyType={editBodyType}
+          projectIsJson5={props.projectIsJson5}
+          reqSchemaEditorMode={props.reqSchemaEditorMode}
+          onReqSchemaEditorModeChange={props.onReqSchemaEditorModeChange}
+          watchedReqBodyOther={props.watchedReqBodyOther}
+          editValues={props.editValues}
+          resEditorTab={props.resEditorTab}
+          onResponseEditorTabChange={props.onResponseEditorTabChange}
+          resSchemaEditorMode={props.resSchemaEditorMode}
+          onResSchemaEditorModeChange={props.onResSchemaEditorModeChange}
+          watchedResBody={props.watchedResBody}
+          resPreviewText={props.resPreviewText}
+          onSave={props.onSave}
+          saving={props.saving}
+          runMethod={props.runMethod}
+          runPath={props.runPath}
+          runQuery={props.runQuery}
+          runHeaders={props.runHeaders}
+          runBody={props.runBody}
+          runResponse={props.runResponse}
+          runLoading={props.runLoading}
+          onSetRunMethod={props.onSetRunMethod}
+          onSetRunPath={props.onSetRunPath}
+          onSetRunQuery={props.onSetRunQuery}
+          onSetRunHeaders={props.onSetRunHeaders}
+          onSetRunBody={props.onSetRunBody}
+          onRun={props.onRun}
+          onFormatRunQuery={props.onFormatRunQuery}
+          onFormatRunHeaders={props.onFormatRunHeaders}
+          onFormatRunBody={props.onFormatRunBody}
+          onCopyRunQuery={props.onCopyRunQuery}
+          onCopyRunHeaders={props.onCopyRunHeaders}
+          onCopyRunBody={props.onCopyRunBody}
+          onClearRunQuery={props.onClearRunQuery}
+          onClearRunHeaders={props.onClearRunHeaders}
+          onClearRunBody={props.onClearRunBody}
+          onCopyRunResponse={props.onCopyRunResponse}
+          onClearResponse={props.onClearResponse}
+        />
+      </div>
+    </Card>
   );
 }

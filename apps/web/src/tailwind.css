@@ -1,3 +1,4 @@
+@import "./design/tokens.css";
 @import "tailwindcss";
 @import "./tailwind/components-console.css";
 @import "./tailwind/components-interface.css";
@@ -5,15 +6,7 @@
 @import "./tailwind/components-pages.css";
 
 @theme {
-  --font-sans:
-    "Plus Jakarta Sans",
-    "Noto Sans SC",
-    "PingFang SC",
-    "Microsoft YaHei",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  --font-sans: var(--font-ui);
 }
 
 @layer base {
@@ -25,9 +18,9 @@
 
   body {
     margin: 0;
-    font-family: var(--font-sans);
-    color: #0f172a;
-    background: #020617;
+    font-family: var(--font-ui);
+    color: var(--text-primary);
+    background: var(--surface-canvas);
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -40,5 +33,28 @@
 
   * {
     box-sizing: border-box;
+  }
+
+  ::selection {
+    background: var(--color-brand-200);
+    color: var(--text-primary);
+  }
+
+  :where(
+    a,
+    button,
+    [role='button'],
+    input,
+    textarea,
+    select,
+    .mantine-ActionIcon-root,
+    .mantine-Button-root,
+    .mantine-UnstyledButton-root,
+    .mantine-Input-input,
+    .mantine-Select-input,
+    .mantine-Textarea-input
+  ):focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
   }
 }

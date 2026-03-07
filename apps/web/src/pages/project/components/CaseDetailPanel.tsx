@@ -12,10 +12,15 @@ import {
   TextInput,
   Textarea
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { IconCopy, IconTrash } from '@tabler/icons-react';
+import { CopyableTextPanel } from '../../../components/patterns/CopyableTextPanel';
+import { DebugEditorPanel } from '../../../components/patterns/DebugEditorPanel';
+import { DebugRequestToolbar } from '../../../components/patterns/DebugRequestToolbar';
+import { CollectionDetailHeader } from '../../../domains/interface/CollectionDetailHeader';
 import RcForm, { Field } from 'rc-field-form';
 import type { FormInstance } from 'rc-field-form';
-import { FilterBar, SectionCard } from '../../../components/layout';
+import { SectionCard } from '../../../components/layout';
 import { getHttpMethodBadgeClassName, normalizeHttpMethod } from '../../../utils/http-method';
 import type { AutoTestResultRow, CaseDetailData, CaseEditFormValues } from './collection-types';
 
@@ -63,34 +68,6 @@ type CaseDetailPanelProps = {
   onRunCaseRequest: () => void;
 };
 
-function SectionActions(props: {
-  onFormat?: () => void;
-  onCopy?: () => void;
-  onClear?: () => void;
-  disableCopy?: boolean;
-  disableClear?: boolean;
-}) {
-  return (
-    <div className="workspace-section-actions flex flex-wrap gap-2">
-      {props.onFormat ? (
-        <Button size="xs" variant="default" onClick={props.onFormat}>
-          格式化
-        </Button>
-      ) : null}
-      {props.onCopy ? (
-        <Button size="xs" variant="default" onClick={props.onCopy} disabled={props.disableCopy}>
-          复制
-        </Button>
-      ) : null}
-      {props.onClear ? (
-        <Button size="xs" variant="default" onClick={props.onClear} disabled={props.disableClear}>
-          清空
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
 export function CaseDetailPanel(props: CaseDetailPanelProps) {
   const interfaceId = Number(props.detail.interface_id || 0);
   const methodOptions = props.runMethods.map(item => ({
@@ -105,13 +82,32 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
         ? { color: 'yellow', label: '失败' }
         : { color: 'red', label: '异常' };
 
+  async function copyText(text: string, successText: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      notifications.show({ color: 'teal', message: successText });
+    } catch (_err) {
+      notifications.show({ color: 'red', message: '复制失败，请手动复制' });
+    }
+  }
+
   return (
     <Card withBorder radius="xl">
       <div className="flex flex-col gap-4">
-        <FilterBar
-          className="interface-table-toolbar case-detail-toolbar"
-          left={<Text fw={700}>{String(props.detail.casename || '测试用例')}</Text>}
-          right={
+        <CollectionDetailHeader
+          eyebrow="测试用例"
+          title={String(props.detail.casename || '测试用例')}
+          subtitle={String(props.detail.path || props.detail.title || '编辑请求参数、脚本和最近测试结果。')}
+          stats={[
+            { label: '方法', value: normalizeHttpMethod(String(props.detail.method || 'GET')), color: 'blue' },
+            {
+              label: '结果',
+              value: props.currentCaseReport ? currentResultBadge.label : '未测试',
+              color: props.currentCaseReport ? currentResultBadge.color : 'gray'
+            },
+            { label: '环境', value: String(props.detail.case_env || '默认'), color: 'gray' }
+          ]}
+          actions={
             <div className="flex flex-wrap gap-2">
               <Button variant="default" loading={props.autoTestRunning} onClick={props.onRunAutoTest}>
                 运行测试
@@ -297,30 +293,44 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
                   <span>HTTP Status: {String(props.currentCaseReport.status ?? '-')}</span>
                   <span>{String(props.currentCaseReport.statusText || '')}</span>
                 </div>
-                <div>
-                  <Text fw={600}>断言结果</Text>
-                  <Textarea
-                    minRows={4}
-                    readOnly
-                    value={
-                      Array.isArray(props.currentCaseReport.validRes) && props.currentCaseReport.validRes.length > 0
+                <CopyableTextPanel
+                  title="断言结果"
+                  value={
+                    Array.isArray(props.currentCaseReport.validRes) && props.currentCaseReport.validRes.length > 0
+                      ? props.currentCaseReport.validRes.map(item => String(item.message || '')).join('\n')
+                      : '无'
+                  }
+                  onCopy={() =>
+                    void copyText(
+                      Array.isArray(props.currentCaseReport?.validRes) && props.currentCaseReport.validRes.length > 0
                         ? props.currentCaseReport.validRes.map(item => String(item.message || '')).join('\n')
-                        : '无'
-                    }
-                  />
-                </div>
-                <div>
-                  <Text fw={600}>请求参数</Text>
-                  <Textarea minRows={4} readOnly value={props.stringifyPretty(props.currentCaseReport.params)} />
-                </div>
-                <div>
-                  <Text fw={600}>响应头</Text>
-                  <Textarea minRows={4} readOnly value={props.stringifyPretty(props.currentCaseReport.res_header)} />
-                </div>
-                <div>
-                  <Text fw={600}>响应体</Text>
-                  <Textarea minRows={8} readOnly value={props.stringifyPretty(props.currentCaseReport.res_body)} />
-                </div>
+                        : '无',
+                      '断言结果已复制'
+                    )
+                  }
+                  rows={4}
+                />
+                <CopyableTextPanel
+                  title="请求参数"
+                  value={props.stringifyPretty(props.currentCaseReport.params)}
+                  onCopy={() => void copyText(props.stringifyPretty(props.currentCaseReport?.params), '请求参数已复制')}
+                  rows={4}
+                  monospace
+                />
+                <CopyableTextPanel
+                  title="响应头"
+                  value={props.stringifyPretty(props.currentCaseReport.res_header)}
+                  onCopy={() => void copyText(props.stringifyPretty(props.currentCaseReport?.res_header), '响应头已复制')}
+                  rows={4}
+                  monospace
+                />
+                <CopyableTextPanel
+                  title="响应体"
+                  value={props.stringifyPretty(props.currentCaseReport.res_body)}
+                  onCopy={() => void copyText(props.stringifyPretty(props.currentCaseReport?.res_body), '响应体已复制')}
+                  rows={8}
+                  monospace
+                />
               </Stack>
             ) : (
               <Alert color="blue" title="暂无测试结果">
@@ -332,75 +342,59 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
 
         <SectionCard title="调试请求" className="case-detail-section">
           <div className="case-debug-panel flex flex-col gap-4">
-            <div className="case-debug-toolbar grid gap-3 md:grid-cols-[140px_minmax(0,1fr)_120px]">
-              <Select
-                value={props.caseRunMethod}
-                onChange={value => {
-                  if (value) props.onSetCaseRunMethod(value);
-                }}
-                className="case-debug-method-select"
-                data={methodOptions}
-              />
-              <TextInput
-                value={props.caseRunPath}
-                onChange={event => props.onSetCaseRunPath(event.currentTarget.value)}
-                className="case-debug-path-input"
-              />
-              <Button loading={props.caseRunLoading} onClick={props.onRunCaseRequest}>
-                发送请求
-              </Button>
-            </div>
+            <DebugRequestToolbar
+              methodValue={props.caseRunMethod}
+              methodOptions={methodOptions}
+              pathValue={props.caseRunPath}
+              onMethodChange={props.onSetCaseRunMethod}
+              onPathChange={props.onSetCaseRunPath}
+              onRun={props.onRunCaseRequest}
+              runLoading={props.caseRunLoading}
+              className="case-debug-toolbar grid gap-3 md:grid-cols-[140px_minmax(0,1fr)_120px]"
+              methodClassName="case-debug-method-select"
+              pathClassName="case-debug-path-input"
+            />
 
             <Alert color="blue" title="调试请求参数需使用 JSON 格式" />
 
-            <div className="flex flex-col gap-2">
-              <div className="workspace-section-head flex items-center justify-between gap-3">
-                <Text fw={600}>Query</Text>
-                <SectionActions
-                  onFormat={props.onFormatCaseRunQuery}
-                  onCopy={props.onCopyCaseRunQuery}
-                  onClear={props.onClearCaseRunQuery}
-                />
-              </div>
-              <Textarea minRows={4} value={props.caseRunQuery} onChange={event => props.onSetCaseRunQuery(event.currentTarget.value)} />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <div className="workspace-section-head flex items-center justify-between gap-3">
-                <Text fw={600}>Headers</Text>
-                <SectionActions
-                  onFormat={props.onFormatCaseRunHeaders}
-                  onCopy={props.onCopyCaseRunHeaders}
-                  onClear={props.onClearCaseRunHeaders}
-                />
-              </div>
-              <Textarea minRows={4} value={props.caseRunHeaders} onChange={event => props.onSetCaseRunHeaders(event.currentTarget.value)} />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <div className="workspace-section-head flex items-center justify-between gap-3">
-                <Text fw={600}>Body</Text>
-                <SectionActions
-                  onFormat={props.onFormatCaseRunBody}
-                  onCopy={props.onCopyCaseRunBody}
-                  onClear={props.onClearCaseRunBody}
-                />
-              </div>
-              <Textarea minRows={6} value={props.caseRunBody} onChange={event => props.onSetCaseRunBody(event.currentTarget.value)} />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <div className="workspace-section-head flex items-center justify-between gap-3">
-                <Text fw={600}>响应</Text>
-                <SectionActions
-                  onCopy={props.onCopyCaseRunResponse}
-                  onClear={props.onClearCaseRunResponse}
-                  disableCopy={!props.caseRunResponse}
-                  disableClear={!props.caseRunResponse}
-                />
-              </div>
-              <Textarea minRows={10} value={props.caseRunResponse} readOnly placeholder="点击“发送请求”后显示结果" />
-            </div>
+            <DebugEditorPanel
+              title="Query"
+              value={props.caseRunQuery}
+              onChange={props.onSetCaseRunQuery}
+              onFormat={props.onFormatCaseRunQuery}
+              onCopy={props.onCopyCaseRunQuery}
+              onClear={props.onClearCaseRunQuery}
+              minRows={4}
+            />
+            <DebugEditorPanel
+              title="Headers"
+              value={props.caseRunHeaders}
+              onChange={props.onSetCaseRunHeaders}
+              onFormat={props.onFormatCaseRunHeaders}
+              onCopy={props.onCopyCaseRunHeaders}
+              onClear={props.onClearCaseRunHeaders}
+              minRows={4}
+            />
+            <DebugEditorPanel
+              title="Body"
+              value={props.caseRunBody}
+              onChange={props.onSetCaseRunBody}
+              onFormat={props.onFormatCaseRunBody}
+              onCopy={props.onCopyCaseRunBody}
+              onClear={props.onClearCaseRunBody}
+              minRows={6}
+            />
+            <DebugEditorPanel
+              title="响应"
+              value={props.caseRunResponse}
+              readOnly
+              minRows={10}
+              placeholder="点击“发送请求”后显示结果"
+              onCopy={props.onCopyCaseRunResponse}
+              onClear={props.onClearCaseRunResponse}
+              disableCopy={!props.caseRunResponse}
+              disableClear={!props.caseRunResponse}
+            />
           </div>
         </SectionCard>
       </div>

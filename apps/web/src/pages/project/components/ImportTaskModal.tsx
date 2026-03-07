@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Modal, Progress, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { InfoGrid, InfoGridItem } from '../../../components/patterns/InfoGrid';
 import { useGetImportTaskQuery } from '../../../services/yapi-api';
 import { taskStatusLabel } from '../ProjectDataPage.utils';
 
@@ -8,6 +9,7 @@ export interface ImportTaskModalProps {
   projectId: number;
   token?: string;
   taskId: string;
+  opened: boolean;
   onClose: () => void;
 }
 
@@ -20,7 +22,7 @@ const messageApi = {
   }
 };
 
-export default function ImportTaskModal({ projectId, token, taskId, onClose }: ImportTaskModalProps) {
+export default function ImportTaskModal({ projectId, token, taskId, opened, onClose }: ImportTaskModalProps) {
   const [notifiedStatus, setNotifiedStatus] = useState('');
 
   useEffect(() => {
@@ -56,6 +58,7 @@ export default function ImportTaskModal({ projectId, token, taskId, onClose }: I
   const task = taskQuery.data?.data;
   const isTaskFinished = task?.status === 'success' || task?.status === 'failed';
   const progressColor = task?.status === 'failed' ? 'red' : task?.status === 'success' ? 'teal' : 'blue';
+  const progressValue = Math.max(0, Math.min(100, Math.round(Number(task?.progress || 0))));
 
   function downloadTaskReport() {
     if (!taskId) return;
@@ -69,14 +72,23 @@ export default function ImportTaskModal({ projectId, token, taskId, onClose }: I
   }
 
   return (
-    <Modal title="OpenAPI 导入任务" opened={Boolean(taskId)} onClose={onClose}>
-      <Stack>
-        <Text>任务 ID：{taskId || '-'}</Text>
-        <Text>状态：{taskStatusLabel(task?.status)}</Text>
-        <Progress value={Math.max(0, Math.min(100, Math.round(Number(task?.progress || 0))))} color={progressColor} />
-        <Text>阶段：{task?.stage || '-'}</Text>
-        <Text>消息：{task?.message || '-'}</Text>
-        <div className="flex justify-end gap-3">
+    <Modal title="OpenAPI 导入任务" opened={opened && Boolean(taskId)} onClose={onClose}>
+      <Stack className="project-data-task-modal">
+        <InfoGrid>
+          <InfoGridItem label="任务 ID" value={taskId || '-'} span />
+          <InfoGridItem label="状态" value={taskStatusLabel(task?.status)} />
+          <InfoGridItem label="阶段" value={task?.stage || '-'} />
+          <InfoGridItem label="进度" value={`${progressValue}%`} />
+          <InfoGridItem label="消息" value={task?.message || '-'} span />
+        </InfoGrid>
+        <div className="project-data-result-card">
+          <Text fw={600}>执行进度</Text>
+          <Progress value={progressValue} color={progressColor} />
+          <Text size="sm" c="dimmed" className="workspace-paragraph-compact">
+            任务进行中时会自动轮询刷新，你可以关闭弹窗后稍后回来继续查看。
+          </Text>
+        </div>
+        <div className="project-data-actions">
           <Button variant="default" onClick={downloadTaskReport} disabled={!taskId}>
             下载结果
           </Button>

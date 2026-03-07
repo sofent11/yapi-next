@@ -1,8 +1,9 @@
-import { Alert, Button, Stack, Text, TextInput } from '@mantine/core';
+import { Button, Stack, Text, TextInput } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useGetProjectQuery, useGetProjectTokenQuery, useUpdateProjectTokenMutation } from '../../../services/yapi-api';
-import { SectionCard } from '../../../components/layout';
+import { ProjectSettingsIntro } from '../../../domains/project/ProjectSettingsIntro';
+import { ProjectSettingsPanel } from '../../../domains/project/ProjectSettingsPanel';
 import type { ProjectSettingPageProps } from '../ProjectSettingPage.types';
 
 const message = {
@@ -69,13 +70,9 @@ export function SettingTokenTab(props: ProjectSettingPageProps) {
   }
 
   return (
-    <SectionCard className="m-panel project-settings-card">
+    <ProjectSettingsPanel>
       <Stack className="workspace-stack">
-        <Alert
-          color="blue"
-          className="project-settings-info-alert"
-          title="Token 用于 OpenAPI 与开放接口访问，请妥善保管并仅在可信环境中使用。"
-        />
+        <ProjectSettingsIntro title="Token 用于 OpenAPI 与开放接口访问，请妥善保管并仅在可信环境中使用。" />
         <Text fw={700}>工具标识</Text>
         <Text c="dimmed">每个项目都有唯一 token，可用于请求项目 openapi。</Text>
         <TextInput value={String(tokenQuery.data?.data || '')} readOnly />
@@ -116,6 +113,6 @@ export function SettingTokenTab(props: ProjectSettingPageProps) {
           <li>/api/spec/export</li>
         </ul>
       </Stack>
-    </SectionCard>
+    </ProjectSettingsPanel>
   );
 }

@@ -1,7 +1,7 @@
-import { Badge, Button, Card, Tabs, Text } from '@mantine/core';
 import type { FormInstance } from 'rc-field-form';
 import type { InterfaceDTO } from '../../../types/interface-dto';
 import type { InterfaceTabItem } from '../../../plugins';
+import { InterfaceModeTabs } from '../../../domains/interface/InterfaceModeTabs';
 import { InterfaceEditTab } from './InterfaceEditTab';
 import type { InterfaceEditConflictState } from './InterfaceEditTab';
 import { InterfaceRunTab } from './InterfaceRunTab';
@@ -33,8 +33,8 @@ type InterfaceApiDetailTabsProps = {
   formatUnixTime: (value: unknown) => string;
   mockFlagText: (mockOpen?: boolean, strict?: boolean) => string;
   onCopyText: (text: string, successText: string) => void;
-  onCopySwaggerJson: (interfaceId: number) => void;
-  onCopyOpenApiJson: (interfaceId: number) => void;
+  onCopyInterfaceSwaggerJson: (interfaceId: number) => void;
+  onCopyInterfaceOpenApiJson: (interfaceId: number) => void;
   copyingSpec: boolean;
   editConflictState: InterfaceEditConflictState;
   form: FormInstance;
@@ -93,12 +93,6 @@ type InterfaceApiDetailTabsProps = {
 };
 
 export function InterfaceApiDetailTabs(props: InterfaceApiDetailTabsProps) {
-  const updatedAt = props.formatUnixTime(props.currentInterface.up_time);
-  const statusText = props.statusLabel(String(props.currentInterface.status || 'undone'));
-  const tagCount = Array.isArray((props.currentInterface as unknown as Record<string, unknown>).tag)
-    ? ((props.currentInterface as unknown as Record<string, unknown>).tag as unknown[]).length
-    : 0;
-
   const items = Object.keys(props.interfaceTabs).flatMap(key => {
     const tabItem = props.interfaceTabs[key];
     if (key === 'view') {
@@ -128,6 +122,9 @@ export function InterfaceApiDetailTabs(props: InterfaceApiDetailTabsProps) {
             formatUnixTime={props.formatUnixTime}
             mockFlagText={props.mockFlagText}
             onCopyText={props.onCopyText}
+            onCopySwaggerJson={props.onCopyInterfaceSwaggerJson}
+            onCopyOpenApiJson={props.onCopyInterfaceOpenApiJson}
+            copyingSpec={props.copyingSpec}
           />
         )
       }];
@@ -223,66 +220,6 @@ export function InterfaceApiDetailTabs(props: InterfaceApiDetailTabsProps) {
   });
 
   return (
-    <Card padding="lg" radius="lg" withBorder>
-      <div className="interface-detail-summary">
-        <div className="interface-detail-summary-main">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={props.methodClassName(props.method)}>{props.method}</span>
-            <Text className="interface-detail-summary-path">
-              {props.fullPath}
-            </Text>
-            <Badge color={props.currentInterface.status === 'done' ? 'green' : 'gray'}>
-              {statusText}
-            </Badge>
-            <Badge variant="light">{`更新于 ${updatedAt}`}</Badge>
-            {tagCount > 0 ? (
-              <Badge color="blue" variant="light">
-                {`${tagCount} 个标签`}
-              </Badge>
-            ) : null}
-          </div>
-        </div>
-        <div className="interface-detail-summary-actions">
-          <Button size="compact-sm" variant="default" onClick={() => props.onCopyText(props.fullPath, '接口路径已复制')}>
-            复制路径
-          </Button>
-          <Button size="compact-sm" onClick={() => props.onCopyText(props.mockUrl, 'Mock 地址已复制')}>
-            复制 Mock URL
-          </Button>
-          <Button
-            size="compact-sm"
-            variant="default"
-            onClick={() => props.onCopySwaggerJson(Number(props.currentInterface._id || 0))}
-            loading={props.copyingSpec}
-            disabled={Number(props.currentInterface._id || 0) <= 0}
-          >
-            复制 Swagger JSON
-          </Button>
-          <Button
-            size="compact-sm"
-            variant="default"
-            onClick={() => props.onCopyOpenApiJson(Number(props.currentInterface._id || 0))}
-            loading={props.copyingSpec}
-            disabled={Number(props.currentInterface._id || 0) <= 0}
-          >
-            复制 OpenAPI 3.0
-          </Button>
-        </div>
-      </div>
-      <Tabs className="interface-detail-tabs" value={props.tab} onChange={key => key && props.onSwitchTab(key)}>
-        <Tabs.List>
-          {items.map(item => (
-            <Tabs.Tab key={item.key} value={item.key}>
-              {item.label}
-            </Tabs.Tab>
-          ))}
-        </Tabs.List>
-        {items.map(item => (
-          <Tabs.Panel key={item.key} value={item.key} pt="md">
-            {item.children}
-          </Tabs.Panel>
-        ))}
-      </Tabs>
-    </Card>
+    <InterfaceModeTabs value={props.tab} items={items} onChange={props.onSwitchTab} />
   );
 }

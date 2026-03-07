@@ -186,48 +186,117 @@
     @apply flex min-h-full flex-col gap-4;
   }
 
-  .interface-detail-summary {
-    @apply mb-4 flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-slate-50/70 px-5 py-5;
+  .interface-index-panel,
+  .interface-detail-panel {
+    @apply flex flex-col gap-5;
   }
 
-  .interface-detail-summary-main {
-    @apply min-w-0;
+  .interface-index-intro {
+    @apply rounded-[24px] border border-slate-200 bg-slate-50/70 px-5 py-5;
   }
 
-  .interface-detail-summary-main > div:first-child {
-    @apply flex flex-wrap items-center gap-2;
+  .interface-index-eyebrow {
+    @apply inline-flex rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-white;
   }
 
-  .interface-detail-summary-path {
-    @apply min-w-0 text-[28px] font-semibold tracking-tight text-slate-900;
+  .interface-index-title {
+    @apply mt-3 text-2xl font-semibold tracking-tight text-slate-900;
   }
 
-  .interface-detail-summary .mantine-Badge-root {
+  .interface-detail-header {
+    @apply flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-slate-50/70 px-5 py-5;
+  }
+
+  .interface-detail-header-copy {
+    @apply min-w-0 space-y-4;
+  }
+
+  .interface-detail-header-title {
+    @apply m-0 text-[28px] font-semibold tracking-tight text-slate-900;
+  }
+
+  .interface-detail-header-path {
+    @apply min-w-0 break-all text-base font-medium text-slate-700;
+  }
+
+  .interface-detail-header .mantine-Badge-root {
     @apply rounded-full;
   }
 
-  .interface-detail-summary-actions {
+  .interface-detail-header-actions {
     @apply flex flex-wrap gap-2;
   }
 
-  .interface-detail-summary-actions .mantine-Button-root {
+  .interface-detail-header-actions .mantine-Button-root {
     @apply rounded-full;
   }
 
-  .interface-detail-tabs [role='tablist'] {
+  .interface-mode-tabs [role='tablist'] {
     @apply border-b border-slate-200;
   }
 
-  .interface-detail-tabs [role='tab'] {
+  .interface-mode-tabs [role='tab'] {
     @apply rounded-none border-b-2 border-transparent px-4 py-3 text-base font-medium text-slate-500;
   }
 
-  .interface-detail-tabs [role='tab'][data-active='true'] {
+  .interface-mode-tabs [role='tab'][data-active='true'] {
     @apply border-blue-500 text-slate-900;
   }
 
   .interface-table-panel {
     @apply space-y-4;
+  }
+
+  .adaptive-data-view-mobile {
+    @apply space-y-3;
+  }
+
+  .adaptive-data-card {
+    @apply rounded-[18px] border border-slate-200 bg-white/96 p-4 shadow-sm;
+  }
+
+  .adaptive-data-card-active {
+    @apply border-blue-200 bg-blue-50/70;
+  }
+
+  .adaptive-data-card-pass {
+    @apply border-emerald-200 bg-emerald-50/60;
+  }
+
+  .adaptive-data-card-fail {
+    @apply border-amber-200 bg-amber-50/70;
+  }
+
+  .adaptive-data-card-error {
+    @apply border-rose-200 bg-rose-50/70;
+  }
+
+  .adaptive-data-card-head {
+    @apply flex items-start justify-between gap-3;
+  }
+
+  .adaptive-data-card-meta {
+    @apply mt-3 flex flex-wrap items-center gap-2;
+  }
+
+  .adaptive-data-card-grid {
+    @apply mt-3 grid gap-3 sm:grid-cols-2;
+  }
+
+  .adaptive-data-card-grid > div {
+    @apply flex min-w-0 flex-col gap-1 text-sm text-slate-700;
+  }
+
+  .adaptive-data-card-label {
+    @apply text-xs font-semibold uppercase tracking-[0.08em] text-slate-500;
+  }
+
+  .adaptive-data-card-actions {
+    @apply mt-4 flex flex-wrap gap-2;
+  }
+
+  .adaptive-data-empty {
+    @apply rounded-[18px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-center text-sm text-slate-500;
   }
 
   .interface-table-panel .mantine-Table-table {
@@ -267,15 +336,18 @@
     @apply ml-0 justify-start md:justify-end;
   }
 
-  .interface-table-toolbar-copy {
+  .interface-table-toolbar-copy,
+  .data-toolbar-copy {
     @apply min-w-0;
   }
 
-  .interface-table-toolbar-copy .mantine-Text-root:first-child {
+  .interface-table-toolbar-copy .mantine-Text-root:first-child,
+  .data-toolbar-copy .mantine-Text-root:first-child {
     @apply truncate text-base font-semibold text-slate-900;
   }
 
-  .interface-table-toolbar-copy .mantine-Text-root:last-child {
+  .interface-table-toolbar-copy .mantine-Text-root:last-child,
+  .data-toolbar-copy .mantine-Text-root:last-child {
     @apply text-sm text-slate-500;
   }
 
@@ -325,25 +397,8 @@
     @apply gap-5;
   }
 
-  .collection-overview-toolbar {
-    @apply items-start;
-  }
-
-  .collection-overview-toolbar > div:first-child,
-  .collection-overview-toolbar > div:last-child {
-    @apply w-full;
-  }
-
-  .collection-overview-toolbar > div:last-child {
-    @apply ml-0 justify-start md:justify-end;
-  }
-
-  .collection-overview-title {
-    @apply text-lg font-semibold tracking-tight text-slate-900;
-  }
-
-  .collection-overview-desc {
-    @apply mt-1 max-w-3xl text-sm leading-6 text-slate-500;
+  .collection-detail-header {
+    @apply mb-0;
   }
 
   .collection-overview-actions {

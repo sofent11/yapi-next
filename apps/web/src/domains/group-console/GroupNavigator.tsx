@@ -4,7 +4,7 @@ import { IconFolderOpen, IconFolderPlus, IconSearch, IconUser, IconX } from '@ta
 import type { GroupListItem } from '@yapi-next/shared-types';
 import { GuideActions } from '../../components/GuideActions';
 
-type ProjectConsoleSidebarProps = {
+export type GroupNavigatorProps = {
   guideVisible: boolean;
   guideStep: number;
   personalSpaceTip: ReactNode;
@@ -30,35 +30,38 @@ function EmptyGroups() {
   );
 }
 
-export function ProjectConsoleSidebar(props: ProjectConsoleSidebarProps) {
+export function GroupNavigator(props: GroupNavigatorProps) {
+  const currentGroupName =
+    props.selectedGroupType === 'private' ? '个人空间' : props.selectedGroupName || '项目分组';
+  const currentGroupDesc = props.selectedGroupDesc?.trim() || '当前分组尚未填写简介。';
+
   return (
     <div className="m-group">
       {props.guideVisible && props.guideStep === 0 ? <div className="guide-focus-mask" /> : null}
       <div className="group-bar">
         <div className="curr-group">
           <div className="curr-group-name">
-            <span className="name">
-              {props.selectedGroupType === 'private' ? '个人空间' : props.selectedGroupName || '项目分组'}
-            </span>
-            <Tooltip label="添加分组">
+            <span className="name">{currentGroupName}</span>
+            <Tooltip label="新建分组">
               <ActionIcon
                 variant="subtle"
                 className="editSet console-group-add-button"
                 onClick={props.onOpenCreateGroup}
-                aria-label="添加分组"
+                aria-label="新建分组"
               >
                 <IconFolderPlus className="btn" size={18} />
               </ActionIcon>
             </Tooltip>
           </div>
-          <div className="curr-group-desc">简介: {props.selectedGroupDesc || ''}</div>
+          <div className="curr-group-desc">{currentGroupDesc}</div>
         </div>
         <div className="group-operate">
           <div className="search">
             <TextInput
               value={props.groupKeyword}
               onChange={event => props.onGroupKeywordChange(event.currentTarget.value)}
-              placeholder="搜索分类"
+              placeholder="搜索分组…"
+              aria-label="搜索分组"
               leftSection={<IconSearch size={16} />}
               rightSection={
                 props.groupKeyword ? (

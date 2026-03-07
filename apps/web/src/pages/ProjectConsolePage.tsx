@@ -30,10 +30,11 @@ import type { GroupSettingForm } from './components/ProjectConsoleSettingTab';
 import { ActivityList } from './project/components/ActivityList';
 import { MemberList } from './project/components/MemberList';
 import { ProjectList } from './project/components/ProjectList';
-import { GroupOverview } from './project/components/GroupOverview';
 import { AppShell, PageHeader } from '../components/layout';
 import { useGuide } from '../context/GuideContext';
 import { safeApiRequest } from '../utils/safe-request';
+import { ConsoleShell } from '../app/shells/ConsoleShell';
+import { GroupNavigator } from '../domains/group-console/GroupNavigator';
 import type {
   ConsoleTabKey,
   CopyForm,
@@ -631,9 +632,10 @@ export function ProjectConsolePage() {
       />
 
       <div className="projectGround">
-        <div className="project-console-layout flex flex-col gap-4 lg:flex-row">
-          <aside className="project-console-sider w-full lg:w-[260px] lg:flex-none">
-            <GroupOverview
+        <ConsoleShell
+          className="project-console-layout"
+          aside={
+            <GroupNavigator
               guideVisible={guideVisible}
               guideStep={guide.step}
               personalSpaceTip={personalSpaceTip}
@@ -650,39 +652,37 @@ export function ProjectConsolePage() {
               onGuideNext={guide.next}
               onGuideExit={guide.finish}
             />
-          </aside>
-
-          <section className="project-console-content min-w-0 flex-1">
-            <Tabs
-              className="m-tab tabs-large project-console-tabs"
-              value={activeTab}
-              onChange={key => {
-                if (key && isConsoleTabKey(key)) {
-                  const nextParams = new URLSearchParams(searchParams.toString());
-                  if (key === 'projects') {
-                    nextParams.delete('tab');
-                  } else {
-                    nextParams.set('tab', key);
-                  }
-                  setSearchParams(nextParams, { replace: true });
+          }
+        >
+          <Tabs
+            className="m-tab tabs-large project-console-tabs"
+            value={activeTab}
+            onChange={key => {
+              if (key && isConsoleTabKey(key)) {
+                const nextParams = new URLSearchParams(searchParams.toString());
+                if (key === 'projects') {
+                  nextParams.delete('tab');
+                } else {
+                  nextParams.set('tab', key);
                 }
-              }}
-            >
-              <Tabs.List>
-                {tabItems.map(item => (
-                  <Tabs.Tab key={item.key} value={item.key}>
-                    {item.label}
-                  </Tabs.Tab>
-                ))}
-              </Tabs.List>
+                setSearchParams(nextParams, { replace: true });
+              }
+            }}
+          >
+            <Tabs.List>
               {tabItems.map(item => (
-                <Tabs.Panel key={item.key} value={item.key} pt="md">
-                  {item.children}
-                </Tabs.Panel>
+                <Tabs.Tab key={item.key} value={item.key}>
+                  {item.label}
+                </Tabs.Tab>
               ))}
-            </Tabs>
-          </section>
-        </div>
+            </Tabs.List>
+            {tabItems.map(item => (
+              <Tabs.Panel key={item.key} value={item.key} pt="md">
+                {item.children}
+              </Tabs.Panel>
+            ))}
+          </Tabs>
+        </ConsoleShell>
       </div>
 
       <ProjectConsoleModals

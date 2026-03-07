@@ -49,7 +49,7 @@ export type AutoTestResultRow = {
   status?: number | null;
   statusText?: string;
   validRes?: Array<{ message?: string }>;
-  params?: unknown;
+  params?: Record<string, unknown>;
   res_header?: unknown;
   res_body?: unknown;
   interface_id?: number;

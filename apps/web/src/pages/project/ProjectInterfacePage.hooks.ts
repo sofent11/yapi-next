@@ -369,7 +369,7 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
   });
 
   const callApi = useCallback(
-    <T extends { errcode?: number; errmsg?: string }>(request: Promise<T>, fallback: string) =>
+    <T,>(request: Promise<T>, fallback: string) =>
       safeApiRequest(request, { fallback, onError: msg => message.error(msg) }),
     []
   );

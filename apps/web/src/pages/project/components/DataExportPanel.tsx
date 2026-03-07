@@ -2,10 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Radio, Select, Stack, Switch, Text, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconHelpCircle } from '@tabler/icons-react';
+import { CopyableTextPanel } from '../../../components/patterns/CopyableTextPanel';
+import { InfoGrid, InfoGridItem } from '../../../components/patterns/InfoGrid';
+import { ProjectDataActions } from '../../../domains/project/ProjectDataActions';
+import { ProjectDataIntro } from '../../../domains/project/ProjectDataIntro';
+import { ProjectDataPanel } from '../../../domains/project/ProjectDataPanel';
 import { useExportSpecMutation } from '../../../services/yapi-api';
 import { webPlugins, type ExportDataItem } from '../../../plugins';
 import { safeApiRequest } from '../../../utils/safe-request';
-import { SectionCard } from '../../../components/layout';
 import type { ExportFormat, ExportStatus } from '../ProjectDataPage.types';
 
 export interface DataExportPanelProps {
@@ -132,10 +136,29 @@ export default function DataExportPanel({ projectId, token }: DataExportPanelPro
     }
   }, [wikiSupported, withWiki]);
 
+  async function handleCopyExport() {
+    if (!exportText.trim()) {
+      message.info('请先执行导出');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(exportText);
+      message.success('导出结果已复制');
+    } catch (_err) {
+      message.error('复制失败，请手动复制');
+    }
+  }
+
   return (
-    <SectionCard title="数据导出" className="project-data-card">
+    <ProjectDataPanel title="数据导出">
       <Stack>
-        <div className="dataImportTile">
+        <ProjectDataIntro title={exportMethodDesc || '支持 OpenAPI3/Swagger2 导出（插件导出可能在新页面打开）'}>
+          <Text size="sm" c="blue.8">
+            当前导出范围：{exportStatus === 'all' ? '全部接口' : '公开接口'}。{wikiSupported ? '支持附带 Wiki 内容。' : '当前格式不支持附带 Wiki。'}
+          </Text>
+        </ProjectDataIntro>
+
+        <div className="project-data-control-grid">
           <Select
             placeholder="请选择导出数据的方式"
             value={exportMethod}
@@ -145,9 +168,6 @@ export default function DataExportPanel({ projectId, token }: DataExportPanelPro
             className="workspace-control"
             data={mergedExportOptions}
           />
-        </div>
-
-        <div className="dataExport">
           <Radio.Group value={exportStatus} onChange={value => setExportStatus(value as ExportStatus)}>
             <div className="flex flex-wrap gap-4">
               <Radio value="all" label="全部接口" />
@@ -156,7 +176,7 @@ export default function DataExportPanel({ projectId, token }: DataExportPanelPro
           </Radio.Group>
         </div>
 
-        <div className="dataSync flex flex-wrap items-center justify-between gap-3">
+        <div className="project-data-switch-row">
           <span className="label inline-flex items-center gap-1">
             包含 Wiki
             <Tooltip label="开启后导出时附带项目 Wiki 内容">
@@ -168,20 +188,40 @@ export default function DataExportPanel({ projectId, token }: DataExportPanelPro
           <Switch checked={withWiki} onChange={event => setWithWiki(event.currentTarget.checked)} disabled={!wikiSupported} />
         </div>
 
-        <div className="export-content flex flex-col gap-3">
+        <div className="project-data-editor-stack">
           <Text c="dimmed" className="export-desc">
             {exportMethodDesc || '支持 OpenAPI3/Swagger2 导出（插件导出可能在新页面打开）'}
           </Text>
-          <div className="flex flex-wrap gap-3">
+          <ProjectDataActions className="justify-start">
             <Button onClick={() => void handleExportByMethod()} loading={exportState.isLoading}>
               导出
             </Button>
             <Button variant="default" onClick={downloadExportJson} disabled={!exportText}>
               下载 JSON
             </Button>
-          </div>
+          </ProjectDataActions>
         </div>
+
+        {exportText ? (
+          <div className="project-data-result-card">
+            <Text fw={600}>导出结果</Text>
+            <InfoGrid>
+              <InfoGridItem label="导出方式" value={mergedExportOptions.find(item => item.value === exportMethod)?.label || exportMethod} />
+              <InfoGridItem label="导出范围" value={exportStatus === 'all' ? '全部接口' : '公开接口'} />
+              <InfoGridItem label="附带 Wiki" value={withWiki ? '是' : '否'} />
+              <InfoGridItem label="结果状态" value="已生成，可复制或下载" />
+            </InfoGrid>
+            <CopyableTextPanel
+              title="导出 JSON"
+              value={exportText}
+              onCopy={() => void handleCopyExport()}
+              rows={10}
+              monospace
+              placeholder="导出结果会显示在这里"
+            />
+          </div>
+        ) : null}
       </Stack>
-    </SectionCard>
+    </ProjectDataPanel>
   );
 }

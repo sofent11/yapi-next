@@ -33,7 +33,9 @@ import {
   resolveProjectColorKey
 } from '../../../utils/project-visual';
 import { createNameValidator } from '../../../utils/name-validator';
-import { SectionCard } from '../../../components/layout';
+import { ProjectSettingsActions } from '../../../domains/project/ProjectSettingsActions';
+import { ProjectSettingsIntro } from '../../../domains/project/ProjectSettingsIntro';
+import { ProjectSettingsPanel } from '../../../domains/project/ProjectSettingsPanel';
 import type { ProjectForm, ProjectSettingPageProps } from '../ProjectSettingPage.types';
 
 const message = {
@@ -179,7 +181,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
   }
 
   return (
-    <SectionCard className="m-panel project-settings-card">
+    <ProjectSettingsPanel>
       <div className="project-settings-hero project-settings-hero-card">
         <Popover width={360} position="bottom" shadow="md">
           <Popover.Target>
@@ -239,11 +241,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
           <Text c="dimmed">点击图标可调整项目视觉样式，帮助团队更快识别项目。</Text>
         </div>
       </div>
-      <Alert
-        color="blue"
-        className="project-settings-info-alert"
-        title="这里维护项目基础信息、访问权限与行为开关，调整公开权限前请先确认协作范围。"
-      />
+      <ProjectSettingsIntro title="这里维护项目基础信息、访问权限与行为开关，调整公开权限前请先确认协作范围。" />
       <hr className="project-settings-divider" />
 
       <RcForm<ProjectForm> className="project-settings-form" form={projectForm} onFinish={handleSubmit}>
@@ -400,11 +398,11 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
         </Stack>
       </RcForm>
 
-      <div className="project-settings-actions">
+      <ProjectSettingsActions>
         <Button className="btn-save" size="md" onClick={() => void projectForm.submit()} loading={updateState.isLoading}>
           保存项目配置
         </Button>
-      </div>
+      </ProjectSettingsActions>
 
       {canDeleteProject ? (
         <div className="project-settings-danger-zone">
@@ -459,6 +457,6 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
           </div>
         </Stack>
       </Modal>
-    </SectionCard>
+    </ProjectSettingsPanel>
   );
 }

@@ -59,14 +59,6 @@
     @apply rounded-[24px] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
   }
 
-  .console-project-header {
-    @apply mb-4;
-  }
-
-  .console-project-header-main {
-    @apply flex flex-col gap-1;
-  }
-
   .console-project-stats {
     @apply mb-5 flex flex-wrap gap-2;
   }
@@ -77,10 +69,6 @@
 
   .console-project-grid {
     @apply min-h-[240px];
-  }
-
-  .console-project-loading {
-    @apply flex min-h-[180px] items-center justify-center;
   }
 
   .console-project-section-empty {
@@ -137,8 +125,7 @@
     @apply flex flex-col gap-5;
   }
 
-  .console-members-toolbar,
-  .console-activity-head {
+  .console-members-toolbar {
     @apply mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between;
   }
 

@@ -150,7 +150,7 @@ type BuildCollectionWorkspaceParams = {
   setAddCaseOpen: (open: boolean) => void;
   openCommonSettingModal: (col: InterfaceCollectionContentProps['colRows'][number] | undefined) => void;
   runAutoTestInPage: (focusCaseId?: string) => Promise<void>;
-  openAutoTest: (mode: 'html' | 'download', isDownload?: boolean) => void;
+  openAutoTest: (mode: 'json' | 'html', isDownload?: boolean) => void;
   setAutoTestModalOpen: (open: boolean) => void;
   setAutoTestDetailItem: Dispatch<SetStateAction<InterfaceCollectionContentProps['autoTestDetailItem']>>;
   caseDetailLoading: boolean;
@@ -229,6 +229,7 @@ export function buildProjectInterfaceApiWorkspace(
       if (!cat) return;
       params.openEditCatModal(cat as InterfaceTreeNode);
     },
+    onNavigateAllInterfaces: () => params.navigateWithGuard(`/project/${params.projectId}/interface/api`),
     onNavigateInterface: id => params.navigateWithGuard(`/project/${params.projectId}/interface/api/${id}`),
     onUpdateStatus: params.handleInterfaceListStatusChange,
     onUpdateCategory: params.handleInterfaceListCatChange,

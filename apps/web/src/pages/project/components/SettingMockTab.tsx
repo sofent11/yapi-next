@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
-import { Alert, Button, Stack, Switch, Text, Textarea } from '@mantine/core';
+import { Button, Stack, Switch, Text, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import RcForm, { Field, useForm as useRcForm } from 'rc-field-form';
 import { useGetProjectQuery, useUpdateProjectMutation } from '../../../services/yapi-api';
-import { SectionCard } from '../../../components/layout';
+import { ProjectSettingsActions } from '../../../domains/project/ProjectSettingsActions';
+import { ProjectSettingsIntro } from '../../../domains/project/ProjectSettingsIntro';
+import { ProjectSettingsPanel } from '../../../domains/project/ProjectSettingsPanel';
 import type { MockForm, ProjectSettingPageProps } from '../ProjectSettingPage.types';
 
 const message = {
@@ -49,14 +51,10 @@ export function SettingMockTab(props: ProjectSettingPageProps) {
   }
 
   return (
-    <SectionCard className="m-panel project-settings-card">
+    <ProjectSettingsPanel>
       <RcForm<MockForm> form={mockForm}>
         <Stack>
-          <Alert
-            color="blue"
-            className="project-settings-info-alert"
-            title="为整个项目统一定义 Mock 入口与全局脚本，适合需要稳定演示数据或联调兜底的场景。"
-          />
+          <ProjectSettingsIntro title="为整个项目统一定义 Mock 入口与全局脚本，适合需要稳定演示数据或联调兜底的场景。" />
           <Field<MockForm> name="is_mock_open" valuePropName="checked">
             {(control) => (
               <Switch
@@ -82,13 +80,13 @@ export function SettingMockTab(props: ProjectSettingPageProps) {
               </div>
             )}
           </Field>
-          <div className="project-settings-actions">
+          <ProjectSettingsActions>
             <Button className="btn-save" size="md" onClick={() => void handleSaveMock()} loading={updateState.isLoading}>
               保存 Mock 配置
             </Button>
-          </div>
+          </ProjectSettingsActions>
         </Stack>
       </RcForm>
-    </SectionCard>
+    </ProjectSettingsPanel>
   );
 }

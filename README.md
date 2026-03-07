@@ -49,6 +49,9 @@ npm start
 # 全量构建（shared-types + api + web）
 npm run next:build
 
+# 仅检查 Web TypeScript 类型
+npm run next:web:typecheck
+
 # 仅后端开发
 npm run next:api:dev
 
@@ -64,6 +67,9 @@ npm run next:start
 ```bash
 # 默认测试（当前等价于 next:build）
 npm test
+
+# Web 类型检查（next:web:build 已内置执行）
+npm run next:web:typecheck
 
 # Web 样式审计（检查 legacy 类是否已在 tailwind.css 中定义）
 npm run next:web:style:audit

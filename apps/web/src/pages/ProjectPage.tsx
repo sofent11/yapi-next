@@ -1,11 +1,11 @@
 import { Suspense, lazy, useMemo, type ComponentType } from 'react';
-import { Badge, Button, Group, Loader } from '@mantine/core';
-import { IconArrowLeft } from '@tabler/icons-react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useGetGroupQuery, useGetProjectQuery } from '../services/yapi-api';
 import { webPlugins, type SubNavItem } from '../plugins';
 import { AppShell } from '../components/layout/AppShell';
-import { PageHeader } from '../components/layout/PageHeader';
+import { AsyncRetryAction, AsyncState } from '../components/patterns/AsyncState';
+import { SecondaryNav } from '../components/patterns/SecondaryNav';
+import { ProjectHeader } from '../domains/project/ProjectHeader';
 
 const BUILT_IN_NAV_KEYS = new Set(['interface', 'activity', 'data', 'members', 'setting']);
 
@@ -140,70 +140,58 @@ export function ProjectPage() {
   }
 
   if (projectQuery.isLoading && !project) {
+    return <AsyncState state="loading" title="正在加载项目工作区" description="项目信息与工作区结构正在准备中。" />;
+  }
+
+  if (projectQuery.isError && !project) {
     return (
-      <div className="flex min-h-[240px] items-center justify-center">
-        <Loader />
-      </div>
+      <AsyncState
+        state="error"
+        title="项目信息加载失败"
+        description="当前无法读取项目元数据，请稍后重试。"
+        action={<AsyncRetryAction onRetry={() => void projectQuery.refetch()} />}
+      />
     );
   }
 
+  const navItems = Object.keys(subNavMap).map(key => {
+    const item = subNavMap[key];
+    const descriptions: Record<string, string> = {
+      interface: '管理接口目录、查看详情并进入编辑或调试流程。',
+      activity: '查看项目级变更日志、操作记录和协作动态。',
+      data: '执行 OpenAPI/Swagger 导入导出并跟踪任务状态。',
+      members: '维护项目成员、角色和通知配置。',
+      setting: '配置项目基础信息、环境变量、Token 和全局 Mock。'
+    };
+    return {
+      key,
+      label: item.name,
+      to: item.path,
+      active: key === activeKey,
+      description: descriptions[key] || '进入当前项目的扩展能力页。'
+    };
+  });
+
   return (
     <AppShell className="project-page-root">
-      <PageHeader
-        eyebrow="项目工作区"
-        title={String(project?.name || `项目 #${projectId}`)}
-        subtitle={
-          project?.basepath
-            ? `BasePath: ${project.basepath}`
-            : '接口、测试、数据与成员配置统一管理'
-        }
-        meta={
-          <Group gap={8}>
-            <Badge variant="light" color="blue" radius="xl">
-              {group?.group_name || '未分组项目'}
-            </Badge>
-            {project?.role ? <Badge variant="light" color="gray" radius="xl">{`角色：${project.role}`}</Badge> : null}
-            <Badge variant="light" color={hideMembers ? 'gray' : 'teal'} radius="xl">
-              {hideMembers ? '私有成员模式' : '团队协作模式'}
-            </Badge>
-          </Group>
-        }
-        actions={
-          projectGroupId > 0 ? (
-            <Button
-              leftSection={<IconArrowLeft size={16} />}
-              variant="light"
-              onClick={() => navigate(`/group/${projectGroupId}`)}
-            >
-              返回分组
-            </Button>
-          ) : null
-        }
+      <ProjectHeader
+        projectId={projectId}
+        projectName={project?.name}
+        basepath={project?.basepath}
+        projectRole={project?.role}
+        groupName={group?.group_name}
+        isPrivateMode={hideMembers}
+        groupId={projectGroupId}
+        onBackToGroup={() => navigate(`/group/${projectGroupId}`)}
       />
-      <div className="mb-5 flex flex-wrap gap-2 rounded-[24px] border border-slate-200 bg-white/95 p-3 shadow-sm">
-        {Object.keys(subNavMap).map(key => {
-          const item = subNavMap[key];
-          const active = key === activeKey;
-          return (
-            <Button
-              key={key}
-              component={Link}
-              to={item.path}
-              variant={active ? 'filled' : 'light'}
-              color={active ? 'blue' : 'gray'}
-              radius="xl"
-            >
-              {item.name}
-            </Button>
-          );
-        })}
-      </div>
+      <SecondaryNav
+        items={navItems}
+        summary={project?.name ? `${project.name} 的核心工作区导航` : '切换当前项目的工作区模块'}
+      />
 
       <Suspense
         fallback={
-          <div className="flex min-h-[240px] items-center justify-center">
-            <Loader />
-          </div>
+          <AsyncState state="loading" title="正在加载模块内容" description="当前模块内容正在准备中。" />
         }
       >
         <Routes>

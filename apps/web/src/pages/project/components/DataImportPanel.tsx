@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Select, Stack, Switch, Text, Textarea, TextInput, Tooltip } from '@mantine/core';
+import { Button, Select, Stack, Switch, Text, Textarea, TextInput, Tooltip } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { IconHelpCircle, IconUpload } from '@tabler/icons-react';
 import type { SpecImportResult } from '@yapi-next/shared-types';
+import { InfoGrid, InfoGridItem } from '../../../components/patterns/InfoGrid';
+import { ProjectDataActions } from '../../../domains/project/ProjectDataActions';
+import { ProjectDataIntro } from '../../../domains/project/ProjectDataIntro';
+import { ProjectDataPanel } from '../../../domains/project/ProjectDataPanel';
 import { useGetCatMenuQuery, useImportSpecMutation, useInterUploadMutation } from '../../../services/yapi-api';
 import { webPlugins, type ImportDataItem } from '../../../plugins';
 import { safeApiRequest } from '../../../utils/safe-request';
-import { SectionCard } from '../../../components/layout';
 import type { ImportInputOverrides, SpecFormat, SpecSource, SyncMode } from '../ProjectDataPage.types';
 import {
   asObject,
@@ -58,6 +61,10 @@ export interface DataImportPanelProps {
   projectId: number;
   token?: string;
   onTaskStart: (taskId: string) => void;
+}
+
+function normalizeCompatSyncMode(syncMode: SyncMode): 'normal' | 'good' | 'merge' {
+  return syncMode === 'sync' ? 'merge' : syncMode;
 }
 
 export default function DataImportPanel({ projectId, token, onTaskStart }: DataImportPanelProps) {
@@ -201,7 +208,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
         token,
         source,
         format,
-        merge: syncMode,
+        merge: normalizeCompatSyncMode(syncMode),
         interfaceData: source === 'json' ? nextJsonText : undefined,
         url: source === 'url' ? nextUrlText : undefined
       }).unwrap(),
@@ -302,7 +309,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
         token,
         source: 'json',
         format: importFormat,
-        merge: syncMode,
+        merge: normalizeCompatSyncMode(syncMode),
         interfaceData
       }).unwrap(),
       `${importer.name} 导入失败`
@@ -334,6 +341,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
     if (importMethod === 'compat') return '通过旧版兼容接口导入';
     return importDataModules[importMethod]?.desc || '';
   }, [importDataModules, importMethod]);
+  const selectedCategoryName = catNameMap.get(defaultCatId) || '未选择默认分类';
 
   const previewSupported = importMethod === 'swagger';
   const supportsUrlImport = importMethod === 'swagger';
@@ -349,9 +357,8 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
   }, [importMethod, source]);
 
   return (
-    <SectionCard
+    <ProjectDataPanel
       title="数据导入"
-      className="project-data-card"
       extra={
         <a
           target="_blank"
@@ -363,7 +370,13 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
       }
     >
       <Stack>
-        <div className="dataImportTile">
+        <ProjectDataIntro title={importMethodDesc || '支持 Swagger/OpenAPI 文档导入'}>
+          <Text size="sm" c="blue.8">
+            默认分类：{selectedCategoryName}。当前来源：{source === 'url' ? 'URL 链接' : '文本或文件'}。
+          </Text>
+        </ProjectDataIntro>
+
+        <div className="project-data-control-grid">
           <Select
             placeholder="请选择导入数据的方式"
             value={importMethod}
@@ -373,9 +386,6 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
             className="workspace-control"
             data={mergedImportOptions}
           />
-        </div>
-
-        <div className="catidSelect">
           <Select
             className="workspace-control"
             placeholder="请选择数据导入的默认分类"
@@ -389,7 +399,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
           />
         </div>
 
-        <div className="dataSync flex flex-wrap items-center justify-between gap-3">
+        <div className="project-data-switch-row">
           <span className="label inline-flex items-center gap-1">
             数据同步
             <Tooltip
@@ -432,7 +442,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
         </div>
 
         {supportsUrlImport ? (
-          <div className="dataSync flex flex-wrap items-center justify-between gap-3">
+          <div className="project-data-switch-row">
             <span className="label inline-flex items-center gap-1">
               开启 URL 导入
               <Tooltip label="使用 swagger/openapi 链接地址导入">
@@ -446,23 +456,23 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
         ) : null}
 
         {source === 'url' ? (
-          <div className="import-content url-import-content flex flex-col gap-3">
+          <div className="project-data-editor-stack">
             <TextInput
               placeholder="http://demo.swagger.io/v2/swagger.json"
               value={urlText}
               onChange={event => setUrlText(event.currentTarget.value)}
             />
-            <div className="url-btn flex flex-wrap gap-3">
+            <ProjectDataActions className="justify-start">
               <Button onClick={() => void handlePreview()} disabled={!previewSupported} loading={importState.isLoading}>
                 预检
               </Button>
               <Button onClick={() => void handleImportByMethod()} loading={importState.isLoading || uploadState.isLoading}>
                 执行导入
               </Button>
-            </div>
+            </ProjectDataActions>
           </div>
         ) : (
-          <div className="import-content flex flex-col gap-3">
+          <div className="project-data-editor-stack">
             <input
               ref={fileInputRef}
               type="file"
@@ -482,7 +492,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
             />
             <button
               type="button"
-              className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center transition hover:border-slate-400 hover:bg-slate-100"
+              className="project-data-upload-trigger"
               onClick={() => fileInputRef.current?.click()}
             >
               <span className="mb-2 inline-flex">
@@ -497,14 +507,14 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
               onChange={event => setJsonText(event.currentTarget.value)}
               placeholder='粘贴 OpenAPI/Swagger JSON，例如：{"openapi":"3.0.0","paths":{}}'
             />
-            <div className="flex flex-wrap gap-3">
+            <ProjectDataActions className="justify-start">
               <Button onClick={() => void handlePreview()} disabled={!previewSupported} loading={importState.isLoading}>
                 预检
               </Button>
               <Button onClick={() => void handleImportByMethod()} loading={importState.isLoading || uploadState.isLoading}>
                 执行导入
               </Button>
-            </div>
+            </ProjectDataActions>
             {importMethodDesc ? (
               <Text c="dimmed" className="workspace-paragraph-compact">
                 {importMethodDesc}
@@ -519,19 +529,17 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
         )}
 
         {preview ? (
-          <Alert
-            color="blue"
-            title={`预检结果：${preview.detectedFormat || 'unknown'}`}
-          >
-            <div className="flex flex-col gap-1">
-              <span>分类数量：{preview.categories || 0}</span>
-              <span>接口数量：{preview.interfaces || 0}</span>
-              <span>BasePath：{preview.basePath || '/'}</span>
-              <span>同步模式：{syncModeLabel(syncMode)}</span>
-            </div>
-          </Alert>
+          <div className="project-data-result-card">
+            <Text fw={600}>{`预检结果：${preview.detectedFormat || 'unknown'}`}</Text>
+            <InfoGrid>
+              <InfoGridItem label="分类数量" value={preview.categories || 0} />
+              <InfoGridItem label="接口数量" value={preview.interfaces || 0} />
+              <InfoGridItem label="BasePath" value={preview.basePath || '/'} />
+              <InfoGridItem label="同步模式" value={syncModeLabel(syncMode)} />
+            </InfoGrid>
+          </div>
         ) : null}
       </Stack>
-    </SectionCard>
+    </ProjectDataPanel>
   );
 }

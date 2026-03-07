@@ -1,7 +1,8 @@
-import { Button, Group, Switch, Text, TextInput, Textarea, Tooltip } from '@mantine/core';
+import { Alert, Button, Group, Switch, Text, TextInput, Textarea, Tooltip } from '@mantine/core';
 import { IconChevronDown, IconChevronUp, IconExclamationCircle, IconHelpCircle } from '@tabler/icons-react';
 import RcForm, { Field } from 'rc-field-form';
 import type { FormInstance } from 'rc-field-form';
+import { SectionCard } from '../../components/layout';
 
 export type GroupSettingForm = {
   group_name: string;
@@ -30,9 +31,14 @@ type ProjectConsoleSettingTabProps = {
 
 export function ProjectConsoleSettingTab(props: ProjectConsoleSettingTabProps) {
   return (
-    <div className="m-panel group-setting-pane">
+    <SectionCard className="m-panel group-setting-pane">
       <RcForm<GroupSettingForm> form={props.form} onFinish={props.onSave}>
         <div className="space-y-4">
+          <Alert
+            color="blue"
+            className="project-settings-info-alert"
+            title="在这里维护分组名称、简介和自定义字段规则，保存后会同步影响该分组下的协作体验。"
+          />
           <Field<GroupSettingForm> name="group_name" rules={[{ required: true, message: '请输入分组名称' }]}>
             {(control, meta) => (
               <div>
@@ -136,6 +142,6 @@ export function ProjectConsoleSettingTab(props: ProjectConsoleSettingTabProps) {
           ) : null}
         </div>
       ) : null}
-    </div>
+    </SectionCard>
   );
 }

@@ -8,8 +8,9 @@ import { AppNotify } from './components/AppNotify';
 import { GuideProvider } from './context/GuideContext';
 import { webPlugins } from './plugins';
 import type { AppRouteContract } from './types/route-contract';
+import { WorkspaceShell } from './app/shells/WorkspaceShell';
 
-const pageShellClassName = 'min-h-screen bg-slate-50 text-slate-900 flex flex-col';
+const publicShellClassName = 'min-h-screen bg-[var(--surface-canvas)] text-[var(--text-primary)]';
 const contentClassName = 'flex-1 px-6 py-6';
 const skipLinkClassName =
   'sr-only focus:not-sr-only focus:absolute focus:left-6 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow';
@@ -107,10 +108,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
   );
 }
 
-function AppShell({ children }: { children: React.ReactNode }) {
-  return <div className={pageShellClassName}>{children}</div>;
-}
-
 function renderBrowserHint(show: boolean) {
   if (!show) return null;
   return (
@@ -202,20 +199,20 @@ export function App() {
 
   if (!isLoggedIn) {
     return (
-      <AppShell>
+      <div className={publicShellClassName}>
         <SkipLink />
         {renderBrowserHint(browserHint)}
         <Suspense fallback={<LoadingView />}>
-          <AppContent>
+          <main id="app-main-content" role="main" tabIndex={-1}>
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
               {renderRoutes(appRoutes, 'public')}
               <Route path="*" element={<Navigate to={redirectToLogin} replace />} />
             </Routes>
-          </AppContent>
+          </main>
         </Suspense>
-      </AppShell>
+      </div>
     );
   }
 
@@ -224,29 +221,32 @@ export function App() {
       uid={Number(user?._id || user?.uid || 0)}
       study={Boolean((user as unknown as Record<string, unknown> | null)?.study)}
     >
-      <AppShell>
+      <>
         <SkipLink />
-        <AppHeader
-          uid={Number(user?._id || user?.uid || 0)}
-          username={user?.username}
-          email={user?.email}
-          role={user?.role}
-          study={Boolean((user as unknown as Record<string, unknown> | null)?.study)}
-        />
-        <AppNotify enabled={String(user?.role || '') === 'admin'} />
-        {renderBrowserHint(browserHint)}
-        <Suspense fallback={<LoadingView />}>
-          <AppContent>
+        <WorkspaceShell
+          header={
+            <AppHeader
+              uid={Number(user?._id || user?.uid || 0)}
+              username={user?.username}
+              email={user?.email}
+              role={user?.role}
+              study={Boolean((user as unknown as Record<string, unknown> | null)?.study)}
+            />
+          }
+          notices={<AppNotify enabled={String(user?.role || '') === 'admin'} />}
+          banner={renderBrowserHint(browserHint)}
+          footer={<AppFooter />}
+        >
+          <Suspense fallback={<LoadingView />}>
             <Routes>
               <Route path="/" element={<Navigate to="/group" replace />} />
               <Route path="/login" element={<Navigate to="/group" replace />} />
               {renderRoutes(appRoutes, 'all')}
               <Route path="*" element={<Navigate to="/group" replace />} />
             </Routes>
-          </AppContent>
-        </Suspense>
-        <AppFooter />
-      </AppShell>
+          </Suspense>
+        </WorkspaceShell>
+      </>
     </GuideProvider>
   );
 }

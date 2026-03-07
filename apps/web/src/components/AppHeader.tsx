@@ -264,7 +264,7 @@ export function AppHeader(props: AppHeaderProps) {
           }}
         />
         <Popover
-          open={guideVisible && guide.step === 1}
+          opened={guideVisible && guide.step === 1}
           position="bottom-end"
           withArrow
           shadow="md"
@@ -293,7 +293,7 @@ export function AppHeader(props: AppHeaderProps) {
             </div>
           </Popover.Dropdown>
         </Popover>
-        <Popover open={guideVisible && guide.step === 2} position="bottom-end" withArrow shadow="md">
+        <Popover opened={guideVisible && guide.step === 2} position="bottom-end" withArrow shadow="md">
           <Popover.Target>
             <div>
               <Tooltip label="新建项目">
@@ -318,7 +318,7 @@ export function AppHeader(props: AppHeaderProps) {
             </div>
           </Popover.Dropdown>
         </Popover>
-        <Popover open={guideVisible && guide.step === 3} position="bottom-end" withArrow shadow="md">
+        <Popover opened={guideVisible && guide.step === 3} position="bottom-end" withArrow shadow="md">
           <Popover.Target>
             <div>
               <Tooltip label="使用文档">
@@ -373,12 +373,7 @@ export function AppHeader(props: AppHeaderProps) {
                   </Menu.Item>
                 </Fragment>
               ) : (
-                <Menu.Item
-                  key={item.key}
-                  component={item.to ? Link : 'button'}
-                  to={item.to}
-                  leftSection={item.icon}
-                >
+                <Menu.Item key={item.key} component={Link} to={item.to || '/'} leftSection={item.icon}>
                   {item.label}
                 </Menu.Item>
               )

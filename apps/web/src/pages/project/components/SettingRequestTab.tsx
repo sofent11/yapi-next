@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
-import { Alert, Button, Stack, Text, Textarea } from '@mantine/core';
+import { Button, Stack, Text, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import RcForm, { Field, useForm as useRcForm } from 'rc-field-form';
 import { useGetProjectQuery, useUpdateProjectMutation } from '../../../services/yapi-api';
-import { SectionCard } from '../../../components/layout';
+import { ProjectSettingsActions } from '../../../domains/project/ProjectSettingsActions';
+import { ProjectSettingsIntro } from '../../../domains/project/ProjectSettingsIntro';
+import { ProjectSettingsPanel } from '../../../domains/project/ProjectSettingsPanel';
 import type { RequestForm, ProjectSettingPageProps } from '../ProjectSettingPage.types';
 
 const message = {
@@ -49,14 +51,10 @@ export function SettingRequestTab(props: ProjectSettingPageProps) {
   }
 
   return (
-    <SectionCard className="m-panel project-settings-card">
+    <ProjectSettingsPanel>
       <RcForm<RequestForm> form={requestForm}>
         <Stack>
-          <Alert
-            color="blue"
-            className="project-settings-info-alert"
-            title="在请求发送前后执行全局脚本，适合统一注入 Header、鉴权或响应后处理。"
-          />
+          <ProjectSettingsIntro title="在请求发送前后执行全局脚本，适合统一注入 Header、鉴权或响应后处理。" />
           <Field<RequestForm> name="pre_script">
             {(control) => (
               <div>
@@ -89,13 +87,13 @@ export function SettingRequestTab(props: ProjectSettingPageProps) {
               </div>
             )}
           </Field>
-          <div className="project-settings-actions">
+          <ProjectSettingsActions>
             <Button className="btn-save" size="md" onClick={() => void handleSaveRequest()} loading={updateState.isLoading}>
               保存请求配置
             </Button>
-          </div>
+          </ProjectSettingsActions>
         </Stack>
       </RcForm>
-    </SectionCard>
+    </ProjectSettingsPanel>
   );
 }

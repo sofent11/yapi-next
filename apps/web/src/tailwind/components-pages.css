@@ -54,6 +54,94 @@
     @apply h-9 rounded-[12px] px-4 text-xs font-semibold;
   }
 
+  .project-data-intro {
+    @apply rounded-[18px] border border-blue-100 bg-blue-50/80;
+  }
+
+  .project-data-intro .mantine-Alert-title {
+    @apply text-sm font-semibold text-blue-800;
+  }
+
+  .project-data-flow-grid {
+    @apply grid gap-4 md:grid-cols-3;
+  }
+
+  .project-data-flow-card {
+    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 px-4 py-4;
+  }
+
+  .project-data-task-banner {
+    @apply mt-4 space-y-3 rounded-[18px] border border-blue-100 bg-blue-50/80 px-4 py-3;
+  }
+
+  .project-data-task-grid {
+    @apply md:grid-cols-2;
+  }
+
+  .project-data-control-grid {
+    @apply grid gap-3 md:grid-cols-2;
+  }
+
+  .project-data-switch-row {
+    @apply flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-slate-200 bg-slate-50/70 px-4 py-3;
+  }
+
+  .project-data-editor-stack {
+    @apply flex flex-col gap-3;
+  }
+
+  .project-data-upload-trigger {
+    @apply rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center transition;
+  }
+
+  .project-data-upload-trigger:hover {
+    @apply border-slate-400 bg-slate-100;
+  }
+
+  .project-data-result-card {
+    @apply flex flex-col gap-3 rounded-[18px] border border-slate-200 bg-slate-50/70 p-4;
+  }
+
+  .project-data-actions {
+    @apply flex flex-wrap gap-3;
+  }
+
+  .project-data-actions .mantine-Button-root {
+    @apply h-10 rounded-[12px] px-4 text-sm font-semibold;
+  }
+
+  .project-data-task-modal {
+    @apply gap-4;
+  }
+
+  .data-pagination {
+    @apply flex items-center justify-between gap-3;
+  }
+
+  .data-pagination-actions {
+    @apply flex gap-2;
+  }
+
+  .app-info-grid {
+    @apply grid gap-4 md:grid-cols-2;
+  }
+
+  .app-info-item {
+    @apply min-w-0;
+  }
+
+  .app-info-item-span {
+    @apply md:col-span-2;
+  }
+
+  .app-info-item-label {
+    @apply text-sm text-slate-500;
+  }
+
+  .app-info-item-value {
+    @apply mt-1 text-sm text-slate-900;
+  }
+
   .workspace-row-active td {
     @apply bg-blue-50/80;
   }
@@ -77,12 +165,14 @@
   }
 
   .interface-run-method-select .mantine-Select-input,
-  .case-debug-method-select .mantine-Select-input {
+  .case-debug-method-select .mantine-Select-input,
+  .debug-request-method-select .mantine-Select-input {
     @apply h-11 rounded-[14px] border-slate-300 bg-white text-sm;
   }
 
   .interface-run-path-input .mantine-Input-input,
-  .case-debug-path-input .mantine-Input-input {
+  .case-debug-path-input .mantine-Input-input,
+  .debug-request-path-input .mantine-Input-input {
     @apply h-11 rounded-[14px] border-slate-300 bg-white text-sm;
   }
 
@@ -116,6 +206,38 @@
 
   .workspace-section-actions .mantine-Button-root {
     @apply h-8 rounded-[10px] px-3 text-xs font-semibold;
+  }
+
+  .debug-request-toolbar {
+    @apply items-start;
+  }
+
+  .debug-editor-panel {
+    @apply flex flex-col gap-3;
+  }
+
+  .debug-editor-panel-head {
+    @apply flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-slate-200 bg-white px-3 py-3;
+  }
+
+  .debug-editor-panel-actions {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .debug-editor-panel-actions .mantine-Button-root {
+    @apply h-8 rounded-[10px] px-3 text-xs font-semibold;
+  }
+
+  .copyable-text-panel {
+    @apply flex flex-col gap-2;
+  }
+
+  .copyable-text-panel-head {
+    @apply flex items-center justify-between gap-3 rounded-[14px] border border-slate-200 bg-white px-3 py-3;
+  }
+
+  .copyable-text-panel-mono .mantine-Textarea-input {
+    @apply font-mono text-[13px] leading-6;
   }
 
   .case-detail-toolbar {
@@ -173,6 +295,14 @@
 
   .interface-view-code-row {
     @apply rounded-[14px] border border-slate-200 bg-slate-50/70 px-3 py-3;
+  }
+
+  .interface-view-actions {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .interface-view-actions .mantine-Button-root {
+    @apply rounded-full;
   }
 
   .interface-view-code {
@@ -243,12 +373,28 @@
     @apply text-sm font-semibold text-blue-800;
   }
 
+  .project-settings-toolbar {
+    @apply flex flex-wrap gap-3;
+  }
+
+  .project-settings-empty-alert {
+    @apply rounded-[18px] border border-blue-100 bg-blue-50/80;
+  }
+
   .project-settings-actions {
     @apply flex justify-end pt-2;
   }
 
   .project-settings-actions .mantine-Button-root {
     @apply h-11 rounded-[14px] px-5 text-sm font-semibold;
+  }
+
+  .project-settings-editor-card {
+    @apply rounded-[20px] border border-slate-200 bg-slate-50/70 p-4;
+  }
+
+  .project-settings-editor-card-head {
+    @apply mb-4 flex items-center justify-between gap-3;
   }
 
   .project-settings-radio-desc {

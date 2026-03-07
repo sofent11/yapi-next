@@ -3,7 +3,8 @@ import { Tabs } from '@mantine/core';
 import { useSearchParams } from 'react-router-dom';
 import { useGetProjectQuery } from '../../services/yapi-api';
 import { webPlugins, type SubSettingNavItem } from '../../plugins';
-import { PageHeader, SectionCard } from '../../components/layout';
+import { PageHeader } from '../../components/layout';
+import { ProjectSettingsPanel } from '../../domains/project/ProjectSettingsPanel';
 
 import type { ProjectSettingPageProps } from './ProjectSettingPage.types';
 import { SettingGeneralTab } from './components/SettingGeneralTab';
@@ -64,9 +65,9 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
         key: `plugin_${key}`,
         label: tab.name,
         children: (
-          <SectionCard className="project-settings-card">
+          <ProjectSettingsPanel>
             <C projectId={props.projectId} />
-          </SectionCard>
+          </ProjectSettingsPanel>
         )
       };
     })

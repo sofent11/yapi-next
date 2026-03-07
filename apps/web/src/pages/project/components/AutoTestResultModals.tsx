@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Button, Modal, Table, Text, Textarea } from '@mantine/core';
+import { Alert, Badge, Button, Modal, Table, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconCopy } from '@tabler/icons-react';
+import { AdaptiveDataView } from '../../../components/patterns/AdaptiveDataView';
+import { CopyableTextPanel } from '../../../components/patterns/CopyableTextPanel';
+import { DataPagination } from '../../../components/patterns/DataPagination';
+import { InfoGrid, InfoGridItem } from '../../../components/patterns/InfoGrid';
 
 type AutoTestResultItem = {
   id: string;
@@ -63,28 +67,10 @@ function resultBadge(code: number) {
   return { color: 'red', label: '异常' };
 }
 
-function DetailSection(props: {
-  title: string;
-  value: string;
-  onCopy: () => void;
-  rows?: number;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="workspace-section-head flex items-center justify-between gap-3">
-        <Text fw={600}>{props.title}</Text>
-        <Button size="xs" variant="default" leftSection={<IconCopy size={14} />} onClick={props.onCopy}>
-          复制
-        </Button>
-      </div>
-      <Textarea minRows={props.rows || 6} readOnly value={props.value} />
-    </div>
-  );
-}
-
 export function AutoTestResultModals(props: AutoTestResultModalsProps) {
   const [page, setPage] = useState(1);
   const pageSize = 10;
+  const detailItem = props.detailItem;
 
   useEffect(() => {
     if (!props.reportOpen) {
@@ -135,103 +121,145 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
             </div>
           </Alert>
 
-          <div className="overflow-x-auto">
-            <Table className="report-table" striped highlightOnHover withTableBorder>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>用例</Table.Th>
-                  <Table.Th>接口</Table.Th>
-                  <Table.Th>HTTP</Table.Th>
-                  <Table.Th>结果</Table.Th>
-                  <Table.Th>信息</Table.Th>
-                  <Table.Th>操作</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {visibleRows.length === 0 ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={6}>
-                      <Text c="dimmed" ta="center" py="lg">
-                        暂无可展示的测试结果
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : (
-                  visibleRows.map(row => {
-                    const badge = resultBadge(row.code);
-                    return (
-                      <Table.Tr
-                        key={String(row.id || `${row.method || 'GET'}:${row.path || ''}`)}
-                        className={
-                          row.code === 0
-                            ? 'report-row-pass'
-                            : row.code === 1
-                              ? 'report-row-fail'
-                              : 'report-row-error'
-                        }
-                        onClick={() => props.onOpenDetail(row)}
-                      >
-                        <Table.Td>{row.name || row.id}</Table.Td>
-                        <Table.Td>
+          <AdaptiveDataView
+            desktop={
+              <div className="overflow-x-auto">
+                <Table className="report-table" striped highlightOnHover withTableBorder>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>用例</Table.Th>
+                      <Table.Th>接口</Table.Th>
+                      <Table.Th>HTTP</Table.Th>
+                      <Table.Th>结果</Table.Th>
+                      <Table.Th>信息</Table.Th>
+                      <Table.Th>操作</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {visibleRows.length === 0 ? (
+                      <Table.Tr>
+                        <Table.Td colSpan={6}>
+                          <Text c="dimmed" ta="center" py="lg">
+                            暂无可展示的测试结果
+                          </Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    ) : (
+                      visibleRows.map(row => {
+                        const badge = resultBadge(row.code);
+                        return (
+                          <Table.Tr
+                            key={String(row.id || `${row.method || 'GET'}:${row.path || ''}`)}
+                            className={
+                              row.code === 0
+                                ? 'report-row-pass'
+                                : row.code === 1
+                                  ? 'report-row-fail'
+                                  : 'report-row-error'
+                            }
+                            onClick={() => props.onOpenDetail(row)}
+                          >
+                            <Table.Td>{row.name || row.id}</Table.Td>
+                            <Table.Td>
+                              <div className="flex items-center gap-2">
+                                <span className={props.methodClassName(row.method || 'GET')}>
+                                  {String(row.method || 'GET').toUpperCase()}
+                                </span>
+                                <span>{row.path || '-'}</span>
+                              </div>
+                            </Table.Td>
+                            <Table.Td>{row.status == null ? '-' : String(row.status)}</Table.Td>
+                            <Table.Td>
+                              <Badge color={badge.color} variant="light">
+                                {badge.label}
+                              </Badge>
+                            </Table.Td>
+                            <Table.Td>
+                              {(row.validRes || [])
+                                .map(item => String(item?.message || ''))
+                                .filter(Boolean)
+                                .join(' | ') || row.statusText || '-'}
+                            </Table.Td>
+                            <Table.Td>
+                              <Button
+                                size="xs"
+                                variant="default"
+                                onClick={event => {
+                                  event.stopPropagation();
+                                  props.onOpenDetail(row);
+                                }}
+                              >
+                                详情
+                              </Button>
+                            </Table.Td>
+                          </Table.Tr>
+                        );
+                      })
+                    )}
+                  </Table.Tbody>
+                </Table>
+              </div>
+            }
+            mobile={
+              visibleRows.length === 0 ? (
+                <div className="adaptive-data-empty">暂无可展示的测试结果</div>
+              ) : (
+                visibleRows.map(row => {
+                  const badge = resultBadge(row.code);
+                  return (
+                    <div
+                      key={`mobile-report-${String(row.id || `${row.method || 'GET'}:${row.path || ''}`)}`}
+                      className={`adaptive-data-card ${
+                        row.code === 0 ? 'adaptive-data-card-pass' : row.code === 1 ? 'adaptive-data-card-fail' : 'adaptive-data-card-error'
+                      }`}
+                      onClick={() => props.onOpenDetail(row)}
+                    >
+                      <div className="adaptive-data-card-head">
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-900">{row.name || row.id}</div>
                           <div className="flex items-center gap-2">
                             <span className={props.methodClassName(row.method || 'GET')}>
                               {String(row.method || 'GET').toUpperCase()}
                             </span>
-                            <span>{row.path || '-'}</span>
+                            <span className="truncate text-sm text-slate-600">{row.path || '-'}</span>
                           </div>
-                        </Table.Td>
-                        <Table.Td>{row.status == null ? '-' : String(row.status)}</Table.Td>
-                        <Table.Td>
-                          <Badge color={badge.color} variant="light">
-                            {badge.label}
-                          </Badge>
-                        </Table.Td>
-                        <Table.Td>
-                          {(row.validRes || [])
-                            .map(item => String(item?.message || ''))
-                            .filter(Boolean)
-                            .join(' | ') || row.statusText || '-'}
-                        </Table.Td>
-                        <Table.Td>
-                          <Button
-                            size="xs"
-                            variant="default"
-                            onClick={event => {
-                              event.stopPropagation();
-                              props.onOpenDetail(row);
-                            }}
-                          >
-                            详情
-                          </Button>
-                        </Table.Td>
-                      </Table.Tr>
-                    );
-                  })
-                )}
-              </Table.Tbody>
-            </Table>
-          </div>
+                        </div>
+                        <Badge color={badge.color} variant="light">
+                          {badge.label}
+                        </Badge>
+                      </div>
+                      <div className="adaptive-data-card-grid">
+                        <div>
+                          <span className="adaptive-data-card-label">HTTP</span>
+                          <span>{row.status == null ? '-' : String(row.status)}</span>
+                        </div>
+                        <div>
+                          <span className="adaptive-data-card-label">信息</span>
+                          <span>
+                            {(row.validRes || [])
+                              .map(item => String(item?.message || ''))
+                              .filter(Boolean)
+                              .join(' | ') || row.statusText || '-'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="adaptive-data-card-actions" onClick={event => event.stopPropagation()}>
+                        <Button size="xs" variant="default" onClick={() => props.onOpenDetail(row)}>
+                          详情
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              )
+            }
+          />
 
-          {totalPages > 1 ? (
-            <div className="flex items-center justify-between gap-3">
-              <Text c="dimmed" size="sm">
-                第 {page} / {totalPages} 页
-              </Text>
-              <div className="flex gap-2">
-                <Button size="xs" variant="default" disabled={page <= 1} onClick={() => setPage(current => Math.max(1, current - 1))}>
-                  上一页
-                </Button>
-                <Button
-                  size="xs"
-                  variant="default"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage(current => Math.min(totalPages, current + 1))}
-                >
-                  下一页
-                </Button>
-              </div>
-            </div>
-          ) : null}
+          <DataPagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+          />
 
           <div className="flex justify-end">
             <Button variant="default" onClick={props.onCloseReport}>
@@ -242,12 +270,12 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
       </Modal>
 
       <Modal
-        title={`测试详情 ${props.detailItem?.name || ''}`}
-        opened={!!props.detailItem}
+        title={`测试详情 ${detailItem?.name || ''}`}
+        opened={!!detailItem}
         onClose={props.onCloseDetail}
         size="72rem"
       >
-        {props.detailItem ? (
+        {detailItem ? (
           <div className="flex flex-col gap-4">
             <div className="workspace-section-head flex items-center justify-between gap-3">
               <Text fw={600}>基础信息</Text>
@@ -255,61 +283,55 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
                 size="xs"
                 variant="default"
                 leftSection={<IconCopy size={14} />}
-                onClick={() => void copyText(stringifyPretty(props.detailItem), '测试详情已复制')}
+                onClick={() => void copyText(stringifyPretty(detailItem), '测试详情已复制')}
               >
                 复制全部
               </Button>
             </div>
 
-            <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
-              <div>
-                <Text c="dimmed" size="sm">用例ID</Text>
-                <Text>{props.detailItem.id || '-'}</Text>
-              </div>
-              <div>
-                <Text c="dimmed" size="sm">接口地址</Text>
-                <Text>{props.detailItem.url || props.detailItem.path || '-'}</Text>
-              </div>
-              <div>
-                <Text c="dimmed" size="sm">方法</Text>
-                <Text>{String(props.detailItem.method || '-')}</Text>
-              </div>
-              <div>
-                <Text c="dimmed" size="sm">HTTP 状态</Text>
-                <Text>{props.detailItem.status == null ? '-' : String(props.detailItem.status)}</Text>
-              </div>
-              <div>
-                <Text c="dimmed" size="sm">执行结果</Text>
-                <Text>{props.detailItem.code === 0 ? '通过' : props.detailItem.code === 1 ? '失败' : '异常'}</Text>
-              </div>
-            </div>
+            <InfoGrid>
+              <InfoGridItem label="用例ID" value={detailItem.id || '-'} />
+              <InfoGridItem label="接口地址" value={detailItem.url || detailItem.path || '-'} />
+              <InfoGridItem label="方法" value={String(detailItem.method || '-')} />
+              <InfoGridItem
+                label="HTTP 状态"
+                value={detailItem.status == null ? '-' : String(detailItem.status)}
+              />
+              <InfoGridItem
+                label="执行结果"
+                value={detailItem.code === 0 ? '通过' : detailItem.code === 1 ? '失败' : '异常'}
+              />
+            </InfoGrid>
 
-            <DetailSection
+            <CopyableTextPanel
               title="校验信息"
-              value={(props.detailItem.validRes || []).map(item => item?.message || '').join('\n') || '-'}
+              value={(detailItem.validRes || []).map(item => item?.message || '').join('\n') || '-'}
               onCopy={() =>
                 void copyText(
-                  (props.detailItem.validRes || []).map(item => item?.message || '').join('\n') || '-',
+                  (detailItem.validRes || []).map(item => item?.message || '').join('\n') || '-',
                   '校验信息已复制'
                 )
               }
               rows={5}
             />
-            <DetailSection
+            <CopyableTextPanel
               title="请求参数"
-              value={stringifyPretty(props.detailItem.params)}
-              onCopy={() => void copyText(stringifyPretty(props.detailItem.params), '请求参数已复制')}
+              value={stringifyPretty(detailItem.params)}
+              onCopy={() => void copyText(stringifyPretty(detailItem.params), '请求参数已复制')}
+              monospace
             />
-            <DetailSection
+            <CopyableTextPanel
               title="响应头"
-              value={stringifyPretty(props.detailItem.res_header)}
-              onCopy={() => void copyText(stringifyPretty(props.detailItem.res_header), '响应头已复制')}
+              value={stringifyPretty(detailItem.res_header)}
+              onCopy={() => void copyText(stringifyPretty(detailItem.res_header), '响应头已复制')}
+              monospace
             />
-            <DetailSection
+            <CopyableTextPanel
               title="响应体"
-              value={stringifyPretty(props.detailItem.res_body)}
-              onCopy={() => void copyText(stringifyPretty(props.detailItem.res_body), '响应体已复制')}
+              value={stringifyPretty(detailItem.res_body)}
+              onCopy={() => void copyText(stringifyPretty(detailItem.res_body), '响应体已复制')}
               rows={10}
+              monospace
             />
 
             <div className="flex justify-end">

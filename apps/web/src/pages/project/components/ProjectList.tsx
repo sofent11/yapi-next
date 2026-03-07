@@ -1,8 +1,11 @@
-import { Button, Card, Loader, Text, Tooltip } from '@mantine/core';
+import { Button, Card, Text, Tooltip } from '@mantine/core';
 import { IconCopy, IconStar } from '@tabler/icons-react';
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import type { ProjectListItem } from '@yapi-next/shared-types';
 import { AppEmptyState } from '../../../components/AppEmptyState';
+import { AsyncState } from '../../../components/patterns/AsyncState';
+import { DataToolbar } from '../../../components/patterns/DataToolbar';
+import { SectionCard } from '../../../components/layout';
 import { renderProjectIcon, resolveProjectColor, resolveProjectColorKey } from '../../../utils/project-visual';
 
 interface ProjectListProps {
@@ -109,22 +112,26 @@ export function ProjectList(props: ProjectListProps) {
   };
 
   return (
-    <div className="m-panel card-panel card-panel-s project-list console-project-panel">
-      <div className="project-list-header console-project-header flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="console-project-header-main">
-          <Text fw={700}>项目总览</Text>
-          <Text c="dimmed">按最近更新时间排序，可直接进入项目或管理关注状态。</Text>
-        </div>
-        <div className="console-project-header-actions">
-          {props.canCreateProject ? (
-            <Button onClick={props.onAddProject}>添加项目</Button>
-          ) : (
-            <Tooltip label="您没有权限,请联系该分组组长或管理员">
-              <Button disabled>添加项目</Button>
-            </Tooltip>
-          )}
-        </div>
-      </div>
+    <SectionCard className="m-panel project-list console-project-panel">
+      <DataToolbar
+        title="项目总览"
+        summary={
+          props.groupType === 'private'
+            ? `当前共有 ${props.projectRows.length} 个项目，其中我的项目 ${myProjectCount} 个、关注 ${followProjectCount} 个。`
+            : `当前共有 ${props.mixedPublicProjects.length} 个公开项目，其中已关注 ${publicFollowCount} 个。`
+        }
+        actions={
+          <div className="console-project-header-actions">
+            {props.canCreateProject ? (
+              <Button onClick={props.onAddProject}>添加项目</Button>
+            ) : (
+              <Tooltip label="您没有权限,请联系该分组组长或管理员">
+                <Button disabled>添加项目</Button>
+              </Tooltip>
+            )}
+          </div>
+        }
+      />
       <div className="console-project-stats">
         {props.groupType === 'private' ? (
           <>
@@ -148,9 +155,7 @@ export function ProjectList(props: ProjectListProps) {
       </div>
       <div className="console-project-grid">
         {props.projectListFetching && props.projectRows.length === 0 ? (
-          <div className="console-project-loading">
-            <Loader />
-          </div>
+          <AsyncState state="loading" title="正在加载项目列表" description="项目概览和关注状态正在准备中。" />
         ) : props.projectRows.length === 0 ? (
           <AppEmptyState type="noProject" />
         ) : props.groupType === 'private' ? (
@@ -182,6 +187,6 @@ export function ProjectList(props: ProjectListProps) {
           renderGrid(props.mixedPublicProjects, renderProjectCard)
         )}
       </div>
-    </div>
+    </SectionCard>
   );
 }

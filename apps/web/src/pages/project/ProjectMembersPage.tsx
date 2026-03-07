@@ -3,7 +3,6 @@ import {
   Avatar,
   Badge,
   Button,
-  Loader,
   Modal,
   MultiSelect,
   Select,
@@ -29,6 +28,9 @@ import {
   useLazyGetProjectMemberListQuery
 } from '../../services/yapi-api';
 import { AppEmptyState } from '../../components/AppEmptyState';
+import { AdaptiveDataView } from '../../components/patterns/AdaptiveDataView';
+import { AsyncState } from '../../components/patterns/AsyncState';
+import { DataToolbar } from '../../components/patterns/DataToolbar';
 import { PageHeader, SectionCard } from '../../components/layout';
 
 type ProjectMembersPageProps = {
@@ -262,24 +264,108 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
         }
       />
 
-      <SectionCard title="项目成员" className="project-members-card">
+      <SectionCard className="project-members-card">
+        <DataToolbar
+          title="项目成员"
+          summary={`当前项目共有 ${rows.length} 位成员${canManage ? '，可直接调整角色与通知开关。' : '，当前为只读模式。'}`}
+        />
         {loading && rows.length === 0 ? (
-          <div className="flex justify-center py-12">
-            <Loader />
-          </div>
+          <AsyncState state="loading" title="正在加载项目成员" description="成员资料和权限信息正在准备中。" />
         ) : rows.length === 0 ? (
           <AppEmptyState type="noMemberInProject" />
         ) : (
-          <div className="overflow-x-auto rounded-2xl border border-slate-200">
-            <Table striped highlightOnHover withTableBorder>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>成员</Table.Th>
-                  <Table.Th>角色</Table.Th>
-                  <Table.Th className="text-right">操作</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
+          <AdaptiveDataView
+            desktop={
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <Table striped highlightOnHover withTableBorder>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>成员</Table.Th>
+                      <Table.Th>角色</Table.Th>
+                      <Table.Th className="text-right">操作</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {rows.map(row => {
+                      const uid = Number(row.uid || 0);
+                      const role = String(row.role || '');
+                      const canSwitchNotice = canManage || uid === currentUid;
+                      const displayName = String(row.username || row.email || uid);
+
+                      return (
+                        <Table.Tr key={uid}>
+                          <Table.Td>
+                            <div className="project-members-cell">
+                              <Avatar src={`/api/user/avatar?uid=${uid}`} size={32} />
+                              <span>{displayName}</span>
+                              {uid === currentUid ? <Badge color="blue">我</Badge> : null}
+                              <Tooltip label="消息通知">
+                                <div>
+                                  <Switch
+                                    checked={Boolean(row.email_notice)}
+                                    disabled={!canSwitchNotice}
+                                    onChange={async event => {
+                                      const response = await changeEmailNotice({
+                                        id: props.projectId,
+                                        member_uid: uid,
+                                        notice: event.currentTarget.checked
+                                      }).unwrap();
+                                      if (response.errcode !== 0) {
+                                        showNotification('red', response.errmsg || '更新通知设置失败');
+                                        return;
+                                      }
+                                      await listQuery.refetch();
+                                    }}
+                                  />
+                                </div>
+                              </Tooltip>
+                            </div>
+                          </Table.Td>
+                          <Table.Td>
+                            {canManage ? (
+                              <Select
+                                value={(role as MemberRole) || 'dev'}
+                                className="project-members-role-select"
+                                data={roleOptions.map(item => ({ ...item }))}
+                                onChange={async newRole => {
+                                  if (!newRole) return;
+                                  const response = await changeRole({
+                                    id: props.projectId,
+                                    member_uid: uid,
+                                    role: newRole as MemberRole
+                                  }).unwrap();
+                                  if (response.errcode !== 0) {
+                                    showNotification('red', response.errmsg || '修改角色失败');
+                                    return;
+                                  }
+                                  showNotification('teal', '成员角色已更新');
+                                  await listQuery.refetch();
+                                }}
+                              />
+                            ) : (
+                              <Badge variant="light">{normalizeRole(role)}</Badge>
+                            )}
+                          </Table.Td>
+                          <Table.Td>
+                            <div className="flex justify-end">
+                              {canManage ? (
+                                <Button color="red" variant="light" size="xs" onClick={() => confirmDelete(uid)}>
+                                  删除
+                                </Button>
+                              ) : (
+                                '-'
+                              )}
+                            </div>
+                          </Table.Td>
+                        </Table.Tr>
+                      );
+                    })}
+                  </Table.Tbody>
+                </Table>
+              </div>
+            }
+            mobile={
+              <div className="adaptive-data-view-mobile">
                 {rows.map(row => {
                   const uid = Number(row.uid || 0);
                   const role = String(row.role || '');
@@ -287,76 +373,79 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
                   const displayName = String(row.username || row.email || uid);
 
                   return (
-                    <Table.Tr key={uid}>
-                      <Table.Td>
-                        <div className="project-members-cell flex flex-wrap items-center gap-3">
-                          <Avatar src={`/api/user/avatar?uid=${uid}`} size={32} />
-                          <span>{displayName}</span>
-                          {uid === currentUid ? <Badge color="blue">我</Badge> : null}
-                          <Tooltip label="消息通知">
-                            <div>
-                              <Switch
-                                checked={Boolean(row.email_notice)}
-                                disabled={!canSwitchNotice}
-                                onChange={async event => {
-                                  const response = await changeEmailNotice({
-                                    id: props.projectId,
-                                    member_uid: uid,
-                                    notice: event.currentTarget.checked
-                                  }).unwrap();
-                                  if (response.errcode !== 0) {
-                                    showNotification('red', response.errmsg || '更新通知设置失败');
-                                    return;
-                                  }
-                                  await listQuery.refetch();
-                                }}
-                              />
-                            </div>
-                          </Tooltip>
+                    <div key={uid} className="adaptive-data-card">
+                      <div className="adaptive-data-card-head">
+                        <div className="project-members-cell min-w-0">
+                          <Avatar src={`/api/user/avatar?uid=${uid}`} size={36} />
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-slate-900">{displayName}</div>
+                            <div className="text-sm text-slate-500">{String(row.email || `UID ${uid}`)}</div>
+                          </div>
                         </div>
-                      </Table.Td>
-                      <Table.Td>
-                        {canManage ? (
-                          <Select
-                            value={(role as MemberRole) || 'dev'}
-                            className="project-members-role-select"
-                            data={roleOptions.map(item => ({ ...item }))}
-                            onChange={async newRole => {
-                              if (!newRole) return;
-                              const response = await changeRole({
+                        {uid === currentUid ? <Badge color="blue">我</Badge> : null}
+                      </div>
+                      <div className="adaptive-data-card-grid">
+                        <div>
+                          <span className="adaptive-data-card-label">角色</span>
+                          {canManage ? (
+                            <Select
+                              value={(role as MemberRole) || 'dev'}
+                              className="project-members-role-select"
+                              data={roleOptions.map(item => ({ ...item }))}
+                              onChange={async newRole => {
+                                if (!newRole) return;
+                                const response = await changeRole({
+                                  id: props.projectId,
+                                  member_uid: uid,
+                                  role: newRole as MemberRole
+                                }).unwrap();
+                                if (response.errcode !== 0) {
+                                  showNotification('red', response.errmsg || '修改角色失败');
+                                  return;
+                                }
+                                showNotification('teal', '成员角色已更新');
+                                await listQuery.refetch();
+                              }}
+                            />
+                          ) : (
+                            <Badge variant="light" className="w-fit">
+                              {normalizeRole(role)}
+                            </Badge>
+                          )}
+                        </div>
+                        <div>
+                          <span className="adaptive-data-card-label">消息通知</span>
+                          <Switch
+                            checked={Boolean(row.email_notice)}
+                            disabled={!canSwitchNotice}
+                            onChange={async event => {
+                              const response = await changeEmailNotice({
                                 id: props.projectId,
                                 member_uid: uid,
-                                role: newRole
+                                notice: event.currentTarget.checked
                               }).unwrap();
                               if (response.errcode !== 0) {
-                                showNotification('red', response.errmsg || '修改角色失败');
+                                showNotification('red', response.errmsg || '更新通知设置失败');
                                 return;
                               }
-                              showNotification('teal', '成员角色已更新');
                               await listQuery.refetch();
                             }}
                           />
-                        ) : (
-                          <Badge variant="light">{normalizeRole(role)}</Badge>
-                        )}
-                      </Table.Td>
-                      <Table.Td>
-                        <div className="flex justify-end">
-                          {canManage ? (
-                            <Button color="red" variant="light" size="xs" onClick={() => confirmDelete(uid)}>
-                              删除
-                            </Button>
-                          ) : (
-                            '-'
-                          )}
                         </div>
-                      </Table.Td>
-                    </Table.Tr>
+                      </div>
+                      {canManage ? (
+                        <div className="adaptive-data-card-actions">
+                          <Button color="red" variant="light" size="xs" onClick={() => confirmDelete(uid)}>
+                            删除
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
                   );
                 })}
-              </Table.Tbody>
-            </Table>
-          </div>
+              </div>
+            }
+          />
         )}
       </SectionCard>
 
