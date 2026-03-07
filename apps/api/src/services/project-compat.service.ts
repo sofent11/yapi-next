@@ -109,9 +109,12 @@ export class ProjectCompatService {
       return result;
     }
 
-    const followed = followRows.map(item => ({
-      ...(item as unknown as Record<string, unknown>),
-      _id: Number((item as unknown as FollowItem).projectid),
+    const followedProjects = await this.projectModel
+      .find({ _id: { $in: Array.from(followProjectIds) } })
+      .sort({ _id: -1 })
+      .lean();
+    const followed = followedProjects.map(item => ({
+      ...item,
       follow: true
     }));
     const merged = followed.concat(
