@@ -456,7 +456,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
             {groupMembers.map(item => (
               <div
                 key={Number(item.uid || 0)}
-                className="group-members-item rounded-[22px] border border-slate-200 bg-slate-50 p-4"
+                className="group-members-item rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50 p-4"
               >
                 <Avatar size={40} src={`/api/user/avatar?uid=${item.uid}`} />
                 <div className="group-members-name mt-3 flex items-center gap-2 font-medium text-slate-900">

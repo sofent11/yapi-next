@@ -4,11 +4,11 @@
   }
 
   .group-bar {
-    @apply rounded-[24px] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
   }
 
   .curr-group {
-    @apply mb-4 rounded-[20px] border border-slate-200 bg-slate-50/80 p-4;
+    @apply mb-4 rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/80 p-4;
   }
 
   .curr-group-name {
@@ -44,7 +44,7 @@
   }
 
   .project-console-tabs [role='tablist'] {
-    @apply mb-4 rounded-[20px] border border-slate-200 bg-white/92 p-1 shadow-sm;
+    @apply mb-4 rounded-[var(--radius-lg)] border border-slate-200 bg-white/92 p-1 shadow-sm;
   }
 
   .project-console-tabs [role='tab'] {
@@ -56,7 +56,7 @@
   }
 
   .console-project-panel {
-    @apply rounded-[24px] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
   }
 
   .console-project-stats {
@@ -72,7 +72,7 @@
   }
 
   .console-project-section-empty {
-    @apply rounded-[20px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500;
+    @apply rounded-[var(--radius-lg)] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500;
   }
 
   .owner-type {
@@ -84,7 +84,7 @@
   }
 
   .m-card.console-project-card-button {
-    @apply flex min-h-[288px] cursor-pointer flex-col rounded-[24px] border border-slate-200 bg-white px-6 py-6 shadow-sm transition-all duration-150;
+    @apply flex min-h-[288px] cursor-pointer flex-col rounded-[var(--radius-xl)] border border-slate-200 bg-white px-6 py-6 shadow-sm transition-all duration-150;
   }
 
   .m-card.console-project-card-button:hover {
@@ -113,12 +113,12 @@
 
   .console-members-panel,
   .console-activity-panel {
-    @apply rounded-[24px] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
   }
 
   .m-panel,
   .news-box {
-    @apply rounded-[24px] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
   }
 
   .g-row {
@@ -134,7 +134,7 @@
   }
 
   .timeline-filter {
-    @apply rounded-[22px] border border-slate-200 bg-slate-50/80 p-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/80 p-4;
   }
 
   .timeline-filter .mantine-Text-root {
@@ -147,7 +147,7 @@
 
   .timeline-api-select .mantine-Input-input,
   .timeline-api-select .mantine-Select-input {
-    @apply h-12 rounded-[16px] border-slate-300 bg-white px-4 text-sm text-slate-700;
+    @apply h-12 rounded-[var(--radius-md)] border-slate-300 bg-white px-4 text-sm text-slate-700;
   }
 
   .timeline-api-select .mantine-Input-input::placeholder,
@@ -180,7 +180,7 @@
   }
 
   .timeline-item {
-    @apply rounded-[22px] border border-slate-200 bg-white px-5 py-4 shadow-sm;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white px-5 py-4 shadow-sm;
   }
 
   .timeline-log-head {
@@ -240,7 +240,7 @@
   }
 
   .log-diff-item {
-    @apply rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 px-4 py-4;
   }
 
   .log-diff-item-title {
@@ -264,7 +264,7 @@
   }
 
   .console-members-table {
-    @apply overflow-hidden rounded-[20px] border border-slate-200 bg-white;
+    @apply overflow-hidden rounded-[var(--radius-lg)] border border-slate-200 bg-white;
   }
 
   .console-members-table thead {

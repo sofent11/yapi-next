@@ -1,0 +1,75 @@
+/**
+ * Centralized Mantine Component Overrides
+ *
+ * Consolidated from scattered CSS overrides in `components-console.css`,
+ * `components-interface.css`, and `components-editor.css`.
+ *
+ * Usage: Import this file in `tailwind.css` or in the Mantine theme configuration.
+ *
+ * NOTE: Some Mantine overrides are still scoped inside parent-class selectors
+ * in the component CSS files (e.g. `.timeline-filter .mantine-Text-root`).
+ * Those are intentionally kept co-located with their parent component styles.
+ * This file captures GLOBAL (unscoped) Mantine styling that applies everywhere.
+ */
+
+@layer components {
+  /* ─── Tabs ─── */
+  .m-tab .mantine-Tabs-tab {
+    @apply whitespace-nowrap text-sm font-medium text-[var(--text-muted)] transition-colors;
+  }
+  .m-tab .mantine-Tabs-tab[data-active] {
+    @apply text-[var(--interactive-primary)];
+  }
+  .m-tab .mantine-Tabs-tabLabel {
+    @apply leading-relaxed;
+  }
+
+  /* ─── Modal ─── */
+  .mantine-Modal-content {
+    border-radius: var(--radius-lg);
+  }
+  .mantine-Modal-header {
+    @apply border-b border-[var(--border-subtle)] pb-3;
+  }
+  .mantine-Modal-title {
+    @apply text-base font-semibold;
+  }
+
+  /* ─── Card / Paper ─── */
+  .mantine-Paper-root {
+    border-radius: var(--radius-lg);
+  }
+
+  /* ─── Table ─── */
+  .mantine-Table-table {
+    @apply text-sm;
+  }
+  .mantine-Table-table th {
+    @apply whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)];
+  }
+
+  /* ─── Notifications ─── */
+  .mantine-Notification-root {
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-float);
+  }
+
+  /* ─── Drawer ─── */
+  .mantine-Drawer-content {
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  }
+
+  /* ─── Input unified ─── */
+  .mantine-Input-input,
+  .mantine-Select-input,
+  .mantine-Textarea-input {
+    border-radius: var(--radius-sm);
+    transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+  }
+  .mantine-Input-input:focus,
+  .mantine-Select-input:focus,
+  .mantine-Textarea-input:focus {
+    border-color: var(--border-interactive);
+    box-shadow: 0 0 0 2px var(--focus-ring);
+  }
+}

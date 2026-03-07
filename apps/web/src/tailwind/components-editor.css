@@ -4,20 +4,10 @@
   }
 
   .workspace-control,
-  .workspace-control-top {
-    @apply min-w-[180px];
-  }
 
   .workspace-control .mantine-Input-input,
   .workspace-control .mantine-Select-input,
-  .workspace-control-top .mantine-Input-input,
-  .workspace-control-top .mantine-Select-input {
-    @apply h-11 rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
-  }
 
-  .workspace-field-top {
-    @apply pt-1;
-  }
 
   .workspace-text-top,
   .workspace-paragraph,
@@ -41,11 +31,11 @@
   .workspace-form-modal-stack .mantine-Input-input,
   .workspace-form-modal-stack .mantine-Select-input,
   .workspace-form-modal-stack .mantine-Textarea-input {
-    @apply rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
+    @apply rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-700;
   }
 
   .interface-edit-section {
-    @apply rounded-[24px] border border-slate-200 bg-white shadow-sm;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white shadow-sm;
   }
 
   .interface-edit-path,
@@ -55,7 +45,7 @@
 
   .interface-edit-method-select .mantine-Input-input,
   .interface-edit-basepath-input .mantine-Input-input {
-    @apply h-11 rounded-[14px] border-slate-300 text-sm;
+    @apply h-11 rounded-[var(--radius-md)] border-slate-300 text-sm;
   }
 
   .interface-edit-basepath-input .mantine-Input-input {
@@ -63,15 +53,15 @@
   }
 
   .interface-edit-type-switch .mantine-SegmentedControl-root {
-    @apply rounded-[16px] bg-slate-100 p-1;
+    @apply rounded-[var(--radius-md)] bg-slate-100 p-1;
   }
 
   .interface-edit-type-switch .mantine-SegmentedControl-indicator {
-    @apply rounded-[12px] bg-white shadow-sm;
+    @apply rounded-[var(--radius-sm)] bg-white shadow-sm;
   }
 
   .interface-edit-type-switch .mantine-SegmentedControl-label {
-    @apply rounded-[12px] px-3 py-2 text-sm font-semibold text-slate-500;
+    @apply rounded-[var(--radius-sm)] px-3 py-2 text-sm font-semibold text-slate-500;
   }
 
   .interface-edit-type-switch [data-active='true'] {
@@ -84,7 +74,7 @@
 
   .interface-edit-json-alert,
   .interface-edit-conflict-alert {
-    @apply rounded-[16px] border;
+    @apply rounded-[var(--radius-md)] border;
   }
 
   .interface-edit-json-alert {
@@ -112,7 +102,7 @@
   }
 
   .interface-edit-footer {
-    @apply rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-sm;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white px-4 py-3 shadow-sm;
   }
 
   .interface-edit-footer-sticky {
@@ -146,7 +136,7 @@
   }
 
   .schema-editor-mode-toolbar {
-    @apply rounded-[20px] border border-slate-200 bg-slate-50/80 px-4 py-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/80 px-4 py-4;
   }
 
   .schema-editor-mode-toolbar .mantine-RadioGroup-root {
@@ -158,17 +148,17 @@
   }
 
   .schema-editor-alert {
-    @apply rounded-[18px] border-yellow-200 bg-yellow-50;
+    @apply rounded-[var(--radius-lg)] border-yellow-200 bg-yellow-50;
   }
 
   .schema-editor {
-    @apply rounded-[24px] border border-slate-200 bg-slate-50/60 p-4;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-slate-50/60 p-4;
   }
 
   .schema-editor .mantine-Input-input,
   .schema-editor .mantine-Select-input,
   .schema-editor .mantine-Textarea-input {
-    @apply rounded-[14px] border-slate-300 bg-white text-sm text-slate-700 shadow-none;
+    @apply rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-700 shadow-none;
   }
 
   .schema-editor .mantine-Input-input::placeholder,
@@ -196,7 +186,7 @@
   }
 
   .schema-editor-head {
-    @apply rounded-[20px] border border-slate-200 bg-white px-4 py-4 shadow-sm;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white px-4 py-4 shadow-sm;
   }
 
   .schema-editor-head-grid {
@@ -285,7 +275,7 @@
   }
 
   .schema-editor-import-input .mantine-Textarea-input {
-    @apply rounded-[16px] border-slate-300 bg-slate-50 font-mono text-[13px] leading-6 text-slate-800;
+    @apply rounded-[var(--radius-md)] border-slate-300 bg-slate-50 font-mono text-[13px] leading-6 text-slate-800;
   }
 
   .schema-editor .mantine-Table-table {
@@ -297,7 +287,7 @@
   }
 
   .workspace-leave-confirm-note {
-    @apply rounded-[18px] border border-amber-100 bg-amber-50/70 px-4 py-3 text-[15px] leading-7 text-slate-600;
+    @apply rounded-[var(--radius-lg)] border border-amber-100 bg-amber-50/70 px-4 py-3 text-[15px] leading-7 text-slate-600;
   }
 
   .workspace-leave-confirm-actions {
@@ -309,7 +299,7 @@
   }
 
   .workspace-leave-confirm-actions .mantine-Button-root {
-    @apply h-11 rounded-[14px] px-5 text-sm font-semibold;
+    @apply h-11 rounded-[var(--radius-md)] px-5 text-sm font-semibold;
   }
 
   .app-modal-title {

@@ -98,7 +98,7 @@ export function HomePage() {
       containerClassName="py-6 md:py-8"
     >
       <Container size="xl" className="px-0">
-        <header className="flex flex-col gap-4 rounded-[28px] border border-white/10 bg-white/6 px-5 py-4 backdrop-blur md:flex-row md:items-center md:justify-between md:px-7">
+        <header className="flex flex-col gap-4 rounded-[var(--radius-xl)] border border-white/10 bg-white/6 px-5 py-4 backdrop-blur md:flex-row md:items-center md:justify-between md:px-7">
           <Group gap="sm" wrap="nowrap">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-900 shadow-[0_12px_32px_rgba(255,255,255,0.14)]">
               <LogoSVG length="30px" />

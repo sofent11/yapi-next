@@ -102,7 +102,7 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
           }
           setSearchParams(nextParams, { replace: true });
         }}
-        className="rounded-[28px] border border-slate-200 bg-white/95 p-4 shadow-sm"
+        className="rounded-[var(--radius-xl)] border border-slate-200 bg-white/95 p-4 shadow-sm"
       >
         <Tabs.List>
           {tabItems.map(item => (

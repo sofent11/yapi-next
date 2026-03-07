@@ -4,7 +4,7 @@
   }
 
   .interface-workspace-switch {
-    @apply rounded-[24px] border border-slate-200 bg-white/94 p-4 shadow-sm backdrop-blur;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/94 p-4 shadow-sm backdrop-blur;
   }
 
   .interface-workspace-switch-actions {
@@ -16,15 +16,15 @@
   }
 
   .interface-workspace-switch .mantine-SegmentedControl-root {
-    @apply rounded-[18px] bg-slate-100/90 p-1;
+    @apply rounded-[var(--radius-lg)] bg-slate-100/90 p-1;
   }
 
   .interface-workspace-switch .mantine-SegmentedControl-indicator {
-    @apply rounded-[14px] border border-slate-200 bg-white shadow-sm;
+    @apply rounded-[var(--radius-md)] border border-slate-200 bg-white shadow-sm;
   }
 
   .interface-workspace-switch .mantine-SegmentedControl-label {
-    @apply rounded-[14px] px-4 py-3 text-base font-semibold text-slate-500 transition-colors;
+    @apply rounded-[var(--radius-md)] px-4 py-3 text-base font-semibold text-slate-500 transition-colors;
   }
 
   .interface-workspace-switch [data-active='true'] {
@@ -33,7 +33,7 @@
 
   .interface-workspace-body,
   .interface-workspace-card {
-    @apply min-h-0 rounded-[28px] border border-slate-200 bg-white/94 p-6 shadow-sm backdrop-blur;
+    @apply min-h-0 rounded-[var(--radius-xl)] border border-slate-200 bg-white/94 p-6 shadow-sm backdrop-blur;
   }
 
   .interface-workspace-body {
@@ -45,7 +45,7 @@
   }
 
   .interface-nav-filter {
-    @apply mb-0 gap-3 rounded-[22px] border border-slate-200 bg-slate-50/70 px-4 py-4 shadow-none;
+    @apply mb-0 gap-3 rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 px-4 py-4 shadow-none;
   }
 
   .interface-nav-filter > div:first-child,
@@ -63,7 +63,7 @@
   }
 
   .interface-nav-filter-input .mantine-TextInput-input {
-    @apply h-12 rounded-[16px] border-slate-300 bg-white px-4 text-[15px];
+    @apply h-12 rounded-[var(--radius-md)] border-slate-300 bg-white px-4 text-[15px];
   }
 
   .interface-nav-filter-actions {
@@ -75,7 +75,7 @@
   }
 
   .interface-nav-filter-actions .mantine-Button-root {
-    @apply h-11 rounded-[14px] px-4 text-sm font-semibold;
+    @apply h-11 rounded-[var(--radius-md)] px-4 text-sm font-semibold;
   }
 
   .interface-nav-summary {
@@ -91,11 +91,11 @@
   }
 
   .interface-nav-group {
-    @apply rounded-[18px] border border-slate-200 bg-slate-50/60 p-2;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/60 p-2;
   }
 
   .interface-nav-group-title {
-    @apply flex min-h-9 items-center justify-between gap-2 rounded-[14px] px-3 py-2 text-slate-700 transition-all duration-150;
+    @apply flex min-h-9 items-center justify-between gap-2 rounded-[var(--radius-md)] px-3 py-2 text-slate-700 transition-all duration-150;
   }
 
   .interface-nav-group-title:hover {
@@ -192,7 +192,7 @@
   }
 
   .interface-detail-header {
-    @apply flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-slate-50/70 px-5 py-5;
+    @apply flex flex-col gap-4 rounded-[var(--radius-xl)] border border-slate-200 bg-slate-50/70 px-5 py-5;
   }
 
   .interface-detail-header-copy {
@@ -240,7 +240,7 @@
   }
 
   .adaptive-data-card {
-    @apply rounded-[18px] border border-slate-200 bg-white/96 p-4 shadow-sm;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white/96 p-4 shadow-sm;
   }
 
   .adaptive-data-card-active {
@@ -284,7 +284,7 @@
   }
 
   .adaptive-data-empty {
-    @apply rounded-[18px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-center text-sm text-slate-500;
+    @apply rounded-[var(--radius-lg)] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-center text-sm text-slate-500;
   }
 
   .interface-table-panel .mantine-Table-table {
@@ -300,7 +300,7 @@
   }
 
   .interface-category-alert {
-    @apply rounded-[18px] border border-blue-100 bg-blue-50/80;
+    @apply rounded-[var(--radius-lg)] border border-blue-100 bg-blue-50/80;
   }
 
   .interface-category-alert .mantine-Alert-title {
@@ -312,7 +312,7 @@
   }
 
   .interface-table-toolbar {
-    @apply mb-0 gap-4 rounded-[22px] border border-slate-200 bg-white/94 px-4 py-4 shadow-sm;
+    @apply mb-0 gap-4 rounded-[var(--radius-lg)] border border-slate-200 bg-white/94 px-4 py-4 shadow-sm;
   }
 
   .interface-table-toolbar > div:first-child,
@@ -324,20 +324,8 @@
     @apply ml-0 justify-start md:justify-end;
   }
 
-  .interface-table-toolbar-copy,
-  .data-toolbar-copy {
-    @apply min-w-0;
-  }
 
-  .interface-table-toolbar-copy .mantine-Text-root:first-child,
-  .data-toolbar-copy .mantine-Text-root:first-child {
-    @apply truncate text-base font-semibold text-slate-900;
-  }
 
-  .interface-table-toolbar-copy .mantine-Text-root:last-child,
-  .data-toolbar-copy .mantine-Text-root:last-child {
-    @apply text-sm text-slate-500;
-  }
 
   .interface-table-search,
   .interface-table-status-filter,
@@ -350,7 +338,7 @@
   .interface-table-status-filter .mantine-Select-input,
   .interface-table-status-select .mantine-Select-input,
   .interface-table-category-select .mantine-Select-input {
-    @apply h-11 rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
+    @apply h-11 rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-700;
   }
 
   .interface-table-row-active td {
@@ -374,7 +362,7 @@
   }
 
   .interface-nav-empty {
-    @apply rounded-[18px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6;
+    @apply rounded-[var(--radius-lg)] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6;
   }
 
   .interface-nav-empty .mantine-Text-root {
@@ -394,7 +382,7 @@
   }
 
   .collection-overview-actions .mantine-Button-root {
-    @apply h-10 rounded-[14px] px-4 text-sm font-semibold;
+    @apply h-10 rounded-[var(--radius-md)] px-4 text-sm font-semibold;
   }
 
   .collection-env-select {
@@ -402,7 +390,7 @@
   }
 
   .collection-env-select .mantine-Select-input {
-    @apply h-10 rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
+    @apply h-10 rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-700;
   }
 
   .collection-case-table .mantine-Table-table {
@@ -434,15 +422,15 @@
   }
 
   .collection-import-project-select .mantine-Select-input {
-    @apply h-11 rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
+    @apply h-11 rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-700;
   }
 
   .collection-import-summary {
-    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 px-4 py-3;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 px-4 py-3;
   }
 
   .collection-import-summary-alert {
-    @apply rounded-[16px] border border-blue-100 bg-blue-50/80;
+    @apply rounded-[var(--radius-md)] border border-blue-100 bg-blue-50/80;
   }
 
   .collection-import-summary-alert .mantine-Alert-title {
@@ -467,7 +455,7 @@
 
   .collection-case-truncated-alert,
   .collection-common-setting-alert {
-    @apply rounded-[18px] border;
+    @apply rounded-[var(--radius-lg)] border;
   }
 
   .collection-case-truncated-alert {
@@ -483,7 +471,7 @@
   }
 
   .collection-inline-setting-row {
-    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 px-4 py-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 px-4 py-4;
   }
 
   .collection-inline-setting-fields {
@@ -495,10 +483,10 @@
   }
 
   .collection-inline-input .mantine-Input-input {
-    @apply h-11 rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
+    @apply h-11 rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-700;
   }
 
   .collection-script-switch-row {
-    @apply rounded-[14px] border border-slate-200 bg-white px-3 py-3;
+    @apply rounded-[var(--radius-md)] border border-slate-200 bg-white px-3 py-3;
   }
 }

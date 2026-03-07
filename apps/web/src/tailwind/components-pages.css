@@ -1,8 +1,5 @@
 @layer components {
   .page-shell,
-  .workspace-page {
-    @apply space-y-6;
-  }
 
   .add-project-page,
   .user-page,
@@ -16,17 +13,10 @@
   .project-settings-card,
   .project-data-card,
   .workspace-card {
-    @apply rounded-[24px] border border-slate-200 bg-white/94 shadow-sm;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/94 shadow-sm;
   }
 
   .project-data-grid,
-  .workspace-grid {
-    @apply grid gap-4 xl:grid-cols-2;
-  }
-
-  .workspace-grid {
-    @apply items-start;
-  }
 
   .workspace-card .mantine-Input-input,
   .workspace-card .mantine-Select-input,
@@ -37,7 +27,7 @@
   .project-data-card .mantine-Input-input,
   .project-data-card .mantine-Select-input,
   .project-data-card .mantine-Textarea-input {
-    @apply rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
+    @apply rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-700;
   }
 
   .workspace-card .mantine-Textarea-input,
@@ -46,16 +36,8 @@
     @apply leading-6;
   }
 
-  .workspace-result-actions {
-    @apply justify-end;
-  }
-
-  .workspace-result-actions .mantine-Button-root {
-    @apply h-9 rounded-[12px] px-4 text-xs font-semibold;
-  }
-
   .project-data-intro {
-    @apply rounded-[18px] border border-blue-100 bg-blue-50/80;
+    @apply rounded-[var(--radius-lg)] border border-blue-100 bg-blue-50/80;
   }
 
   .project-data-intro .mantine-Alert-title {
@@ -63,7 +45,7 @@
   }
 
   .project-data-task-toolbar {
-    @apply flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-blue-100 bg-blue-50/80 px-4 py-3;
+    @apply flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-blue-100 bg-blue-50/80 px-4 py-3;
   }
 
   .project-data-control-grid {
@@ -71,7 +53,7 @@
   }
 
   .project-data-switch-row {
-    @apply flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-slate-200 bg-slate-50/70 px-4 py-3;
+    @apply flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-slate-200 bg-slate-50/70 px-4 py-3;
   }
 
   .project-data-editor-stack {
@@ -87,7 +69,7 @@
   }
 
   .project-data-result-card {
-    @apply flex flex-col gap-3 rounded-[18px] border border-slate-200 bg-slate-50/70 p-4;
+    @apply flex flex-col gap-3 rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
   }
 
   .project-data-actions {
@@ -95,7 +77,7 @@
   }
 
   .project-data-actions .mantine-Button-root {
-    @apply h-10 rounded-[12px] px-4 text-sm font-semibold;
+    @apply h-10 rounded-[var(--radius-sm)] px-4 text-sm font-semibold;
   }
 
   .project-data-task-modal {
@@ -138,7 +120,7 @@
   .case-detail-section,
   .interface-view-panel,
   .interface-view-section {
-    @apply rounded-[24px] border border-slate-200 bg-white shadow-sm;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white shadow-sm;
   }
 
   .interface-run-card .mantine-Input-input,
@@ -149,23 +131,23 @@
   .case-detail-section .mantine-Textarea-input,
   .interface-view-section .mantine-Input-input,
   .interface-view-section .mantine-Textarea-input {
-    @apply rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
+    @apply rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-700;
   }
 
   .interface-run-method-select .mantine-Select-input,
   .case-debug-method-select .mantine-Select-input,
   .debug-request-method-select .mantine-Select-input {
-    @apply h-11 rounded-[14px] border-slate-300 bg-white text-sm;
+    @apply h-11 rounded-[var(--radius-md)] border-slate-300 bg-white text-sm;
   }
 
   .interface-run-path-input .mantine-Input-input,
   .case-debug-path-input .mantine-Input-input,
   .debug-request-path-input .mantine-Input-input {
-    @apply h-11 rounded-[14px] border-slate-300 bg-white text-sm;
+    @apply h-11 rounded-[var(--radius-md)] border-slate-300 bg-white text-sm;
   }
 
   .interface-run-format-alert {
-    @apply rounded-[16px] border border-blue-100 bg-blue-50/80;
+    @apply rounded-[var(--radius-md)] border border-blue-100 bg-blue-50/80;
   }
 
   .interface-run-format-alert .mantine-Alert-title {
@@ -179,12 +161,12 @@
   .interface-run-editor-block,
   .interface-run-editor-block-wide,
   .interface-view-block {
-    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 p-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
   }
 
   .workspace-section-head,
   .case-detail-section-head {
-    @apply rounded-[14px] border border-slate-200 bg-white px-3 py-3;
+    @apply rounded-[var(--radius-md)] border border-slate-200 bg-white px-3 py-3;
   }
 
   .workspace-section-head .mantine-Text-root,
@@ -193,7 +175,7 @@
   }
 
   .workspace-section-actions .mantine-Button-root {
-    @apply h-8 rounded-[10px] px-3 text-xs font-semibold;
+    @apply h-8 rounded-[var(--radius-sm)] px-3 text-xs font-semibold;
   }
 
   .debug-request-toolbar {
@@ -205,7 +187,7 @@
   }
 
   .debug-editor-panel-head {
-    @apply flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-slate-200 bg-white px-3 py-3;
+    @apply flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-slate-200 bg-white px-3 py-3;
   }
 
   .debug-editor-panel-actions {
@@ -213,7 +195,7 @@
   }
 
   .debug-editor-panel-actions .mantine-Button-root {
-    @apply h-8 rounded-[10px] px-3 text-xs font-semibold;
+    @apply h-8 rounded-[var(--radius-sm)] px-3 text-xs font-semibold;
   }
 
   .copyable-text-panel {
@@ -221,28 +203,15 @@
   }
 
   .copyable-text-panel-head {
-    @apply flex items-center justify-between gap-3 rounded-[14px] border border-slate-200 bg-white px-3 py-3;
+    @apply flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-slate-200 bg-white px-3 py-3;
   }
 
   .copyable-text-panel-mono .mantine-Textarea-input {
     @apply font-mono text-[13px] leading-6;
   }
 
-  .case-detail-toolbar {
-    @apply items-start;
-  }
-
-  .case-detail-toolbar > div:first-child,
-  .case-detail-toolbar > div:last-child {
-    @apply w-full;
-  }
-
-  .case-detail-toolbar > div:last-child {
-    @apply ml-0 justify-start md:justify-end;
-  }
-
   .case-detail-form {
-    @apply rounded-[20px] border border-slate-200 bg-slate-50/70 p-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
   }
 
   .case-detail-meta-grid {
@@ -250,15 +219,15 @@
   }
 
   .case-detail-switch-card {
-    @apply rounded-[16px] border border-slate-200 bg-white px-4 py-3;
+    @apply rounded-[var(--radius-md)] border border-slate-200 bg-white px-4 py-3;
   }
 
   .case-detail-result-stack {
-    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 p-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
   }
 
   .case-debug-panel {
-    @apply rounded-[20px] border border-slate-200 bg-slate-50/70 p-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
   }
 
   .case-debug-toolbar {
@@ -282,7 +251,7 @@
   }
 
   .interface-view-code-row {
-    @apply rounded-[14px] border border-slate-200 bg-slate-50/70 px-3 py-3;
+    @apply rounded-[var(--radius-md)] border border-slate-200 bg-slate-50/70 px-3 py-3;
   }
 
   .interface-view-actions {
@@ -295,14 +264,6 @@
 
   .interface-view-code {
     @apply min-w-0 flex-1 overflow-x-auto rounded-xl bg-slate-900 px-3 py-2 font-mono text-[12px] text-slate-100;
-  }
-
-  .interface-view-raw-block {
-    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 p-4;
-  }
-
-  .interface-view-raw-block textarea {
-    @apply rounded-[14px] border-slate-300 bg-white font-mono text-[13px] leading-6 text-slate-700;
   }
 
   .interface-view-link-button {
@@ -354,7 +315,7 @@
   }
 
   .project-settings-info-alert {
-    @apply rounded-[18px] border border-blue-100 bg-blue-50/80;
+    @apply rounded-[var(--radius-lg)] border border-blue-100 bg-blue-50/80;
   }
 
   .project-settings-info-alert .mantine-Alert-title {
@@ -366,7 +327,7 @@
   }
 
   .project-settings-empty-alert {
-    @apply rounded-[18px] border border-blue-100 bg-blue-50/80;
+    @apply rounded-[var(--radius-lg)] border border-blue-100 bg-blue-50/80;
   }
 
   .project-settings-actions {
@@ -374,11 +335,11 @@
   }
 
   .project-settings-actions .mantine-Button-root {
-    @apply h-11 rounded-[14px] px-5 text-sm font-semibold;
+    @apply h-11 rounded-[var(--radius-md)] px-5 text-sm font-semibold;
   }
 
   .project-settings-editor-card {
-    @apply rounded-[20px] border border-slate-200 bg-slate-50/70 p-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
   }
 
   .project-settings-editor-card-head {
@@ -398,7 +359,7 @@
   }
 
   .project-settings-hero-card {
-    @apply rounded-[20px] border border-slate-200 bg-slate-50/70 p-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
   }
 
   .project-settings-hero-info {
@@ -414,7 +375,7 @@
   }
 
   .project-settings-logo {
-    @apply inline-flex h-20 w-20 items-center justify-center rounded-[22px] text-white shadow-sm transition-transform duration-150;
+    @apply inline-flex h-20 w-20 items-center justify-center rounded-[var(--radius-lg)] text-white shadow-sm transition-transform duration-150;
     background-color: #2395f1;
   }
 
@@ -435,7 +396,7 @@
   }
 
   .project-settings-visual-popover {
-    @apply rounded-[20px] border border-slate-200 bg-white p-4 shadow-lg;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white p-4 shadow-lg;
   }
 
   .project-settings-color-group,
@@ -461,57 +422,9 @@
     @apply border-slate-300;
   }
 
-  .project-color-blue,
-  .project-settings-color-option.project-color-blue {
-    background-color: #2395f1;
-    color: #fff;
-  }
-
-  .project-color-green,
-  .project-settings-color-option.project-color-green {
-    background-color: #00a854;
-    color: #fff;
-  }
-
-  .project-color-yellow,
-  .project-settings-color-option.project-color-yellow {
-    background-color: #ffbf00;
-    color: #0f172a;
-  }
-
-  .project-color-red,
-  .project-settings-color-option.project-color-red {
-    background-color: #f56a00;
-    color: #fff;
-  }
-
-  .project-color-pink,
-  .project-settings-color-option.project-color-pink {
-    background-color: #f5317f;
-    color: #fff;
-  }
-
-  .project-color-cyan,
-  .project-settings-color-option.project-color-cyan {
-    background-color: #00a2ae;
-    color: #fff;
-  }
-
-  .project-color-gray,
-  .project-settings-color-option.project-color-gray {
-    background-color: #94a3b8;
-    color: #fff;
-  }
-
-  .project-color-purple,
-  .project-settings-color-option.project-color-purple {
-    background-color: #7265e6;
-    color: #fff;
-  }
-
   .project-settings-danger-zone,
   .console-danger-zone {
-    @apply rounded-[22px] border border-rose-200 bg-rose-50/70 p-4;
+    @apply rounded-[var(--radius-lg)] border border-rose-200 bg-rose-50/70 p-4;
   }
 
   .project-settings-danger-header,
@@ -530,7 +443,7 @@
   }
 
   .console-settings-custom-field-row {
-    @apply gap-3 rounded-[18px] border border-slate-200 bg-slate-50/70 px-4 py-4;
+    @apply gap-3 rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 px-4 py-4;
   }
 
   .console-settings-custom-field-input {
@@ -546,12 +459,12 @@
   }
 
   .console-settings-submit .mantine-Button-root {
-    @apply h-10 rounded-[14px] px-5 text-sm font-semibold;
+    @apply h-10 rounded-[var(--radius-md)] px-5 text-sm font-semibold;
   }
 
   .console-danger-content,
   .console-danger-confirm-content {
-    @apply flex flex-col gap-3 rounded-[18px] border border-rose-200 bg-white px-4 py-4;
+    @apply flex flex-col gap-3 rounded-[var(--radius-lg)] border border-rose-200 bg-white px-4 py-4;
   }
 
   .console-danger-confirm-path {
@@ -559,7 +472,7 @@
   }
 
   .console-danger-confirm-input .mantine-Input-input {
-    @apply rounded-[14px] border-rose-200 bg-white text-sm;
+    @apply rounded-[var(--radius-md)] border-rose-200 bg-white text-sm;
   }
 
   .console-danger-confirm-hint {
@@ -571,7 +484,7 @@
   }
 
   .console-project-section-head {
-    @apply mb-0 rounded-[16px] border border-slate-200 bg-slate-50/70 px-4 py-3;
+    @apply mb-0 rounded-[var(--radius-md)] border border-slate-200 bg-slate-50/70 px-4 py-3;
   }
 
   .console-project-header-actions {
@@ -579,7 +492,7 @@
   }
 
   .console-group-add-button {
-    @apply inline-flex h-10 items-center justify-center rounded-[14px] border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-150;
+    @apply inline-flex h-10 items-center justify-center rounded-[var(--radius-md)] border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-150;
   }
 
   .console-group-add-button:hover {
@@ -607,11 +520,11 @@
   }
 
   .console-copy-modal {
-    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 p-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
   }
 
   .guide-popover {
-    @apply rounded-[18px] border border-slate-200 bg-white p-3 shadow-lg;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white p-3 shadow-lg;
   }
 
   .guide-tip-title {
@@ -619,7 +532,7 @@
   }
 
   .guide-focus-mask {
-    @apply pointer-events-none absolute inset-0 rounded-[24px] ring-4 ring-blue-200/70;
+    @apply pointer-events-none absolute inset-0 rounded-[var(--radius-xl)] ring-4 ring-blue-200/70;
   }
 
   .follow-page {
@@ -634,7 +547,7 @@
   .user-list-card,
   .user-profile-card,
   .group-members-card {
-    @apply rounded-[24px] border border-slate-200 bg-white/94 shadow-sm;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/94 shadow-sm;
   }
 
   .follow-project-logo {
@@ -642,7 +555,7 @@
   }
 
   .user-search-bar {
-    @apply mb-4 rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-4 shadow-none;
+    @apply mb-4 rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 px-4 py-4 shadow-none;
   }
 
   .user-search-bar > div:first-child,
@@ -656,12 +569,6 @@
 
   .project-console-page,
   .project-console-layout,
-  .project-console-content,
-  .project-console-sider,
-  .interface-workspace-layout,
-  .interface-workspace-drawer {
-    @apply min-w-0;
-  }
 
   .interface-run-tab {
     @apply space-y-4;
@@ -676,12 +583,12 @@
   }
 
   .project-members-card {
-    @apply rounded-[24px] border border-slate-200 bg-white/94 shadow-sm;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/94 shadow-sm;
   }
 
   .project-members-role-select .mantine-Select-input,
   .project-members-modal-select .mantine-Select-input {
-    @apply h-10 rounded-[14px] border-slate-300 bg-white text-sm text-slate-700;
+    @apply h-10 rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-700;
   }
 
   .group-members-grid {
@@ -689,7 +596,7 @@
   }
 
   .group-members-item {
-    @apply rounded-[22px] border border-slate-200 bg-slate-50 p-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50 p-4;
   }
 
   .group-members-name {
@@ -736,16 +643,12 @@
     @apply bg-slate-100 text-slate-700;
   }
 
-  .log-diff-wrap {
-    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 p-4;
-  }
-
   .log-diff-pair {
     @apply grid gap-4 lg:grid-cols-2;
   }
 
   .log-diff-col {
-    @apply rounded-[18px] border border-slate-200 bg-white p-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white p-4;
   }
 
   .log-diff-col-title {
@@ -761,7 +664,7 @@
   }
 
   .plugin-loading-block {
-    @apply rounded-[18px] border border-dashed border-slate-200 bg-slate-50/70;
+    @apply rounded-[var(--radius-lg)] border border-dashed border-slate-200 bg-slate-50/70;
   }
 
   .plugin-row-start {
@@ -769,7 +672,7 @@
   }
 
   .plugin-field-row {
-    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 px-4 py-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 px-4 py-4;
   }
 
   .plugin-field-w220 {
@@ -785,15 +688,15 @@
   }
 
   .plugin-ip-switch-item {
-    @apply rounded-[16px] border border-slate-200 bg-white px-4 py-3;
+    @apply rounded-[var(--radius-md)] border border-slate-200 bg-white px-4 py-3;
   }
 
   .plugin-ip-address-item {
-    @apply rounded-[16px] border border-slate-200 bg-white px-4 py-4;
+    @apply rounded-[var(--radius-md)] border border-slate-200 bg-white px-4 py-4;
   }
 
   .plugin-pre {
-    @apply overflow-x-auto rounded-[18px] border border-slate-200 bg-slate-950 px-4 py-4 font-mono text-[13px] leading-6 text-slate-100;
+    @apply overflow-x-auto rounded-[var(--radius-lg)] border border-slate-200 bg-slate-950 px-4 py-4 font-mono text-[13px] leading-6 text-slate-100;
   }
 
   .schema-editor-head-name {
@@ -806,7 +709,7 @@
 
   .schema-editor-root-type .mantine-Select-input,
   .schema-editor-root-placeholder .mantine-Input-input {
-    @apply rounded-[14px] border-slate-300 bg-white text-sm text-slate-500;
+    @apply rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-500;
   }
 
   .open-api-list {
@@ -819,5 +722,39 @@
 
   .project-settings-form {
     @apply space-y-0;
+  }
+
+  /* ─── Project color badges (dynamically applied via `project-color-${color}`) ─── */
+  .project-color-blue {
+    background-color: #2563eb;
+    color: #fff;
+  }
+  .project-color-cyan {
+    background-color: #0891b2;
+    color: #fff;
+  }
+  .project-color-green {
+    background-color: #059669;
+    color: #fff;
+  }
+  .project-color-red {
+    background-color: #dc2626;
+    color: #fff;
+  }
+  .project-color-pink {
+    background-color: #db2777;
+    color: #fff;
+  }
+  .project-color-purple {
+    background-color: #7c3aed;
+    color: #fff;
+  }
+  .project-color-yellow {
+    background-color: #d97706;
+    color: #fff;
+  }
+  .project-color-gray {
+    background-color: #475569;
+    color: #fff;
   }
 }

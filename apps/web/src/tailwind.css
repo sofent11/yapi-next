@@ -4,6 +4,7 @@
 @import "./tailwind/components-interface.css";
 @import "./tailwind/components-editor.css";
 @import "./tailwind/components-pages.css";
+@import "./tailwind/mantine-overrides.css";
 
 @theme {
   --font-sans: var(--font-ui);
@@ -56,5 +57,20 @@
   ):focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
+  }
+
+  @keyframes page-enter {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  #app-main-content > * {
+    animation: page-enter var(--duration-base) ease-out both;
   }
 }

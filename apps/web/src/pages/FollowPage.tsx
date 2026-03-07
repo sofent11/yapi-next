@@ -73,7 +73,7 @@ export function FollowPage() {
         key={pid}
         radius="xl"
         withBorder
-        className="cursor-pointer rounded-[24px] border border-slate-200 bg-white/95 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+        className="cursor-pointer rounded-[var(--radius-xl)] border border-slate-200 bg-white/95 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         onClick={handleNavigate}
         role="button"
         tabIndex={0}

@@ -11,7 +11,7 @@ export type EntityHeaderProps = {
 
 export function EntityHeader(props: EntityHeaderProps) {
   return (
-    <header className="mb-5 flex flex-wrap items-start justify-between gap-4 rounded-[28px] border border-slate-200 bg-white/92 px-5 py-5 shadow-sm backdrop-blur">
+    <header className="mb-5 flex flex-wrap items-start justify-between gap-4 rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 px-5 py-5 shadow-sm backdrop-blur">
       <div className="min-w-0 flex-1">
         <div className="space-y-2">
           {props.eyebrow ? (
