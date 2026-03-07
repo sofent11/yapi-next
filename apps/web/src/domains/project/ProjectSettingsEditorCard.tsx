@@ -10,7 +10,16 @@ type ProjectSettingsEditorCardProps = {
 
 export function ProjectSettingsEditorCard(props: ProjectSettingsEditorCardProps) {
   return (
-    <Card withBorder radius="lg" className={['project-settings-editor-card', props.className].filter(Boolean).join(' ')}>
+    <Card
+      withBorder
+      radius="lg"
+      className={[
+        'project-settings-editor-card dark:!border-[#24456f] dark:!bg-[#10294d]',
+        props.className
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       <div className="project-settings-editor-card-head">
         <Text fw={600}>{props.title}</Text>
         {props.actions ? <div>{props.actions}</div> : null}

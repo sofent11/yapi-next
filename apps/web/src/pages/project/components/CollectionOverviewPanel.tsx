@@ -80,7 +80,7 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
   }
 
   return (
-    <Card withBorder radius="lg" padding="lg">
+    <Card withBorder radius="lg" padding="lg" className="collection-overview-card">
       <Stack className="collection-overview-stack">
         <CollectionDetailHeader
           eyebrow="测试集合"

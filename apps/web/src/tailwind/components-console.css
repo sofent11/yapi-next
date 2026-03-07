@@ -5,10 +5,16 @@
 
   .group-bar {
     @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900/92;
+    }
   }
 
   .curr-group {
     @apply mb-4 rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/80 p-4;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-800/80;
+    }
   }
 
   .curr-group-name {
@@ -17,18 +23,47 @@
 
   .curr-group-name .name {
     @apply text-2xl font-semibold tracking-tight text-slate-900;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-100;
+    }
   }
 
   .curr-group-desc {
     @apply text-sm leading-6 text-slate-500;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-400;
+    }
   }
 
   .group-operate {
     @apply mb-3;
   }
 
+  .group-operate .mantine-Input-input {
+    @apply border-slate-200 bg-slate-50/90 text-slate-700 shadow-sm;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-[#24456f] bg-[#102341] text-slate-200;
+    }
+  }
+
+  .group-operate .mantine-Input-input::placeholder {
+    @apply text-slate-400;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-400;
+    }
+  }
+
+  .group-operate .mantine-Input-section {
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-400;
+    }
+  }
+
   .console-group-summary {
     @apply mb-3 text-sm text-slate-500;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-400;
+    }
   }
 
   .console-group-loading {
@@ -41,14 +76,23 @@
 
   .group-item:hover {
     @apply -translate-y-px border-slate-200 shadow-md;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700;
+    }
   }
 
   .project-console-tabs [role='tablist'] {
     @apply mb-4 rounded-[var(--radius-lg)] border border-slate-200 bg-white/92 p-1 shadow-sm;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900/92;
+    }
   }
 
   .project-console-tabs [role='tab'] {
     @apply rounded-2xl px-4 py-2 text-sm font-medium text-slate-500;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-400;
+    }
   }
 
   .project-console-tabs [role='tab'][data-active='true'] {
@@ -57,6 +101,9 @@
 
   .console-project-panel {
     @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-[#1f3e68] bg-[#081a36]/92;
+    }
   }
 
   .console-project-stats {
@@ -65,6 +112,9 @@
 
   .console-project-stat-chip {
     @apply inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply bg-slate-800 text-slate-300;
+    }
   }
 
   .console-project-grid {
@@ -73,10 +123,16 @@
 
   .console-project-section-empty {
     @apply rounded-[var(--radius-lg)] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-800 text-slate-400;
+    }
   }
 
   .owner-type {
     @apply m-0 text-lg font-semibold tracking-tight text-slate-900;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-100;
+    }
   }
 
   .card-container {
@@ -85,10 +141,16 @@
 
   .m-card.console-project-card-button {
     @apply flex min-h-[288px] cursor-pointer flex-col rounded-[var(--radius-xl)] border border-slate-200 bg-white px-6 py-6 shadow-sm transition-all duration-150;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-[#214670] bg-[#102341];
+    }
   }
 
   .m-card.console-project-card-button:hover {
     @apply -translate-y-0.5 border-slate-300 shadow-lg;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-[#3a6aa0] bg-[#132b50];
+    }
   }
 
   .ui-logo {
@@ -97,10 +159,16 @@
 
   .ui-title {
     @apply m-0 text-[28px] font-semibold leading-tight tracking-tight text-slate-900;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-100;
+    }
   }
 
   .console-project-subtitle {
     @apply mt-3 min-h-[48px] text-sm leading-6 text-slate-500;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-400;
+    }
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -114,11 +182,17 @@
   .console-members-panel,
   .console-activity-panel {
     @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900/92;
+    }
   }
 
   .m-panel,
   .news-box {
     @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900/92;
+    }
   }
 
   .g-row {
@@ -135,6 +209,9 @@
 
   .timeline-filter {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/80 p-4;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-800/80;
+    }
   }
 
   .timeline-filter .mantine-Text-root {
@@ -148,6 +225,9 @@
   .timeline-api-select .mantine-Input-input,
   .timeline-api-select .mantine-Select-input {
     @apply h-12 rounded-[var(--radius-md)] border-slate-300 bg-white px-4 text-sm text-slate-700;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900 text-slate-300;
+    }
   }
 
   .timeline-api-select .mantine-Input-input::placeholder,
@@ -165,6 +245,9 @@
 
   .timeline-bullet {
     @apply border-4 border-white bg-slate-100 shadow-sm ring-1 ring-slate-200;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-900 bg-slate-800 ring-slate-700;
+    }
   }
 
   .timeline-bullet .mantine-Avatar-root {
@@ -181,6 +264,9 @@
 
   .timeline-item {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white px-5 py-4 shadow-sm;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900;
+    }
   }
 
   .timeline-log-head {
@@ -189,22 +275,37 @@
 
   .timeline-log-chip {
     @apply inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold tracking-wide text-blue-700;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply bg-blue-950/40 text-blue-300;
+    }
   }
 
   .timeline-log-time {
     @apply text-sm font-medium text-slate-700;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-300;
+    }
   }
 
   .timeline-log-timeago {
     @apply text-sm text-slate-400;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-500;
+    }
   }
 
   .timeline-log-content {
     @apply text-[15px] leading-8 text-slate-700;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-300;
+    }
   }
 
   .timeline-log-content a {
     @apply font-medium text-slate-900;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-100;
+    }
   }
 
   .timeline-log-content p {
@@ -217,10 +318,16 @@
 
   .timeline-item-actions .mantine-Button-root {
     @apply rounded-full border-slate-200 bg-slate-50 text-slate-700;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-800 text-slate-300;
+    }
   }
 
   .timeline-item-actions .mantine-Button-root:hover {
     @apply border-slate-300 bg-white text-slate-900;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900 text-slate-100;
+    }
   }
 
   .timeline-footer {
@@ -233,6 +340,9 @@
 
   .log-diff-note {
     @apply rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-emerald-800 bg-emerald-950/35 text-emerald-300;
+    }
   }
 
   .log-diff-content {
@@ -241,10 +351,16 @@
 
   .log-diff-item {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 px-4 py-4;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-800/70;
+    }
   }
 
   .log-diff-item-title {
     @apply m-0 text-base font-semibold text-slate-900;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-100;
+    }
   }
 
   .log-diff-item ins {
@@ -261,14 +377,23 @@
 
   .console-members-summary-chip {
     @apply inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply bg-slate-800 text-slate-300;
+    }
   }
 
   .console-members-table {
     @apply overflow-hidden rounded-[var(--radius-lg)] border border-slate-200 bg-white;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900;
+    }
   }
 
   .console-members-table thead {
     @apply bg-slate-50;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply bg-slate-800;
+    }
   }
 
   .console-members-table th {
@@ -277,6 +402,9 @@
 
   .console-members-table tbody tr + tr {
     @apply border-t border-slate-100;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-800;
+    }
   }
 
   .console-members-cell {
@@ -289,11 +417,17 @@
 
   .console-members-name-link {
     @apply font-medium text-slate-900;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-100;
+    }
   }
 
   .console-members-email,
   .console-members-role-text {
     @apply text-sm text-slate-500;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-400;
+    }
   }
 
   .console-members-role-select {
@@ -302,10 +436,16 @@
 
   .console-project-action-button {
     @apply absolute z-10 flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-all duration-150;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900 text-slate-400;
+    }
   }
 
   .console-project-action-button:hover {
     @apply -translate-y-px border-slate-300 text-slate-900 shadow-md;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 text-slate-100;
+    }
   }
 
   .card-btns {

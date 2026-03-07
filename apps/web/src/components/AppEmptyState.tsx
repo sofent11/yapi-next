@@ -75,7 +75,7 @@ export function AppEmptyState(props: AppEmptyStateProps) {
     <Stack
       align="center"
       gap="sm"
-      className="rounded-[var(--radius-xl)] border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center"
+      className="rounded-[var(--radius-xl)] border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center dark:!border-[#24456f] dark:!bg-[#10294d]"
     >
       <ThemeIcon size={56} radius="xl" variant="light" color="gray">
         {fallback.icon === 'meh' ? <IconMoodEmpty size={28} /> : <IconMoodSad size={28} />}

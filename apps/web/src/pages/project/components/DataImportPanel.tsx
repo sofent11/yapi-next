@@ -422,7 +422,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
               multiline
               maw={320}
             >
-              <span className="inline-help-text inline-flex text-slate-500">
+              <span className="inline-help-text inline-flex text-slate-500 dark:text-slate-400">
                 <IconHelpCircle size={16} />
               </span>
             </Tooltip>
@@ -446,7 +446,7 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
             <span className="label inline-flex items-center gap-1">
               开启 URL 导入
               <Tooltip label="使用 swagger/openapi 链接地址导入">
-                <span className="inline-help-text inline-flex text-slate-500">
+                <span className="inline-help-text inline-flex text-slate-500 dark:text-slate-400">
                   <IconHelpCircle size={16} />
                 </span>
               </Tooltip>
@@ -498,8 +498,8 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
               <span className="mb-2 inline-flex">
                 <IconUpload size={20} />
               </span>
-              <div className="text-sm font-medium text-slate-800">点击选择规范文件</div>
-              <div className="mt-1 text-sm text-slate-500">支持 JSON / YAML / TXT，选择后会自动填充到下方文本框</div>
+              <div className="text-sm font-medium text-slate-800 dark:text-slate-200">点击选择规范文件</div>
+              <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">支持 JSON / YAML / TXT，选择后会自动填充到下方文本框</div>
             </button>
             <Textarea
               minRows={10}

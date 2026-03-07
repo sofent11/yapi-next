@@ -11,7 +11,7 @@ export type EntityHeaderProps = {
 
 export function EntityHeader(props: EntityHeaderProps) {
   return (
-    <header className="mb-5 flex flex-wrap items-start justify-between gap-4 rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 px-5 py-5 shadow-sm backdrop-blur">
+    <header className="mb-5 flex flex-wrap items-start justify-between gap-4 rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 px-5 py-5 shadow-sm backdrop-blur dark:!border-[#24456f] dark:!bg-[#0d2345]">
       <div className="min-w-0 flex-1">
         <div className="space-y-2">
           {props.eyebrow ? (
@@ -19,10 +19,12 @@ export function EntityHeader(props: EntityHeaderProps) {
               {props.eyebrow}
             </span>
           ) : null}
-          <h1 className="m-0 text-2xl font-semibold text-slate-900 md:text-3xl">{props.title}</h1>
-          {props.subtitle ? <p className="m-0 max-w-4xl text-sm leading-7 text-slate-600">{props.subtitle}</p> : null}
+          <h1 className="m-0 text-2xl font-semibold text-slate-900 dark:text-slate-100 md:text-3xl">{props.title}</h1>
+          {props.subtitle ? (
+            <p className="m-0 max-w-4xl text-sm leading-7 text-slate-600 dark:text-slate-300">{props.subtitle}</p>
+          ) : null}
           {props.meta || props.status ? (
-            <div className="flex flex-wrap items-center gap-3 pt-1 text-sm text-slate-500">
+            <div className="flex flex-wrap items-center gap-3 pt-1 text-sm text-slate-500 dark:text-slate-400">
               {props.meta ? <div>{props.meta}</div> : null}
               {props.status ? <div>{props.status}</div> : null}
             </div>

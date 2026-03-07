@@ -62,7 +62,7 @@ export function ProjectList(props: ProjectListProps) {
       <div className="card-container" key={pid}>
         <Card
           withBorder={false}
-          className="m-card console-project-card-button"
+          className="m-card console-project-card-button dark:!border-[#214670] dark:!bg-[#102341] dark:hover:!border-[#3a6aa0] dark:hover:!bg-[#132b50]"
           onClick={() => props.onNavigateProject(pid)}
           role="button"
           tabIndex={0}
@@ -112,7 +112,7 @@ export function ProjectList(props: ProjectListProps) {
   };
 
   return (
-    <SectionCard className="m-panel project-list console-project-panel">
+    <SectionCard className="m-panel project-list console-project-panel dark:!border-[#1f3e68] dark:!bg-[#081a36]/92">
       <DataToolbar
         title="项目总览"
         summary={

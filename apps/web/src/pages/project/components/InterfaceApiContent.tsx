@@ -113,7 +113,7 @@ export type InterfaceApiContentProps = {
 export function InterfaceApiContent(props: InterfaceApiContentProps) {
   if (props.interfaceId <= 0) {
     return (
-      <Card padding="lg" radius="lg" withBorder>
+      <Card padding="lg" radius="lg" withBorder className="interface-index-panel-card">
         <div className="interface-index-panel">
           <InterfaceListPanel
             basepath={props.basepath}
@@ -246,7 +246,7 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
   ];
 
   return (
-    <Card padding="lg" radius="lg" withBorder>
+    <Card padding="lg" radius="lg" withBorder className="interface-index-panel-card">
       <div className="interface-detail-panel">
         {props.tab !== 'view' ? (
           <InterfaceDetailHeader

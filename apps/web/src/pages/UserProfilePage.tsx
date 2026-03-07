@@ -221,12 +221,12 @@ export function UserProfilePage() {
       <SectionCard className="user-profile-card">
         <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
           <div className="space-y-4">
-            <div className="flex flex-col items-center gap-3 rounded-[var(--radius-xl)] border border-slate-200 bg-slate-50 p-6 text-center">
+            <div className="flex flex-col items-center gap-3 rounded-[var(--radius-xl)] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-6 text-center">
               {targetUid === currentUid ? (
                 <Tooltip label="点击头像更换，仅支持 jpg/png 且大小不超过 200kb。">
                   <label htmlFor="avatar-upload-input" className="cursor-pointer">
                     <img
-                      className="h-24 w-24 rounded-full border border-slate-200 object-cover"
+                      className="h-24 w-24 rounded-full border border-slate-200 dark:border-slate-700 object-cover"
                       src={`/api/user/avatar?uid=${targetUid}`}
                       alt="avatar"
                     />
@@ -234,7 +234,7 @@ export function UserProfilePage() {
                 </Tooltip>
               ) : (
                 <img
-                  className="h-24 w-24 rounded-full border border-slate-200 object-cover"
+                  className="h-24 w-24 rounded-full border border-slate-200 dark:border-slate-700 object-cover"
                   src={`/api/user/avatar?uid=${targetUid}`}
                   alt="avatar"
                 />
@@ -257,7 +257,7 @@ export function UserProfilePage() {
               ) : null}
             </div>
 
-            <div className="rounded-[var(--radius-xl)] border border-slate-200 bg-slate-50 p-5">
+            <div className="rounded-[var(--radius-xl)] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-5">
               <Text fw={600} mb="md">
                 账号摘要
               </Text>
@@ -271,7 +271,7 @@ export function UserProfilePage() {
           </div>
 
           <div className="space-y-6">
-            <div className="space-y-4 rounded-[var(--radius-xl)] border border-slate-200 bg-slate-50 p-5">
+            <div className="space-y-4 rounded-[var(--radius-xl)] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-5">
               <Text fw={600}>基础资料</Text>
               <div className="grid gap-4 md:grid-cols-[96px_minmax(0,1fr)_auto] md:items-center">
                 <Text fw={500}>用户名</Text>
@@ -331,7 +331,7 @@ export function UserProfilePage() {
             </div>
 
             {canChangePassword ? (
-              <div className="space-y-4 rounded-[var(--radius-xl)] border border-slate-200 bg-slate-50 p-5">
+              <div className="space-y-4 rounded-[var(--radius-xl)] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-5">
                 <Text fw={600}>修改密码</Text>
                 {isAdmin && profileData?.role !== 'admin' ? null : (
                   <PasswordInput

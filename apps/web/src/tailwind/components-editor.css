@@ -13,6 +13,9 @@
   .workspace-paragraph,
   .workspace-paragraph-compact {
     @apply text-sm text-slate-500;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-400;
+    }
   }
 
   .workspace-paragraph,
@@ -26,16 +29,27 @@
 
   .workspace-form-modal-stack .mantine-Text-root:first-child {
     @apply text-sm leading-6 text-slate-500;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-400;
+    }
   }
 
   .workspace-form-modal-stack .mantine-Input-input,
   .workspace-form-modal-stack .mantine-Select-input,
   .workspace-form-modal-stack .mantine-Textarea-input {
     @apply rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-700;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-input);
+      color: rgb(226 232 240);
+    }
   }
 
   .interface-edit-section {
     @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white shadow-sm;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900;
+    }
   }
 
   .interface-edit-path,
@@ -46,26 +60,44 @@
   .interface-edit-method-select .mantine-Input-input,
   .interface-edit-basepath-input .mantine-Input-input {
     @apply h-11 rounded-[var(--radius-md)] border-slate-300 text-sm;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700;
+    }
   }
 
   .interface-edit-basepath-input .mantine-Input-input {
     @apply bg-slate-100 text-slate-500;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply bg-slate-800 text-slate-400;
+    }
   }
 
   .interface-edit-type-switch .mantine-SegmentedControl-root {
     @apply rounded-[var(--radius-md)] bg-slate-100 p-1;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply bg-slate-800;
+    }
   }
 
   .interface-edit-type-switch .mantine-SegmentedControl-indicator {
     @apply rounded-[var(--radius-sm)] bg-white shadow-sm;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply bg-slate-900;
+    }
   }
 
   .interface-edit-type-switch .mantine-SegmentedControl-label {
     @apply rounded-[var(--radius-sm)] px-3 py-2 text-sm font-semibold text-slate-500;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-400;
+    }
   }
 
   .interface-edit-type-switch [data-active='true'] {
     @apply text-slate-900;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-100;
+    }
   }
 
   .interface-edit-list-toolbar {
@@ -87,14 +119,23 @@
 
   .interface-edit-response-tabs [role='tablist'] {
     @apply border-b border-slate-200;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700;
+    }
   }
 
   .interface-edit-response-tabs [role='tab'] {
     @apply rounded-none border-b-2 border-transparent px-4 py-3 text-sm font-medium text-slate-500;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-400;
+    }
   }
 
   .interface-edit-response-tabs [role='tab'][data-active='true'] {
     @apply border-blue-500 text-slate-900;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-100;
+    }
   }
 
   .interface-edit-zero-margin {
@@ -103,6 +144,9 @@
 
   .interface-edit-footer {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white px-4 py-3 shadow-sm;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900;
+    }
   }
 
   .interface-edit-footer-sticky {
@@ -133,10 +177,16 @@
   .http-method-head,
   .http-method-options {
     @apply bg-slate-200 text-slate-700;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-300;
+    }
   }
 
   .schema-editor-mode-toolbar {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/80 px-4 py-4;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-800/80;
+    }
   }
 
   .schema-editor-mode-toolbar .mantine-RadioGroup-root {
@@ -145,6 +195,9 @@
 
   .schema-editor-mode-toolbar .mantine-Radio-radio {
     @apply border-slate-300;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700;
+    }
   }
 
   .schema-editor-alert {
@@ -153,12 +206,18 @@
 
   .schema-editor {
     @apply rounded-[var(--radius-xl)] border border-slate-200 bg-slate-50/60 p-4;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-800/60;
+    }
   }
 
   .schema-editor .mantine-Input-input,
   .schema-editor .mantine-Select-input,
   .schema-editor .mantine-Textarea-input {
     @apply rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-700 shadow-none;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900 text-slate-300;
+    }
   }
 
   .schema-editor .mantine-Input-input::placeholder,
@@ -171,14 +230,23 @@
   .schema-editor .mantine-Select-input:disabled,
   .schema-editor .mantine-Textarea-input:disabled {
     @apply border-slate-200 bg-slate-100/90 text-slate-500 opacity-100;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-800/90 text-slate-400;
+    }
   }
 
   .schema-editor .mantine-Switch-track {
     @apply border-slate-300 bg-slate-200;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-800;
+    }
   }
 
   .schema-editor .mantine-Switch-thumb {
     @apply border-white bg-white shadow-sm;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900;
+    }
   }
 
   .schema-editor .mantine-Switch-track[data-checked='true'] {
@@ -187,6 +255,9 @@
 
   .schema-editor-head {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white px-4 py-4 shadow-sm;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-900;
+    }
   }
 
   .schema-editor-head-grid {
@@ -199,10 +270,16 @@
 
   .schema-editor-toggle-button {
     @apply rounded-full text-slate-500 transition-all duration-150;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-400;
+    }
   }
 
   .schema-editor-toggle-button:hover:not(:disabled) {
     @apply bg-slate-100 text-slate-900;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply bg-slate-800 text-slate-100;
+    }
   }
 
   .schema-editor-toggle-button:disabled {
@@ -211,10 +288,16 @@
 
   .schema-editor-root-name .mantine-Input-input {
     @apply font-semibold text-slate-900;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-100;
+    }
   }
 
   .schema-editor-table-wrap {
     @apply bg-white shadow-sm;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply bg-slate-900;
+    }
   }
 
   .schema-editor-table {
@@ -223,18 +306,30 @@
 
   .schema-editor-table thead {
     @apply bg-slate-100/80;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply bg-slate-800/80;
+    }
   }
 
   .schema-editor-table th {
     @apply border-slate-200 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 text-slate-400;
+    }
   }
 
   .schema-editor-table td {
     @apply border-slate-200 px-4 py-3 align-top;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700;
+    }
   }
 
   .schema-editor-table tbody tr:hover {
     @apply bg-slate-50/80;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply bg-slate-800/80;
+    }
   }
 
   .schema-editor-tree-row {
@@ -248,16 +343,25 @@
 
   .schema-editor-tree-row .mantine-Input-input {
     @apply font-medium text-slate-800;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-200;
+    }
   }
 
   .schema-editor-row-actions .mantine-ActionIcon-root,
   .schema-editor-head-actions .mantine-ActionIcon-root {
     @apply h-9 w-9 rounded-full border border-transparent bg-white text-slate-500 transition-all duration-150;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply bg-slate-900 text-slate-400;
+    }
   }
 
   .schema-editor-row-actions .mantine-ActionIcon-root:hover,
   .schema-editor-head-actions .mantine-ActionIcon-root:hover {
     @apply border-slate-200 bg-slate-50 text-slate-900 shadow-sm;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-800 text-slate-100;
+    }
   }
 
   .schema-editor-row-actions .mantine-ActionIcon-root[data-disabled],
@@ -276,6 +380,9 @@
 
   .schema-editor-import-input .mantine-Textarea-input {
     @apply rounded-[var(--radius-md)] border-slate-300 bg-slate-50 font-mono text-[13px] leading-6 text-slate-800;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply border-slate-700 bg-slate-800 text-slate-200;
+    }
   }
 
   .schema-editor .mantine-Table-table {
@@ -288,6 +395,11 @@
 
   .workspace-leave-confirm-note {
     @apply rounded-[var(--radius-lg)] border border-amber-100 bg-amber-50/70 px-4 py-3 text-[15px] leading-7 text-slate-600;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      border-color: rgb(180 83 9 / 0.45);
+      background-color: rgb(92 34 8 / 0.28);
+      color: rgb(226 232 240);
+    }
   }
 
   .workspace-leave-confirm-actions {
@@ -304,5 +416,41 @@
 
   .app-modal-title {
     @apply text-[18px] font-semibold tracking-tight text-slate-900;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      @apply text-slate-100;
+    }
+  }
+
+  .app-modal-content {
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      border: 1px solid var(--border-project-subtle);
+      background-color: var(--surface-project-subtle);
+      box-shadow: 0 24px 60px rgb(2 6 23 / 0.55);
+    }
+  }
+
+  .app-modal-header {
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      border-bottom-color: var(--border-project-subtle);
+      background-color: transparent;
+    }
+  }
+
+  .app-modal-body {
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      background-color: transparent;
+      color: rgb(226 232 240);
+    }
+  }
+
+  .app-modal-close {
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      color: rgb(203 213 225);
+      background-color: transparent;
+    }
+    &:is([data-theme="dark"], [data-theme="dark"] *):hover {
+      background-color: var(--surface-project-elevated);
+      color: rgb(248 250 252);
+    }
   }
 }

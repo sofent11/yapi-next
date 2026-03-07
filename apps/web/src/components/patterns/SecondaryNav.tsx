@@ -31,7 +31,7 @@ export function SecondaryNav(props: SecondaryNavProps) {
           {props.summary}
         </Text>
       ) : null}
-      <nav className="no-scrollbar flex overflow-x-auto" role="tablist">
+      <nav className="no-scrollbar flex overflow-x-auto overflow-y-hidden" role="tablist">
         {props.items.map(item => {
           const content = (
             <Link

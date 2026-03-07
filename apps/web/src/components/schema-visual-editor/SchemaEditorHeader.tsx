@@ -29,7 +29,7 @@ export function SchemaEditorHeader({
           <ActionIcon
             variant="subtle"
             size="sm"
-            className="schema-editor-toggle-button"
+            className="schema-editor-toggle-button dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[#24456f] dark:hover:!bg-[#13325d] dark:hover:!text-slate-100"
             onClick={onToggleRootCollapse}
           >
             {rootCollapsed ? <IconChevronRight size={16} /> : <IconChevronDown size={16} />}
@@ -44,17 +44,29 @@ export function SchemaEditorHeader({
         <TextInput className="schema-editor-root-placeholder" value="description" disabled />
         <div className="schema-editor-head-actions flex items-center gap-1">
           <Tooltip label="导入 JSON 生成 Schema">
-            <ActionIcon variant="subtle" onClick={onImportJson}>
+            <ActionIcon
+              variant="subtle"
+              className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[#24456f] dark:hover:!bg-[#13325d] dark:hover:!text-slate-100"
+              onClick={onImportJson}
+            >
               <IconUpload size={16} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label="查看/编辑 Schema 文件">
-            <ActionIcon variant="subtle" onClick={onOpenSchema}>
+            <ActionIcon
+              variant="subtle"
+              className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[#24456f] dark:hover:!bg-[#13325d] dark:hover:!text-slate-100"
+              onClick={onOpenSchema}
+            >
               <IconFileText size={16} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label="添加子节点">
-            <ActionIcon variant="subtle" onClick={onAddTopRow}>
+            <ActionIcon
+              variant="subtle"
+              className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[#24456f] dark:hover:!bg-[#13325d] dark:hover:!text-slate-100"
+              onClick={onAddTopRow}
+            >
               <IconPlus size={16} />
             </ActionIcon>
           </Tooltip>

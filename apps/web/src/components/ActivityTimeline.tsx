@@ -163,7 +163,7 @@ export function ActivityTimeline(props: ActivityTimelineProps) {
       ) : null}
 
       {logRows.length === 0 && !query.isFetching ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+        <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
           暂无动态
         </div>
       ) : (
@@ -244,17 +244,17 @@ export function ActivityTimeline(props: ActivityTimelineProps) {
         onClose={() => setDetailOpen(false)}
         size="xl"
       >
-        <div className="log-diff-note mb-4 text-sm text-slate-500">注：绿色代表新增内容，红色代表删除内容</div>
+        <div className="log-diff-note mb-4 text-sm text-slate-500 dark:text-slate-400">注：绿色代表新增内容，红色代表删除内容</div>
         <div className="log-diff-content space-y-4">
           {diffItems.length > 0 ? (
             diffItems.map(item => (
               <div key={item.title} className="log-diff-item space-y-2">
-                <h3 className="log-diff-item-title text-base font-semibold text-slate-900">{item.title}</h3>
+                <h3 className="log-diff-item-title text-base font-semibold text-slate-900 dark:text-slate-100">{item.title}</h3>
                 <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.content) }} />
               </div>
             ))
           ) : (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
               没有改动
             </div>
           )}

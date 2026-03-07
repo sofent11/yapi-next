@@ -14,8 +14,8 @@ export function ProjectDataPage(props: ProjectDataPageProps) {
       {taskId ? (
         <div className="project-data-task-toolbar">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-900">正在跟踪导入任务</p>
-            <p className="text-sm text-slate-500">任务 ID：{taskId}</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">正在跟踪导入任务</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">任务 ID：{taskId}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button size="xs" variant="default" onClick={() => setTaskModalOpen(true)}>

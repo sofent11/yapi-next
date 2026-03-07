@@ -216,12 +216,12 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
                     >
                       <div className="adaptive-data-card-head">
                         <div className="min-w-0">
-                          <div className="font-semibold text-slate-900">{row.name || row.id}</div>
+                          <div className="font-semibold text-slate-900 dark:text-slate-100">{row.name || row.id}</div>
                           <div className="flex items-center gap-2">
                             <span className={props.methodClassName(row.method || 'GET')}>
                               {String(row.method || 'GET').toUpperCase()}
                             </span>
-                            <span className="truncate text-sm text-slate-600">{row.path || '-'}</span>
+                            <span className="truncate text-sm text-slate-600 dark:text-slate-300">{row.path || '-'}</span>
                           </div>
                         </div>
                         <Badge color={badge.color} variant="light">

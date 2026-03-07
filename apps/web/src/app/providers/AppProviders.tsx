@@ -7,6 +7,7 @@ import { Notifications } from '@mantine/notifications';
 import { bootstrapWebPlugins, webPlugins } from '../../plugins';
 import { registerDynamicReducers, store } from '../../store';
 import { appTheme } from '../../design/theme';
+import { ThemeProvider, useTheme } from '../../hooks/useTheme';
 
 bootstrapWebPlugins();
 registerDynamicReducers(webPlugins.getDynamicReducers());
@@ -15,22 +16,32 @@ type AppProvidersProps = {
   children: ReactNode;
 };
 
+function ThemedProviders(props: AppProvidersProps) {
+  const { theme } = useTheme();
+
+  return (
+    <MantineProvider forceColorScheme={theme} theme={appTheme}>
+      <ModalsProvider>
+        <Notifications position="top-right" />
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true
+          }}
+        >
+          {props.children}
+        </BrowserRouter>
+      </ModalsProvider>
+    </MantineProvider>
+  );
+}
+
 export function AppProviders(props: AppProvidersProps) {
   return (
     <Provider store={store}>
-      <MantineProvider defaultColorScheme="light" theme={appTheme}>
-        <ModalsProvider>
-          <Notifications position="top-right" />
-          <BrowserRouter
-            future={{
-              v7_startTransition: true,
-              v7_relativeSplatPath: true
-            }}
-          >
-            {props.children}
-          </BrowserRouter>
-        </ModalsProvider>
-      </MantineProvider>
+      <ThemeProvider>
+        <ThemedProviders>{props.children}</ThemedProviders>
+      </ThemeProvider>
     </Provider>
   );
 }

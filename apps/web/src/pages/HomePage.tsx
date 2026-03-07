@@ -98,9 +98,9 @@ export function HomePage() {
       containerClassName="py-6 md:py-8"
     >
       <Container size="xl" className="px-0">
-        <header className="flex flex-col gap-4 rounded-[var(--radius-xl)] border border-white/10 bg-white/6 px-5 py-4 backdrop-blur md:flex-row md:items-center md:justify-between md:px-7">
+        <header className="flex flex-col gap-4 rounded-[var(--radius-xl)] border border-white/10 bg-white/6 dark:bg-slate-900/6 px-5 py-4 backdrop-blur md:flex-row md:items-center md:justify-between md:px-7">
           <Group gap="sm" wrap="nowrap">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-900 shadow-[0_12px_32px_rgba(255,255,255,0.14)]">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-[0_12px_32px_rgba(255,255,255,0.14)]">
               <LogoSVG length="30px" />
             </div>
             <div>
@@ -173,7 +173,7 @@ export function HomePage() {
               {productSignals.map(item => (
                 <div
                   key={item}
-                  className="rounded-full border border-white/10 bg-white/7 px-4 py-2 text-sm text-slate-200 backdrop-blur"
+                  className="rounded-full border border-white/10 bg-white/7 dark:bg-slate-900/7 px-4 py-2 text-sm text-slate-200 backdrop-blur"
                 >
                   {item}
                 </div>

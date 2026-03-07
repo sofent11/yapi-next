@@ -30,6 +30,13 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
           <SegmentedControl
             fullWidth
             value={activeKey}
+            classNames={{
+              root: 'dark:!bg-[#0d2345]',
+              control: 'dark:!border-transparent',
+              indicator: 'dark:!border-[#3a6aa0] dark:!bg-[#13325d]',
+              label: 'dark:!text-slate-300',
+              innerLabel: 'dark:!text-inherit'
+            }}
             onChange={value => {
               if (value === 'api') props.onSwitchAction('api');
               if (value === 'col') props.onSwitchAction('col');
@@ -133,4 +140,3 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
     </div>
   );
 }
-

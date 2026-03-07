@@ -29,7 +29,7 @@ export function AsyncState(props: AsyncStateProps) {
   const description = props.description || copy.description;
 
   return (
-    <div className="rounded-[var(--radius-xl)] border border-slate-200 bg-white/94 px-6 py-12 text-center shadow-sm">
+    <div className="rounded-[var(--radius-xl)] border border-slate-200 bg-white/94 px-6 py-12 text-center shadow-sm dark:!border-[#24456f] dark:!bg-[#0d2345]">
       <Stack align="center" gap="sm">
         {props.state === 'loading' ? <Loader size="lg" /> : null}
         <Title order={4}>{title}</Title>

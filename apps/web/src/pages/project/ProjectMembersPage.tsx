@@ -271,12 +271,12 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
         ) : (
           <AdaptiveDataView
             desktop={
-              <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                <Table striped highlightOnHover withTableBorder>
+              <div className="overflow-x-auto rounded-2xl">
+                <Table className="console-members-table" highlightOnHover withTableBorder>
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th>成员</Table.Th>
-                      <Table.Th>角色</Table.Th>
+                      <Table.Th>成员信息</Table.Th>
+                      <Table.Th>权限</Table.Th>
                       <Table.Th className="text-right">操作</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
@@ -288,12 +288,26 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
                       const displayName = String(row.username || row.email || uid);
 
                       return (
-                        <Table.Tr key={uid}>
+                        <Table.Tr
+                          key={uid}
+                          className={
+                            role === 'owner'
+                              ? 'console-members-row-owner'
+                              : role === 'guest'
+                                ? 'console-members-row-guest'
+                                : 'console-members-row-dev'
+                          }
+                        >
                           <Table.Td>
-                            <div className="project-members-cell">
+                            <div className="console-members-cell">
                               <Avatar src={`/api/user/avatar?uid=${uid}`} size={32} />
-                              <span>{displayName}</span>
-                              {uid === currentUid ? <Badge color="blue">我</Badge> : null}
+                              <div className="console-members-meta min-w-0">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <span className="console-members-name-link truncate">{displayName}</span>
+                                  {uid === currentUid ? <Badge color="blue">我</Badge> : null}
+                                </div>
+                                <span className="console-members-email truncate">{String(row.email || `UID ${uid}`)}</span>
+                              </div>
                               <Tooltip label="消息通知">
                                 <div>
                                   <Switch
@@ -320,7 +334,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
                             {canManage ? (
                               <Select
                                 value={(role as MemberRole) || 'dev'}
-                                className="project-members-role-select"
+                                className="console-members-role-select project-members-role-select"
                                 data={roleOptions.map(item => ({ ...item }))}
                                 onChange={async newRole => {
                                   if (!newRole) return;
@@ -338,11 +352,13 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
                                 }}
                               />
                             ) : (
-                              <Badge variant="light">{normalizeRole(role)}</Badge>
+                              <Badge variant="light" className="console-members-role-text">
+                                {normalizeRole(role)}
+                              </Badge>
                             )}
                           </Table.Td>
                           <Table.Td>
-                            <div className="flex justify-end">
+                            <div className="flex justify-end text-sm text-slate-500 dark:text-slate-400">
                               {canManage ? (
                                 <Button color="red" variant="light" size="xs" onClick={() => confirmDelete(uid)}>
                                   删除
@@ -373,8 +389,8 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
                         <div className="project-members-cell min-w-0">
                           <Avatar src={`/api/user/avatar?uid=${uid}`} size={36} />
                           <div className="min-w-0">
-                            <div className="truncate font-medium text-slate-900">{displayName}</div>
-                            <div className="text-sm text-slate-500">{String(row.email || `UID ${uid}`)}</div>
+                            <div className="truncate font-medium text-slate-900 dark:text-slate-100">{displayName}</div>
+                            <div className="text-sm text-slate-500 dark:text-slate-400">{String(row.email || `UID ${uid}`)}</div>
                           </div>
                         </div>
                         {uid === currentUid ? <Badge color="blue">我</Badge> : null}
@@ -456,14 +472,14 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
             {groupMembers.map(item => (
               <div
                 key={Number(item.uid || 0)}
-                className="group-members-item rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50 p-4"
+                className="group-members-item rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50 p-4 dark:!border-[#24456f] dark:!bg-[#10294d]"
               >
                 <Avatar size={40} src={`/api/user/avatar?uid=${item.uid}`} />
-                <div className="group-members-name mt-3 flex items-center gap-2 font-medium text-slate-900">
+                <div className="group-members-name mt-3 flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100">
                   {String(item.username || item.uid || '-')}
                   {Number(item.uid || 0) === currentUid ? <Badge color="blue">我</Badge> : null}
                 </div>
-                <div className="group-members-role mt-1 text-sm text-slate-500">
+                <div className="group-members-role mt-1 text-sm text-slate-500 dark:text-slate-400">
                   {normalizeRole(item.role)}
                 </div>
               </div>

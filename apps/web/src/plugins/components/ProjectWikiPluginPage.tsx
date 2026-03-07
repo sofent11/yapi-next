@@ -92,7 +92,7 @@ export function ProjectWikiPluginPage() {
           保存 Wiki
         </Button>
       </div>
-      <Card padding="lg" radius="lg" withBorder>
+      <Card padding="lg" radius="lg" withBorder className="dark:!border-[#24456f] dark:!bg-[#10294d]">
         <Text fw={600} mb="sm">
           预览（纯文本）
         </Text>

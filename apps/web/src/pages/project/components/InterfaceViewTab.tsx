@@ -63,8 +63,8 @@ function renderCell(record: ParamRow, column: Record<string, unknown>) {
 function renderParamTable(title: string, columns: ParamColumns, rows: ParamRow[]) {
   return (
     <div className="interface-view-block space-y-3">
-      <h3 className="interface-view-subtitle text-base font-semibold text-slate-900">{title}</h3>
-      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+      <h3 className="interface-view-subtitle text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:!border-[#24456f]">
         <Table withTableBorder striped highlightOnHover>
           <Table.Thead>
             <Table.Tr>
@@ -137,8 +137,8 @@ function SchemaParamTable(props: { title: string; columns: ParamColumns; rows: S
 
   return (
     <div className="interface-view-block space-y-3">
-      <h3 className="interface-view-subtitle text-base font-semibold text-slate-900">{props.title}</h3>
-      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+      <h3 className="interface-view-subtitle text-base font-semibold text-slate-900 dark:text-slate-100">{props.title}</h3>
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:!border-[#24456f]">
         <Table withTableBorder striped highlightOnHover>
           <Table.Thead>
             <Table.Tr>
@@ -210,9 +210,9 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
 
   return (
     <div className="caseContainer space-y-4">
-      <div className="flex flex-col gap-4 rounded-[var(--radius-xl)] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4 rounded-[var(--radius-xl)] border border-slate-200 bg-white p-5 shadow-sm dark:!border-[#24456f] dark:!bg-[#0d2345]">
         {/* Top Info Row */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
           <div className="flex flex-wrap items-center gap-3">
             <Badge 
               variant="light"
@@ -222,7 +222,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
             >
               {props.statusLabel(props.currentInterface.status)}
             </Badge>
-            <span className="text-lg font-bold text-slate-900">{props.currentInterface.title || '-'}</span>
+            <span className="text-lg font-bold text-slate-900 dark:text-slate-100">{props.currentInterface.title || '-'}</span>
             {tags.length > 0 ? (
               <div className="flex flex-wrap gap-1.5 ml-1">
                 {tags.map(tag => (
@@ -234,22 +234,29 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
             ) : null}
           </div>
           
-          <div className="flex items-center gap-4 text-[13px] text-slate-500">
+          <div className="flex items-center gap-4 text-[13px] text-slate-500 dark:text-slate-400">
             <div className="flex items-center gap-1.5">
               <span className="text-slate-400">创建人:</span>
               {uid > 0 ? (
-                <Link className="inline-flex items-center gap-1.5 text-slate-600 hover:text-blue-600 transition-colors" to={`/user/profile/${uid}`}>
+                <Link
+                  className="inline-flex items-center gap-1.5 text-slate-600 transition-colors hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-300"
+                  to={`/user/profile/${uid}`}
+                >
                   <Avatar size={18} src={`/api/user/avatar?uid=${uid}`} radius="xl" />
                   {String((props.currentInterface as unknown as Record<string, unknown>).username || '-')}
                 </Link>
               ) : (
-                <span className="text-slate-600">{String((props.currentInterface as unknown as Record<string, unknown>).username || '-')}</span>
+                <span className="text-slate-600 dark:text-slate-300">
+                  {String((props.currentInterface as unknown as Record<string, unknown>).username || '-')}
+                </span>
               )}
             </div>
-            <div className="h-3 w-px bg-slate-200"></div>
+            <div className="h-3 w-px bg-slate-200 dark:!bg-[#24456f]"></div>
             <div className="flex items-center gap-1.5">
               <span className="text-slate-400">更新于:</span>
-              <span className="text-slate-600">{props.formatUnixTime((props.currentInterface as unknown as Record<string, unknown>).up_time)}</span>
+              <span className="text-slate-600 dark:text-slate-300">
+                {props.formatUnixTime((props.currentInterface as unknown as Record<string, unknown>).up_time)}
+              </span>
             </div>
           </div>
         </div>
@@ -258,10 +265,10 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
         <div className="flex flex-col gap-3">
           {/* Path Row */}
           <div className="flex items-center gap-4">
-            <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500">接口路径</div>
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-slate-50 px-3 py-1.5 border border-slate-100">
+            <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500 dark:text-slate-400">接口路径</div>
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-1.5 dark:!border-[#24456f] dark:!bg-[#10294d]">
               <span className={`${props.methodClassName(props.method)} text-[12px] font-bold leading-none shrink-0`}>{props.method}</span>
-              <code className="min-w-0 flex-1 truncate font-mono text-[13px] text-slate-700">{props.fullPath}</code>
+              <code className="min-w-0 flex-1 truncate font-mono text-[13px] text-slate-700 dark:text-slate-300">{props.fullPath}</code>
               <ActionIcon 
                 size="sm" 
                 variant="subtle" 
@@ -276,11 +283,20 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
 
           {/* Mock URL Row */}
           <div className="flex items-center gap-4">
-            <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500">Mock</div>
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-slate-50 px-3 py-1.5 border border-slate-100">
-              {mockFlag ? <span className="shrink-0 text-[12px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">{mockFlag}</span> : null}
+            <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500 dark:text-slate-400">Mock</div>
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-1.5 dark:!border-[#24456f] dark:!bg-[#10294d]">
+              {mockFlag ? (
+                <span className="shrink-0 rounded px-1.5 py-0.5 text-[12px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-500/20 dark:text-amber-200">
+                  {mockFlag}
+                </span>
+              ) : null}
               {props.mockUrl ? (
-                <a href={props.mockUrl} target="_blank" rel="noopener noreferrer" className="min-w-0 flex-1 truncate font-mono text-[13px] text-blue-600 hover:text-blue-700 hover:underline">
+                <a
+                  href={props.mockUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-w-0 flex-1 truncate font-mono text-[13px] text-blue-600 hover:text-blue-700 hover:underline dark:text-blue-300 dark:hover:text-blue-200"
+                >
                   {props.mockUrl}
                 </a>
               ) : (
@@ -303,8 +319,8 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
           {/* Custom Field Row (if applicable) */}
           {props.customField?.enable && String(props.currentInterface.custom_field_value || '').trim() ? (
             <div className="flex items-center gap-4">
-              <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500">{props.customField.name || '自定义'}</div>
-              <div className="flex min-w-0 flex-1 items-center rounded-lg bg-slate-50 px-3 py-1.5 border border-slate-100 text-[13px] text-slate-700">
+              <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500 dark:text-slate-400">{props.customField.name || '自定义'}</div>
+              <div className="flex min-w-0 flex-1 items-center rounded-lg border border-slate-100 bg-slate-50 px-3 py-1.5 text-[13px] text-slate-700 dark:!border-[#24456f] dark:!bg-[#10294d] dark:text-slate-300">
                 {String(props.currentInterface.custom_field_value || '')}
               </div>
             </div>
@@ -312,13 +328,13 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
 
           {/* Actions Row */}
           <div className="flex items-center gap-4 mt-1">
-            <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500">规格导出</div>
+            <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500 dark:text-slate-400">规格导出</div>
             <div className="flex flex-1 items-center gap-2">
               <Button
                 size="xs"
                 variant="default"
                 radius="md"
-                className="font-medium bg-white hover:bg-slate-50"
+                className="bg-white font-medium hover:bg-slate-50 dark:!bg-[#13325d] dark:hover:!bg-[#19406f]"
                 onClick={() => props.onCopySwaggerJson(interfaceId)}
                 loading={props.copyingSpec}
                 disabled={interfaceId <= 0}
@@ -329,7 +345,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
                 size="xs"
                 variant="default"
                 radius="md"
-                className="font-medium bg-white hover:bg-slate-50"
+                className="bg-white font-medium hover:bg-slate-50 dark:!bg-[#13325d] dark:hover:!bg-[#19406f]"
                 onClick={() => props.onCopyOpenApiJson(interfaceId)}
                 loading={props.copyingSpec}
                 disabled={interfaceId <= 0}
@@ -360,7 +376,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
           {props.reqBodyFormRows.length > 0 ? renderParamTable('Body(form)', props.bodyParamColumns, props.reqBodyFormRows) : null}
           {props.currentInterface.req_body_other ? (
             <div className="interface-view-block space-y-3">
-              <h3 className="interface-view-subtitle text-base font-semibold text-slate-900">
+              <h3 className="interface-view-subtitle text-base font-semibold text-slate-900 dark:text-slate-100">
                 Body({props.currentInterface.req_body_type || 'raw'})
               </h3>
               {props.schemaRowsRequest.length > 0 ? (

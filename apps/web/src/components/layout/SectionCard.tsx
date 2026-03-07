@@ -15,7 +15,7 @@ export function SectionCard(props: SectionCardProps) {
       withBorder
       padding="lg"
       className={[
-        'rounded-[var(--radius-xl)] border border-slate-200 bg-white/94 shadow-sm backdrop-blur',
+        'rounded-[var(--radius-xl)] border border-slate-200 bg-white/94 shadow-sm backdrop-blur dark:!border-[#24456f] dark:!bg-[#0d2345]',
         props.className
       ]
         .filter(Boolean)
@@ -23,7 +23,7 @@ export function SectionCard(props: SectionCardProps) {
     >
       {props.title || props.extra ? (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          {props.title ? <div className="text-base font-semibold text-slate-900">{props.title}</div> : <div />}
+          {props.title ? <div className="text-base font-semibold text-slate-900 dark:text-slate-100">{props.title}</div> : <div />}
           {props.extra ? <div>{props.extra}</div> : null}
         </div>
       ) : null}

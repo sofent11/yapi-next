@@ -16,7 +16,12 @@ type InterfaceModeTabsProps = {
 export function InterfaceModeTabs(props: InterfaceModeTabsProps) {
   return (
     <Tabs
-      className="interface-mode-tabs"
+      classNames={{
+        root: 'interface-mode-tabs dark:!border-transparent dark:!bg-transparent dark:!p-0 dark:!shadow-none',
+        list: 'px-5 pt-5 dark:!border-[#24456f]',
+        tab: 'dark:!text-slate-400',
+        panel: 'px-5 pb-5 dark:!bg-transparent'
+      }}
       value={props.value}
       onChange={value => {
         if (value) props.onChange(value);

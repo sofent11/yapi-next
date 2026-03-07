@@ -82,7 +82,7 @@ function FieldLabel(props: FieldLabelProps) {
       {props.label}
       {props.tip ? (
         <Tooltip label={props.tip} multiline maw={320}>
-          <span className="inline-flex cursor-help text-slate-500">
+          <span className="inline-flex cursor-help text-slate-500 dark:text-slate-400">
             <IconHelpCircle size={16} />
           </span>
         </Tooltip>

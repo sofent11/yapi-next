@@ -164,7 +164,7 @@ export function LoginPage() {
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_460px] lg:items-center">
         <div className="space-y-8 text-slate-50">
           <Group gap="md" wrap="nowrap">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-slate-900 shadow-[0_18px_44px_rgba(255,255,255,0.16)]">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-[0_18px_44px_rgba(255,255,255,0.16)]">
               <LogoSVG length="34px" />
             </div>
             <div>
@@ -265,9 +265,9 @@ export function LoginPage() {
                 {ThirdLogin ? (
                   <div className="mt-6 space-y-4">
                     <div className="flex items-center gap-3">
-                      <div className="h-px flex-1 bg-white/10" />
+                      <div className="h-px flex-1 bg-white/10 dark:bg-slate-900/10" />
                       <Text className="text-xs uppercase tracking-[0.18em] text-slate-400">或</Text>
-                      <div className="h-px flex-1 bg-white/10" />
+                      <div className="h-px flex-1 bg-white/10 dark:bg-slate-900/10" />
                     </div>
                     <div className="flex justify-center">
                       <ThirdLogin />

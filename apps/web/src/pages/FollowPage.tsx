@@ -73,7 +73,7 @@ export function FollowPage() {
         key={pid}
         radius="xl"
         withBorder
-        className="cursor-pointer rounded-[var(--radius-xl)] border border-slate-200 bg-white/95 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+        className="cursor-pointer rounded-[var(--radius-xl)] border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         onClick={handleNavigate}
         role="button"
         tabIndex={0}
@@ -99,8 +99,8 @@ export function FollowPage() {
           </Tooltip>
         </div>
         <div className="space-y-3">
-          <div className="text-lg font-semibold text-slate-900">{projectName}</div>
-          <div className="flex flex-col gap-1 text-sm text-slate-500">
+          <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{projectName}</div>
+          <div className="flex flex-col gap-1 text-sm text-slate-500 dark:text-slate-400">
             <Text size="sm" c="dimmed">BasePath: {project.basepath ? String(project.basepath) : '/'}</Text>
             <Text size="sm" c="dimmed">更新于 {updatedAt}</Text>
           </div>

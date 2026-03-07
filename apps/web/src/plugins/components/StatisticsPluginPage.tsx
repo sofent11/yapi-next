@@ -39,7 +39,7 @@ const message = {
 
 function StatRow(props: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 px-4 py-3">
+    <div className="rounded-xl border border-slate-200 px-4 py-3 dark:!border-[#24456f] dark:!bg-[#10294d]">
       <Text size="sm" c="dimmed">
         {props.label}
       </Text>
@@ -87,14 +87,14 @@ export function StatisticsPluginPage() {
   return (
     <Stack className="workspace-stack" gap="md">
       {loading ? (
-        <Card padding="lg" radius="lg" withBorder>
+        <Card padding="lg" radius="lg" withBorder className="dark:!border-[#24456f] dark:!bg-[#10294d]">
           <div className="inline-flex items-center gap-2">
             <Loader size="sm" />
             <Text>加载统计数据...</Text>
           </div>
         </Card>
       ) : null}
-      <Card padding="lg" radius="lg" withBorder>
+      <Card padding="lg" radius="lg" withBorder className="dark:!border-[#24456f] dark:!bg-[#10294d]">
         <Text fw={600} mb="sm">
           总览
         </Text>
@@ -106,7 +106,7 @@ export function StatisticsPluginPage() {
           <Badge color="cyan">Mock 访问 {mockData?.mockCount ?? 0}</Badge>
         </div>
       </Card>
-      <Card padding="lg" radius="lg" withBorder>
+      <Card padding="lg" radius="lg" withBorder className="dark:!border-[#24456f] dark:!bg-[#10294d]">
         <Text fw={600} mb="sm">
           系统状态
         </Text>
@@ -119,7 +119,7 @@ export function StatisticsPluginPage() {
           <StatRow label="可用内存" value={systemStatus?.freemem || '-'} />
         </SimpleGrid>
       </Card>
-      <Card padding="lg" radius="lg" withBorder>
+      <Card padding="lg" radius="lg" withBorder className="dark:!border-[#24456f] dark:!bg-[#10294d]">
         <Text fw={600} mb="sm">
           分组统计
         </Text>

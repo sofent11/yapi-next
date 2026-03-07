@@ -194,7 +194,7 @@ export function UserListPage() {
         ) : (
           <AdaptiveDataView
             desktop={
-              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
                 <Table striped highlightOnHover withTableBorder>
                   <Table.Thead>
                     <Table.Tr>
@@ -241,10 +241,10 @@ export function UserListPage() {
                   <div key={row.key || getUserId(row)} className="adaptive-data-card">
                     <div className="adaptive-data-card-head">
                       <div className="min-w-0">
-                        <Link className="truncate font-medium text-slate-900" to={`/user/profile/${getUserId(row)}`}>
+                        <Link className="truncate font-medium text-slate-900 dark:text-slate-100" to={`/user/profile/${getUserId(row)}`}>
                           {String(row.username || '-')}
                         </Link>
-                        <div className="text-sm text-slate-500">{String(row.email || '-')}</div>
+                        <div className="text-sm text-slate-500 dark:text-slate-400">{String(row.email || '-')}</div>
                       </div>
                     </div>
                     <div className="adaptive-data-card-grid">

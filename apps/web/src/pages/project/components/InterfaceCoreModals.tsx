@@ -3,7 +3,13 @@ import RcForm, { Field } from 'rc-field-form';
 import type { FormInstance } from 'rc-field-form';
 import { createNameValidator } from '../../../utils/name-validator';
 
-const modalClassNames = { title: 'app-modal-title' };
+const modalClassNames = {
+  content: 'app-modal-content',
+  header: 'app-modal-header',
+  body: 'app-modal-body',
+  close: 'app-modal-close',
+  title: 'app-modal-title'
+};
 
 type AddInterfaceModalForm = {
   title: string;

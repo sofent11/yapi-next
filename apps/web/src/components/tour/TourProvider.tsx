@@ -114,7 +114,7 @@ export function TourPopover({ stepIndex, position = 'bottom-end', children }: To
         {stepConfig ? (
           <div className="space-y-3">
             <div>
-              <Text size="sm" fw={600} className="text-slate-700">
+              <Text size="sm" fw={600} className="text-slate-700 dark:text-slate-300">
                 {stepConfig.title}
               </Text>
               {stepConfig.description ? (

@@ -27,12 +27,42 @@
   /* ─── Modal ─── */
   .mantine-Modal-content {
     border-radius: var(--radius-lg);
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      border: 1px solid var(--border-project-subtle);
+      background-color: var(--surface-project-subtle);
+      box-shadow: 0 24px 60px rgb(2 6 23 / 0.55);
+    }
   }
   .mantine-Modal-header {
     @apply border-b border-[var(--border-subtle)] pb-3;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      border-bottom-color: var(--border-project-subtle);
+      background-color: transparent;
+    }
+  }
+  .mantine-Modal-body {
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      background-color: transparent;
+      color: rgb(226 232 240);
+    }
   }
   .mantine-Modal-title {
     @apply text-base font-semibold;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      color: rgb(241 245 249);
+    }
+  }
+  .mantine-Modal-close {
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      color: rgb(203 213 225);
+      background-color: transparent;
+    }
+  }
+  .mantine-Modal-close:hover {
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      background-color: var(--surface-project-elevated);
+      color: rgb(248 250 252);
+    }
   }
 
   /* ─── Card / Paper ─── */

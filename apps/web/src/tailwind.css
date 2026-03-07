@@ -1,14 +1,17 @@
 @import "./design/tokens.css";
 @import "tailwindcss";
+
+@custom-variant dark (&:is([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --font-sans: var(--font-ui);
+}
+
 @import "./tailwind/components-console.css";
 @import "./tailwind/components-interface.css";
 @import "./tailwind/components-editor.css";
 @import "./tailwind/components-pages.css";
 @import "./tailwind/mantine-overrides.css";
-
-@theme {
-  --font-sans: var(--font-ui);
-}
 
 @layer base {
   html,

@@ -17,7 +17,13 @@ import type { FormInstance } from 'rc-field-form';
 import { normalizeHttpMethod } from '../../../utils/http-method';
 import type { AddCaseFormValues, ColFormValues, CommonSettingFormValues } from './collection-types';
 
-const modalClassNames = { title: 'app-modal-title' };
+const modalClassNames = {
+  content: 'app-modal-content',
+  header: 'app-modal-header',
+  body: 'app-modal-body',
+  close: 'app-modal-close',
+  title: 'app-modal-title'
+};
 
 type ImportInterfaceRow = {
   key: string;

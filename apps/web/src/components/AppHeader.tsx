@@ -19,7 +19,7 @@ export function AppHeader(props: AppHeaderProps) {
     <header className="flex items-center gap-4 border-b border-slate-800 bg-slate-900 px-4 py-3 text-white">
       <Link
         to="/group"
-        className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-700 bg-white text-slate-900 transition hover:border-blue-400 hover:bg-blue-400 hover:text-white"
+        className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition hover:border-blue-400 hover:bg-blue-400 hover:text-white"
       >
         <div className="flex h-8 w-8 items-center justify-center rounded-full">
           <LogoSVG length={28} />

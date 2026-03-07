@@ -91,6 +91,13 @@
   --surface-subtle: #1a2035;
   --surface-hover: #1e2742;
   --surface-inverse: #f8fafc;
+  --surface-project-panel: #0d2345;
+  --surface-project-subtle: #10294d;
+  --surface-project-elevated: #13325d;
+  --surface-project-input: #102341;
+  --surface-project-header: #16365f;
+  --border-project-subtle: #24456f;
+  --border-project-strong: #3a6aa0;
 
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;

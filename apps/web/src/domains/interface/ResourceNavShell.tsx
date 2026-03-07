@@ -26,6 +26,10 @@ export function ResourceNavShell(props: ResourceNavShellProps) {
               placeholder={props.searchPlaceholder}
               leftSection={<IconSearch size={16} />}
               className="interface-nav-filter-input"
+              classNames={{
+                input: 'dark:!border-[#24456f] dark:!bg-[#102341] dark:!text-slate-200 dark:placeholder:!text-slate-500',
+                section: 'dark:!text-slate-400'
+              }}
             />
           }
           right={props.actions}

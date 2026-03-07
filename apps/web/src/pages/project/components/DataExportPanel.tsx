@@ -180,7 +180,7 @@ export default function DataExportPanel({ projectId, token }: DataExportPanelPro
           <span className="label inline-flex items-center gap-1">
             包含 Wiki
             <Tooltip label="开启后导出时附带项目 Wiki 内容">
-              <span className="inline-help-text inline-flex text-slate-500">
+              <span className="inline-help-text inline-flex text-slate-500 dark:text-slate-400">
                 <IconHelpCircle size={16} />
               </span>
             </Tooltip>
