@@ -201,12 +201,39 @@ const payload = {
   json: {
     openapi: "3.0.0",
     info: { title: "smoke-spec", version: "1.0.0" },
+    components: {
+      schemas: {
+        SmokeResponse: {
+          type: "object",
+          required: ["code", "data"],
+          properties: {
+            code: { type: "integer", example: 0 },
+            data: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                name: { type: "string" }
+              }
+            }
+          }
+        }
+      }
+    },
     paths: {
       "/smoke/spec": {
         get: {
           summary: "spec-import",
           responses: {
-            "200": { description: "ok" }
+            "200": {
+              description: "ok",
+              content: {
+                "application/json": {
+                  schema: {
+                    "$ref": "#/components/schemas/SmokeResponse"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -223,7 +250,9 @@ resp="$(request_get "/spec/export?project_id=${project_id}&format=openapi3&token
 assert_ok 'spec/export' "${resp}"
 node -e '
 const obj = JSON.parse(process.argv[1]);
-if (!obj.data || !obj.data.paths || !obj.data.paths["/smoke/spec"]) process.exit(1);
+const schema = obj?.data?.paths?.["/smoke/spec"]?.get?.responses?.["200"]?.content?.["application/json"]?.schema;
+if (!schema || schema.type !== "object") process.exit(1);
+if (!schema.properties || !schema.properties.code || !schema.properties.data) process.exit(1);
 ' "${resp}" || fail 'spec/export content check failed'
 
 log 'compat export swagger2 via /plugin/exportSwagger'

@@ -120,6 +120,11 @@ export class OpenapiParserService {
     const rawSpec = typeof content === 'string' ? JSON.parse(content) : content;
     const { openapi3, detectedFormat } = await this.toOpenApi3(rawSpec);
     const spec = await SwaggerParser.bundle(openapi3);
+    const dereferencedSpec = await SwaggerParser.dereference(JSON.parse(JSON.stringify(openapi3)), {
+      dereference: {
+        circular: 'ignore'
+      }
+    });
     const basePath = parseServerBasePath(spec);
     const cats: Array<{ name: string; desc: string }> = [];
     const apis: NormalizedApiItem[] = [];
@@ -135,16 +140,26 @@ export class OpenapiParserService {
     }
 
     const paths = spec.paths || {};
+    const dereferencedPaths = dereferencedSpec?.paths || {};
     for (const pathKey of Object.keys(paths)) {
       const pathItem = paths[pathKey];
+      const dereferencedPathItem = dereferencedPaths[pathKey];
       if (!pathItem || typeof pathItem !== 'object') continue;
 
       for (const method of HTTP_METHODS) {
         const operation = pathItem[method];
+        const dereferencedOperation = dereferencedPathItem?.[method];
         if (!operation || typeof operation !== 'object') continue;
         const mergedOperation = {
           ...operation,
           parameters: [...(pathItem.parameters || []), ...(operation.parameters || [])]
+        };
+        const mergedDereferencedOperation = {
+          ...(dereferencedOperation || operation),
+          parameters: [
+            ...(dereferencedPathItem?.parameters || pathItem.parameters || []),
+            ...(dereferencedOperation?.parameters || operation.parameters || [])
+          ]
         };
         const catname = selectCategory(mergedOperation.tags, rootTags);
         const api: NormalizedApiItem = {
@@ -174,9 +189,9 @@ export class OpenapiParserService {
           })
         };
 
-        this.handleParameters(mergedOperation, api);
-        this.handleRequestBody(mergedOperation, api);
-        this.handleResponse(mergedOperation, api);
+        this.handleParameters(mergedDereferencedOperation, api);
+        this.handleRequestBody(mergedDereferencedOperation, api);
+        this.handleResponse(mergedDereferencedOperation, api);
 
         if (api.catname && !cats.find(item => item.name === api.catname)) {
           cats.push({

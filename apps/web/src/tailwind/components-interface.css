@@ -191,18 +191,6 @@
     @apply flex flex-col gap-5;
   }
 
-  .interface-index-intro {
-    @apply rounded-[24px] border border-slate-200 bg-slate-50/70 px-5 py-5;
-  }
-
-  .interface-index-eyebrow {
-    @apply inline-flex rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-white;
-  }
-
-  .interface-index-title {
-    @apply mt-3 text-2xl font-semibold tracking-tight text-slate-900;
-  }
-
   .interface-detail-header {
     @apply flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-slate-50/70 px-5 py-5;
   }

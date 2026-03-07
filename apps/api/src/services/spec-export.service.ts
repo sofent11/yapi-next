@@ -134,9 +134,7 @@ export class SpecExportService {
         operation['x-yapi-import-meta'] = this.parseJson(api.import_meta, { raw: api.import_meta });
       }
 
-      if (!rawOperation) {
-        this.fillLegacyOperation(operation, api);
-      }
+      this.applyInterfaceDataToOpenApiOperation(operation, api);
       model.paths[api.path][method] = operation;
     });
 
@@ -247,7 +245,18 @@ export class SpecExportService {
     return model;
   }
 
-  private fillLegacyOperation(operation: Record<string, any>, api: InterfaceEntity): void {
+  private applyInterfaceDataToOpenApiOperation(operation: Record<string, any>, api: InterfaceEntity): void {
+    const preservedResponses = operation.responses && typeof operation.responses === 'object'
+      ? Object.fromEntries(
+          Object.entries(operation.responses).filter(([code]) => code !== '200')
+        )
+      : {};
+    const requestBodyDescription = operation.requestBody?.description;
+
+    operation.parameters = [];
+    operation.responses = preservedResponses;
+    delete operation.requestBody;
+
     (api.req_headers || []).forEach((item: any) => {
       if (item.name === 'Content-Type') return;
       operation.parameters.push({
@@ -282,6 +291,7 @@ export class SpecExportService {
     if (api.req_body_type === 'json' && api.req_body_other) {
       operation.requestBody = {
         required: true,
+        ...(requestBodyDescription ? { description: requestBodyDescription } : {}),
         content: {
           'application/json': {
             schema: this.parseJson(api.req_body_other, { type: 'object' })
@@ -301,6 +311,7 @@ export class SpecExportService {
       });
       operation.requestBody = {
         required: required.length > 0,
+        ...(requestBodyDescription ? { description: requestBodyDescription } : {}),
         content: {
           'multipart/form-data': {
             schema: {
@@ -314,6 +325,7 @@ export class SpecExportService {
     } else if (api.req_body_type === 'raw' && api.req_body_other) {
       operation.requestBody = {
         required: false,
+        ...(requestBodyDescription ? { description: requestBodyDescription } : {}),
         content: {
           'text/plain': {
             schema: {

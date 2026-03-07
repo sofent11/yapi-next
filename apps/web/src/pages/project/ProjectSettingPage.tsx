@@ -3,7 +3,6 @@ import { Tabs } from '@mantine/core';
 import { useSearchParams } from 'react-router-dom';
 import { useGetProjectQuery } from '../../services/yapi-api';
 import { webPlugins, type SubSettingNavItem } from '../../plugins';
-import { PageHeader } from '../../components/layout';
 import { ProjectSettingsPanel } from '../../domains/project/ProjectSettingsPanel';
 
 import type { ProjectSettingPageProps } from './ProjectSettingPage.types';
@@ -91,12 +90,6 @@ export function ProjectSettingPage(props: ProjectSettingPageProps) {
 
   return (
     <div className="page-shell project-settings-page">
-      <PageHeader
-        eyebrow="项目管理"
-        title="项目设置"
-        subtitle="管理项目基础信息、环境变量、请求脚本、Token 与全局 Mock 配置。"
-        meta={project ? `${project.name || `项目 #${props.projectId}`} · 角色 ${project.role || 'guest'}` : undefined}
-      />
       <Tabs
         value={activeTab}
         onChange={key => {

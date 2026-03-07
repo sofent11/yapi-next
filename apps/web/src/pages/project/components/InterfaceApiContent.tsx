@@ -1,4 +1,4 @@
-import { Button, Card, Text, Title } from '@mantine/core';
+import { Button, Card } from '@mantine/core';
 import type { FormInstance } from 'rc-field-form';
 import { AsyncRetryAction, AsyncState } from '../../../components/patterns/AsyncState';
 import type { InterfaceDTO } from '../../../types/interface-dto';
@@ -115,17 +115,6 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
     return (
       <Card padding="lg" radius="lg" withBorder>
         <div className="interface-index-panel">
-          <section className="interface-index-intro">
-            <Text className="interface-index-eyebrow">接口工作台</Text>
-            <Title order={2} className="interface-index-title">
-              从目录进入详情，或先在这里集中筛选和整理接口
-            </Title>
-            <Text c="dimmed" className="max-w-3xl leading-7">
-              {props.currentCat
-                ? `当前聚焦分类“${props.currentCat.name}”，共筛出 ${props.filteredList.length} 个接口。`
-                : `当前展示 ${props.filteredList.length} 个接口，你可以按名称、路径和状态快速定位目标。`}
-            </Text>
-          </section>
           <InterfaceListPanel
             basepath={props.basepath}
             canEdit={props.canEdit}

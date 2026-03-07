@@ -62,20 +62,8 @@
     @apply text-sm font-semibold text-blue-800;
   }
 
-  .project-data-flow-grid {
-    @apply grid gap-4 md:grid-cols-3;
-  }
-
-  .project-data-flow-card {
-    @apply rounded-[18px] border border-slate-200 bg-slate-50/70 px-4 py-4;
-  }
-
-  .project-data-task-banner {
-    @apply mt-4 space-y-3 rounded-[18px] border border-blue-100 bg-blue-50/80 px-4 py-3;
-  }
-
-  .project-data-task-grid {
-    @apply md:grid-cols-2;
+  .project-data-task-toolbar {
+    @apply flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-blue-100 bg-blue-50/80 px-4 py-3;
   }
 
   .project-data-control-grid {

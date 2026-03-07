@@ -31,7 +31,7 @@ import { AppEmptyState } from '../../components/AppEmptyState';
 import { AdaptiveDataView } from '../../components/patterns/AdaptiveDataView';
 import { AsyncState } from '../../components/patterns/AsyncState';
 import { DataToolbar } from '../../components/patterns/DataToolbar';
-import { PageHeader, SectionCard } from '../../components/layout';
+import { SectionCard } from '../../components/layout';
 
 type ProjectMembersPageProps = {
   projectId: number;
@@ -249,25 +249,20 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
 
   return (
     <div className="page-shell project-members-page">
-      <PageHeader
-        title="成员管理"
-        subtitle={`项目 ${project?.name || props.projectId} · 当前成员 ${rows.length} 人${canManage ? '' : '（只读）'}`}
-        actions={
-          canManage ? (
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={openAddMemberModal}>添加成员</Button>
-              <Button variant="default" onClick={() => setImportModalOpen(true)}>
-                批量导入成员
-              </Button>
-            </div>
-          ) : null
-        }
-      />
-
       <SectionCard className="project-members-card">
         <DataToolbar
           title="项目成员"
           summary={`当前项目共有 ${rows.length} 位成员${canManage ? '，可直接调整角色与通知开关。' : '，当前为只读模式。'}`}
+          actions={
+            canManage ? (
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={openAddMemberModal}>添加成员</Button>
+                <Button variant="default" onClick={() => setImportModalOpen(true)}>
+                  批量导入成员
+                </Button>
+              </div>
+            ) : null
+          }
         />
         {loading && rows.length === 0 ? (
           <AsyncState state="loading" title="正在加载项目成员" description="成员资料和权限信息正在准备中。" />
