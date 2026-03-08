@@ -14,7 +14,7 @@ export function ProjectSettingsEditorCard(props: ProjectSettingsEditorCardProps)
       withBorder
       radius="lg"
       className={[
-        'project-settings-editor-card dark:!border-[#24456f] dark:!bg-[#10294d]',
+        'project-settings-editor-card dark:!border-[var(--border-project-subtle)] dark:!bg-[var(--surface-project-subtle)]',
         props.className
       ]
         .filter(Boolean)

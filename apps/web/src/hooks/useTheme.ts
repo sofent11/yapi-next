@@ -48,7 +48,8 @@ function applyTheme(resolved: ResolvedTheme) {
 
   const themeColorMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
   if (themeColorMeta) {
-    themeColorMeta.content = resolved === 'dark' ? '#0c0f1a' : '#f5f7fb';
+    const canvasColor = getComputedStyle(root).getPropertyValue('--surface-canvas').trim();
+    themeColorMeta.content = canvasColor || (resolved === 'dark' ? '#0c0f1a' : '#f5f7fb');
   }
 }
 

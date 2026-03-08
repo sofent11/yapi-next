@@ -12,6 +12,7 @@ export function PropertyEditor({ value, onChange, placeholder }: PropertyEditorP
       value={value}
       onChange={event => onChange(event.currentTarget.value)}
       placeholder={placeholder || '备注'}
+      aria-label="字段说明"
     />
   );
 }

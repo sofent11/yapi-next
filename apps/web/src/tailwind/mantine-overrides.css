@@ -69,6 +69,32 @@
   .mantine-Paper-root {
     border-radius: var(--radius-lg);
   }
+  .mantine-Card-root,
+  .mantine-Paper-root {
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      background-color: var(--surface-project-panel);
+      border-color: var(--border-project-subtle);
+      color: rgb(226 232 240);
+    }
+  }
+  .mantine-Button-root:where([data-variant='default']),
+  .mantine-ActionIcon-root:where([data-variant='default']),
+  .mantine-ActionIcon-root:where([data-variant='light']) {
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      background-color: var(--surface-project-elevated);
+      border-color: var(--border-project-subtle);
+      color: rgb(226 232 240);
+    }
+  }
+  .mantine-Tooltip-tooltip,
+  .mantine-Popover-dropdown,
+  .mantine-Menu-dropdown {
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      background-color: var(--surface-project-panel);
+      border: 1px solid var(--border-project-subtle);
+      color: rgb(226 232 240);
+    }
+  }
 
   /* ─── Table ─── */
   .mantine-Table-table {

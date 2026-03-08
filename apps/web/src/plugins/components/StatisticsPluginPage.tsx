@@ -39,7 +39,7 @@ const message = {
 
 function StatRow(props: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 px-4 py-3 dark:!border-[#24456f] dark:!bg-[#10294d]">
+    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-panel)] px-4 py-3 text-[var(--text-primary)] dark:!border-[var(--border-project-subtle)] dark:!bg-[var(--surface-project-subtle)]">
       <Text size="sm" c="dimmed">
         {props.label}
       </Text>
@@ -49,6 +49,9 @@ function StatRow(props: { label: string; value: string }) {
 }
 
 export function StatisticsPluginPage() {
+  const panelClassName =
+    'border-[var(--border-subtle)] bg-[var(--surface-panel)] text-[var(--text-primary)] dark:!border-[var(--border-project-subtle)] dark:!bg-[var(--surface-project-subtle)]';
+
   const [loading, setLoading] = useState(false);
   const [count, setCount] = useState<StatisticsCount | null>(null);
   const [systemStatus, setSystemStatus] = useState<StatisticsSystemStatus | null>(null);
@@ -87,14 +90,14 @@ export function StatisticsPluginPage() {
   return (
     <Stack className="workspace-stack" gap="md">
       {loading ? (
-        <Card padding="lg" radius="lg" withBorder className="dark:!border-[#24456f] dark:!bg-[#10294d]">
+        <Card padding="lg" radius="lg" withBorder className={panelClassName}>
           <div className="inline-flex items-center gap-2">
             <Loader size="sm" />
             <Text>加载统计数据...</Text>
           </div>
         </Card>
       ) : null}
-      <Card padding="lg" radius="lg" withBorder className="dark:!border-[#24456f] dark:!bg-[#10294d]">
+      <Card padding="lg" radius="lg" withBorder className={panelClassName}>
         <Text fw={600} mb="sm">
           总览
         </Text>
@@ -106,7 +109,7 @@ export function StatisticsPluginPage() {
           <Badge color="cyan">Mock 访问 {mockData?.mockCount ?? 0}</Badge>
         </div>
       </Card>
-      <Card padding="lg" radius="lg" withBorder className="dark:!border-[#24456f] dark:!bg-[#10294d]">
+      <Card padding="lg" radius="lg" withBorder className={panelClassName}>
         <Text fw={600} mb="sm">
           系统状态
         </Text>
@@ -119,7 +122,7 @@ export function StatisticsPluginPage() {
           <StatRow label="可用内存" value={systemStatus?.freemem || '-'} />
         </SimpleGrid>
       </Card>
-      <Card padding="lg" radius="lg" withBorder className="dark:!border-[#24456f] dark:!bg-[#10294d]">
+      <Card padding="lg" radius="lg" withBorder className={panelClassName}>
         <Text fw={600} mb="sm">
           分组统计
         </Text>

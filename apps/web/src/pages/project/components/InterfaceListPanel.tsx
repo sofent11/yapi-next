@@ -137,7 +137,7 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
       ) : (
         <AdaptiveDataView
           desktop={
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:!border-[#24456f]">
+            <div className="overflow-x-auto rounded-2xl border border-[var(--border-subtle)] dark:!border-[var(--border-project-subtle)]">
               <Table withTableBorder striped highlightOnHover>
                 <Table.Thead>
                   <Table.Tr>

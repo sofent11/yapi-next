@@ -116,7 +116,7 @@ export function HeaderUserMenu(props: HeaderUserMenuProps) {
       <Menu.Target>
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-white transition hover:border-slate-500"
+          className="inline-flex items-center gap-2 rounded-full border border-[var(--border-shell-subtle)] bg-[var(--surface-shell-subtle)] px-2.5 py-1.5 text-[var(--text-inverse)] transition hover:border-[var(--border-shell-strong)]"
           disabled={logoutState.isLoading}
           aria-label="打开用户菜单"
         >

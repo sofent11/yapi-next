@@ -663,7 +663,7 @@
 
   .project-settings-logo {
     @apply inline-flex h-20 w-20 items-center justify-center rounded-[var(--radius-lg)] text-white shadow-sm transition-transform duration-150;
-    background-color: #2395f1;
+    background-color: var(--project-color-blue);
   }
 
   .project-settings-logo-btn:hover .project-settings-logo {
@@ -752,7 +752,8 @@
   .console-settings-custom-field-row {
     @apply gap-3 rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 px-4 py-4;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800/70;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-subtle) 70%, transparent);
     }
   }
 
@@ -776,7 +777,8 @@
   .console-danger-confirm-content {
     @apply flex flex-col gap-3 rounded-[var(--radius-lg)] border border-rose-200 bg-white px-4 py-4;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-rose-800 bg-slate-900;
+      border-color: rgb(127 29 29 / 0.8);
+      background-color: var(--surface-project-panel);
     }
   }
 
@@ -787,7 +789,8 @@
   .console-danger-confirm-input .mantine-Input-input {
     @apply rounded-[var(--radius-md)] border-rose-200 bg-white text-sm;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-rose-800 bg-slate-900;
+      border-color: rgb(127 29 29 / 0.8);
+      background-color: var(--surface-project-input);
     }
   }
 
@@ -802,7 +805,8 @@
   .console-project-section-head {
     @apply mb-0 rounded-[var(--radius-md)] border border-slate-200 bg-slate-50/70 px-4 py-3;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800/70;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-subtle) 70%, transparent);
     }
   }
 
@@ -813,14 +817,17 @@
   .console-group-add-button {
     @apply inline-flex h-10 items-center justify-center rounded-[var(--radius-md)] border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-150;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900 text-slate-300;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-panel);
+      color: rgb(203 213 225);
     }
   }
 
   .console-group-add-button:hover {
     @apply -translate-y-px border-slate-300 text-slate-900 shadow-md;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 text-slate-100;
+      border-color: var(--border-project-strong);
+      color: rgb(241 245 249);
     }
   }
 
@@ -842,28 +849,30 @@
   .console-members-row-dev td {
     @apply bg-blue-50/70;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-900;
+      background-color: var(--surface-project-panel);
     }
   }
 
   .console-members-row-guest td {
     @apply bg-slate-50/70;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-800/70;
+      background-color: color-mix(in srgb, var(--surface-project-subtle) 70%, transparent);
     }
   }
 
   .console-copy-modal {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800/70;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-subtle) 70%, transparent);
     }
   }
 
   .guide-popover {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white p-3 shadow-lg;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-panel);
     }
   }
 
@@ -956,14 +965,14 @@
   .console-members-row-dev:hover td {
     @apply bg-blue-100/80;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-800;
+      background-color: var(--surface-project-subtle);
     }
   }
 
   .console-members-row-guest:hover td {
     @apply bg-slate-100/80;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-800;
+      background-color: var(--surface-project-subtle);
     }
   }
 
@@ -1010,14 +1019,15 @@
   .report-table th {
     @apply bg-slate-50/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-800/80 text-slate-400;
+      background-color: color-mix(in srgb, var(--surface-project-header) 80%, transparent);
+      color: rgb(148 163 184);
     }
   }
 
   .report-table td {
     @apply border-slate-200 px-4 py-3 align-middle;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700;
+      border-color: var(--border-project-subtle);
     }
   }
 
@@ -1058,7 +1068,8 @@
   .log-diff-col {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white p-4;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-panel);
     }
   }
 
@@ -1083,7 +1094,8 @@
   .plugin-loading-block {
     @apply rounded-[var(--radius-lg)] border border-dashed border-slate-200 bg-slate-50/70;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800/70;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-subtle) 70%, transparent);
     }
   }
 
@@ -1182,7 +1194,7 @@
   .plugin-pre {
     @apply overflow-x-auto rounded-[var(--radius-lg)] border border-slate-200 bg-slate-950 px-4 py-4 font-mono text-[13px] leading-6 text-slate-100;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700;
+      border-color: var(--border-project-subtle);
     }
   }
 
@@ -1267,7 +1279,9 @@
   .schema-editor-root-placeholder .mantine-Input-input {
     @apply rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-500;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900 text-slate-400;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-input);
+      color: rgb(148 163 184);
     }
   }
 
@@ -1285,35 +1299,35 @@
 
   /* ─── Project color badges (dynamically applied via `project-color-${color}`) ─── */
   .project-color-blue {
-    background-color: #2563eb;
-    color: #fff;
+    background-color: var(--project-color-blue);
+    color: var(--text-inverse);
   }
   .project-color-cyan {
-    background-color: #0891b2;
-    color: #fff;
+    background-color: var(--project-color-cyan);
+    color: var(--text-inverse);
   }
   .project-color-green {
-    background-color: #059669;
-    color: #fff;
+    background-color: var(--project-color-green);
+    color: var(--text-inverse);
   }
   .project-color-red {
-    background-color: #dc2626;
-    color: #fff;
+    background-color: var(--project-color-red);
+    color: var(--text-inverse);
   }
   .project-color-pink {
-    background-color: #db2777;
-    color: #fff;
+    background-color: var(--project-color-pink);
+    color: var(--text-inverse);
   }
   .project-color-purple {
-    background-color: #7c3aed;
-    color: #fff;
+    background-color: var(--project-color-purple);
+    color: var(--text-inverse);
   }
   .project-color-yellow {
-    background-color: #d97706;
-    color: #fff;
+    background-color: var(--project-color-yellow);
+    color: var(--text-inverse);
   }
   .project-color-gray {
-    background-color: #475569;
-    color: #fff;
+    background-color: var(--project-color-gray);
+    color: var(--text-inverse);
   }
 }

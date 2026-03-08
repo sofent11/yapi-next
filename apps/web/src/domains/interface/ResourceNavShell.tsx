@@ -27,7 +27,8 @@ export function ResourceNavShell(props: ResourceNavShellProps) {
               leftSection={<IconSearch size={16} />}
               className="interface-nav-filter-input"
               classNames={{
-                input: 'dark:!border-[#24456f] dark:!bg-[#102341] dark:!text-slate-200 dark:placeholder:!text-slate-500',
+                input:
+                  'dark:!border-[var(--border-project-subtle)] dark:!bg-[var(--surface-project-input)] dark:!text-slate-200 dark:placeholder:!text-slate-500',
                 section: 'dark:!text-slate-400'
               }}
             />

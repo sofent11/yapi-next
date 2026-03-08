@@ -8,7 +8,7 @@ type PublicShellProps = {
 
 export function PublicShell(props: PublicShellProps) {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[var(--surface-inverse)] text-[var(--text-inverse)]">
+    <div className="relative min-h-screen overflow-hidden bg-[var(--surface-public-canvas)] text-[var(--text-public-primary)]">
       {props.backdrop}
       <div
         className={[

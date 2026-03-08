@@ -31,9 +31,9 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
             fullWidth
             value={activeKey}
             classNames={{
-              root: 'dark:!bg-[#0d2345]',
+              root: 'dark:!bg-[var(--surface-project-panel)]',
               control: 'dark:!border-transparent',
-              indicator: 'dark:!border-[#3a6aa0] dark:!bg-[#13325d]',
+              indicator: 'dark:!border-[var(--border-project-strong)] dark:!bg-[var(--surface-project-elevated)]',
               label: 'dark:!text-slate-300',
               innerLabel: 'dark:!text-inherit'
             }}

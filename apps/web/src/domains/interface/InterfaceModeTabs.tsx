@@ -18,7 +18,7 @@ export function InterfaceModeTabs(props: InterfaceModeTabsProps) {
     <Tabs
       classNames={{
         root: 'interface-mode-tabs dark:!border-transparent dark:!bg-transparent dark:!p-0 dark:!shadow-none',
-        list: 'px-5 pt-5 dark:!border-[#24456f]',
+        list: 'px-5 pt-5 dark:!border-[var(--border-project-subtle)]',
         tab: 'dark:!text-slate-400',
         panel: 'px-5 pb-5 dark:!bg-transparent'
       }}

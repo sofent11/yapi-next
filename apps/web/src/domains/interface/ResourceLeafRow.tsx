@@ -8,18 +8,17 @@ type ResourceLeafRowProps = {
   dragEnabled?: boolean;
   onNavigate: () => void;
   onKeyNavigate: (event: KeyboardEvent<HTMLElement>) => void;
-  onDragStart?: (event: DragEvent<HTMLDivElement>) => void;
+  onDragStart?: (event: DragEvent<HTMLElement>) => void;
   onDragEnd?: () => void;
-  onDragOver?: (event: DragEvent<HTMLDivElement>) => void;
-  onDrop?: (event: DragEvent<HTMLDivElement>) => void;
+  onDragOver?: (event: DragEvent<HTMLElement>) => void;
+  onDrop?: (event: DragEvent<HTMLElement>) => void;
 };
 
 export function ResourceLeafRow(props: ResourceLeafRowProps) {
   return (
-    <div
-      className={`interface-nav-item${props.active ? ' active' : ''}`}
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
+      className={`interface-nav-item${props.active ? ' active' : ''} w-full text-left`}
       aria-current={props.active ? 'page' : undefined}
       draggable={props.dragEnabled}
       onDragStart={props.onDragStart}
@@ -32,6 +31,6 @@ export function ResourceLeafRow(props: ResourceLeafRowProps) {
       {props.leading}
       {props.title}
       {props.actions}
-    </div>
+    </button>
   );
 }

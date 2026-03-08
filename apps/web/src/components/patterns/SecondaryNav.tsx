@@ -31,14 +31,13 @@ export function SecondaryNav(props: SecondaryNavProps) {
           {props.summary}
         </Text>
       ) : null}
-      <nav className="no-scrollbar flex overflow-x-auto overflow-y-hidden" role="tablist">
+      <nav className="no-scrollbar flex overflow-x-auto overflow-y-hidden" aria-label="二级导航">
         {props.items.map(item => {
           const content = (
             <Link
               key={item.key}
               to={item.to}
-              role="tab"
-              aria-selected={item.active || false}
+              aria-current={item.active ? 'page' : undefined}
               className={[
                 'relative inline-flex items-center whitespace-nowrap px-4 py-2.5 text-sm font-medium transition-colors',
                 item.active

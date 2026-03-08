@@ -6,14 +6,16 @@
   .group-bar {
     @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900/92;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-panel) 92%, transparent);
     }
   }
 
   .curr-group {
     @apply mb-4 rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/80 p-4;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800/80;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-subtle) 84%, transparent);
     }
   }
 
@@ -42,7 +44,9 @@
   .group-operate .mantine-Input-input {
     @apply border-slate-200 bg-slate-50/90 text-slate-700 shadow-sm;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-[#24456f] bg-[#102341] text-slate-200;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-input);
+      color: rgb(226 232 240);
     }
   }
 
@@ -77,14 +81,15 @@
   .group-item:hover {
     @apply -translate-y-px border-slate-200 shadow-md;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700;
+      border-color: var(--border-project-subtle);
     }
   }
 
   .project-console-tabs [role='tablist'] {
     @apply mb-4 rounded-[var(--radius-lg)] border border-slate-200 bg-white/92 p-1 shadow-sm;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900/92;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-panel) 92%, transparent);
     }
   }
 
@@ -97,12 +102,20 @@
 
   .project-console-tabs [role='tab'][data-active='true'] {
     @apply bg-slate-900 text-white;
+    &:not(:is([data-theme="dark"], [data-theme="dark"] *)) {
+      @apply bg-slate-900 text-white;
+    }
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      background-color: var(--surface-project-elevated);
+      color: rgb(241 245 249);
+    }
   }
 
   .console-project-panel {
     @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-[#1f3e68] bg-[#081a36]/92;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-panel) 82%, black 18%);
     }
   }
 
@@ -113,7 +126,8 @@
   .console-project-stat-chip {
     @apply inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-800 text-slate-300;
+      background-color: var(--surface-project-subtle);
+      color: rgb(203 213 225);
     }
   }
 
@@ -124,7 +138,9 @@
   .console-project-section-empty {
     @apply rounded-[var(--radius-lg)] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800 text-slate-400;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-subtle);
+      color: rgb(148 163 184);
     }
   }
 
@@ -142,14 +158,16 @@
   .m-card.console-project-card-button {
     @apply flex min-h-[288px] cursor-pointer flex-col rounded-[var(--radius-xl)] border border-slate-200 bg-white px-6 py-6 shadow-sm transition-all duration-150;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-[#214670] bg-[#102341];
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-input);
     }
   }
 
   .m-card.console-project-card-button:hover {
     @apply -translate-y-0.5 border-slate-300 shadow-lg;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-[#3a6aa0] bg-[#132b50];
+      border-color: var(--border-project-strong);
+      background-color: var(--surface-project-elevated);
     }
   }
 
@@ -183,7 +201,8 @@
   .console-activity-panel {
     @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900/92;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-panel) 92%, transparent);
     }
   }
 
@@ -191,7 +210,8 @@
   .news-box {
     @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900/92;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-panel) 92%, transparent);
     }
   }
 
@@ -210,7 +230,8 @@
   .timeline-filter {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/80 p-4;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800/80;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-subtle) 84%, transparent);
     }
   }
 
@@ -226,7 +247,9 @@
   .timeline-api-select .mantine-Select-input {
     @apply h-12 rounded-[var(--radius-md)] border-slate-300 bg-white px-4 text-sm text-slate-700;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900 text-slate-300;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-input);
+      color: rgb(203 213 225);
     }
   }
 
@@ -246,7 +269,9 @@
   .timeline-bullet {
     @apply border-4 border-white bg-slate-100 shadow-sm ring-1 ring-slate-200;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-900 bg-slate-800 ring-slate-700;
+      border-color: var(--surface-project-panel);
+      background-color: var(--surface-project-subtle);
+      ring-color: var(--border-project-subtle);
     }
   }
 
@@ -265,7 +290,8 @@
   .timeline-item {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white px-5 py-4 shadow-sm;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-panel);
     }
   }
 
@@ -319,14 +345,18 @@
   .timeline-item-actions .mantine-Button-root {
     @apply rounded-full border-slate-200 bg-slate-50 text-slate-700;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800 text-slate-300;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-subtle);
+      color: rgb(203 213 225);
     }
   }
 
   .timeline-item-actions .mantine-Button-root:hover {
     @apply border-slate-300 bg-white text-slate-900;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900 text-slate-100;
+      border-color: var(--border-project-strong);
+      background-color: var(--surface-project-elevated);
+      color: rgb(241 245 249);
     }
   }
 
@@ -352,7 +382,8 @@
   .log-diff-item {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 px-4 py-4;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800/70;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-subtle) 70%, transparent);
     }
   }
 
@@ -378,21 +409,23 @@
   .console-members-summary-chip {
     @apply inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-800 text-slate-300;
+      background-color: var(--surface-project-subtle);
+      color: rgb(203 213 225);
     }
   }
 
   .console-members-table {
     @apply overflow-hidden rounded-[var(--radius-lg)] border border-slate-200 bg-white;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-panel);
     }
   }
 
   .console-members-table thead {
     @apply bg-slate-50;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-800;
+      background-color: var(--surface-project-header);
     }
   }
 
@@ -403,7 +436,7 @@
   .console-members-table tbody tr + tr {
     @apply border-t border-slate-100;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-800;
+      border-color: var(--border-project-subtle);
     }
   }
 
@@ -437,14 +470,17 @@
   .console-project-action-button {
     @apply absolute z-10 flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-all duration-150;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900 text-slate-400;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-panel);
+      color: rgb(148 163 184);
     }
   }
 
   .console-project-action-button:hover {
     @apply -translate-y-px border-slate-300 text-slate-900 shadow-md;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 text-slate-100;
+      border-color: var(--border-project-strong);
+      color: rgb(241 245 249);
     }
   }
 

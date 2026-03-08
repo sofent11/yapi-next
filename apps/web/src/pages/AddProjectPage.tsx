@@ -208,7 +208,7 @@ export function AddProjectPage() {
                 value={values.project_type}
                 onChange={value => setValues(current => ({ ...current, project_type: value as 'private' | 'public' }))}
               >
-                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-[var(--border-project-subtle)] dark:bg-[var(--surface-project-subtle)]">
                   <Radio
                     value="private"
                     label={

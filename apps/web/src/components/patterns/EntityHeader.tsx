@@ -11,20 +11,20 @@ export type EntityHeaderProps = {
 
 export function EntityHeader(props: EntityHeaderProps) {
   return (
-    <header className="mb-5 flex flex-wrap items-start justify-between gap-4 rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 px-5 py-5 shadow-sm backdrop-blur dark:!border-[#24456f] dark:!bg-[#0d2345]">
+    <header className="mb-5 flex flex-wrap items-start justify-between gap-4 rounded-[var(--radius-xl)] border border-[var(--border-shell-subtle)] bg-[var(--surface-shell-panel)] px-5 py-5 text-[var(--text-primary)] shadow-[var(--shadow-panel)]">
       <div className="min-w-0 flex-1">
         <div className="space-y-2">
           {props.eyebrow ? (
-            <span className="inline-flex rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-white">
+            <span className="inline-flex rounded-full bg-[var(--surface-inverse)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-inverse)]">
               {props.eyebrow}
             </span>
           ) : null}
-          <h1 className="m-0 text-2xl font-semibold text-slate-900 dark:text-slate-100 md:text-3xl">{props.title}</h1>
+          <h1 className="m-0 text-2xl font-semibold text-[var(--text-primary)] md:text-3xl">{props.title}</h1>
           {props.subtitle ? (
-            <p className="m-0 max-w-4xl text-sm leading-7 text-slate-600 dark:text-slate-300">{props.subtitle}</p>
+            <p className="m-0 max-w-4xl text-sm leading-7 text-[var(--text-secondary)]">{props.subtitle}</p>
           ) : null}
           {props.meta || props.status ? (
-            <div className="flex flex-wrap items-center gap-3 pt-1 text-sm text-slate-500 dark:text-slate-400">
+            <div className="flex flex-wrap items-center gap-3 pt-1 text-sm text-[var(--text-muted)]">
               {props.meta ? <div>{props.meta}</div> : null}
               {props.status ? <div>{props.status}</div> : null}
             </div>

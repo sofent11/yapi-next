@@ -91,21 +91,21 @@ export function HomePage() {
     <PublicShell
       backdrop={
         <>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,197,94,0.16),_transparent_32%),radial-gradient(circle_at_80%_10%,_rgba(59,130,246,0.2),_transparent_28%),linear-gradient(180deg,_#020617_0%,_#0f172a_42%,_#111827_100%)]" />
-          <div className="absolute inset-x-0 top-0 h-80 bg-[linear-gradient(180deg,rgba(15,23,42,0.1),rgba(15,23,42,0))]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--status-success)_20%,transparent)_0%,transparent_34%),radial-gradient(circle_at_82%_10%,color-mix(in_srgb,var(--interactive-primary)_24%,transparent)_0%,transparent_30%),linear-gradient(180deg,color-mix(in_srgb,var(--surface-public-canvas)_92%,black)_0%,var(--surface-public-canvas)_46%,color-mix(in_srgb,var(--surface-public-canvas)_84%,var(--surface-panel))_100%)]" />
+          <div className="absolute inset-x-0 top-0 h-80 bg-[linear-gradient(180deg,rgba(15,23,42,0.08),rgba(15,23,42,0))]" />
         </>
       }
       containerClassName="py-6 md:py-8"
     >
       <Container size="xl" className="px-0">
-        <header className="flex flex-col gap-4 rounded-[var(--radius-xl)] border border-white/10 bg-white/6 dark:bg-slate-900/6 px-5 py-4 backdrop-blur md:flex-row md:items-center md:justify-between md:px-7">
+        <header className="flex flex-col gap-4 rounded-[var(--radius-xl)] border border-[var(--border-public-subtle)] bg-[var(--surface-public-panel)] px-5 py-4 backdrop-blur md:flex-row md:items-center md:justify-between md:px-7">
           <Group gap="sm" wrap="nowrap">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-[0_12px_32px_rgba(255,255,255,0.14)]">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--surface-panel)] text-[var(--text-primary)] shadow-[var(--shadow-float)]">
               <LogoSVG length="30px" />
             </div>
             <div>
-              <Text className="text-lg font-semibold tracking-[0.18em] text-white/95 uppercase">YApi</Text>
-              <Text className="text-xs text-slate-300">Next workspace</Text>
+              <Text className="text-lg font-semibold tracking-[0.18em] text-[var(--text-public-primary)] uppercase">YApi</Text>
+              <Text className="text-xs text-[var(--text-public-muted)]">Next workspace</Text>
             </div>
             <Badge radius="xl" color="blue" variant="light">
               Next
@@ -137,14 +137,14 @@ export function HomePage() {
                 radius="xl"
                 color="blue"
                 variant="light"
-                className="border border-blue-400/25 bg-blue-400/12"
+                className="border border-[color-mix(in_srgb,var(--interactive-primary)_32%,transparent)] bg-[color-mix(in_srgb,var(--interactive-primary)_14%,transparent)]"
               >
                 API Governance Platform
               </Badge>
-              <Title className="max-w-4xl text-4xl font-semibold leading-tight text-white md:text-6xl">
+              <Title className="max-w-4xl text-4xl font-semibold leading-tight text-[var(--text-public-primary)] md:text-6xl">
                 清晰、现代、面向协作的 API 管理体验
               </Title>
-              <Text className="max-w-3xl text-base leading-8 text-slate-300 md:text-lg">
+              <Text className="max-w-3xl text-base leading-8 text-[var(--text-public-secondary)] md:text-lg">
                 YApi Next 将接口设计、调试、测试、导入导出和团队协作统一在一个工作流中，
                 让研发、测试、产品都可以在同一语义下高效协同。
               </Text>
@@ -173,7 +173,7 @@ export function HomePage() {
               {productSignals.map(item => (
                 <div
                   key={item}
-                  className="rounded-full border border-white/10 bg-white/7 dark:bg-slate-900/7 px-4 py-2 text-sm text-slate-200 backdrop-blur"
+                  className="rounded-full border border-[var(--border-public-subtle)] bg-[color-mix(in_srgb,var(--surface-public-panel)_88%,transparent)] px-4 py-2 text-sm text-[var(--text-public-secondary)] backdrop-blur"
                 >
                   {item}
                 </div>
@@ -184,14 +184,14 @@ export function HomePage() {
           <Card
             radius="xl"
             padding="xl"
-            className="border border-white/10 bg-white/[0.07] shadow-[0_24px_80px_rgba(15,23,42,0.45)] backdrop-blur"
+            className="border border-[var(--border-public-subtle)] bg-[var(--surface-public-panel)] shadow-[var(--shadow-overlay)] backdrop-blur"
           >
             <Stack gap="lg">
               <div>
-                <Text className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-200/80">
+                <Text className="text-xs font-semibold uppercase tracking-[0.22em] text-[color-mix(in_srgb,var(--interactive-primary)_48%,white)]">
                   Core capabilities
                 </Text>
-                <Title order={3} className="mt-3 text-white">
+                <Title order={2} className="mt-3 text-[var(--text-public-primary)]">
                   核心能力
                 </Title>
               </div>
@@ -200,17 +200,17 @@ export function HomePage() {
                 {coreCapabilities.map((item, index) => (
                   <div
                     key={item}
-                    className="flex items-center gap-3 rounded-2xl border border-white/8 bg-slate-950/35 px-4 py-3"
+                    className="flex items-center gap-3 rounded-2xl border border-[var(--border-public-subtle)] bg-[var(--surface-public-panel-strong)] px-4 py-3"
                   >
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/18 text-sm font-semibold text-blue-100">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--interactive-primary)_20%,transparent)] text-sm font-semibold text-[var(--text-public-primary)]">
                       {index + 1}
                     </div>
-                    <Text className="text-sm text-slate-200">{item}</Text>
+                    <Text className="text-sm text-[var(--text-public-secondary)]">{item}</Text>
                   </div>
                 ))}
               </Stack>
 
-              <div className="rounded-2xl border border-emerald-300/12 bg-emerald-300/8 px-4 py-4 text-sm leading-7 text-slate-200">
+              <div className="rounded-2xl border border-[color-mix(in_srgb,var(--status-success)_24%,transparent)] bg-[color-mix(in_srgb,var(--status-success)_14%,transparent)] px-4 py-4 text-sm leading-7 text-[var(--text-public-secondary)]">
                 适合需要统一接口协作、Mock 与回归测试链路的团队。
               </div>
             </Stack>
@@ -226,16 +226,16 @@ export function HomePage() {
                   key={item.title}
                   radius="xl"
                   padding="xl"
-                  className="border border-white/10 bg-white/[0.06] shadow-[0_18px_50px_rgba(15,23,42,0.28)] backdrop-blur"
+                  className="border border-[var(--border-public-subtle)] bg-[var(--surface-public-panel)] shadow-[var(--shadow-float)] backdrop-blur"
                 >
                   <Stack gap="md">
                     <ThemeIcon size={52} radius="xl" color="blue" variant="light">
                       <Icon size={26} stroke={1.8} />
                     </ThemeIcon>
-                    <Title order={4} className="text-white">
+                    <Title order={3} className="text-[var(--text-public-primary)]">
                       {item.title}
                     </Title>
-                    <Text className="leading-7 text-slate-300">{item.desc}</Text>
+                    <Text className="leading-7 text-[var(--text-public-secondary)]">{item.desc}</Text>
                   </Stack>
                 </Card>
               );
@@ -252,18 +252,18 @@ export function HomePage() {
                   key={item.title}
                   radius="xl"
                   padding="xl"
-                  className="border border-white/10 bg-[linear-gradient(145deg,rgba(15,23,42,0.78),rgba(30,41,59,0.52))] shadow-[0_20px_60px_rgba(15,23,42,0.35)]"
+                  className="border border-[var(--border-public-subtle)] bg-[linear-gradient(145deg,var(--surface-public-panel-strong),var(--surface-public-subtle))] shadow-[var(--shadow-float)]"
                 >
                   <Stack gap="md">
                     <Group gap="sm" align="center">
                       <ThemeIcon size={48} radius="xl" color="teal" variant="light">
                         <Icon size={24} stroke={1.8} />
                       </ThemeIcon>
-                      <Title order={4} className="text-white">
+                      <Title order={3} className="text-[var(--text-public-primary)]">
                         {item.title}
                       </Title>
                     </Group>
-                    <Text className="leading-8 text-slate-300">{item.content}</Text>
+                    <Text className="leading-8 text-[var(--text-public-secondary)]">{item.content}</Text>
                   </Stack>
                 </Card>
               );

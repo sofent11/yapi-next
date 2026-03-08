@@ -11,6 +11,7 @@ export function MockGenerator({ value, onChange }: MockGeneratorProps) {
       value={value}
       onChange={event => onChange(event.currentTarget.value)}
       placeholder="mock"
+      aria-label="Mock 值"
     />
   );
 }

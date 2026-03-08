@@ -139,7 +139,7 @@ export function CaseDetailPanel(props: CaseDetailPanelProps) {
 
         <RcForm<CaseEditFormValues> form={props.caseForm}>
           <div className="grid gap-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:!border-[#24456f] dark:!bg-[#10294d]">
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-subtle)] p-4 text-[var(--text-primary)] dark:!border-[var(--border-project-subtle)] dark:!bg-[var(--surface-project-subtle)]">
               <div className="flex flex-wrap items-center gap-2">
                 <span className={getHttpMethodBadgeClassName(props.detail.method)}>
                   {normalizeHttpMethod(String(props.detail.method || 'GET'))}

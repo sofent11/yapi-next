@@ -37,6 +37,16 @@
   --surface-subtle: #f8fafc;
   --surface-hover: #f1f5f9;
   --surface-inverse: #0f172a;
+  --surface-shell-panel: var(--surface-panel);
+  --surface-shell-subtle: var(--surface-subtle);
+  --surface-public-canvas: #0b1220;
+  --surface-public-panel: rgba(15, 23, 42, 0.72);
+  --surface-public-panel-strong: rgba(15, 23, 42, 0.84);
+  --surface-public-subtle: rgba(30, 41, 59, 0.82);
+  --border-public-subtle: rgba(148, 163, 184, 0.22);
+  --text-public-primary: rgba(248, 250, 252, 0.96);
+  --text-public-secondary: rgba(203, 213, 225, 0.88);
+  --text-public-muted: rgba(148, 163, 184, 0.92);
 
   --text-primary: #0f172a;
   --text-secondary: #475569;
@@ -45,6 +55,8 @@
 
   --border-subtle: #e2e8f0;
   --border-strong: #cbd5e1;
+  --border-shell-subtle: var(--border-subtle);
+  --border-shell-strong: var(--border-strong);
   --focus-ring: #93c5fd;
 
   --status-success: #059669;
@@ -55,6 +67,15 @@
   --status-danger-bg: #fef2f2;
   --status-info: #2563eb;
   --status-info-bg: #eff6ff;
+
+  --project-color-blue: #2563eb;
+  --project-color-cyan: #0891b2;
+  --project-color-green: #059669;
+  --project-color-red: #dc2626;
+  --project-color-pink: #db2777;
+  --project-color-purple: #7c3aed;
+  --project-color-yellow: #d97706;
+  --project-color-gray: #475569;
 
   --radius-sm: 10px;
   --radius-md: 14px;
@@ -87,25 +108,29 @@
 
 [data-theme='dark'] {
   --surface-canvas: #0c0f1a;
-  --surface-panel: #161b2e;
-  --surface-subtle: #1a2035;
-  --surface-hover: #1e2742;
+  --surface-panel: var(--surface-project-panel);
+  --surface-subtle: var(--surface-project-subtle);
+  --surface-hover: var(--surface-project-elevated);
   --surface-inverse: #f8fafc;
   --surface-project-panel: #0d2345;
   --surface-project-subtle: #10294d;
   --surface-project-elevated: #13325d;
   --surface-project-input: #102341;
   --surface-project-header: #16365f;
+  --surface-shell-panel: var(--surface-project-panel);
+  --surface-shell-subtle: var(--surface-project-subtle);
   --border-project-subtle: #24456f;
   --border-project-strong: #3a6aa0;
+  --border-shell-subtle: var(--border-project-subtle);
+  --border-shell-strong: var(--border-project-strong);
 
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
   --text-inverse: #0f172a;
 
-  --border-subtle: #1e293b;
-  --border-strong: #334155;
+  --border-subtle: var(--border-project-subtle);
+  --border-strong: var(--border-project-strong);
   --focus-ring: #3b82f6;
 
   --status-success: #34d399;
@@ -127,4 +152,25 @@
   --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.50);
   --elevation-low: 0 1px 3px rgba(0, 0, 0, 0.20);
   --elevation-high: 0 12px 32px rgba(0, 0, 0, 0.40);
+
+  /* Bridge Mantine dark variables to YApi project surfaces. */
+  --mantine-color-body: var(--surface-canvas);
+  --mantine-color-default: var(--surface-project-panel);
+  --mantine-color-default-hover: var(--surface-project-subtle);
+  --mantine-color-default-border: var(--border-project-subtle);
+  --mantine-color-dimmed: rgb(148 163 184);
+  --mantine-color-placeholder: rgb(100 116 139);
+  --mantine-color-disabled: var(--surface-project-subtle);
+  --mantine-color-disabled-border: var(--border-project-subtle);
+  --mantine-color-disabled-color: rgb(100 116 139);
+  --mantine-color-dark-0: rgb(226 232 240);
+  --mantine-color-dark-1: rgb(203 213 225);
+  --mantine-color-dark-2: rgb(148 163 184);
+  --mantine-color-dark-3: rgb(100 116 139);
+  --mantine-color-dark-4: var(--border-project-subtle);
+  --mantine-color-dark-5: var(--surface-project-elevated);
+  --mantine-color-dark-6: var(--surface-project-subtle);
+  --mantine-color-dark-7: var(--surface-project-panel);
+  --mantine-color-dark-8: #0a1b35;
+  --mantine-color-dark-9: #08152b;
 }

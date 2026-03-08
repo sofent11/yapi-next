@@ -322,7 +322,7 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
 
       {parseError ? <Text c="red">当前 schema 解析失败: {parseError}</Text> : null}
 
-      <div className="schema-editor-table-wrap overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
+      <div className="schema-editor-table-wrap overflow-x-auto rounded-2xl border border-slate-200 dark:border-[var(--border-project-subtle)]">
         <Table className="schema-editor-table" withTableBorder striped highlightOnHover>
           <Table.Thead>
             <Table.Tr>
@@ -354,9 +354,16 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
                         <ActionIcon
                           variant="subtle"
                           size="sm"
-                          className="schema-editor-toggle-button dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[#24456f] dark:hover:!bg-[#13325d] dark:hover:!text-slate-100 disabled:dark:!border-transparent disabled:dark:!bg-transparent disabled:dark:!text-slate-600"
+                          className="schema-editor-toggle-button dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[var(--border-project-subtle)] dark:hover:!bg-[var(--surface-project-elevated)] dark:hover:!text-slate-100 disabled:dark:!border-transparent disabled:dark:!bg-transparent disabled:dark:!text-slate-600"
                           onClick={() => hasChildren && toggleRowCollapse(row.id)}
                           disabled={!hasChildren}
+                          aria-label={
+                            hasChildren
+                              ? expanded
+                                ? `收起字段 ${row.name || '未命名字段'}`
+                                : `展开字段 ${row.name || '未命名字段'}`
+                              : `字段 ${row.name || '未命名字段'} 无子节点`
+                          }
                         >
                           {hasChildren ? (
                             expanded ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />
@@ -398,8 +405,9 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
                         <Tooltip label="查看字段 Schema">
                           <ActionIcon
                             variant="subtle"
-                            className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[#24456f] dark:hover:!bg-[#13325d] dark:hover:!text-slate-100"
+                            className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[var(--border-project-subtle)] dark:hover:!bg-[var(--surface-project-elevated)] dark:hover:!text-slate-100"
                             onClick={() => openFieldModal(row.id)}
+                            aria-label={`查看字段 ${row.name || '未命名字段'} 的 Schema`}
                           >
                             <IconSettings size={16} />
                           </ActionIcon>
@@ -408,8 +416,9 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
                           <Tooltip label="添加子节点">
                             <ActionIcon
                               variant="subtle"
-                              className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[#24456f] dark:hover:!bg-[#13325d] dark:hover:!text-slate-100"
+                              className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[var(--border-project-subtle)] dark:hover:!bg-[var(--surface-project-elevated)] dark:hover:!text-slate-100"
                               onClick={() => addChildRow(row.id)}
+                              aria-label={`为字段 ${row.name || '未命名字段'} 添加子节点`}
                             >
                               <IconPlus size={16} />
                             </ActionIcon>
@@ -421,6 +430,7 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
                             variant="subtle"
                             className="dark:!border-transparent dark:!bg-transparent dark:!text-rose-400 dark:hover:!border-rose-700 dark:hover:!bg-rose-950/40 dark:hover:!text-rose-300"
                             onClick={() => removeRow(row.id)}
+                            aria-label={`删除字段 ${row.name || '未命名字段'}`}
                           >
                             <IconTrash size={16} />
                           </ActionIcon>

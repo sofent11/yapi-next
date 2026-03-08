@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -70,6 +70,7 @@ export function UserProfilePage() {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const [findUser, findUserState] = useLazyFindUserQuery();
   const [updateUser, updateUserState] = useUpdateUserMutation();
@@ -95,6 +96,12 @@ export function UserProfilePage() {
   const canEditBasic = isAdmin || currentUid === targetUid;
   const canEditRole = isAdmin;
   const canChangePassword = canEditBasic && (profileData?.type || 'site') === 'site';
+  const avatarAlt = `${String(profileData?.username || profileData?.email || targetUid)} 的头像`;
+  const insetPanelClassName =
+    'rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--surface-subtle)] p-5 text-[var(--text-primary)]';
+  const avatarPanelClassName = `${insetPanelClassName} flex flex-col items-center gap-3 p-6 text-center`;
+  const avatarImageClassName =
+    'h-24 w-24 rounded-full border border-[var(--border-subtle)] object-cover';
 
   async function handleSaveProfile() {
     if (targetUid <= 0) {
@@ -221,25 +228,31 @@ export function UserProfilePage() {
       <SectionCard className="user-profile-card">
         <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
           <div className="space-y-4">
-            <div className="flex flex-col items-center gap-3 rounded-[var(--radius-xl)] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-6 text-center">
+            <div className={avatarPanelClassName}>
               {targetUid === currentUid ? (
-                <Tooltip label="点击头像更换，仅支持 jpg/png 且大小不超过 200kb。">
-                  <label htmlFor="avatar-upload-input" className="cursor-pointer">
+                <Tooltip label="更换头像，仅支持 jpg/png 且大小不超过 200kb。">
+                  <button
+                    type="button"
+                    className="rounded-full border-0 bg-transparent p-0 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                    onClick={() => avatarInputRef.current?.click()}
+                    aria-label="上传新头像"
+                  >
                     <img
-                      className="h-24 w-24 rounded-full border border-slate-200 dark:border-slate-700 object-cover"
+                      className={avatarImageClassName}
                       src={`/api/user/avatar?uid=${targetUid}`}
-                      alt="avatar"
+                      alt={avatarAlt}
                     />
-                  </label>
+                  </button>
                 </Tooltip>
               ) : (
                 <img
-                  className="h-24 w-24 rounded-full border border-slate-200 dark:border-slate-700 object-cover"
+                  className={avatarImageClassName}
                   src={`/api/user/avatar?uid=${targetUid}`}
-                  alt="avatar"
+                  alt={avatarAlt}
                 />
               )}
               <input
+                ref={avatarInputRef}
                 id="avatar-upload-input"
                 type="file"
                 accept="image/png,image/jpeg"
@@ -257,7 +270,7 @@ export function UserProfilePage() {
               ) : null}
             </div>
 
-            <div className="rounded-[var(--radius-xl)] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-5">
+            <div className={insetPanelClassName}>
               <Text fw={600} mb="md">
                 账号摘要
               </Text>
@@ -271,7 +284,7 @@ export function UserProfilePage() {
           </div>
 
           <div className="space-y-6">
-            <div className="space-y-4 rounded-[var(--radius-xl)] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-5">
+            <div className={`${insetPanelClassName} space-y-4`}>
               <Text fw={600}>基础资料</Text>
               <div className="grid gap-4 md:grid-cols-[96px_minmax(0,1fr)_auto] md:items-center">
                 <Text fw={500}>用户名</Text>
@@ -331,7 +344,7 @@ export function UserProfilePage() {
             </div>
 
             {canChangePassword ? (
-              <div className="space-y-4 rounded-[var(--radius-xl)] border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-5">
+              <div className={`${insetPanelClassName} space-y-4`}>
                 <Text fw={600}>修改密码</Text>
                 {isAdmin && profileData?.role !== 'admin' ? null : (
                   <PasswordInput

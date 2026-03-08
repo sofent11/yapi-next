@@ -29,8 +29,9 @@ export function SchemaEditorHeader({
           <ActionIcon
             variant="subtle"
             size="sm"
-            className="schema-editor-toggle-button dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[#24456f] dark:hover:!bg-[#13325d] dark:hover:!text-slate-100"
+            className="schema-editor-toggle-button dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[var(--border-project-subtle)] dark:hover:!bg-[var(--surface-project-elevated)] dark:hover:!text-slate-100"
             onClick={onToggleRootCollapse}
+            aria-label={rootCollapsed ? '展开 root 节点' : '收起 root 节点'}
           >
             {rootCollapsed ? <IconChevronRight size={16} /> : <IconChevronDown size={16} />}
           </ActionIcon>
@@ -46,8 +47,9 @@ export function SchemaEditorHeader({
           <Tooltip label="导入 JSON 生成 Schema">
             <ActionIcon
               variant="subtle"
-              className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[#24456f] dark:hover:!bg-[#13325d] dark:hover:!text-slate-100"
+              className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[var(--border-project-subtle)] dark:hover:!bg-[var(--surface-project-elevated)] dark:hover:!text-slate-100"
               onClick={onImportJson}
+              aria-label="导入 JSON 生成 Schema"
             >
               <IconUpload size={16} />
             </ActionIcon>
@@ -55,8 +57,9 @@ export function SchemaEditorHeader({
           <Tooltip label="查看/编辑 Schema 文件">
             <ActionIcon
               variant="subtle"
-              className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[#24456f] dark:hover:!bg-[#13325d] dark:hover:!text-slate-100"
+              className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[var(--border-project-subtle)] dark:hover:!bg-[var(--surface-project-elevated)] dark:hover:!text-slate-100"
               onClick={onOpenSchema}
+              aria-label="查看或编辑 Schema 文件"
             >
               <IconFileText size={16} />
             </ActionIcon>
@@ -64,8 +67,9 @@ export function SchemaEditorHeader({
           <Tooltip label="添加子节点">
             <ActionIcon
               variant="subtle"
-              className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[#24456f] dark:hover:!bg-[#13325d] dark:hover:!text-slate-100"
+              className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[var(--border-project-subtle)] dark:hover:!bg-[var(--surface-project-elevated)] dark:hover:!text-slate-100"
               onClick={onAddTopRow}
+              aria-label="添加根节点子字段"
             >
               <IconPlus size={16} />
             </ActionIcon>

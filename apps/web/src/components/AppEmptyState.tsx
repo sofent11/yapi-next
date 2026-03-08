@@ -75,15 +75,15 @@ export function AppEmptyState(props: AppEmptyStateProps) {
     <Stack
       align="center"
       gap="sm"
-      className="rounded-[var(--radius-xl)] border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center dark:!border-[#24456f] dark:!bg-[#10294d]"
+      className="rounded-[var(--radius-xl)] border border-dashed border-[var(--border-shell-strong)] bg-[var(--surface-shell-subtle)] px-6 py-10 text-center text-[var(--text-primary)]"
     >
       <ThemeIcon size={56} radius="xl" variant="light" color="gray">
         {fallback.icon === 'meh' ? <IconMoodEmpty size={28} /> : <IconMoodSad size={28} />}
       </ThemeIcon>
-      <Title order={4} c="dark">
+      <Title order={4} className="text-[var(--text-primary)]">
         {title}
       </Title>
-      <Text c="dimmed" className="max-w-lg leading-7">
+      <Text className="max-w-lg leading-7 text-[var(--text-secondary)]">
         {desc}
       </Text>
       {props.type === 'noFollow' ? (

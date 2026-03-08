@@ -6,7 +6,7 @@ export function ProjectCardSkeleton({ count = 4 }: { count?: number }) {
       {Array.from({ length: count }, (_, i) => (
         <div
           key={i}
-          className="flex min-h-[288px] flex-col rounded-[var(--radius-xl)] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-6 py-6"
+          className="flex min-h-[288px] flex-col rounded-[var(--radius-xl)] border border-slate-200 bg-white px-6 py-6 dark:border-[var(--border-project-subtle)] dark:bg-[var(--surface-project-panel)]"
         >
           <Skeleton height={56} width={56} radius="var(--radius-md)" mb="md" />
           <Skeleton height={28} width="70%" mb="sm" />
@@ -24,12 +24,12 @@ export function ProjectCardSkeleton({ count = 4 }: { count?: number }) {
 
 export function UserRowSkeleton({ count = 5 }: { count?: number }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
+    <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-[var(--border-project-subtle)]">
       <div className="space-y-0">
         {Array.from({ length: count }, (_, i) => (
           <div
             key={i}
-            className="flex items-center gap-4 border-b border-slate-100 px-4 py-3.5 last:border-b-0 dark:border-slate-800"
+            className="flex items-center gap-4 border-b border-slate-100 px-4 py-3.5 last:border-b-0 dark:border-[var(--border-project-subtle)]"
           >
             <Skeleton circle height={36} />
             <div className="flex-1 space-y-1.5">

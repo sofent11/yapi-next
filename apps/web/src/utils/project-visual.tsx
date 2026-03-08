@@ -45,14 +45,14 @@ import {
 } from '@tabler/icons-react';
 
 export const PROJECT_COLOR_MAP: Record<string, string> = {
-  blue: '#2395f1',
-  green: '#00a854',
-  yellow: '#ffbf00',
-  red: '#f56a00',
-  pink: '#f5317f',
-  cyan: '#00a2ae',
-  gray: '#bfbfbf',
-  purple: '#7265e6'
+  blue: 'var(--project-color-blue)',
+  green: 'var(--project-color-green)',
+  yellow: 'var(--project-color-yellow)',
+  red: 'var(--project-color-red)',
+  pink: 'var(--project-color-pink)',
+  cyan: 'var(--project-color-cyan)',
+  gray: 'var(--project-color-gray)',
+  purple: 'var(--project-color-purple)'
 };
 
 export const PROJECT_COLOR_OPTIONS = [
@@ -180,7 +180,17 @@ export function resolveProjectColorKey(rawColor: string | undefined): string | n
     return null;
   }
   const normalized = rawColor.toLowerCase();
-  const match = Object.entries(PROJECT_COLOR_MAP).find(([, value]) => value.toLowerCase() === normalized);
+  const legacyColorMap: Record<string, string> = {
+    blue: '#2395f1',
+    green: '#00a854',
+    yellow: '#ffbf00',
+    red: '#f56a00',
+    pink: '#f5317f',
+    cyan: '#00a2ae',
+    gray: '#bfbfbf',
+    purple: '#7265e6'
+  };
+  const match = Object.entries(legacyColorMap).find(([, value]) => value.toLowerCase() === normalized);
   return match ? match[0] : null;
 }
 

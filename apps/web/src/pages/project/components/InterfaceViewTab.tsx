@@ -63,8 +63,8 @@ function renderCell(record: ParamRow, column: Record<string, unknown>) {
 function renderParamTable(title: string, columns: ParamColumns, rows: ParamRow[]) {
   return (
     <div className="interface-view-block space-y-3">
-      <h3 className="interface-view-subtitle text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:!border-[#24456f]">
+      <h3 className="interface-view-subtitle text-base font-semibold text-[var(--text-primary)]">{title}</h3>
+      <div className="overflow-x-auto rounded-2xl border border-[var(--border-subtle)] dark:!border-[var(--border-project-subtle)]">
         <Table withTableBorder striped highlightOnHover>
           <Table.Thead>
             <Table.Tr>
@@ -137,8 +137,8 @@ function SchemaParamTable(props: { title: string; columns: ParamColumns; rows: S
 
   return (
     <div className="interface-view-block space-y-3">
-      <h3 className="interface-view-subtitle text-base font-semibold text-slate-900 dark:text-slate-100">{props.title}</h3>
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:!border-[#24456f]">
+      <h3 className="interface-view-subtitle text-base font-semibold text-[var(--text-primary)]">{props.title}</h3>
+      <div className="overflow-x-auto rounded-2xl border border-[var(--border-subtle)] dark:!border-[var(--border-project-subtle)]">
         <Table withTableBorder striped highlightOnHover>
           <Table.Thead>
             <Table.Tr>
@@ -210,9 +210,9 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
 
   return (
     <div className="caseContainer space-y-4">
-      <div className="flex flex-col gap-4 rounded-[var(--radius-xl)] border border-slate-200 bg-white p-5 shadow-sm dark:!border-[#24456f] dark:!bg-[#0d2345]">
+      <div className="flex flex-col gap-4 rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-5 text-[var(--text-primary)] shadow-[var(--shadow-panel)] dark:!border-[var(--border-project-subtle)] dark:!bg-[var(--surface-project-panel)]">
         {/* Top Info Row */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4 dark:border-[var(--border-project-subtle)]">
           <div className="flex flex-wrap items-center gap-3">
             <Badge 
               variant="light"
@@ -222,7 +222,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
             >
               {props.statusLabel(props.currentInterface.status)}
             </Badge>
-            <span className="text-lg font-bold text-slate-900 dark:text-slate-100">{props.currentInterface.title || '-'}</span>
+            <span className="text-lg font-bold text-[var(--text-primary)]">{props.currentInterface.title || '-'}</span>
             {tags.length > 0 ? (
               <div className="flex flex-wrap gap-1.5 ml-1">
                 {tags.map(tag => (
@@ -251,7 +251,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
                 </span>
               )}
             </div>
-            <div className="h-3 w-px bg-slate-200 dark:!bg-[#24456f]"></div>
+            <div className="h-3 w-px bg-[var(--border-subtle)] dark:!bg-[var(--border-project-subtle)]"></div>
             <div className="flex items-center gap-1.5">
               <span className="text-slate-400">更新于:</span>
               <span className="text-slate-600 dark:text-slate-300">
@@ -266,7 +266,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
           {/* Path Row */}
           <div className="flex items-center gap-4">
             <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500 dark:text-slate-400">接口路径</div>
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-1.5 dark:!border-[#24456f] dark:!bg-[#10294d]">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-100 bg-[var(--surface-subtle)] px-3 py-1.5 dark:!border-[var(--border-project-subtle)] dark:!bg-[var(--surface-project-subtle)]">
               <span className={`${props.methodClassName(props.method)} text-[12px] font-bold leading-none shrink-0`}>{props.method}</span>
               <code className="min-w-0 flex-1 truncate font-mono text-[13px] text-slate-700 dark:text-slate-300">{props.fullPath}</code>
               <ActionIcon 
@@ -275,6 +275,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
                 color="gray"
                 onClick={() => props.onCopyText(props.fullPath, '接口路径已复制')}
                 title="复制路径"
+                aria-label="复制接口路径"
               >
                 <IconCopy size={14} />
               </ActionIcon>
@@ -284,7 +285,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
           {/* Mock URL Row */}
           <div className="flex items-center gap-4">
             <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500 dark:text-slate-400">Mock</div>
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-1.5 dark:!border-[#24456f] dark:!bg-[#10294d]">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-100 bg-[var(--surface-subtle)] px-3 py-1.5 dark:!border-[var(--border-project-subtle)] dark:!bg-[var(--surface-project-subtle)]">
               {mockFlag ? (
                 <span className="shrink-0 rounded px-1.5 py-0.5 text-[12px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-500/20 dark:text-amber-200">
                   {mockFlag}
@@ -309,6 +310,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
                   color="gray"
                   onClick={() => props.onCopyText(props.mockUrl, 'Mock地址已复制')}
                   title="复制Mock地址"
+                  aria-label="复制 Mock 地址"
                 >
                   <IconCopy size={14} />
                 </ActionIcon>
@@ -320,7 +322,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
           {props.customField?.enable && String(props.currentInterface.custom_field_value || '').trim() ? (
             <div className="flex items-center gap-4">
               <div className="w-16 shrink-0 text-right text-[13px] font-medium text-slate-500 dark:text-slate-400">{props.customField.name || '自定义'}</div>
-              <div className="flex min-w-0 flex-1 items-center rounded-lg border border-slate-100 bg-slate-50 px-3 py-1.5 text-[13px] text-slate-700 dark:!border-[#24456f] dark:!bg-[#10294d] dark:text-slate-300">
+              <div className="flex min-w-0 flex-1 items-center rounded-lg border border-slate-100 bg-[var(--surface-subtle)] px-3 py-1.5 text-[13px] text-slate-700 dark:!border-[var(--border-project-subtle)] dark:!bg-[var(--surface-project-subtle)] dark:text-slate-300">
                 {String(props.currentInterface.custom_field_value || '')}
               </div>
             </div>
@@ -334,7 +336,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
                 size="xs"
                 variant="default"
                 radius="md"
-                className="bg-white font-medium hover:bg-slate-50 dark:!bg-[#13325d] dark:hover:!bg-[#19406f]"
+                className="bg-[var(--surface-panel)] font-medium hover:bg-[var(--surface-hover)] dark:!bg-[var(--surface-project-elevated)] dark:hover:brightness-110"
                 onClick={() => props.onCopySwaggerJson(interfaceId)}
                 loading={props.copyingSpec}
                 disabled={interfaceId <= 0}
@@ -345,7 +347,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
                 size="xs"
                 variant="default"
                 radius="md"
-                className="bg-white font-medium hover:bg-slate-50 dark:!bg-[#13325d] dark:hover:!bg-[#19406f]"
+                className="bg-[var(--surface-panel)] font-medium hover:bg-[var(--surface-hover)] dark:!bg-[var(--surface-project-elevated)] dark:hover:brightness-110"
                 onClick={() => props.onCopyOpenApiJson(interfaceId)}
                 loading={props.copyingSpec}
                 disabled={interfaceId <= 0}

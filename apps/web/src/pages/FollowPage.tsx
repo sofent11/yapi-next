@@ -1,9 +1,8 @@
 import { useMemo } from 'react';
-import type { KeyboardEvent } from 'react';
 import { ActionIcon, Card, Loader, Text, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconStarFilled } from '@tabler/icons-react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useDelFollowMutation, useGetFollowListQuery } from '../services/yapi-api';
 import { renderProjectIcon, resolveProjectColor, resolveProjectColorKey } from '../utils/project-visual';
 import { AppShell, PageHeader, SectionCard } from '../components/layout';
@@ -12,7 +11,6 @@ import { AppEmptyState } from '../components/AppEmptyState';
 export function FollowPage() {
   const followQuery = useGetFollowListQuery();
   const [delFollow] = useDelFollowMutation();
-  const navigate = useNavigate();
 
   const rows = useMemo(
     () =>
@@ -59,30 +57,29 @@ export function FollowPage() {
         })
       : '未知';
 
-    const handleNavigate = () => navigate(`/project/${pid}`);
-
-    const handleCardKeydown = (event: KeyboardEvent) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        handleNavigate();
-      }
-    };
-
     return (
       <Card
         key={pid}
         radius="xl"
         withBorder
-        className="cursor-pointer rounded-[var(--radius-xl)] border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-        onClick={handleNavigate}
-        role="button"
-        tabIndex={0}
-        onKeyDown={handleCardKeydown}
+        className="rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-5 text-[var(--text-primary)] shadow-[var(--shadow-panel)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-float)]"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
-          <div className={logoClassName} style={colorKey ? undefined : { backgroundColor: color }}>
-            {renderProjectIcon(visual.icon)}
-          </div>
+          <Link
+            to={`/project/${pid}`}
+            className="flex min-w-0 flex-1 items-start gap-3 rounded-[var(--radius-md)] focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+          >
+            <div className={logoClassName} style={colorKey ? undefined : { backgroundColor: color }}>
+              {renderProjectIcon(visual.icon)}
+            </div>
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="text-lg font-semibold text-[var(--text-primary)]">{projectName}</div>
+              <div className="flex flex-col gap-1 text-sm text-[var(--text-muted)]">
+                <Text size="sm" c="dimmed">BasePath: {project.basepath ? String(project.basepath) : '/'}</Text>
+                <Text size="sm" c="dimmed">更新于 {updatedAt}</Text>
+              </div>
+            </div>
+          </Link>
           <Tooltip label="取消关注">
             <ActionIcon
               variant="light"
@@ -97,13 +94,6 @@ export function FollowPage() {
               <IconStarFilled size={18} />
             </ActionIcon>
           </Tooltip>
-        </div>
-        <div className="space-y-3">
-          <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{projectName}</div>
-          <div className="flex flex-col gap-1 text-sm text-slate-500 dark:text-slate-400">
-            <Text size="sm" c="dimmed">BasePath: {project.basepath ? String(project.basepath) : '/'}</Text>
-            <Text size="sm" c="dimmed">更新于 {updatedAt}</Text>
-          </div>
         </div>
       </Card>
     );

@@ -163,7 +163,7 @@ export function ActivityTimeline(props: ActivityTimelineProps) {
       ) : null}
 
       {logRows.length === 0 && !query.isFetching ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500 dark:border-[var(--border-project-subtle)] dark:bg-[color-mix(in_srgb,var(--surface-project-subtle)_78%,transparent)] dark:text-slate-400">
           暂无动态
         </div>
       ) : (
@@ -254,7 +254,7 @@ export function ActivityTimeline(props: ActivityTimelineProps) {
               </div>
             ))
           ) : (
-            <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500 dark:border-[var(--border-project-subtle)] dark:bg-[color-mix(in_srgb,var(--surface-project-subtle)_78%,transparent)] dark:text-slate-400">
               没有改动
             </div>
           )}

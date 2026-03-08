@@ -194,7 +194,7 @@ export function UserListPage() {
         ) : (
           <AdaptiveDataView
             desktop={
-              <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-[var(--border-project-subtle)]">
                 <Table striped highlightOnHover withTableBorder>
                   <Table.Thead>
                     <Table.Tr>

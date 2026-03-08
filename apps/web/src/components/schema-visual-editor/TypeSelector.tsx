@@ -14,6 +14,7 @@ export function TypeSelector({ value, onChange }: TypeSelectorProps) {
       className="workspace-control"
       data={FIELD_TYPES}
       onChange={nextValue => onChange((nextValue as SchemaFieldType) || 'string')}
+      aria-label="字段类型"
     />
   );
 }

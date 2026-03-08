@@ -62,7 +62,7 @@ export function ProjectList(props: ProjectListProps) {
       <div className="card-container" key={pid}>
         <Card
           withBorder={false}
-          className="m-card console-project-card-button dark:!border-[#214670] dark:!bg-[#102341] dark:hover:!border-[#3a6aa0] dark:hover:!bg-[#132b50]"
+          className="m-card console-project-card-button"
           onClick={() => props.onNavigateProject(pid)}
           role="button"
           tabIndex={0}
@@ -112,7 +112,7 @@ export function ProjectList(props: ProjectListProps) {
   };
 
   return (
-    <SectionCard className="m-panel project-list console-project-panel dark:!border-[#1f3e68] dark:!bg-[#081a36]/92">
+    <SectionCard className="m-panel project-list console-project-panel">
       <DataToolbar
         title="项目总览"
         summary={
@@ -141,7 +141,7 @@ export function ProjectList(props: ProjectListProps) {
           <div className="space-y-6">
             <section className="console-project-section">
               <div className="console-project-section-head mb-4 flex items-center justify-between gap-3">
-                <h3 className="owner-type">我的项目</h3>
+                <h2 className="owner-type">我的项目</h2>
                 <Text c="dimmed">{myProjectCount} 个</Text>
               </div>
               {props.normalProjects.length > 0 ? (
@@ -152,7 +152,7 @@ export function ProjectList(props: ProjectListProps) {
             </section>
             <section className="console-project-section">
               <div className="console-project-section-head mb-4 flex items-center justify-between gap-3">
-                <h3 className="owner-type">我的关注</h3>
+                <h2 className="owner-type">我的关注</h2>
                 <Text c="dimmed">{followProjectCount} 个</Text>
               </div>
               {props.followedProjects.length > 0 ? (

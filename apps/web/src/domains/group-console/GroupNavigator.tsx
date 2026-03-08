@@ -24,7 +24,7 @@ export type GroupNavigatorProps = {
 
 function EmptyGroups() {
   return (
-    <div className="console-group-empty rounded-xl border border-dashed border-slate-200 dark:border-slate-700 px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+    <div className="console-group-empty rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-[var(--border-project-subtle)] dark:bg-[color-mix(in_srgb,var(--surface-project-subtle)_72%,transparent)] dark:text-slate-400">
       暂无分组
     </div>
   );
@@ -64,7 +64,7 @@ export function GroupNavigator(props: GroupNavigatorProps) {
               aria-label="搜索分组"
               classNames={{
                 input:
-                  'dark:!border-[#24456f] dark:!bg-[#102341] dark:!text-slate-200 dark:placeholder:!text-slate-400',
+                  'dark:!border-[var(--border-project-subtle)] dark:!bg-[var(--surface-project-input)] dark:!text-slate-200 dark:placeholder:!text-slate-400',
                 section: 'dark:!text-slate-400'
               }}
               leftSection={<IconSearch size={16} />}
@@ -99,8 +99,8 @@ export function GroupNavigator(props: GroupNavigatorProps) {
                 type="button"
                 className={`group-item flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left ${
                   gid === props.selectedGroupId
-                    ? 'bg-slate-900 text-white shadow-sm dark:bg-slate-800 dark:text-slate-100'
-                    : 'bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+                    ? 'bg-slate-900 text-white shadow-sm dark:bg-[var(--surface-project-elevated)] dark:text-slate-100'
+                    : 'bg-white text-slate-700 hover:bg-slate-50 dark:bg-[var(--surface-project-panel)] dark:text-slate-300 dark:hover:bg-[var(--surface-project-subtle)]'
                 }`}
                 onClick={() => props.onSelectGroup(gid)}
               >

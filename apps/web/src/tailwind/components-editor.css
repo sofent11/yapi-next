@@ -48,7 +48,8 @@
   .interface-edit-section {
     @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white shadow-sm;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-panel);
     }
   }
 
@@ -61,28 +62,29 @@
   .interface-edit-basepath-input .mantine-Input-input {
     @apply h-11 rounded-[var(--radius-md)] border-slate-300 text-sm;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700;
+      border-color: var(--border-project-subtle);
     }
   }
 
   .interface-edit-basepath-input .mantine-Input-input {
     @apply bg-slate-100 text-slate-500;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-800 text-slate-400;
+      background-color: var(--surface-project-input);
+      color: rgb(148 163 184);
     }
   }
 
   .interface-edit-type-switch .mantine-SegmentedControl-root {
     @apply rounded-[var(--radius-md)] bg-slate-100 p-1;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-800;
+      background-color: var(--surface-project-subtle);
     }
   }
 
   .interface-edit-type-switch .mantine-SegmentedControl-indicator {
     @apply rounded-[var(--radius-sm)] bg-white shadow-sm;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-900;
+      background-color: var(--surface-project-panel);
     }
   }
 
@@ -120,7 +122,7 @@
   .interface-edit-response-tabs [role='tablist'] {
     @apply border-b border-slate-200;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700;
+      border-color: var(--border-project-subtle);
     }
   }
 
@@ -145,7 +147,8 @@
   .interface-edit-footer {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white px-4 py-3 shadow-sm;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-panel);
     }
   }
 
@@ -185,7 +188,8 @@
   .schema-editor-mode-toolbar {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/80 px-4 py-4;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800/80;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-subtle) 80%, transparent);
     }
   }
 
@@ -196,7 +200,7 @@
   .schema-editor-mode-toolbar .mantine-Radio-radio {
     @apply border-slate-300;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700;
+      border-color: var(--border-project-subtle);
     }
   }
 
@@ -207,7 +211,8 @@
   .schema-editor {
     @apply rounded-[var(--radius-xl)] border border-slate-200 bg-slate-50/60 p-4;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800/60;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-subtle) 60%, transparent);
     }
   }
 
@@ -216,7 +221,9 @@
   .schema-editor .mantine-Textarea-input {
     @apply rounded-[var(--radius-md)] border-slate-300 bg-white text-sm text-slate-700 shadow-none;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900 text-slate-300;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-panel);
+      color: rgb(203 213 225);
     }
   }
 
@@ -231,21 +238,25 @@
   .schema-editor .mantine-Textarea-input:disabled {
     @apply border-slate-200 bg-slate-100/90 text-slate-500 opacity-100;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800/90 text-slate-400;
+      border-color: var(--border-project-subtle);
+      background-color: color-mix(in srgb, var(--surface-project-subtle) 90%, transparent);
+      color: rgb(148 163 184);
     }
   }
 
   .schema-editor .mantine-Switch-track {
     @apply border-slate-300 bg-slate-200;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-subtle);
     }
   }
 
   .schema-editor .mantine-Switch-thumb {
     @apply border-white bg-white shadow-sm;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-panel);
     }
   }
 
@@ -256,7 +267,8 @@
   .schema-editor-head {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white px-4 py-4 shadow-sm;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-900;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-panel);
     }
   }
 
@@ -278,7 +290,8 @@
   .schema-editor-toggle-button:hover:not(:disabled) {
     @apply bg-slate-100 text-slate-900;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-800 text-slate-100;
+      background-color: var(--surface-project-elevated);
+      color: rgb(241 245 249);
     }
   }
 
@@ -296,7 +309,7 @@
   .schema-editor-table-wrap {
     @apply bg-white shadow-sm;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-900;
+      background-color: var(--surface-project-panel);
     }
   }
 
@@ -307,28 +320,29 @@
   .schema-editor-table thead {
     @apply bg-slate-100/80;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-800/80;
+      background-color: color-mix(in srgb, var(--surface-project-header) 80%, transparent);
     }
   }
 
   .schema-editor-table th {
     @apply border-slate-200 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 text-slate-400;
+      border-color: var(--border-project-subtle);
+      color: rgb(148 163 184);
     }
   }
 
   .schema-editor-table td {
     @apply border-slate-200 px-4 py-3 align-top;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700;
+      border-color: var(--border-project-subtle);
     }
   }
 
   .schema-editor-table tbody tr:hover {
     @apply bg-slate-50/80;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-800/80;
+      background-color: color-mix(in srgb, var(--surface-project-elevated) 80%, transparent);
     }
   }
 
@@ -352,7 +366,8 @@
   .schema-editor-head-actions .mantine-ActionIcon-root {
     @apply h-9 w-9 rounded-full border border-transparent bg-white text-slate-500 transition-all duration-150;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply bg-slate-900 text-slate-400;
+      background-color: var(--surface-project-panel);
+      color: rgb(148 163 184);
     }
   }
 
@@ -360,7 +375,9 @@
   .schema-editor-head-actions .mantine-ActionIcon-root:hover {
     @apply border-slate-200 bg-slate-50 text-slate-900 shadow-sm;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800 text-slate-100;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-elevated);
+      color: rgb(241 245 249);
     }
   }
 
@@ -381,7 +398,9 @@
   .schema-editor-import-input .mantine-Textarea-input {
     @apply rounded-[var(--radius-md)] border-slate-300 bg-slate-50 font-mono text-[13px] leading-6 text-slate-800;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
-      @apply border-slate-700 bg-slate-800 text-slate-200;
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-input);
+      color: rgb(226 232 240);
     }
   }
 
