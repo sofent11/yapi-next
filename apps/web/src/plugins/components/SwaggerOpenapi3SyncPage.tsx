@@ -14,6 +14,10 @@ type SyncResult = {
   errors?: Array<{ path?: string; method?: string; message?: string }>;
 };
 
+type ProjectSyncSettings = {
+  openapi3_sync_url?: string;
+};
+
 const message = {
   success(text: string) {
     notifications.show({ color: 'teal', message: text });
@@ -26,42 +30,96 @@ const message = {
   }
 };
 
-export function PluginTestPage(props: { projectId: number }) {
+export function SwaggerOpenapi3SyncPage(props: { projectId: number }) {
   const [specUrl, setSpecUrl] = useState('');
+  const [savedSpecUrl, setSavedSpecUrl] = useState('');
   const [projectToken, setProjectToken] = useState('');
-  const [loadingToken, setLoadingToken] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState<SyncResult | null>(null);
 
   useEffect(() => {
     let active = true;
-    async function loadProjectToken() {
-      setLoadingToken(true);
+    async function loadProjectSyncSettings() {
+      setLoading(true);
       try {
-        const res = await getJson<string>(`/api/project/token?project_id=${props.projectId}`);
+        const [tokenRes, projectRes] = await Promise.all([
+          getJson<string>(`/api/project/token?project_id=${props.projectId}`),
+          getJson<ProjectSyncSettings>(`/api/project/get?project_id=${props.projectId}`)
+        ]);
         if (!active) return;
-        if (res.errcode === 0) {
-          setProjectToken(toStringValue(res.data));
+
+        setProjectToken(tokenRes.errcode === 0 ? toStringValue(tokenRes.data) : '');
+
+        if (projectRes.errcode !== 0) {
+          message.error(projectRes.errmsg || '加载 Swagger 3.0 同步配置失败');
           return;
         }
-        setProjectToken('');
+
+        const nextUrl = toStringValue(projectRes.data?.openapi3_sync_url);
+        setSpecUrl(nextUrl);
+        setSavedSpecUrl(nextUrl);
       } catch (_error) {
         if (!active) return;
         setProjectToken('');
+        setSpecUrl('');
+        setSavedSpecUrl('');
+        message.error('加载 Swagger 3.0 同步配置失败');
       } finally {
-        if (active) setLoadingToken(false);
+        if (active) setLoading(false);
       }
     }
-    void loadProjectToken();
+    void loadProjectSyncSettings();
     return () => {
       active = false;
     };
   }, [props.projectId]);
 
+  async function persistSpecUrl(targetUrl: string, notifyOnSuccess: boolean) {
+    if (targetUrl === savedSpecUrl) {
+      return true;
+    }
+    setSaving(true);
+    try {
+      const res = await postJson('/api/project/up', {
+        id: props.projectId,
+        openapi3_sync_url: targetUrl
+      });
+      if (res.errcode !== 0) {
+        message.error(res.errmsg || '保存同步地址失败');
+        return false;
+      }
+      setSavedSpecUrl(targetUrl);
+      if (notifyOnSuccess) {
+        message.success('同步地址已保存');
+      }
+      return true;
+    } catch (error) {
+      message.error(`保存同步地址失败: ${String((error as Error).message || error)}`);
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSave() {
+    const targetUrl = specUrl.trim();
+    if (!targetUrl) {
+      message.warning('请输入 OpenAPI 3.0 URL');
+      return;
+    }
+    await persistSpecUrl(targetUrl, true);
+  }
+
   async function handleSync() {
     const targetUrl = specUrl.trim();
     if (!targetUrl) {
       message.warning('请输入 OpenAPI 3.0 URL');
+      return;
+    }
+    const saved = await persistSpecUrl(targetUrl, false);
+    if (!saved) {
       return;
     }
     setSyncing(true);
@@ -100,10 +158,10 @@ export function PluginTestPage(props: { projectId: number }) {
         </div>
       </Alert>
 
-      {loadingToken ? (
+      {loading ? (
         <div className="inline-flex items-center gap-2">
           <Loader size="sm" />
-          <Text>正在加载项目 Token...</Text>
+          <Text>正在加载 Swagger 3.0 同步配置...</Text>
         </div>
       ) : null}
 
@@ -112,10 +170,14 @@ export function PluginTestPage(props: { projectId: number }) {
         placeholder="https://example.com/openapi.json"
         value={specUrl}
         onChange={event => setSpecUrl(event.currentTarget.value)}
+        description={savedSpecUrl ? `已保存地址：${savedSpecUrl}` : '保存后，下次进入页面会自动回填该同步地址。'}
       />
 
       <div className="flex flex-wrap gap-3">
-        <Button loading={syncing} onClick={() => void handleSync()}>
+        <Button variant="default" loading={saving} onClick={() => void handleSave()}>
+          保存地址
+        </Button>
+        <Button loading={syncing || saving} onClick={() => void handleSync()}>
           开始同步
         </Button>
       </div>

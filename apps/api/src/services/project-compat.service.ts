@@ -581,6 +581,7 @@ export class ProjectCompatService {
       'pre_script',
       'after_script',
       'project_mock_script',
+      'openapi3_sync_url',
       'is_mock_open',
       'switch_notice',
       'strice',

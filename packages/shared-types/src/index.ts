@@ -270,6 +270,7 @@ export interface ProjectListItem {
   pre_script?: string;
   after_script?: string;
   project_mock_script?: string;
+  openapi3_sync_url?: string;
   is_mock_open?: boolean;
   switch_notice?: boolean;
   strice?: boolean;
@@ -329,6 +330,7 @@ export interface ProjectUpdateRequest {
   pre_script?: string;
   after_script?: string;
   project_mock_script?: string;
+  openapi3_sync_url?: string;
   is_mock_open?: boolean;
   switch_notice?: boolean;
   strice?: boolean;

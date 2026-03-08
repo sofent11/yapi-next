@@ -308,7 +308,7 @@ import { AdvancedMockPluginTab } from './components/AdvancedMockPluginTab';
 import { ServicesPluginPage } from './components/ServicesPluginPage';
 import { SwaggerAutoSyncPluginPage } from './components/SwaggerAutoSyncPluginPage';
 import { ProjectWikiPluginPage } from './components/ProjectWikiPluginPage';
-import { PluginTestPage } from './components/PluginTestPage';
+import { SwaggerOpenapi3SyncPage } from './components/SwaggerOpenapi3SyncPage';
 import { createPostmanImporter } from './importers/createPostmanImporter';
 import { createHarImporter } from './importers/createHarImporter';
 import { createYapiJsonImporter } from './importers/createYapiJsonImporter';
@@ -432,12 +432,12 @@ const autoSyncPlugin: ModernWebPlugin = {
 };
 
 const testPlugin: ModernWebPlugin = {
-  id: 'test',
+  id: 'swagger-openapi3-sync',
   setup(api) {
     api.extendSubSettingNav(tabs => {
-      tabs.test = {
+      tabs.swaggerOpenapi3Sync = {
         name: 'Swagger 3.0 同步',
-        component: PluginTestPage
+        component: SwaggerOpenapi3SyncPage
       };
     });
   }

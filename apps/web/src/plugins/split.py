@@ -17,8 +17,8 @@ import { StatisticsPluginPage } from './components/StatisticsPluginPage';
 import { AdvancedMockPluginTab } from './components/AdvancedMockPluginTab';
 import { ServicesPluginPage } from './components/ServicesPluginPage';
 import { SwaggerAutoSyncPluginPage } from './components/SwaggerAutoSyncPluginPage';
+import { SwaggerOpenapi3SyncPage } from './components/SwaggerOpenapi3SyncPage';
 import { ProjectWikiPluginPage } from './components/ProjectWikiPluginPage';
-import { PluginTestPage } from './components/PluginTestPage';
 import { createPostmanImporter } from './importers/createPostmanImporter';
 import { createHarImporter } from './importers/createHarImporter';
 import { createYapiJsonImporter } from './importers/createYapiJsonImporter';
@@ -89,7 +89,7 @@ write_comp("AdvancedMockPluginTab", advanced_mock)
 write_comp("ServicesPluginPage", services)
 write_comp("SwaggerAutoSyncPluginPage", auto_sync)
 write_comp("ProjectWikiPluginPage", wiki)
-write_comp("PluginTestPage", test_page)
+write_comp("SwaggerOpenapi3SyncPage", test_page)
 
 write_imp("createPostmanImporter", postman)
 write_imp("createHarImporter", har)
