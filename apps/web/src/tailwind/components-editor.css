@@ -186,15 +186,11 @@
   }
 
   .schema-editor-mode-toolbar {
-    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/80 px-4 py-4;
-    &:is([data-theme="dark"], [data-theme="dark"] *) {
-      border-color: var(--border-project-subtle);
-      background-color: color-mix(in srgb, var(--surface-project-subtle) 80%, transparent);
-    }
+    @apply flex flex-wrap items-center justify-between gap-3 rounded-none border-0 bg-transparent px-0 py-0;
   }
 
   .schema-editor-mode-toolbar .mantine-RadioGroup-root {
-    @apply mt-1;
+    @apply mt-0;
   }
 
   .schema-editor-mode-toolbar .mantine-Radio-radio {
@@ -209,11 +205,7 @@
   }
 
   .schema-editor {
-    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-slate-50/60 p-4;
-    &:is([data-theme="dark"], [data-theme="dark"] *) {
-      border-color: var(--border-project-subtle);
-      background-color: color-mix(in srgb, var(--surface-project-subtle) 60%, transparent);
-    }
+    @apply rounded-none border-0 bg-transparent p-0;
   }
 
   .schema-editor .mantine-Input-input,
@@ -265,11 +257,7 @@
   }
 
   .schema-editor-head {
-    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-white px-4 py-4 shadow-sm;
-    &:is([data-theme="dark"], [data-theme="dark"] *) {
-      border-color: var(--border-project-subtle);
-      background-color: var(--surface-project-panel);
-    }
+    @apply rounded-none border-0 bg-transparent px-0 py-0 shadow-none;
   }
 
   .schema-editor-head-grid {
@@ -307,7 +295,7 @@
   }
 
   .schema-editor-table-wrap {
-    @apply bg-white shadow-sm;
+    @apply bg-white;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       background-color: var(--surface-project-panel);
     }

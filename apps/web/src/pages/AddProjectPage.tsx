@@ -140,7 +140,7 @@ export function AddProjectPage() {
     <AppShell className="add-project-page">
       <PageHeader
         title="新建项目"
-        subtitle="填写基础信息后立即进入接口工作区，后续可在项目设置中继续完善。"
+        subtitle="填写基础信息后立即进入工作区。"
         actions={(
           <Button
             variant="default"
@@ -208,7 +208,7 @@ export function AddProjectPage() {
                 value={values.project_type}
                 onChange={value => setValues(current => ({ ...current, project_type: value as 'private' | 'public' }))}
               >
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-[var(--border-project-subtle)] dark:bg-[var(--surface-project-subtle)]">
+                <div className="flex items-center py-2">
                   <Radio
                     value="private"
                     label={

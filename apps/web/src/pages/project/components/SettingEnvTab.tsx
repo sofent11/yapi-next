@@ -74,7 +74,7 @@ export function SettingEnvTab(props: ProjectSettingPageProps) {
   return (
     <ProjectSettingsPanel>
       <Stack className="workspace-stack">
-        <ProjectSettingsIntro title="为不同环境维护域名、Header 与全局变量，便于调试时快速切换。" />
+        <ProjectSettingsIntro title="维护不同环境的域名、Header 和全局变量。" />
         <div className="project-settings-toolbar">
           <Button
             variant="default"
@@ -98,7 +98,7 @@ export function SettingEnvTab(props: ProjectSettingPageProps) {
           </Button>
         </div>
         {envEditors.length === 0 ? (
-          <Alert color="blue" className="project-settings-empty-alert" title="暂无环境，点击“添加环境”开始配置。" />
+          <Alert color="blue" className="project-settings-empty-alert" title="还没有环境，先添加一个。" />
         ) : null}
         {envEditors.map((item, index) => (
           <ProjectSettingsEditorCard

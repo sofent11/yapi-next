@@ -60,16 +60,18 @@ export function AppBreadcrumb() {
 
   return (
     <div className={`min-w-0 flex-1 ${groupMode ? 'text-lg md:text-2xl' : 'text-sm'}`}>
-      <div className="flex flex-wrap items-center gap-2 text-white/90">
+      <div className="flex flex-wrap items-center gap-2 text-[var(--text-primary)]">
         {crumbs.map((item, idx) => (
           <span key={`${item.label}-${idx}`} className="inline-flex items-center gap-2">
-            {idx > 0 ? <span className="text-white/45">/</span> : null}
+            {idx > 0 ? <span className="text-[var(--text-muted)]">/</span> : null}
             {item.to ? (
-              <Link to={item.to} className="transition hover:text-white">
+              <Link to={item.to} className="text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]">
                 {item.label}
               </Link>
             ) : (
-              <span className={groupMode ? 'font-light tracking-wide' : 'text-white/80'}>{item.label}</span>
+              <span className={groupMode ? 'font-light tracking-wide text-[var(--text-primary)]' : 'text-[var(--text-primary)]'}>
+                {item.label}
+              </span>
             )}
           </span>
         ))}

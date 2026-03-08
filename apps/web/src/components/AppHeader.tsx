@@ -16,10 +16,10 @@ type AppHeaderProps = {
 
 export function AppHeader(props: AppHeaderProps) {
   return (
-    <header className="flex items-center gap-4 border-b border-[var(--border-shell-subtle)] bg-[var(--surface-shell-panel)] px-4 py-3 text-[var(--text-inverse)]">
+    <header className="flex items-center gap-4 border-b border-[var(--border-shell-subtle)] bg-[var(--surface-shell-panel)] px-4 py-2.5 text-[var(--text-primary)]">
       <Link
         to="/group"
-        className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-shell-subtle)] bg-white text-slate-900 transition hover:border-blue-400 hover:bg-blue-400 hover:text-white dark:bg-[var(--surface-shell-subtle)] dark:text-slate-100"
+        className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-shell-subtle)] bg-white text-slate-900 transition hover:border-blue-400 hover:bg-blue-400 hover:text-white dark:bg-[var(--surface-shell-subtle)] dark:text-slate-100"
       >
         <div className="flex h-8 w-8 items-center justify-center rounded-full">
           <LogoSVG length={28} />
@@ -28,7 +28,7 @@ export function AppHeader(props: AppHeaderProps) {
 
       <AppBreadcrumb />
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         <CommandPalette />
         <HeaderGuidePopovers />
         <HeaderUserMenu

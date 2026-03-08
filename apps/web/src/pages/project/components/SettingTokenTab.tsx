@@ -72,9 +72,9 @@ export function SettingTokenTab(props: ProjectSettingPageProps) {
   return (
     <ProjectSettingsPanel>
       <Stack className="workspace-stack">
-        <ProjectSettingsIntro title="Token 用于 OpenAPI 与开放接口访问，请妥善保管并仅在可信环境中使用。" />
+        <ProjectSettingsIntro title="Token 用于 OpenAPI 和开放接口访问，请妥善保管。" />
         <Text fw={700}>工具标识</Text>
-        <Text c="dimmed">每个项目都有唯一 token，可用于请求项目 openapi。</Text>
+        <Text c="dimmed">每个项目都有唯一 Token，可用于请求项目 OpenAPI。</Text>
         <TextInput value={String(tokenQuery.data?.data || '')} readOnly />
         <div className="flex flex-wrap gap-3">
           <Button variant="default" onClick={handleCopyToken}>
@@ -92,7 +92,7 @@ export function SettingTokenTab(props: ProjectSettingPageProps) {
         <Text fw={700} className="workspace-text-top">
           Open 接口
         </Text>
-        <Text c="dimmed">详细说明请查看 OpenAPI 文档，以下为常用接口：</Text>
+        <Text c="dimmed">以下列出常用 OpenAPI 接口。</Text>
         <ul className="open-api-list">
           <li>/api/open/run_auto_test</li>
           <li>/api/open/import_data</li>

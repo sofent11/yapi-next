@@ -154,9 +154,7 @@ export function LoginPage() {
     <PublicShell
       backdrop={
         <>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--status-info)_18%,transparent)_0%,transparent_28%),radial-gradient(circle_at_20%_20%,color-mix(in_srgb,var(--status-success)_16%,transparent)_0%,transparent_24%),linear-gradient(160deg,color-mix(in_srgb,var(--surface-public-canvas)_94%,black)_0%,var(--surface-public-canvas)_52%,color-mix(in_srgb,var(--surface-public-canvas)_82%,var(--interactive-primary))_100%)]" />
-          <div className="absolute left-[-8rem] top-20 h-72 w-72 rounded-full bg-[color-mix(in_srgb,var(--status-info)_12%,transparent)] blur-3xl" />
-          <div className="absolute bottom-0 right-[-8rem] h-80 w-80 rounded-full bg-[color-mix(in_srgb,var(--status-success)_12%,transparent)] blur-3xl" />
+          <div className="absolute inset-0 bg-[linear-gradient(160deg,color-mix(in_srgb,var(--surface-public-canvas)_96%,black)_0%,var(--surface-public-canvas)_54%,color-mix(in_srgb,var(--surface-public-canvas)_88%,var(--interactive-primary))_100%)]" />
         </>
       }
       containerClassName="flex flex-col justify-center"
@@ -164,7 +162,7 @@ export function LoginPage() {
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_460px] lg:items-center">
         <div className="space-y-8 text-[var(--text-public-primary)]">
           <Group gap="md" wrap="nowrap">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface-panel)] text-[var(--text-primary)] shadow-[var(--shadow-float)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-[var(--radius-md)] bg-[var(--surface-panel)] text-[var(--text-primary)]">
               <LogoSVG length="34px" />
             </div>
             <div>
@@ -181,29 +179,21 @@ export function LoginPage() {
               把接口设计、调试和协作放回同一个工作台
             </Title>
             <Text className="max-w-2xl text-base leading-8 text-[var(--text-public-secondary)] md:text-lg">
-              登录后即可进入分组、项目与接口工作区。现有插件入口和第三方登录扩展保持可用，
-              不需要额外切换域名或环境地址。
+              登录后即可进入分组、项目与接口工作区，沿用现有插件入口和 `/api` 代理配置。
             </Text>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            {[
-              ['统一规范', '接口定义、测试和导入导出保持同一语义'],
-              ['可扩展', '第三方登录和插件页继续走既有扩展点'],
-              ['零额外配置', '默认仍通过 /api 代理连接服务端']
-            ].map(([title, body]) => (
-              <div key={title} className="rounded-3xl border border-[var(--border-public-subtle)] bg-[var(--surface-public-panel)] p-4 backdrop-blur">
-                <Text className="text-sm font-semibold text-[var(--text-public-primary)]">{title}</Text>
-                <Text className="mt-2 text-sm leading-6 text-[var(--text-public-secondary)]">{body}</Text>
-              </div>
-            ))}
+          <div className="space-y-2 text-sm text-[var(--text-public-secondary)]">
+            <Text>统一接口设计、调试、测试与导入导出。</Text>
+            <Text>支持已有插件入口与第三方登录扩展。</Text>
+            <Text>默认通过 `/api` 代理连接服务端。</Text>
           </div>
         </div>
 
         <Card
           radius="xl"
           padding="xl"
-          className="border border-[var(--border-public-subtle)] bg-[var(--surface-public-panel)] shadow-[var(--shadow-overlay)] backdrop-blur"
+          className="border border-[var(--border-public-subtle)] bg-[var(--surface-public-panel)] shadow-none"
         >
           <Stack gap="lg">
             <div className="space-y-2 text-center">

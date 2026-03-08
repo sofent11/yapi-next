@@ -77,10 +77,10 @@
   --project-color-yellow: #d97706;
   --project-color-gray: #475569;
 
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 24px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
   --radius-full: 9999px;
 
   --interactive-primary: var(--color-brand-600);
@@ -95,11 +95,11 @@
   --space-6: 24px;
   --space-8: 32px;
 
-  --shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
-  --shadow-float: 0 12px 32px rgba(15, 23, 42, 0.12);
-  --shadow-overlay: 0 24px 64px rgba(15, 23, 42, 0.18);
-  --elevation-low: 0 1px 3px rgba(15, 23, 42, 0.04);
-  --elevation-high: 0 12px 32px rgba(15, 23, 42, 0.10);
+  --shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.03), 0 6px 18px rgba(15, 23, 42, 0.05);
+  --shadow-float: 0 10px 24px rgba(15, 23, 42, 0.08);
+  --shadow-overlay: 0 20px 48px rgba(15, 23, 42, 0.14);
+  --elevation-low: 0 1px 2px rgba(15, 23, 42, 0.03);
+  --elevation-high: 0 10px 24px rgba(15, 23, 42, 0.08);
 
   --duration-fast: 120ms;
   --duration-base: 180ms;
@@ -127,7 +127,7 @@
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
-  --text-inverse: #0f172a;
+  --text-inverse: #f8fafc;
 
   --border-subtle: var(--border-project-subtle);
   --border-strong: var(--border-project-strong);
@@ -147,11 +147,11 @@
   --interactive-disabled: #334155;
   --border-interactive: var(--color-brand-600);
 
-  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.20), 0 8px 24px rgba(0, 0, 0, 0.30);
-  --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.40);
-  --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.50);
-  --elevation-low: 0 1px 3px rgba(0, 0, 0, 0.20);
-  --elevation-high: 0 12px 32px rgba(0, 0, 0, 0.40);
+  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.16), 0 6px 18px rgba(0, 0, 0, 0.24);
+  --shadow-float: 0 10px 24px rgba(0, 0, 0, 0.3);
+  --shadow-overlay: 0 20px 48px rgba(0, 0, 0, 0.38);
+  --elevation-low: 0 1px 2px rgba(0, 0, 0, 0.16);
+  --elevation-high: 0 10px 24px rgba(0, 0, 0, 0.3);
 
   /* Bridge Mantine dark variables to YApi project surfaces. */
   --mantine-color-body: var(--surface-canvas);

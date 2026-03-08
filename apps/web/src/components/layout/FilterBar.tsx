@@ -8,7 +8,7 @@ type FilterBarProps = {
 
 export function FilterBar(props: FilterBarProps) {
   const rootClassName = [
-    'mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--border-shell-subtle)] bg-[var(--surface-shell-subtle)] px-4 py-3 text-[var(--text-primary)] shadow-[var(--shadow-panel)]',
+    'mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--border-shell-subtle)] bg-[var(--surface-shell-subtle)] px-4 py-3 text-[var(--text-primary)] shadow-none',
     props.className
   ]
     .filter(Boolean)

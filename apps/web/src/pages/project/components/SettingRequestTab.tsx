@@ -54,7 +54,7 @@ export function SettingRequestTab(props: ProjectSettingPageProps) {
     <ProjectSettingsPanel>
       <RcForm<RequestForm> form={requestForm}>
         <Stack>
-          <ProjectSettingsIntro title="在请求发送前后执行全局脚本，适合统一注入 Header、鉴权或响应后处理。" />
+          <ProjectSettingsIntro title="在请求前后执行全局脚本。" />
           <Field<RequestForm> name="pre_script">
             {(control) => (
               <div>
@@ -66,7 +66,7 @@ export function SettingRequestTab(props: ProjectSettingPageProps) {
                   placeholder="在这里编写请求前处理脚本…"
                 />
                 <Text c="dimmed" size="sm" mt={6}>
-                  发送请求前执行，适合补充签名、时间戳或环境变量。
+                  发送前执行，可用于补充签名、时间戳或环境变量。
                 </Text>
               </div>
             )}
@@ -82,7 +82,7 @@ export function SettingRequestTab(props: ProjectSettingPageProps) {
                   placeholder="在这里编写响应后处理脚本…"
                 />
                 <Text c="dimmed" size="sm" mt={6}>
-                  请求完成后执行，适合统一整理响应数据或埋点。
+                  请求完成后执行，可用于整理响应数据或埋点。
                 </Text>
               </div>
             )}

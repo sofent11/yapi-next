@@ -14,9 +14,9 @@ export function DataToolbar(props: DataToolbarProps) {
     <FilterBar
       className={props.className}
       left={
-        <div className="data-toolbar-copy">
-          <Text fw={700}>{props.title}</Text>
-          {props.summary ? <Text c="dimmed">{props.summary}</Text> : null}
+        <div className="data-toolbar-copy space-y-1">
+          <Text fw={700} className="tracking-tight">{props.title}</Text>
+          {props.summary ? <Text size="sm" c="dimmed">{props.summary}</Text> : null}
         </div>
       }
       right={props.actions}

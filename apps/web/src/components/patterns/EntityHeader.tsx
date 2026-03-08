@@ -11,17 +11,17 @@ export type EntityHeaderProps = {
 
 export function EntityHeader(props: EntityHeaderProps) {
   return (
-    <header className="mb-5 flex flex-wrap items-start justify-between gap-4 rounded-[var(--radius-xl)] border border-[var(--border-shell-subtle)] bg-[var(--surface-shell-panel)] px-5 py-5 text-[var(--text-primary)] shadow-[var(--shadow-panel)]">
+    <header className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--border-shell-subtle)] pb-4 text-[var(--text-primary)]">
       <div className="min-w-0 flex-1">
         <div className="space-y-2">
           {props.eyebrow ? (
-            <span className="inline-flex rounded-full bg-[var(--surface-inverse)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-inverse)]">
+            <span className="inline-flex text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
               {props.eyebrow}
             </span>
           ) : null}
-          <h1 className="m-0 text-2xl font-semibold text-[var(--text-primary)] md:text-3xl">{props.title}</h1>
+          <h1 className="m-0 text-[26px] font-semibold tracking-tight text-[var(--text-primary)] md:text-[32px]">{props.title}</h1>
           {props.subtitle ? (
-            <p className="m-0 max-w-4xl text-sm leading-7 text-[var(--text-secondary)]">{props.subtitle}</p>
+            <p className="m-0 max-w-4xl text-sm leading-6 text-[var(--text-secondary)]">{props.subtitle}</p>
           ) : null}
           {props.meta || props.status ? (
             <div className="flex flex-wrap items-center gap-3 pt-1 text-sm text-[var(--text-muted)]">
@@ -31,7 +31,7 @@ export function EntityHeader(props: EntityHeaderProps) {
           ) : null}
         </div>
       </div>
-      {props.actions ? <div className="ml-auto flex flex-wrap items-center gap-2">{props.actions}</div> : null}
+      {props.actions ? <div className="ml-auto flex flex-wrap items-center gap-2 self-start">{props.actions}</div> : null}
     </header>
   );
 }

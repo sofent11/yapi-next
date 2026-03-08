@@ -4,18 +4,18 @@
   }
 
   .group-bar {
-    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white p-4 shadow-none;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-subtle);
-      background-color: color-mix(in srgb, var(--surface-project-panel) 92%, transparent);
+      background-color: var(--surface-project-panel);
     }
   }
 
   .curr-group {
-    @apply mb-4 rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/80 p-4;
+    @apply mb-4 rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50 px-4 py-3;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-subtle);
-      background-color: color-mix(in srgb, var(--surface-project-subtle) 84%, transparent);
+      background-color: var(--surface-project-subtle);
     }
   }
 
@@ -86,10 +86,10 @@
   }
 
   .project-console-tabs [role='tablist'] {
-    @apply mb-4 rounded-[var(--radius-lg)] border border-slate-200 bg-white/92 p-1 shadow-sm;
+    @apply mb-4 rounded-[var(--radius-lg)] border border-slate-200 bg-white p-1 shadow-none;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-subtle);
-      background-color: color-mix(in srgb, var(--surface-project-panel) 92%, transparent);
+      background-color: var(--surface-project-panel);
     }
   }
 
@@ -112,10 +112,10 @@
   }
 
   .console-project-panel {
-    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white p-5 shadow-none;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-subtle);
-      background-color: color-mix(in srgb, var(--surface-project-panel) 82%, black 18%);
+      background-color: var(--surface-project-panel);
     }
   }
 
@@ -156,27 +156,27 @@
   }
 
   .m-card.console-project-card-button {
-    @apply flex min-h-[288px] cursor-pointer flex-col rounded-[var(--radius-xl)] border border-slate-200 bg-white px-6 py-6 shadow-sm transition-all duration-150;
+    @apply flex min-h-[248px] cursor-pointer flex-col rounded-[var(--radius-lg)] border border-slate-200 bg-white px-5 py-5 shadow-none transition-all duration-150;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-subtle);
-      background-color: var(--surface-project-input);
+      background-color: var(--surface-project-panel);
     }
   }
 
   .m-card.console-project-card-button:hover {
-    @apply -translate-y-0.5 border-slate-300 shadow-lg;
+    @apply -translate-y-0.5 border-slate-300;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-strong);
-      background-color: var(--surface-project-elevated);
+      background-color: var(--surface-project-subtle);
     }
   }
 
   .ui-logo {
-    @apply mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-white;
+    @apply mb-4 flex h-12 w-12 items-center justify-center rounded-[var(--radius-md)] bg-slate-900 text-white;
   }
 
   .ui-title {
-    @apply m-0 text-[28px] font-semibold leading-tight tracking-tight text-slate-900;
+    @apply m-0 text-2xl font-semibold leading-tight tracking-tight text-slate-900;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       @apply text-slate-100;
     }
@@ -199,19 +199,19 @@
 
   .console-members-panel,
   .console-activity-panel {
-    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white p-5 shadow-none;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-subtle);
-      background-color: color-mix(in srgb, var(--surface-project-panel) 92%, transparent);
+      background-color: var(--surface-project-panel);
     }
   }
 
   .m-panel,
   .news-box {
-    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/92 p-5 shadow-sm backdrop-blur;
+    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white p-5 shadow-none;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-subtle);
-      background-color: color-mix(in srgb, var(--surface-project-panel) 92%, transparent);
+      background-color: var(--surface-project-panel);
     }
   }
 
@@ -228,10 +228,10 @@
   }
 
   .timeline-filter {
-    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/80 p-4;
+    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50 p-4;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-subtle);
-      background-color: color-mix(in srgb, var(--surface-project-subtle) 84%, transparent);
+      background-color: var(--surface-project-subtle);
     }
   }
 

@@ -127,7 +127,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
   return (
     <div className="interface-edit">
       {props.editConflictState.status === 'locked' ? (
-        <Alert color="yellow" title="接口正在被其他人编辑">
+        <Alert color="yellow" title="接口正由其他人编辑">
           <span>
             <Link to={`/user/profile/${props.editConflictState.uid}`}>
               <b>{props.editConflictState.username}</b>
@@ -138,7 +138,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
       ) : (
         <>
           {props.editConflictState.status === 'error' ? (
-            <Alert className="interface-edit-conflict-alert" color="yellow" title="多人编辑冲突检测暂时不可用，请稍后重试。" />
+            <Alert className="interface-edit-conflict-alert" color="yellow" title="冲突检测暂时不可用，请稍后重试。" />
           ) : null}
 
           <RcForm<InterfaceEditFormValues> form={props.form}>
@@ -588,7 +588,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                             />
                           ) : (
                             <>
-                              <Alert color="blue" className="interface-edit-json-alert" title="基于 Json5，参数描述信息可以使用注释方式编写。" />
+                              <Alert color="blue" className="interface-edit-json-alert" title="支持 Json5，可用注释补充参数说明。" />
                               <Field<InterfaceEditFormValues> name="req_body_other">
                                 {(control) => (
                                   <Textarea
@@ -679,7 +679,7 @@ export function InterfaceEditTab(props: InterfaceEditTabProps) {
                           />
                         ) : (
                           <>
-                            <Alert color="blue" className="interface-edit-json-alert" title="基于 mockjs 和 json5，参数描述信息可以使用注释方式编写。" />
+                            <Alert color="blue" className="interface-edit-json-alert" title="支持 Mock.js 和 Json5，可用注释补充参数说明。" />
                             <Field<InterfaceEditFormValues> name="res_body">
                               {(control) => (
                                 <Textarea

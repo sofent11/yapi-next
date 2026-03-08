@@ -116,17 +116,17 @@ export function HeaderUserMenu(props: HeaderUserMenuProps) {
       <Menu.Target>
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-full border border-[var(--border-shell-subtle)] bg-[var(--surface-shell-subtle)] px-2.5 py-1.5 text-[var(--text-inverse)] transition hover:border-[var(--border-shell-strong)]"
+          className="inline-flex items-center gap-2 rounded-[var(--radius-full)] border border-[var(--border-shell-subtle)] bg-[var(--surface-shell-subtle)] px-2.5 py-1.5 text-[var(--text-primary)] transition hover:border-[var(--border-shell-strong)] hover:bg-[var(--surface-shell-panel)]"
           disabled={logoutState.isLoading}
           aria-label="打开用户菜单"
         >
           <Avatar src={avatarUrl} size={30} color="blue">
             {(props.username || props.email || 'U').slice(0, 1).toUpperCase()}
           </Avatar>
-          <Text size="sm" className="max-w-24 truncate text-slate-100">
+          <Text size="sm" className="max-w-24 truncate text-[var(--text-primary)]">
             {props.username || props.email || 'User'}
           </Text>
-          <IconChevronDown size={16} className="text-slate-400" />
+          <IconChevronDown size={16} className="text-[var(--text-secondary)]" />
         </button>
       </Menu.Target>
       <Menu.Dropdown>

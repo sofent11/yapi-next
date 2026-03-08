@@ -181,7 +181,7 @@ export function UserProfilePage() {
         <PageHeader
           eyebrow="个人资料"
           title={targetUid === currentUid ? '个人设置' : `用户 ${targetUid} 资料设置`}
-          subtitle="正在加载用户信息..."
+          subtitle="正在加载资料..."
           actions={
             <Button variant="default" onClick={() => navigate('/user/list')}>
               返回用户列表
@@ -199,7 +199,7 @@ export function UserProfilePage() {
         <PageHeader
           eyebrow="个人资料"
           title="用户资料不可用"
-          subtitle="当前用户不存在，或你没有权限查看该资料。"
+          subtitle="当前用户不存在，或你没有查看权限。"
           actions={
             <Button variant="default" onClick={() => navigate('/user/list')}>
               返回用户列表
@@ -216,7 +216,7 @@ export function UserProfilePage() {
       <PageHeader
         eyebrow="个人资料"
         title={targetUid === currentUid ? '个人设置' : `${profileData.username || targetUid} 资料设置`}
-        subtitle="可在此更新基础资料、头像和密码。"
+        subtitle="更新基础资料、头像和密码。"
         meta={profileData.email ? `当前邮箱 ${profileData.email}` : undefined}
         actions={
           <Button variant="default" onClick={() => navigate('/user/list')}>

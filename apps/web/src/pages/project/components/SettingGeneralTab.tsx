@@ -241,7 +241,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
           <Text c="dimmed">点击图标可调整项目视觉样式，帮助团队更快识别项目。</Text>
         </div>
       </div>
-      <ProjectSettingsIntro title="这里维护项目基础信息、访问权限与行为开关，调整公开权限前请先确认协作范围。" />
+      <ProjectSettingsIntro title="维护项目信息、访问权限与行为开关。" />
       <hr className="project-settings-divider" />
 
       <RcForm<ProjectForm> className="project-settings-form" form={projectForm} onFinish={handleSubmit}>
@@ -434,7 +434,7 @@ export function SettingGeneralTab(props: ProjectSettingPageProps) {
         }}
       >
         <Stack className="workspace-stack">
-          <Alert color="yellow" title="该操作会删除项目下所有接口与相关数据，且无法恢复。" />
+          <Alert color="yellow" title="删除后不可恢复，请谨慎操作。" />
           <Text>请输入项目名称以确认删除：</Text>
           <TextInput
             value={deleteConfirmText}

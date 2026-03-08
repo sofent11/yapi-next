@@ -104,7 +104,7 @@ export function ProjectConsolePage() {
       <PageHeader
         eyebrow="分组工作台"
         title="项目控制台"
-        subtitle={state.selectedGroup?.group_desc || `${state.selectedGroup?.group_name || '当前分组'} 的项目、成员和动态总览`}
+        subtitle={state.selectedGroup?.group_desc || '查看项目、成员与分组动态。'}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="default" onClick={state.openCreateGroupModal}>

@@ -211,14 +211,16 @@ export default function DataExportPanel({ projectId, token }: DataExportPanelPro
               <InfoGridItem label="附带 Wiki" value={withWiki ? '是' : '否'} />
               <InfoGridItem label="结果状态" value="已生成，可复制或下载" />
             </InfoGrid>
-            <CopyableTextPanel
-              title="导出 JSON"
-              value={exportText}
-              onCopy={() => void handleCopyExport()}
-              rows={10}
-              monospace
-              placeholder="导出结果会显示在这里"
-            />
+            <div className="project-data-result-block">
+              <CopyableTextPanel
+                title="导出 JSON"
+                value={exportText}
+                onCopy={() => void handleCopyExport()}
+                rows={10}
+                monospace
+                placeholder="导出结果会显示在这里"
+              />
+            </div>
           </div>
         ) : null}
       </Stack>

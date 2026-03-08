@@ -12,7 +12,7 @@ export function PublicShell(props: PublicShellProps) {
       {props.backdrop}
       <div
         className={[
-          'relative z-10 mx-auto min-h-screen w-full max-w-6xl px-6 py-10 md:px-8',
+          'relative z-10 mx-auto min-h-screen w-full max-w-[1120px] px-6 py-10 md:px-8',
           props.containerClassName
         ]
           .filter(Boolean)

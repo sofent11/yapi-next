@@ -128,4 +128,20 @@
     border-color: var(--border-interactive);
     box-shadow: 0 0 0 2px var(--focus-ring);
   }
+
+  .header-search .mantine-Input-input,
+  .header-search .mantine-Autocomplete-input {
+    color: var(--text-primary);
+    border-color: var(--border-shell-subtle);
+    background-color: var(--surface-shell-subtle);
+  }
+
+  .header-search .mantine-Input-input::placeholder,
+  .header-search .mantine-Autocomplete-input::placeholder {
+    color: var(--text-secondary);
+  }
+
+  .header-search .mantine-Input-section {
+    color: var(--text-secondary);
+  }
 }

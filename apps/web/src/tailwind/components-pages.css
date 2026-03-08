@@ -124,10 +124,9 @@
   }
 
   .project-data-switch-row {
-    @apply flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-slate-200 bg-slate-50/70 px-4 py-3;
+    @apply flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-subtle);
-      background-color: var(--surface-project-subtle);
     }
   }
 
@@ -148,10 +147,13 @@
   }
 
   .project-data-result-card {
-    @apply flex flex-col gap-3 rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
+    @apply flex flex-col gap-4;
+  }
+
+  .project-data-result-block {
+    @apply border-t border-slate-200 pt-4;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-subtle);
-      background-color: var(--surface-project-subtle);
     }
   }
 
@@ -169,11 +171,7 @@
 
   .interface-index-panel-card,
   .collection-overview-card {
-    @apply rounded-[var(--radius-xl)] border border-slate-200 bg-white/94 shadow-sm;
-    &:is([data-theme="dark"], [data-theme="dark"] *) {
-      border-color: var(--border-project-subtle) !important;
-      background-color: var(--surface-project-subtle) !important;
-    }
+    @apply rounded-none border-0 bg-transparent shadow-none;
   }
 
   .data-pagination {
@@ -330,12 +328,22 @@
   }
 
   .interface-run-editor-block,
-  .interface-run-editor-block-wide,
-  .interface-view-block {
+  .interface-run-editor-block-wide {
     @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-subtle);
       background-color: var(--surface-project-subtle);
+    }
+  }
+
+  .interface-view-block {
+    @apply space-y-3 py-1;
+  }
+
+  .interface-view-block + .interface-view-block {
+    @apply border-t border-slate-200 pt-5;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      border-color: var(--border-project-subtle);
     }
   }
 
@@ -406,11 +414,7 @@
   }
 
   .debug-editor-panel-head {
-    @apply flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-slate-200 bg-white px-3 py-3;
-    &:is([data-theme="dark"], [data-theme="dark"] *) {
-      border-color: var(--border-project-subtle);
-      background-color: var(--surface-project-elevated);
-    }
+    @apply flex flex-wrap items-center justify-between gap-3;
   }
 
   .debug-editor-panel-actions {
@@ -426,11 +430,7 @@
   }
 
   .copyable-text-panel-head {
-    @apply flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-slate-200 bg-white px-3 py-3;
-    &:is([data-theme="dark"], [data-theme="dark"] *) {
-      border-color: var(--border-project-subtle);
-      background-color: var(--surface-project-elevated);
-    }
+    @apply flex items-center justify-between gap-3;
   }
 
   .copyable-text-panel-mono .mantine-Textarea-input {
@@ -438,11 +438,7 @@
   }
 
   .case-detail-form {
-    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
-    &:is([data-theme="dark"], [data-theme="dark"] *) {
-      border-color: var(--border-project-subtle);
-      background-color: var(--surface-project-subtle);
-    }
+    @apply gap-4;
   }
 
   .case-detail-meta-grid {
@@ -450,31 +446,27 @@
   }
 
   .case-detail-switch-card {
-    @apply rounded-[var(--radius-md)] border border-slate-200 bg-white px-4 py-3;
-    &:is([data-theme="dark"], [data-theme="dark"] *) {
-      border-color: var(--border-project-subtle);
-      background-color: var(--surface-project-elevated);
-    }
+    @apply rounded-none border-0 bg-transparent px-0 py-1;
   }
 
   .case-detail-result-stack {
-    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
-    &:is([data-theme="dark"], [data-theme="dark"] *) {
-      border-color: var(--border-project-subtle);
-      background-color: var(--surface-project-subtle);
-    }
+    @apply gap-4;
   }
 
   .case-debug-panel {
-    @apply rounded-[var(--radius-lg)] border border-slate-200 bg-slate-50/70 p-4;
-    &:is([data-theme="dark"], [data-theme="dark"] *) {
-      border-color: var(--border-project-subtle);
-      background-color: var(--surface-project-subtle);
-    }
+    @apply gap-4;
   }
 
   .case-debug-toolbar {
     @apply items-start;
+  }
+
+  .case-detail-result-stack > .copyable-text-panel + .copyable-text-panel,
+  .case-debug-panel > .debug-editor-panel + .debug-editor-panel {
+    @apply border-t border-slate-200 pt-4;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      border-color: var(--border-project-subtle);
+    }
   }
 
   .interface-view-block {
@@ -1041,6 +1033,13 @@
 
   .report-row-error td {
     @apply bg-rose-50/70;
+  }
+
+  .auto-test-detail-block + .auto-test-detail-block {
+    @apply border-t border-slate-200 pt-4;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      border-color: var(--border-project-subtle);
+    }
   }
 
   .timeline-page {

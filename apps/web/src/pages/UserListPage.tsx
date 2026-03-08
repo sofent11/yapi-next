@@ -128,7 +128,7 @@ export function UserListPage() {
         eyebrow="组织管理"
         title="用户管理"
         subtitle={isAdmin ? `当前共有 ${totalUsers} 位用户` : '当前账号权限受限，仅可查看个人中心。'}
-        meta={isAdmin ? '支持按用户名或邮箱快速检索并维护用户资料。' : '当前仅开放个人资料查看入口。'}
+        meta={isAdmin ? '支持按用户名或邮箱搜索。' : undefined}
         actions={
           currentUid > 0 ? (
             <Button variant="default" onClick={() => navigate(`/user/profile/${currentUid}`)}>
@@ -141,7 +141,7 @@ export function UserListPage() {
       <SectionCard className="user-list-card">
         <DataToolbar
           title={`用户列表 (${totalUsers})`}
-          summary={isAdmin ? '支持按用户名或邮箱快速检索，并在桌面和移动端查看统一结果。' : '当前账号仅可进入个人中心查看资料。'}
+          summary={isAdmin ? '按用户名或邮箱搜索。' : '仅开放个人资料查看。'}
           className="user-search-bar"
           actions={
             <div className="flex w-full flex-col gap-3 md:flex-row md:justify-end">

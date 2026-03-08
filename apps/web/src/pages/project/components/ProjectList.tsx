@@ -117,8 +117,8 @@ export function ProjectList(props: ProjectListProps) {
         title="项目总览"
         summary={
           props.groupType === 'private'
-            ? `当前共有 ${props.projectRows.length} 个项目，其中我的项目 ${myProjectCount} 个、关注 ${followProjectCount} 个。`
-            : `当前共有 ${props.mixedPublicProjects.length} 个公开项目，其中已关注 ${publicFollowCount} 个。`
+            ? `${props.projectRows.length} 个项目，我的 ${myProjectCount} 个，关注 ${followProjectCount} 个。`
+            : `${props.mixedPublicProjects.length} 个公开项目，已关注 ${publicFollowCount} 个。`
         }
         actions={
           <div className="console-project-header-actions">

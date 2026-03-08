@@ -232,11 +232,11 @@ export function CommandPalette() {
       {/* Trigger button in header */}
       <UnstyledButton
         onClick={() => setOpened(true)}
-        className="flex items-center gap-2 rounded-[var(--radius-lg)] border border-[var(--border-shell-subtle)] bg-[var(--surface-shell-subtle)] px-3 py-1.5 text-sm text-slate-300 transition hover:border-[var(--border-shell-strong)] hover:text-slate-100"
+        className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-shell-subtle)] bg-[var(--surface-shell-subtle)] px-3 py-1.5 text-sm text-[var(--text-primary)] transition hover:border-[var(--border-shell-strong)] hover:bg-[var(--surface-shell-panel)]"
         aria-label="打开搜索面板 (⌘K)"
       >
         <IconSearch size={15} />
-        <span className="hidden md:inline">搜索…</span>
+        <span className="hidden text-[var(--text-secondary)] md:inline">搜索…</span>
         <Kbd size="xs" className="ml-1 hidden md:inline-flex">⌘K</Kbd>
       </UnstyledButton>
 

@@ -97,7 +97,7 @@ export function HeaderSearch() {
 
   return (
     <Autocomplete
-      className="w-[230px] max-w-[32vw]"
+      className="header-search w-[230px] max-w-[32vw]"
       value={keyword}
       data={autoOptions}
       onChange={setKeyword}

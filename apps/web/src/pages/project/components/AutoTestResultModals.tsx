@@ -276,7 +276,7 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
         size="72rem"
       >
         {detailItem ? (
-          <div className="flex flex-col gap-4">
+          <div className="auto-test-detail-stack flex flex-col gap-4">
             <div className="workspace-section-head flex items-center justify-between gap-3">
               <Text fw={600}>基础信息</Text>
               <Button
@@ -303,36 +303,44 @@ export function AutoTestResultModals(props: AutoTestResultModalsProps) {
               />
             </InfoGrid>
 
-            <CopyableTextPanel
-              title="校验信息"
-              value={(detailItem.validRes || []).map(item => item?.message || '').join('\n') || '-'}
-              onCopy={() =>
-                void copyText(
-                  (detailItem.validRes || []).map(item => item?.message || '').join('\n') || '-',
-                  '校验信息已复制'
-                )
-              }
-              rows={5}
-            />
-            <CopyableTextPanel
-              title="请求参数"
-              value={stringifyPretty(detailItem.params)}
-              onCopy={() => void copyText(stringifyPretty(detailItem.params), '请求参数已复制')}
-              monospace
-            />
-            <CopyableTextPanel
-              title="响应头"
-              value={stringifyPretty(detailItem.res_header)}
-              onCopy={() => void copyText(stringifyPretty(detailItem.res_header), '响应头已复制')}
-              monospace
-            />
-            <CopyableTextPanel
-              title="响应体"
-              value={stringifyPretty(detailItem.res_body)}
-              onCopy={() => void copyText(stringifyPretty(detailItem.res_body), '响应体已复制')}
-              rows={10}
-              monospace
-            />
+            <div className="auto-test-detail-block">
+              <CopyableTextPanel
+                title="校验信息"
+                value={(detailItem.validRes || []).map(item => item?.message || '').join('\n') || '-'}
+                onCopy={() =>
+                  void copyText(
+                    (detailItem.validRes || []).map(item => item?.message || '').join('\n') || '-',
+                    '校验信息已复制'
+                  )
+                }
+                rows={5}
+              />
+            </div>
+            <div className="auto-test-detail-block">
+              <CopyableTextPanel
+                title="请求参数"
+                value={stringifyPretty(detailItem.params)}
+                onCopy={() => void copyText(stringifyPretty(detailItem.params), '请求参数已复制')}
+                monospace
+              />
+            </div>
+            <div className="auto-test-detail-block">
+              <CopyableTextPanel
+                title="响应头"
+                value={stringifyPretty(detailItem.res_header)}
+                onCopy={() => void copyText(stringifyPretty(detailItem.res_header), '响应头已复制')}
+                monospace
+              />
+            </div>
+            <div className="auto-test-detail-block">
+              <CopyableTextPanel
+                title="响应体"
+                value={stringifyPretty(detailItem.res_body)}
+                onCopy={() => void copyText(stringifyPretty(detailItem.res_body), '响应体已复制')}
+                rows={10}
+                monospace
+              />
+            </div>
 
             <div className="flex justify-end">
               <Button variant="default" onClick={props.onCloseDetail}>

@@ -15,7 +15,7 @@ export function SectionCard(props: SectionCardProps) {
       withBorder
       padding="lg"
       className={[
-        'rounded-[var(--radius-xl)] border border-[var(--border-shell-subtle)] bg-[var(--surface-shell-panel)] text-[var(--text-primary)] shadow-[var(--shadow-panel)]',
+        'rounded-[var(--radius-xl)] border border-[var(--border-shell-subtle)] bg-[var(--surface-shell-panel)] text-[var(--text-primary)] shadow-none',
         props.className
       ]
         .filter(Boolean)

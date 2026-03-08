@@ -54,7 +54,7 @@ export function SettingMockTab(props: ProjectSettingPageProps) {
     <ProjectSettingsPanel>
       <RcForm<MockForm> form={mockForm}>
         <Stack>
-          <ProjectSettingsIntro title="为整个项目统一定义 Mock 入口与全局脚本，适合需要稳定演示数据或联调兜底的场景。" />
+          <ProjectSettingsIntro title="统一管理项目级 Mock 入口和脚本。" />
           <Field<MockForm> name="is_mock_open" valuePropName="checked">
             {(control) => (
               <Switch
@@ -75,7 +75,7 @@ export function SettingMockTab(props: ProjectSettingPageProps) {
                   placeholder="在这里编写项目级 Mock 脚本…"
                 />
                 <Text c="dimmed" size="sm" mt={6}>
-                  脚本会作用于项目所有接口返回值，请保持逻辑简洁且可维护。
+                  脚本会作用于所有接口返回值，尽量保持简洁。
                 </Text>
               </div>
             )}
