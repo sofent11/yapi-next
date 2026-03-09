@@ -75,29 +75,27 @@ async function bootstrap() {
 
   fastify.all(
     '/mock/:projectId/*',
-    async (
-      req: FastifyRequest<{ Params: WildcardMockParams }>,
-      reply: FastifyReply
-    ): Promise<unknown> => {
-      applyCorsHeaders(req, reply);
-      if (isPreflight(req)) {
+    async (req: FastifyRequest, reply: FastifyReply): Promise<unknown> => {
+      const typedReq = req as FastifyRequest<{ Params: WildcardMockParams }>;
+      applyCorsHeaders(typedReq, reply);
+      if (isPreflight(typedReq)) {
         reply.status(200);
         return reply.send('ok');
       }
 
-      const projectId = Number(req.params?.projectId || 0);
+      const projectId = Number(typedReq.params?.projectId || 0);
       if (!Number.isFinite(projectId) || projectId <= 0) {
         return reply.send(resReturn(null, 400, 'projectId不能为空'));
       }
 
-      const tailPath = normalizeTailPath(req.params?.['*']);
+      const tailPath = normalizeTailPath(typedReq.params?.['*']);
       try {
         const resolved = await mockService.resolveAndMock({
           projectId,
-          method: req.method,
+          method: typedReq.method,
           path: tailPath,
-          query: toLooseObject(req.query),
-          body: req.body
+          query: toLooseObject(typedReq.query),
+          body: typedReq.body
         });
         const body = mockService.buildMockBody(resolved);
         reply.status(200);

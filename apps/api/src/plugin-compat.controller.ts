@@ -2,7 +2,6 @@ import { Body, Controller, ForbiddenException, Get, NotFoundException, Post, Que
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import os from 'node:os';
-import { Collection } from 'mongodb';
 import { Connection, Model, Types } from 'mongoose';
 import { resReturn } from './common/api-response';
 import { mapError } from './common/error-response';
@@ -566,7 +565,7 @@ export class PluginCompatController {
     throw new Error('type 无效参数');
   }
 
-  private collection(name: string): Collection<PluginDoc> {
+  private collection(name: string) {
     return this.connection.collection<PluginDoc>(name);
   }
 
