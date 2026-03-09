@@ -106,6 +106,16 @@ npm run perf:roundtrip
 - `VITE_HOST`：Web 监听地址（默认 `0.0.0.0`）
 - `API_PORT`：用于 Vite 代理目标端口（默认 `3300`）
 - `API_PROXY_TARGET`：直接指定代理地址，优先于 `API_PORT`
+- `VITE_APP_BASE`：Web 部署子路径，默认 `/`。例如部署到 `/yapi/` 时设置为 `/yapi/`
+
+### Docker 构建相关
+- `VITE_APP_BASE`：同样用于 Docker 构建阶段生成前端静态资源路径
+
+部署到子路径（例如 `/yapi/`）时，可使用：
+
+```bash
+VITE_APP_BASE=/yapi/ docker compose up -d --build
+```
 
 ## API 约定
 
