@@ -8,6 +8,7 @@ import { AppEmptyState } from '../../../components/AppEmptyState';
 import { InterfaceApiDetailTabs } from './InterfaceApiDetailTabs';
 import type { InterfaceEditConflictState } from './InterfaceEditTab';
 import { InterfaceListPanel } from './InterfaceListPanel';
+import { isJsonSchemaText } from '../ProjectInterfacePage.utils';
 
 export type InterfaceApiContentProps = {
   projectId: number;
@@ -216,11 +217,14 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
       render: (value: string) => <span className="multiline-text">{value || '-'}</span>
     }
   ];
-  const schemaRowsRequest =
-    String(props.currentInterface.req_body_type || '').toLowerCase() === 'json' &&
-    props.currentInterface.req_body_is_json_schema
-      ? props.buildSchemaRows(String(props.currentInterface.req_body_other || ''))
-      : [];
+  const requestBodyType = String(props.currentInterface.req_body_type || '').toLowerCase();
+  const requestBodyOther = String(props.currentInterface.req_body_other || '');
+  const requestBodyIsSchema =
+    (requestBodyType === 'json' && props.currentInterface.req_body_is_json_schema) ||
+    ((requestBodyType === 'raw' || !requestBodyType) && isJsonSchemaText(requestBodyOther));
+  const schemaRowsRequest = requestBodyIsSchema
+    ? props.buildSchemaRows(requestBodyOther)
+    : [];
   const schemaRowsResponse =
     String(props.currentInterface.res_body_type || 'json').toLowerCase() === 'json' &&
     props.currentInterface.res_body_is_json_schema

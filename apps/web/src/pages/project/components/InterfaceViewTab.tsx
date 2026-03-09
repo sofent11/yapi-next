@@ -93,6 +93,14 @@ function renderParamTable(title: string, columns: ParamColumns, rows: ParamRow[]
   );
 }
 
+function getRequestBodyLabel(currentInterface: InterfaceDTO, hasSchemaRows: boolean): string {
+  const rawType = String(currentInterface.req_body_type || 'raw').toLowerCase();
+  if (hasSchemaRows && rawType === 'raw') {
+    return 'json-schema';
+  }
+  return rawType || 'raw';
+}
+
 function normalizeSchemaChildren(input: unknown): SchemaTableRow[] {
   if (!Array.isArray(input)) return [];
   return input.filter((item): item is SchemaTableRow => Boolean(item) && typeof item === 'object');
@@ -380,7 +388,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
           {props.currentInterface.req_body_other ? (
             <div className="interface-view-block space-y-3">
               <h3 className="interface-view-subtitle text-base font-semibold text-slate-900 dark:text-slate-100">
-                Body({props.currentInterface.req_body_type || 'raw'})
+                Body({getRequestBodyLabel(props.currentInterface, props.schemaRowsRequest.length > 0)})
               </h3>
               {props.schemaRowsRequest.length > 0 ? (
                 <SchemaParamTable title="请求 Schema" columns={props.schemaColumns} rows={props.schemaRowsRequest as SchemaTableRow[]} />

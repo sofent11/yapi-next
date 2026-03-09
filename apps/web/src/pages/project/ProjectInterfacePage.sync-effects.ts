@@ -16,6 +16,7 @@ import type {
 } from './ProjectInterfacePage.types';
 import {
   buildReqParamsByPath,
+  isJsonSchemaText,
   normalizeCaseHeaderMap,
   normalizeCaseParamMap,
   sanitizeReqParams,
@@ -442,7 +443,13 @@ export function useProjectInterfaceEditSyncEffects(params: UseProjectInterfaceEd
     if (params.currentInterface.req_body_type === 'form') {
       bodyText = JSON.stringify(params.currentInterface.req_body_form || [], null, 2);
     } else if (
-      params.currentInterface.req_body_is_json_schema &&
+      (
+        params.currentInterface.req_body_is_json_schema ||
+        (
+          String(params.currentInterface.req_body_type || '').toLowerCase() === 'raw' &&
+          isJsonSchemaText(params.currentInterface.req_body_other)
+        )
+      ) &&
       typeof params.currentInterface.req_body_other === 'string'
     ) {
       bodyText = generateMockStringFromJsonSchema(params.currentInterface.req_body_other);

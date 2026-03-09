@@ -462,6 +462,40 @@ export function buildSchemaRows(schemaText: string): SchemaRow[] {
   }
 }
 
+export function isJsonSchemaLike(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const node = value as Record<string, unknown>;
+  return [
+    '$schema',
+    '$ref',
+    'type',
+    'properties',
+    'items',
+    'required',
+    'additionalProperties',
+    'allOf',
+    'anyOf',
+    'oneOf',
+    'not',
+    'enum',
+    'format'
+  ].some(key => Object.prototype.hasOwnProperty.call(node, key));
+}
+
+export function isJsonSchemaText(input: unknown): boolean {
+  const raw = String(input || '').trim();
+  if (!raw) {
+    return false;
+  }
+  try {
+    return isJsonSchemaLike(json5.parse(raw));
+  } catch (_err) {
+    return false;
+  }
+}
+
 export function mockFlagText(mockOpen?: boolean, strict?: boolean): string {
   if (mockOpen && strict) return '( 全局mock & 严格模式 )';
   if (strict) return '( 严格模式 )';

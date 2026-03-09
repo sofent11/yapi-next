@@ -288,7 +288,8 @@ export class SpecExportService {
       });
     });
 
-    if (api.req_body_type === 'json' && api.req_body_other) {
+    const reqBodyLooksLikeSchema = this.isJsonSchemaLikeText(api.req_body_other);
+    if ((api.req_body_type === 'json' || (api.req_body_type === 'raw' && reqBodyLooksLikeSchema)) && api.req_body_other) {
       operation.requestBody = {
         required: true,
         ...(requestBodyDescription ? { description: requestBodyDescription } : {}),
@@ -368,6 +369,31 @@ export class SpecExportService {
     } catch (_err) {
       return fallback;
     }
+  }
+
+  private isJsonSchemaLikeText(input: unknown): boolean {
+    if (typeof input !== 'string' || !input.trim()) {
+      return false;
+    }
+    const parsed = this.parseJson(input, null as Record<string, unknown> | null);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return false;
+    }
+    return [
+      '$schema',
+      '$ref',
+      'type',
+      'properties',
+      'items',
+      'required',
+      'additionalProperties',
+      'allOf',
+      'anyOf',
+      'oneOf',
+      'not',
+      'enum',
+      'format'
+    ].some(key => Object.prototype.hasOwnProperty.call(parsed, key));
   }
 
   private normalizeOperationId(

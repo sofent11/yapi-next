@@ -282,6 +282,12 @@ export class OpenapiParserService {
       }
       return;
     }
+    if (media.schema && this.isJsonSchemaLike(schema)) {
+      api.req_body_type = 'json';
+      api.req_body_is_json_schema = true;
+      api.req_body_other = JSON.stringify(schema, null, 2);
+      return;
+    }
     api.req_body_type = 'raw';
     if (media.schema) {
       api.req_body_other = JSON.stringify(media.schema, null, 2);
@@ -423,6 +429,27 @@ export class OpenapiParserService {
     return {
       type: typeof schema.type === 'string' ? schema.type : 'object'
     };
+  }
+
+  private isJsonSchemaLike(schema: any): boolean {
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+      return false;
+    }
+    return [
+      '$schema',
+      '$ref',
+      'type',
+      'properties',
+      'items',
+      'required',
+      'additionalProperties',
+      'allOf',
+      'anyOf',
+      'oneOf',
+      'not',
+      'enum',
+      'format'
+    ].some(key => Object.prototype.hasOwnProperty.call(schema, key));
   }
 
   private getRefValue(spec: any, ref: string): any {
