@@ -41,7 +41,7 @@ runtime/
 /dev/
 .tags
 .tags1
-tsconfig.json
+/tsconfig.json
 .vscode
 /iconfont
 
