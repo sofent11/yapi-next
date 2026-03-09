@@ -122,7 +122,7 @@ export class OpenCompatController {
 
       const legacyDataSync = pickString(body.dataSync);
       const merge = pickString(body.merge) || legacyDataSync;
-      const syncMode = this.normalizeSyncMode(merge, 'normal');
+      const syncMode = this.normalizeSyncMode(merge, 'merge');
       const warnMessage = legacyDataSync && !pickString(body.merge)
         ? 'importData Api 已废弃 dataSync 传参，请联系管理员将 dataSync 改为 merge.'
         : '';
@@ -288,7 +288,7 @@ export class OpenCompatController {
     fallback: SyncMode
   ): SyncMode {
     const input = (value || '').toLowerCase();
-    if (input === 'good' || input === 'merge') return input;
+    if (input === 'good' || input === 'merge' || input === 'sync') return input;
     if (input === 'normal') return 'normal';
     return fallback;
   }

@@ -12,7 +12,7 @@ import { mergeJsonSchema } from '../legacy/merge-json-schema';
 
 const BULK_WRITE_CHUNK_SIZE = 300;
 const PRESERVED_PARAM_FIELDS = ['desc', 'example'] as const;
-const PRESERVED_SCHEMA_METADATA_FIELDS = ['title', 'description'] as const;
+const PRESERVED_SCHEMA_METADATA_FIELDS = ['title', 'description', 'default', 'example', 'examples', 'mock', 'x-mock'] as const;
 
 export interface BulkUpsertError {
   operationId?: string;
@@ -171,6 +171,7 @@ export class InterfaceBulkUpsertService {
       delete updateData.uid;
       delete updateData.add_time;
       updateData.up_time = this.now();
+      const shouldApplyOpenapi3SchemaRules = this.shouldApplyOpenapi3SchemaRules(item);
       if (mode === 'sync') {
         updateData.catid = existing.catid;
         updateData.title = this.preferExistingText(existing.title, item.title);
@@ -199,6 +200,9 @@ export class InterfaceBulkUpsertService {
           const newBody = this.parseJSON(item.res_body);
           updateData.res_body = JSON.stringify(mergeJsonSchema(oldBody, newBody), null, 2);
         } catch (_err) {}
+      }
+      if (shouldApplyOpenapi3SchemaRules) {
+        this.applyOpenapi3SchemaRules(updateData, existing, item);
       }
       operations.push({
         updateOne: {
@@ -554,17 +558,17 @@ export class InterfaceBulkUpsertService {
       return nextSchema;
     }
     const result: Record<string, unknown> = { ...nextSchema };
-    PRESERVED_SCHEMA_METADATA_FIELDS.forEach(field => {
-      const current = existingSchema[field];
-      if (typeof current === 'string' && current.trim()) {
-        result[field] = current;
-      }
-    });
+    this.preserveSchemaMetadata(existingSchema, result);
     if (nextSchema.type === 'object') {
       result.properties = this.syncSchemaProperties(existingSchema.properties, nextSchema.properties);
     } else if (nextSchema.type === 'array') {
       result.items = this.syncJsonSchema(existingSchema.items, nextSchema.items);
     }
+    result.additionalProperties = this.syncSchemaNode(existingSchema.additionalProperties, nextSchema.additionalProperties);
+    result.not = this.syncSchemaNode(existingSchema.not, nextSchema.not);
+    result.oneOf = this.syncSchemaList(existingSchema.oneOf, nextSchema.oneOf);
+    result.anyOf = this.syncSchemaList(existingSchema.anyOf, nextSchema.anyOf);
+    result.allOf = this.syncSchemaList(existingSchema.allOf, nextSchema.allOf);
     return result;
   }
 
@@ -580,6 +584,76 @@ export class InterfaceBulkUpsertService {
       result[key] = this.syncJsonSchema(existingProperties[key], result[key]);
     });
     return result;
+  }
+
+  private syncSchemaNode(existingNode: unknown, nextNode: unknown): unknown {
+    if (typeof nextNode === 'undefined') {
+      return nextNode;
+    }
+    return this.syncJsonSchema(existingNode, nextNode);
+  }
+
+  private syncSchemaList(existingList: unknown, nextList: unknown): unknown {
+    if (!Array.isArray(nextList)) {
+      return nextList;
+    }
+    const currentList = Array.isArray(existingList) ? existingList : [];
+    return nextList.map((item, index) => this.syncJsonSchema(currentList[index], item));
+  }
+
+  private preserveSchemaMetadata(
+    existingSchema: Record<string, unknown>,
+    result: Record<string, unknown>
+  ): void {
+    Object.entries(existingSchema).forEach(([key, value]) => {
+      if (!this.shouldPreserveSchemaField(key, value)) {
+        return;
+      }
+      result[key] = value;
+    });
+  }
+
+  private shouldPreserveSchemaField(key: string, value: unknown): boolean {
+    if (key.startsWith('x-')) {
+      return typeof value !== 'undefined';
+    }
+    if (!(PRESERVED_SCHEMA_METADATA_FIELDS as readonly string[]).includes(key)) {
+      return false;
+    }
+    if (typeof value === 'string') {
+      return value.trim().length > 0;
+    }
+    return typeof value !== 'undefined';
+  }
+
+  private shouldApplyOpenapi3SchemaRules(item: PreparedItem): boolean {
+    const meta = this.parseJSON(String(item.import_meta || '')) as Record<string, unknown>;
+    return meta?.detectedFormat === 'openapi3';
+  }
+
+  private applyOpenapi3SchemaRules(
+    updateData: Record<string, unknown>,
+    existing: Record<string, any>,
+    item: PreparedItem
+  ): void {
+    if (item.req_body_type === 'json' && item.req_body_is_json_schema === true) {
+      updateData.req_body_other = this.mergeSchemaText(
+        existing.req_body_other,
+        existing.req_body_is_json_schema === true,
+        item.req_body_other,
+        true
+      );
+      updateData.req_body_is_json_schema = true;
+    }
+    if (item.res_body_is_json_schema === true) {
+      updateData.res_body = this.mergeSchemaText(
+        existing.res_body,
+        existing.res_body_is_json_schema === true,
+        item.res_body,
+        true
+      );
+      updateData.res_body_is_json_schema = true;
+    }
   }
 
   private isPlainObject(input: unknown): input is Record<string, any> {

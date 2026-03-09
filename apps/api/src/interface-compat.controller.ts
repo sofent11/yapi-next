@@ -452,12 +452,12 @@ export class InterfaceCompatController {
       pickString(body.syncMode) ||
       pickString(body.merge) ||
       pickString(body.dataSync) ||
-      'normal'
+      'merge'
     ).toLowerCase();
-    if (input === 'good' || input === 'merge' || input === 'normal') {
+    if (input === 'good' || input === 'merge' || input === 'normal' || input === 'sync') {
       return input as SyncMode;
     }
-    return 'normal';
+    return 'merge';
   }
 
   private pickImportPayload(body: InputMap): string | undefined {

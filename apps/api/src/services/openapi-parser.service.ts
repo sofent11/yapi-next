@@ -182,6 +182,7 @@ export class OpenapiParserService {
           operation_oas3: JSON.stringify(mergedOperation, null, 2),
           import_meta: JSON.stringify({
             source: 'openapi3',
+            detectedFormat,
             operationId: mergedOperation.operationId || '',
             mediaTypes: mergedOperation.requestBody?.content
               ? Object.keys(mergedOperation.requestBody.content)
@@ -190,8 +191,8 @@ export class OpenapiParserService {
         };
 
         this.handleParameters(mergedDereferencedOperation, api);
-        this.handleRequestBody(mergedDereferencedOperation, api);
-        this.handleResponse(mergedDereferencedOperation, api);
+        this.handleRequestBody(mergedDereferencedOperation, api, spec);
+        this.handleResponse(mergedDereferencedOperation, api, spec);
 
         if (api.catname && !cats.find(item => item.name === api.catname)) {
           cats.push({
@@ -253,12 +254,12 @@ export class OpenapiParserService {
     }
   }
 
-  private handleRequestBody(operation: any, api: NormalizedApiItem): void {
+  private handleRequestBody(operation: any, api: NormalizedApiItem, spec: any): void {
     if (!operation?.requestBody?.content) return;
     const mediaType = pickMediaType(operation.requestBody.content);
     if (!mediaType) return;
     const media = operation.requestBody.content[mediaType] || {};
-    const schema = media.schema || {};
+    const schema = this.resolveSchema(media.schema || {}, spec);
     if (mediaType === 'application/json' || mediaType.includes('+json')) {
       api.req_body_type = 'json';
       api.req_body_is_json_schema = true;
@@ -289,14 +290,14 @@ export class OpenapiParserService {
     }
   }
 
-  private handleResponse(operation: any, api: NormalizedApiItem): void {
+  private handleResponse(operation: any, api: NormalizedApiItem, spec: any): void {
     const response = selectResponse(operation.responses);
     if (!response) return;
     const mediaType = pickMediaType(response.content);
     if (mediaType && response.content[mediaType]) {
       const media = response.content[mediaType];
       if (media.schema) {
-        api.res_body = JSON.stringify(media.schema, null, 2);
+        api.res_body = JSON.stringify(this.resolveSchema(media.schema, spec), null, 2);
         api.res_body_type = 'json';
         api.res_body_is_json_schema = true;
         return;
@@ -311,5 +312,134 @@ export class OpenapiParserService {
     api.res_body = response.description || '';
     api.res_body_type = 'raw';
     api.res_body_is_json_schema = false;
+  }
+
+  private resolveSchema(schema: any, spec: any, seenRefs: Set<string> = new Set()): any {
+    if (!schema || typeof schema !== 'object') {
+      return schema;
+    }
+
+    if (typeof schema.$ref === 'string') {
+      const ref = schema.$ref;
+      if (seenRefs.has(ref)) {
+        return this.collapseCircularRef(ref, spec);
+      }
+      const target = this.getRefValue(spec, ref);
+      if (!target || typeof target !== 'object') {
+        return schema;
+      }
+      const nextSeen = new Set(seenRefs);
+      nextSeen.add(ref);
+      const resolvedTarget = this.resolveSchema(target, spec, nextSeen);
+      const { $ref: _ignored, ...rest } = schema;
+      return {
+        ...(resolvedTarget && typeof resolvedTarget === 'object' ? resolvedTarget : {}),
+        ...this.resolveSchema(rest, spec, nextSeen)
+      };
+    }
+
+    if (Array.isArray(schema)) {
+      return schema.map(item => this.resolveSchema(item, spec, seenRefs));
+    }
+
+    const result: Record<string, any> = {};
+    Object.entries(schema).forEach(([key, value]) => {
+      if (
+        key === 'properties' ||
+        key === 'patternProperties' ||
+        key === 'definitions' ||
+        key === '$defs'
+      ) {
+        const next: Record<string, any> = {};
+        Object.entries((value || {}) as Record<string, any>).forEach(([innerKey, innerValue]) => {
+          next[innerKey] = this.resolveSchema(innerValue, spec, seenRefs);
+        });
+        result[key] = next;
+        return;
+      }
+      if (key === 'items' || key === 'additionalProperties' || key === 'not') {
+        result[key] = this.resolveSchema(value, spec, seenRefs);
+        return;
+      }
+      if (key === 'allOf' || key === 'anyOf' || key === 'oneOf' || key === 'prefixItems') {
+        result[key] = Array.isArray(value)
+          ? value.map(item => this.resolveSchema(item, spec, seenRefs))
+          : value;
+        return;
+      }
+      result[key] = value;
+    });
+    return result;
+  }
+
+  private collapseCircularRef(ref: string, spec: any): any {
+    const target = this.getRefValue(spec, ref);
+    if (!target || typeof target !== 'object') {
+      return { type: 'object' };
+    }
+    return this.toShallowSchema(target, spec);
+  }
+
+  private toShallowSchema(schema: any, spec: any): any {
+    if (!schema || typeof schema !== 'object') {
+      return { type: 'object' };
+    }
+    if (typeof schema.$ref === 'string') {
+      const target = this.getRefValue(spec, schema.$ref);
+      return this.toShallowSchema(target, spec);
+    }
+
+    const result: Record<string, any> = {};
+    for (const key of ['title', 'description', 'nullable', 'deprecated', 'readOnly', 'writeOnly']) {
+      if (typeof schema[key] !== 'undefined') {
+        result[key] = schema[key];
+      }
+    }
+
+    if (schema.type === 'array') {
+      result.type = 'array';
+      result.items = this.toShallowArrayItemSchema(schema.items, spec);
+      return result;
+    }
+
+    result.type = typeof schema.type === 'string' ? schema.type : 'object';
+    return result;
+  }
+
+  private toShallowArrayItemSchema(schema: any, spec: any): any {
+    if (!schema || typeof schema !== 'object') {
+      return { type: 'object' };
+    }
+    if (typeof schema.$ref === 'string') {
+      const target = this.getRefValue(spec, schema.$ref);
+      return this.toShallowSchema(target, spec);
+    }
+    if (schema.type === 'array') {
+      return {
+        type: 'array',
+        items: { type: 'object' }
+      };
+    }
+    return {
+      type: typeof schema.type === 'string' ? schema.type : 'object'
+    };
+  }
+
+  private getRefValue(spec: any, ref: string): any {
+    if (!ref.startsWith('#/')) {
+      return undefined;
+    }
+    const segments = ref
+      .slice(2)
+      .split('/')
+      .map(segment => segment.replace(/~1/g, '/').replace(/~0/g, '~'));
+    let current = spec;
+    for (const segment of segments) {
+      if (!current || typeof current !== 'object') {
+        return undefined;
+      }
+      current = current[segment];
+    }
+    return current;
   }
 }
