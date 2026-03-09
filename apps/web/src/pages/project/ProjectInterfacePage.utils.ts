@@ -449,6 +449,9 @@ export function buildSchemaRows(schemaText: string): SchemaRow[] {
       const properties = (parsed.properties && typeof parsed.properties === 'object'
         ? (parsed.properties as Record<string, unknown>)
         : {}) as Record<string, unknown>;
+      if (Object.keys(properties).length === 0) {
+        return [schemaNodeToRow(parsed, 'root', true, 'root-0')];
+      }
       const requiredSet = new Set(
         Array.isArray(parsed.required) ? parsed.required.map(item => String(item)) : []
       );
