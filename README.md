@@ -109,12 +109,15 @@ npm run perf:roundtrip
 - `VITE_APP_BASE`：Web 部署子路径，默认 `/`。例如部署到 `/yapi/` 时设置为 `/yapi/`
 
 ### Docker 构建相关
-- `VITE_APP_BASE`：同样用于 Docker 构建阶段生成前端静态资源路径
+- 根目录 `.env` 中的 `VITE_APP_BASE` 会传入 Docker 构建阶段，用于生成前端静态资源路径
+- 可从 [`.env.example`](/Users/sofent/work/yapi/.env.example) 复制一份为根目录 `.env`
 
 部署到子路径（例如 `/yapi/`）时，可使用：
 
 ```bash
-VITE_APP_BASE=/yapi/ docker compose up -d --build
+cp .env.example .env
+# 然后把 .env 中的 VITE_APP_BASE 改为 /yapi/
+docker compose up -d --build
 ```
 
 ## API 约定
