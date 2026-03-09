@@ -74,7 +74,8 @@ find_restore_dir() {
 restore_from_directory() {
     local source_dir="$1"
     echo "=> Copying backup directory '$source_dir' to container..."
-    docker cp "$source_dir/." "$MONGO_CONTAINER":/tmp/yapi_dump_target
+    docker exec "$MONGO_CONTAINER" mkdir -p /tmp/yapi_dump_target
+    tar -C "$source_dir" -cf - . | docker exec -i "$MONGO_CONTAINER" sh -lc 'tar -C /tmp/yapi_dump_target -xf -'
     echo "=> Starting mongorestore from directory... (database: yapi)"
     docker exec "$MONGO_CONTAINER" mongorestore --drop --nsInclude="*.*" --nsFrom="prod-mongodb.*" --nsTo="yapi.*" /tmp/yapi_dump_target
 }
