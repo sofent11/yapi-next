@@ -20,7 +20,7 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import RcForm, { Field, List, useForm as useRcForm, useWatch } from 'rc-field-form';
 import json5 from 'json5';
-import { getJson, parseJsonSafe, parseMaybeJson, postJson, toStringValue } from '../index';
+import { getJson, parseJsonSafe, parseMaybeJson, pluginApiPath, postJson, toStringValue } from '../index';
 
 type AdvancedMockCaseRecord = {
   _id?: string | number;
@@ -178,7 +178,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
   async function convertSchemaToJson(schemaText: string): Promise<string | null> {
     try {
       const schema = json5.parse(schemaText);
-      const response = await fetch('/api/interface/schema2json', {
+      const response = await fetch(pluginApiPath('interface/schema2json'), {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -204,7 +204,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
     setCaseLoading(true);
     try {
       const res = await getJson<AdvancedMockCaseRecord[]>(
-        `/api/plugin/advmock/case/list?interface_id=${interfaceId}`
+        `${pluginApiPath('plugin/advmock/case/list')}?interface_id=${interfaceId}`
       );
       if (res.errcode !== 0) {
         message.error(res.errmsg || '加载期望列表失败');
@@ -230,7 +230,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
       setLoading(true);
       try {
         const res = await getJson<Record<string, unknown>>(
-          `/api/plugin/advmock/get?interface_id=${interfaceId}`
+          `${pluginApiPath('plugin/advmock/get')}?interface_id=${interfaceId}`
         );
         if (!active) return;
         if (res.errcode === 0 && res.data) {
@@ -391,7 +391,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
       }
 
       setCaseSaving(true);
-      const res = await postJson('/api/plugin/advmock/case/save', payload);
+      const res = await postJson(pluginApiPath('plugin/advmock/case/save'), payload);
       if (res.errcode !== 0) {
         message.error(res.errmsg || '保存期望失败');
         return;
@@ -408,7 +408,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
 
   async function handleDeleteCase(row: AdvancedMockCaseRecord) {
     if (row._id == null) return;
-    const res = await postJson('/api/plugin/advmock/case/del', { id: row._id });
+    const res = await postJson(pluginApiPath('plugin/advmock/case/del'), { id: row._id });
     if (res.errcode !== 0) {
       message.error(res.errmsg || '删除期望失败');
       return;
@@ -419,7 +419,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
 
   async function handleToggleCase(row: AdvancedMockCaseRecord) {
     if (row._id == null) return;
-    const res = await postJson('/api/plugin/advmock/case/hide', {
+    const res = await postJson(pluginApiPath('plugin/advmock/case/hide'), {
       id: row._id,
       enable: row.case_enable === false
     });
@@ -438,7 +438,7 @@ export function AdvancedMockPluginTab(props: { projectId: number; interfaceData:
     }
     setSaving(true);
     try {
-      const res = await postJson('/api/plugin/advmock/save', {
+      const res = await postJson(pluginApiPath('plugin/advmock/save'), {
         interface_id: interfaceId,
         project_id: props.projectId,
         enable,

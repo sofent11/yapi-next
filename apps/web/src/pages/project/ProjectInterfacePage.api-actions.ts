@@ -528,7 +528,7 @@ export function useProjectInterfaceApiActions(params: UseProjectInterfaceApiActi
     if (values.res_body_is_json_schema) {
       try {
         const schema = parseLooseJson(resBodyText);
-        const response = await fetch('/api/interface/schema2json', {
+        const response = await fetch(apiPath('interface/schema2json'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -575,3 +575,4 @@ export function useProjectInterfaceApiActions(params: UseProjectInterfaceApiActi
     handleResponseEditorTabChange
   };
 }
+import { apiPath } from '../../utils/base-path';

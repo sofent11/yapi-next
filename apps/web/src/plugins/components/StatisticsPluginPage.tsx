@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Badge, Card, Loader, SimpleGrid, Stack, Table, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { getJson } from '../index';
+import { apiPath } from '../../utils/base-path';
 
 type StatisticsCount = {
   groupCount: number;
@@ -64,10 +65,10 @@ export function StatisticsPluginPage() {
       setLoading(true);
       try {
         const [countRes, systemRes, mockRes, groupRes] = await Promise.all([
-          getJson<StatisticsCount>('/api/plugin/statismock/count'),
-          getJson<StatisticsSystemStatus>('/api/plugin/statismock/get_system_status'),
-          getJson<StatisticsMockData>('/api/plugin/statismock/get'),
-          getJson<StatisticsGroupRow[]>('/api/plugin/statismock/group_data_statis')
+          getJson<StatisticsCount>(apiPath('plugin/statismock/count')),
+          getJson<StatisticsSystemStatus>(apiPath('plugin/statismock/get_system_status')),
+          getJson<StatisticsMockData>(apiPath('plugin/statismock/get')),
+          getJson<StatisticsGroupRow[]>(apiPath('plugin/statismock/group_data_statis'))
         ]);
         if (!active) return;
         if (countRes.errcode === 0) setCount(countRes.data || null);

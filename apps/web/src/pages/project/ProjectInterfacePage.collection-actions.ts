@@ -404,7 +404,7 @@ export function useProjectInterfaceCollectionActions(params: UseProjectInterface
         query.set(`env_${id}`, env);
       });
       if (download) query.set('download', 'true');
-      return `/api/open/run_auto_test?${query.toString()}`;
+      return `${apiPath('open/run_auto_test')}?${query.toString()}`;
     },
     [params]
   );
@@ -706,3 +706,4 @@ export function useProjectInterfaceCollectionActions(params: UseProjectInterface
     handleAddCase
   };
 }
+import { apiPath } from '../../utils/base-path';

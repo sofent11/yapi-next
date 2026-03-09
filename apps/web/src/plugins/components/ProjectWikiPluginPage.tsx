@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Button, Card, Loader, Stack, Text, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useParams } from 'react-router-dom';
-import { getJson, postJson, toStringValue } from '../index';
+import { getJson, pluginApiPath, postJson, toStringValue } from '../index';
 
 type WikiDoc = {
   desc?: string;
@@ -31,7 +31,7 @@ export function ProjectWikiPluginPage() {
     async function load() {
       setLoading(true);
       try {
-        const res = await getJson<WikiDoc>(`/api/plugin/wiki_desc/get?project_id=${projectId}`);
+        const res = await getJson<WikiDoc>(`${pluginApiPath('plugin/wiki_desc/get')}?project_id=${projectId}`);
         if (!active) return;
         if (res.errcode !== 0) {
           message.error(res.errmsg || '加载 Wiki 失败');
@@ -55,7 +55,7 @@ export function ProjectWikiPluginPage() {
     if (projectId <= 0) return;
     setSaving(true);
     try {
-      const res = await postJson('/api/plugin/wiki_desc/up', {
+      const res = await postJson(pluginApiPath('plugin/wiki_desc/up'), {
         project_id: projectId,
         desc: markdown,
         markdown

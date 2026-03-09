@@ -3,6 +3,7 @@ import { Avatar, Button, Loader, Select, Text, Tooltip } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { AppEmptyState } from '../../../components/AppEmptyState';
 import type { GroupMemberRole } from '../../ProjectConsolePage.types';
+import { apiPath } from '../../../utils/base-path';
 
 type GroupMemberListItem = {
   uid?: number;
@@ -80,7 +81,7 @@ export function MemberList(props: MemberListProps) {
                     <td className="px-4 py-4">
                       <div className="console-members-cell">
                         <Link to={`/user/profile/${uid}`}>
-                          <Avatar src={`/api/user/avatar?uid=${uid}`} size={36} />
+                          <Avatar src={apiPath(`user/avatar?uid=${uid}`)} size={36} />
                         </Link>
                         <div className="console-members-meta">
                           <Link to={`/user/profile/${uid}`} className="console-members-name-link">

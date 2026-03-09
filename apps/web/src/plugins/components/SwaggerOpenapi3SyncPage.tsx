@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Code, Loader, Stack, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { getJson, postJson, toStringValue } from '../index';
+import { getJson, pluginApiPath, postJson, toStringValue } from '../index';
 
 type SyncResult = {
   detectedFormat?: string;
@@ -45,8 +45,8 @@ export function SwaggerOpenapi3SyncPage(props: { projectId: number }) {
       setLoading(true);
       try {
         const [tokenRes, projectRes] = await Promise.all([
-          getJson<string>(`/api/project/token?project_id=${props.projectId}`),
-          getJson<ProjectSyncSettings>(`/api/project/get?project_id=${props.projectId}`)
+          getJson<string>(`${pluginApiPath('project/token')}?project_id=${props.projectId}`),
+          getJson<ProjectSyncSettings>(`${pluginApiPath('project/get')}?project_id=${props.projectId}`)
         ]);
         if (!active) return;
 
@@ -82,7 +82,7 @@ export function SwaggerOpenapi3SyncPage(props: { projectId: number }) {
     }
     setSaving(true);
     try {
-      const res = await postJson('/api/project/up', {
+      const res = await postJson(pluginApiPath('project/up'), {
         id: props.projectId,
         openapi3_sync_url: targetUrl
       });
@@ -124,7 +124,7 @@ export function SwaggerOpenapi3SyncPage(props: { projectId: number }) {
     }
     setSyncing(true);
     try {
-      const res = await postJson<SyncResult>('/api/spec/import', {
+      const res = await postJson<SyncResult>(pluginApiPath('spec/import'), {
         project_id: props.projectId,
         token: projectToken || undefined,
         source: 'url',

@@ -4,6 +4,7 @@ import { notifications } from '@mantine/notifications';
 import { InfoGrid, InfoGridItem } from '../../../components/patterns/InfoGrid';
 import { useGetImportTaskQuery } from '../../../services/yapi-api';
 import { taskStatusLabel } from '../ProjectDataPage.utils';
+import { apiPath } from '../../../utils/base-path';
 
 export interface ImportTaskModalProps {
   projectId: number;
@@ -63,7 +64,7 @@ export default function ImportTaskModal({ projectId, token, taskId, opened, onCl
   function downloadTaskReport() {
     if (!taskId) return;
     const link = document.createElement('a');
-    link.href = `/api/spec/import/task/download?task_id=${encodeURIComponent(taskId)}`;
+    link.href = `${apiPath('spec/import/task/download')}?task_id=${encodeURIComponent(taskId)}`;
     link.target = '_blank';
     link.rel = 'noreferrer noopener';
     document.body.appendChild(link);

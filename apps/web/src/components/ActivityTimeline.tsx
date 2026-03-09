@@ -5,6 +5,7 @@ import type { InterfaceDTO } from '../types/interface-dto';
 import { useGetInterfaceListQuery, useGetLogListQuery } from '../services/yapi-api';
 import { buildActivityLogDiff, type ActivityLogDiffItem } from '../utils/activity-log-diff';
 import { sanitizeHtml } from '../utils/html-sanitize';
+import { apiPath } from '../utils/base-path';
 
 type TimelineType = 'project' | 'group';
 
@@ -189,7 +190,7 @@ export function ActivityTimeline(props: ActivityTimelineProps) {
                 key={String(item._id || `${uid}-${item.add_time || 0}`)}
                 bullet={
                   <Link to={`/user/profile/${uid}`}>
-                    <Avatar src={`/api/user/avatar?uid=${uid}`} size={32} />
+                    <Avatar src={apiPath(`user/avatar?uid=${uid}`)} size={32} />
                   </Link>
                 }
               >

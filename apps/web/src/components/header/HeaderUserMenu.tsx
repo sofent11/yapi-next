@@ -20,6 +20,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useLogoutMutation } from '../../services/yapi-api';
 import { webPlugins, type HeaderMenuItem } from '../../plugins';
 import { useTheme } from '../../hooks/useTheme';
+import { apiPath } from '../../utils/base-path';
 
 type HeaderUserMenuProps = {
   uid: number;
@@ -109,7 +110,7 @@ export function HeaderUserMenu(props: HeaderUserMenuProps) {
     return rows;
   }, [headerMenu, navigate, logout, props.role, props.uid]);
 
-  const avatarUrl = props.imageUrl || `/api/user/avatar?uid=${props.uid}`;
+  const avatarUrl = props.imageUrl || apiPath(`user/avatar?uid=${props.uid}`);
 
   return (
     <Menu width={220} position="bottom-end" shadow="md">

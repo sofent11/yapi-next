@@ -1,5 +1,6 @@
 import json5 from 'json5';
 import type { AppRouteContract } from '../types/route-contract';
+import { apiPath } from '../utils/base-path';
 
 export const DRAFT4_SCHEMA_URI = 'http://json-schema.org/draft-04/schema#';
 
@@ -168,6 +169,10 @@ export function toStringValue(value: unknown): string {
   } catch (_err) {
     return '';
   }
+}
+
+export function pluginApiPath(path: string): string {
+  return apiPath(path);
 }
 
 export function postJson<T>(url: string, payload: Record<string, unknown>) {

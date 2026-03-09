@@ -7,6 +7,7 @@ import { InfoGrid, InfoGridItem } from '../../../components/patterns/InfoGrid';
 import type { InterfaceDTO } from '../../../types/interface-dto';
 import { SectionCard } from '../../../components/layout/SectionCard';
 import { sanitizeHtml } from '../../../utils/html-sanitize';
+import { apiPath } from '../../../utils/base-path';
 
 type ParamRow = Record<string, unknown>;
 type ParamColumns = Array<Record<string, unknown>>;
@@ -242,7 +243,7 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
                   className="inline-flex items-center gap-1.5 text-slate-600 transition-colors hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-300"
                   to={`/user/profile/${uid}`}
                 >
-                  <Avatar size={18} src={`/api/user/avatar?uid=${uid}`} radius="xl" />
+                  <Avatar size={18} src={apiPath(`user/avatar?uid=${uid}`)} radius="xl" />
                   {String((props.currentInterface as unknown as Record<string, unknown>).username || '-')}
                 </Link>
               ) : (

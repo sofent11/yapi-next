@@ -20,6 +20,7 @@ import {
   useUploadAvatarMutation
 } from '../services/yapi-api';
 import { PageHeader, SectionCard } from '../components/layout';
+import { apiPath } from '../utils/base-path';
 
 type UserRow = Record<string, unknown> & {
   _id?: number;
@@ -239,7 +240,7 @@ export function UserProfilePage() {
                   >
                     <img
                       className={avatarImageClassName}
-                      src={`/api/user/avatar?uid=${targetUid}`}
+                      src={apiPath(`user/avatar?uid=${targetUid}`)}
                       alt={avatarAlt}
                     />
                   </button>
@@ -247,7 +248,7 @@ export function UserProfilePage() {
               ) : (
                 <img
                   className={avatarImageClassName}
-                  src={`/api/user/avatar?uid=${targetUid}`}
+                  src={apiPath(`user/avatar?uid=${targetUid}`)}
                   alt={avatarAlt}
                 />
               )}

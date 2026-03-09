@@ -3,6 +3,7 @@ import type { ComponentType } from 'react';
 import type { AnyAction, Reducer } from '@reduxjs/toolkit';
 import { useParams } from 'react-router-dom';
 import type { AppRouteContract } from '../types/route-contract';
+import { apiPath } from '../utils/base-path';
 
 import { isValidRouteContract } from './utils';
 export * from './utils';
@@ -366,17 +367,17 @@ const exportDataPlugin: ModernWebPlugin = {
   setup(api) {
     api.registerExporter('html', context => ({
       name: 'html',
-      route: `/api/plugin/export?type=html&pid=${context?.projectId || 0}`,
+      route: apiPath(`plugin/export?type=html&pid=${context?.projectId || 0}`),
       desc: '导出项目接口文档为 html 文件'
     }));
     api.registerExporter('markdown', context => ({
       name: 'markdown',
-      route: `/api/plugin/export?type=markdown&pid=${context?.projectId || 0}`,
+      route: apiPath(`plugin/export?type=markdown&pid=${context?.projectId || 0}`),
       desc: '导出项目接口文档为 markdown 文件'
     }));
     api.registerExporter('json', context => ({
       name: 'json',
-      route: `/api/plugin/export?type=json&pid=${context?.projectId || 0}`,
+      route: apiPath(`plugin/export?type=json&pid=${context?.projectId || 0}`),
       desc: '导出项目接口文档为 json 文件'
     }));
   }
@@ -387,12 +388,12 @@ const exportSwaggerPlugin: ModernWebPlugin = {
   setup(api) {
     api.registerExporter('swaggerjson', context => ({
       name: 'swaggerjson',
-      route: `/api/plugin/exportSwagger?type=OpenAPIV2&pid=${context?.projectId || 0}`,
+      route: apiPath(`plugin/exportSwagger?type=OpenAPIV2&pid=${context?.projectId || 0}`),
       desc: '导出 Swagger 2.0 Json'
     }));
     api.registerExporter('openapi3json', context => ({
       name: 'openapi3json',
-      route: `/api/plugin/exportSwagger?type=OpenAPIV3&pid=${context?.projectId || 0}`,
+      route: apiPath(`plugin/exportSwagger?type=OpenAPIV3&pid=${context?.projectId || 0}`),
       desc: '导出 OpenAPI 3.0 Json'
     }));
   }

@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 
 import { webPlugins } from '../../plugins';
+import { apiPath } from '../../utils/base-path';
 
 const message = {
   success(text: string) {
@@ -163,7 +164,7 @@ export function useProjectInterfaceRequestRunner(): ProjectInterfaceRequestRunne
       try {
         const pluginPayload = await webPlugins.runBeforeRequest(payload, requestMeta);
         const queryString = queryMode ? `?payload=${encodeURIComponent(JSON.stringify(pluginPayload))}` : '';
-        const res = await fetch(`/api/test/${routePath}${queryString}`, {
+        const res = await fetch(`${apiPath(`test/${routePath}`)}${queryString}`, {
           method: requestMethod,
           headers: {
             'Content-Type': 'application/json'

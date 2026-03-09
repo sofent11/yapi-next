@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Anchor, Code, Loader, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { getJson, toStringValue } from '../index';
+import { apiPath } from '../../utils/base-path';
 
 const message = {
   error(text: string) {
@@ -18,7 +19,7 @@ export function ServicesPluginPage(props: { projectId: number }) {
     async function load() {
       setLoading(true);
       try {
-        const res = await getJson<{ token?: string }>(`/api/project/token?id=${props.projectId}`);
+        const res = await getJson<{ token?: string }>(`${apiPath('project/token')}?id=${props.projectId}`);
         if (!active) return;
         if (res.errcode !== 0) {
           message.error(res.errmsg || '获取项目 token 失败');
@@ -43,7 +44,7 @@ export function ServicesPluginPage(props: { projectId: number }) {
   }, [props.projectId]);
 
   const origin = window.location.origin;
-  const modernUrl = `${origin}/api/open/plugin/export-full?type=json&pid=${props.projectId}&status=all&token=${token}`;
+  const modernUrl = `${origin}${apiPath(`open/plugin/export-full?type=json&pid=${props.projectId}&status=all&token=${token}`)}`;
 
   return (
     <Stack className="workspace-stack">

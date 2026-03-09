@@ -32,6 +32,7 @@ import { AdaptiveDataView } from '../../components/patterns/AdaptiveDataView';
 import { AsyncState } from '../../components/patterns/AsyncState';
 import { DataToolbar } from '../../components/patterns/DataToolbar';
 import { SectionCard } from '../../components/layout';
+import { apiPath } from '../../utils/base-path';
 
 type ProjectMembersPageProps = {
   projectId: number;
@@ -300,7 +301,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
                         >
                           <Table.Td>
                             <div className="console-members-cell">
-                              <Avatar src={`/api/user/avatar?uid=${uid}`} size={32} />
+                              <Avatar src={apiPath(`user/avatar?uid=${uid}`)} size={32} />
                               <div className="console-members-meta min-w-0">
                                 <div className="flex min-w-0 items-center gap-2">
                                   <span className="console-members-name-link truncate">{displayName}</span>
@@ -387,7 +388,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
                     <div key={uid} className="adaptive-data-card">
                       <div className="adaptive-data-card-head">
                         <div className="project-members-cell min-w-0">
-                          <Avatar src={`/api/user/avatar?uid=${uid}`} size={36} />
+                          <Avatar src={apiPath(`user/avatar?uid=${uid}`)} size={36} />
                           <div className="min-w-0">
                             <div className="truncate font-medium text-slate-900 dark:text-slate-100">{displayName}</div>
                             <div className="text-sm text-slate-500 dark:text-slate-400">{String(row.email || `UID ${uid}`)}</div>
@@ -474,7 +475,7 @@ export function ProjectMembersPage(props: ProjectMembersPageProps) {
                 key={Number(item.uid || 0)}
                 className="group-members-item rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-[var(--surface-subtle)] p-4 text-[var(--text-primary)] dark:!border-[var(--border-project-subtle)] dark:!bg-[var(--surface-project-subtle)]"
               >
-                <Avatar size={40} src={`/api/user/avatar?uid=${item.uid}`} />
+                <Avatar size={40} src={apiPath(`user/avatar?uid=${item.uid}`)} />
                 <div className="group-members-name mt-3 flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100">
                   {String(item.username || item.uid || '-')}
                   {Number(item.uid || 0) === currentUid ? <Badge color="blue">我</Badge> : null}

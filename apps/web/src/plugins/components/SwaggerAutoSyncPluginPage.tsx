@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Loader, Select, Stack, Switch, Text, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import RcForm, { Field, useForm as useRcForm } from 'rc-field-form';
-import { postJson, getJson, toStringValue } from '../index';
+import { getJson, pluginApiPath, postJson, toStringValue } from '../index';
 
 type AutoSyncForm = {
   is_sync_open: boolean;
@@ -33,7 +33,7 @@ export function SwaggerAutoSyncPluginPage(props: { projectId: number }) {
       setLoading(true);
       try {
         const res = await getJson<Record<string, unknown>>(
-          `/api/plugin/autoSync/get?project_id=${props.projectId}`
+          `${pluginApiPath('plugin/autoSync/get')}?project_id=${props.projectId}`
         );
         if (res.errcode !== 0) {
           message.error(res.errmsg || '加载自动同步配置失败');
@@ -78,7 +78,7 @@ export function SwaggerAutoSyncPluginPage(props: { projectId: number }) {
         sync_json_url: values.sync_json_url.trim(),
         sync_cron: values.sync_cron.trim()
       };
-      const res = await postJson('/api/plugin/autoSync/save', payload);
+      const res = await postJson(pluginApiPath('plugin/autoSync/save'), payload);
       if (res.errcode !== 0) {
         message.error(res.errmsg || '保存自动同步配置失败');
         return;
@@ -91,7 +91,7 @@ export function SwaggerAutoSyncPluginPage(props: { projectId: number }) {
         await (async () => {
           try {
             const latest = await getJson<Record<string, unknown>>(
-              `/api/plugin/autoSync/get?project_id=${props.projectId}`
+              `${pluginApiPath('plugin/autoSync/get')}?project_id=${props.projectId}`
             );
             if (latest.errcode === 0) {
               setRecordId(toStringValue((latest.data || {})._id));

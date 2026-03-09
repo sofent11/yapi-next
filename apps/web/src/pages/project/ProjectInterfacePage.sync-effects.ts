@@ -339,7 +339,7 @@ export function useProjectInterfaceEditSyncEffects(params: UseProjectInterfaceEd
 
     const runCheck = async () => {
       try {
-        const response = await fetch(`/api/interface/solve_conflict?id=${params.interfaceId}`, {
+        const response = await fetch(`${apiPath('interface/solve_conflict')}?id=${params.interfaceId}`, {
           credentials: 'include'
         });
         const payload = (await response.json()) as Record<string, unknown>;
@@ -506,3 +506,4 @@ export function useProjectInterfaceEditSyncEffects(params: UseProjectInterfaceEd
     });
   }, [params.action, params.basepath, params.caseDetailData, params.caseForm, params.resetCaseRequestRunner]);
 }
+import { apiPath } from '../../utils/base-path';
