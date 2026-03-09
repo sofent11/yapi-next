@@ -16,6 +16,8 @@ type AppProvidersProps = {
   children: ReactNode;
 };
 
+const routerBase = import.meta.env.BASE_URL === '/' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, '');
+
 function ThemedProviders(props: AppProvidersProps) {
   const { theme } = useTheme();
 
@@ -24,6 +26,7 @@ function ThemedProviders(props: AppProvidersProps) {
       <ModalsProvider>
         <Notifications position="top-right" />
         <BrowserRouter
+          basename={routerBase}
           future={{
             v7_startTransition: true,
             v7_relativeSplatPath: true
