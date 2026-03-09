@@ -3,9 +3,6 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-ARG VITE_APP_BASE=/
-ENV VITE_APP_BASE=$VITE_APP_BASE
-
 # Enable corepack and prepare pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 

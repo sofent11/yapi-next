@@ -15,8 +15,6 @@ services:
     build:
       context: .
       target: api
-      args:
-        VITE_APP_BASE: ${VITE_APP_BASE:-/}
     restart: always
     ports:
       - "3300:3300"
@@ -30,8 +28,6 @@ services:
     build:
       context: .
       target: web
-      args:
-        VITE_APP_BASE: ${VITE_APP_BASE:-/}
     restart: always
     ports:
       - "8080:80"

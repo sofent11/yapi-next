@@ -190,12 +190,10 @@ function colCaseEntityTag(caseId: string) {
   return { type: 'ColCase' as const, id: `CASE-${caseId}` };
 }
 
-const apiBaseUrl = `${import.meta.env.BASE_URL}api`;
-
 export const yapiApi = createApi({
   reducerPath: 'yapiApi',
   baseQuery: fetchBaseQuery({
-    baseUrl: apiBaseUrl,
+    baseUrl: '/api',
     credentials: 'include'
   }),
   tagTypes: [
