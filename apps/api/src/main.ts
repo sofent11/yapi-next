@@ -1,7 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { RequestMethod } from '@nestjs/common';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
-import { FastifyReply, FastifyRequest } from 'fastify';
 import { AppModule } from './app.module';
 import { resReturn } from './common/api-response';
 import { MockRouteError, MockService } from './services/mock.service';
@@ -12,6 +11,19 @@ type WildcardMockParams = {
 };
 
 type LooseObject = Record<string, unknown>;
+type MockRouteRequest = {
+  method: string;
+  headers: Record<string, string | string[] | undefined>;
+  params?: WildcardMockParams;
+  query?: unknown;
+  body?: unknown;
+};
+
+type MockRouteReply = {
+  header(name: string, value: string): MockRouteReply;
+  status(code: number): MockRouteReply;
+  send(payload: unknown): unknown;
+};
 
 function resolveBodyLimitBytes(): number {
   const fallbackMb = 20;
@@ -39,7 +51,7 @@ async function bootstrap() {
   const mockService = app.get(MockService);
   const fastify = app.getHttpAdapter().getInstance();
 
-  const applyCorsHeaders = (req: FastifyRequest, reply: FastifyReply): void => {
+  const applyCorsHeaders = (req: MockRouteRequest, reply: MockRouteReply): void => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : '';
     if (origin) {
       reply.header('Access-Control-Allow-Origin', origin);
@@ -56,7 +68,7 @@ async function bootstrap() {
     reply.header('Access-Control-Max-Age', '1728000');
   };
 
-  const isPreflight = (req: FastifyRequest): boolean =>
+  const isPreflight = (req: MockRouteRequest): boolean =>
     req.method.toUpperCase() === 'OPTIONS' && Boolean(req.headers['access-control-request-method']);
 
   const normalizeTailPath = (input: string | undefined): string => {
@@ -75,17 +87,18 @@ async function bootstrap() {
 
   fastify.all(
     '/mock/:projectId/*',
-    async (req: FastifyRequest, reply: FastifyReply): Promise<unknown> => {
-      const typedReq = req as FastifyRequest<{ Params: WildcardMockParams }>;
-      applyCorsHeaders(typedReq, reply);
+    async (req, reply): Promise<unknown> => {
+      const typedReq = req as MockRouteRequest;
+      const typedReply = reply as MockRouteReply;
+      applyCorsHeaders(typedReq, typedReply);
       if (isPreflight(typedReq)) {
-        reply.status(200);
-        return reply.send('ok');
+        typedReply.status(200);
+        return typedReply.send('ok');
       }
 
       const projectId = Number(typedReq.params?.projectId || 0);
       if (!Number.isFinite(projectId) || projectId <= 0) {
-        return reply.send(resReturn(null, 400, 'projectId不能为空'));
+        return typedReply.send(resReturn(null, 400, 'projectId不能为空'));
       }
 
       const tailPath = normalizeTailPath(typedReq.params?.['*']);
@@ -98,14 +111,14 @@ async function bootstrap() {
           body: typedReq.body
         });
         const body = mockService.buildMockBody(resolved);
-        reply.status(200);
-        return reply.send(body);
+        typedReply.status(200);
+        return typedReply.send(body);
       } catch (err) {
         if (err instanceof MockRouteError) {
-          return reply.send(resReturn(null, err.errcode, err.message));
+          return typedReply.send(resReturn(null, err.errcode, err.message));
         }
         const message = err instanceof Error ? err.message : 'mock处理失败';
-        return reply.send(resReturn(null, 409, message));
+        return typedReply.send(resReturn(null, 409, message));
       }
     }
   );
