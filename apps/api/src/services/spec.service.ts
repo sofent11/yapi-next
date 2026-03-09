@@ -14,7 +14,7 @@ import { InterfaceEntity } from '../database/schemas/interface.schema';
 import { ProjectEntity } from '../database/schemas/project.schema';
 import { InterfaceCatService } from './interface-cat.service';
 import { InterfaceBulkUpsertService } from './interface-bulk-upsert.service';
-import { OpenapiParserService } from './openapi-parser.service';
+import { NormalizedApiItem, OpenapiParserService } from './openapi-parser.service';
 import { SpecExportService } from './spec-export.service';
 
 @Injectable()
@@ -73,7 +73,9 @@ export class SpecService {
     if (params.format !== 'auto' && params.format !== parsed.detectedFormat) {
       throw new Error(`format 与文档版本不匹配，当前检测为 ${parsed.detectedFormat}`);
     }
-    const apis = parsed.apis.filter(item => !String(item.path || '').includes('/inner/'));
+    const apis = parsed.apis
+      .map(item => this.normalizeImportedApiPath(item, project.basepath || '', parsed.basePath || ''))
+      .filter(item => !String(item.path || '').includes('/inner/'));
     const usedCatNames = new Set(
       apis
         .map(item => (typeof item.catname === 'string' ? item.catname.trim() : ''))
@@ -203,6 +205,65 @@ export class SpecService {
 
   private lookupKey(item: { path: string; method: string }): string {
     return `${String(item.method || '').toUpperCase()} ${String(item.path || '')}`;
+  }
+
+  private normalizeImportedApiPath(
+    item: NormalizedApiItem,
+    projectBasePath: string,
+    parsedBasePath: string
+  ): NormalizedApiItem {
+    const normalizedPath = this.stripKnownBasePath(
+      String(item.path || ''),
+      [projectBasePath, parsedBasePath]
+    );
+    if (normalizedPath === item.path) {
+      return item;
+    }
+    return {
+      ...item,
+      path: normalizedPath
+    };
+  }
+
+  private stripKnownBasePath(path: string, candidates: string[]): string {
+    const normalizedPath = this.ensureLeadingSlash(path);
+    const basePaths = Array.from(
+      new Set(
+        candidates
+          .map(candidate => this.normalizeBasePath(candidate))
+          .filter((candidate): candidate is string => Boolean(candidate))
+          .sort((a, b) => b.length - a.length)
+      )
+    );
+
+    for (const basePath of basePaths) {
+      if (normalizedPath === basePath) {
+        return '/';
+      }
+      if (normalizedPath.startsWith(`${basePath}/`)) {
+        return this.ensureLeadingSlash(normalizedPath.slice(basePath.length));
+      }
+    }
+    return normalizedPath;
+  }
+
+  private normalizeBasePath(basePath: string): string {
+    const value = String(basePath || '').trim();
+    if (!value || value === '/') {
+      return '';
+    }
+    const withLeadingSlash = value.startsWith('/') ? value : `/${value}`;
+    return withLeadingSlash.endsWith('/')
+      ? withLeadingSlash.slice(0, -1)
+      : withLeadingSlash;
+  }
+
+  private ensureLeadingSlash(path: string): string {
+    const value = String(path || '').trim();
+    if (!value) {
+      return '/';
+    }
+    return value.startsWith('/') ? value : `/${value}`;
   }
 
   private firstCatId(map: Map<string, number>, catname?: string | null): number {
