@@ -190,7 +190,7 @@ export class OpenapiParserService {
           })
         };
 
-        this.handleParameters(mergedDereferencedOperation, api);
+        this.handleParameters(mergedDereferencedOperation, api, spec);
         this.handleRequestBody(mergedDereferencedOperation, api, spec);
         this.handleResponse(mergedDereferencedOperation, api, spec);
 
@@ -234,9 +234,16 @@ export class OpenapiParserService {
     throw new Error('仅支持 Swagger 2.x 或 OpenAPI 3.x 规范');
   }
 
-  private handleParameters(operation: any, api: NormalizedApiItem): void {
+  private handleParameters(operation: any, api: NormalizedApiItem, spec: any): void {
     const params = Array.isArray(operation.parameters) ? operation.parameters : [];
     for (const param of params) {
+      if (param?.in === 'query') {
+        const expanded = this.expandStructuredQueryParameter(param, spec);
+        if (expanded.length > 0) {
+          api.req_query.push(...expanded);
+          continue;
+        }
+      }
       const data = normalizeParameter(param);
       switch (param.in) {
         case 'path':
@@ -252,6 +259,56 @@ export class OpenapiParserService {
           break;
       }
     }
+  }
+
+  private expandStructuredQueryParameter(param: any, spec: any): Array<Record<string, any>> {
+    const schema = this.resolveSchema(param?.schema, spec);
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+      return [];
+    }
+    if (String(schema.type || '').toLowerCase() !== 'object') {
+      return [];
+    }
+    return this.flattenQuerySchemaProperties(schema, '');
+  }
+
+  private flattenQuerySchemaProperties(
+    schema: Record<string, any>,
+    prefix: string
+  ): Array<Record<string, any>> {
+    const properties = schema.properties && typeof schema.properties === 'object'
+      ? schema.properties as Record<string, any>
+      : {};
+    const required = new Set(
+      Array.isArray(schema.required)
+        ? schema.required.map((item: unknown) => String(item))
+        : []
+    );
+    const rows: Array<Record<string, any>> = [];
+
+    Object.entries(properties).forEach(([name, property]) => {
+      const fieldName = prefix ? `${prefix}.${name}` : name;
+      const propertySchema = property && typeof property === 'object' && !Array.isArray(property)
+        ? property as Record<string, any>
+        : {};
+      const propertyType = String(propertySchema.type || '').toLowerCase();
+      if (propertyType === 'object' && propertySchema.properties && typeof propertySchema.properties === 'object') {
+        rows.push(...this.flattenQuerySchemaProperties(propertySchema, fieldName));
+        return;
+      }
+      rows.push({
+        name: fieldName,
+        desc: propertySchema.description || '',
+        required: required.has(name) ? '1' : '0',
+        example: typeof propertySchema.example !== 'undefined'
+          ? String(propertySchema.example)
+          : typeof propertySchema.default !== 'undefined'
+            ? String(propertySchema.default)
+            : ''
+      });
+    });
+
+    return rows;
   }
 
   private handleRequestBody(operation: any, api: NormalizedApiItem, spec: any): void {
