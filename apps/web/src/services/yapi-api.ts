@@ -113,6 +113,34 @@ type ColCaseItem = {
   up_time?: number;
 };
 
+type ProjectApiMarkdownMatchedItem = {
+  id: number;
+  title: string;
+  method: string;
+  path: string;
+  fullPath: string;
+  catName: string;
+};
+
+type ProjectApiMarkdownIgnoredItem = {
+  input: string;
+  reason: string;
+  interfaceId?: number;
+  inputProjectId?: number;
+};
+
+type ProjectApiMarkdownResult = {
+  projectId: number;
+  projectName: string;
+  basepath: string;
+  totalInputs: number;
+  matchedCount: number;
+  ignoredCount: number;
+  matched: ProjectApiMarkdownMatchedItem[];
+  ignored: ProjectApiMarkdownIgnoredItem[];
+  markdown: string;
+};
+
 function encodeQuery(params: Record<string, string | number | boolean | undefined>): string {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -573,6 +601,16 @@ export const yapiApi = createApi({
         body: payload
       }),
       invalidatesTags: (_result, _error, args) => [PROJECT_LIST_TAG, projectTag(args.id)]
+    }),
+    generateProjectApiMarkdown: builder.mutation<
+      ApiResult<ProjectApiMarkdownResult>,
+      { project_id: number; source: string; token?: string }
+    >({
+      query: payload => ({
+        url: '/project/api_markdown',
+        method: 'POST',
+        body: payload
+      })
     }),
     addProjectMember: builder.mutation<
       ApiResult<{
@@ -1351,6 +1389,7 @@ export const {
   useGetProjectEnvQuery,
   useUpdateProjectEnvMutation,
   useUpdateProjectTagMutation,
+  useGenerateProjectApiMarkdownMutation,
   useAddProjectMemberMutation,
   useGetProjectMemberListQuery,
   useLazyGetProjectMemberListQuery,

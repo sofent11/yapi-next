@@ -4,6 +4,7 @@ import { resReturn } from './common/api-response';
 import { mapError } from './common/error-response';
 import { InputMap, pickArray, pickBoolean, pickNumber, pickString } from './common/request-utils';
 import { LegacyCryptoService } from './services/legacy-crypto.service';
+import { ProjectApiMarkdownService } from './services/project-api-markdown.service';
 import { ProjectCompatService } from './services/project-compat.service';
 import { SessionAuthService } from './services/session-auth.service';
 
@@ -12,7 +13,8 @@ export class ProjectCompatController {
   constructor(
     private readonly sessionService: SessionAuthService,
     private readonly projectService: ProjectCompatService,
-    private readonly cryptoService: LegacyCryptoService
+    private readonly cryptoService: LegacyCryptoService,
+    private readonly projectApiMarkdownService: ProjectApiMarkdownService
   ) {}
 
   @Get('list')
@@ -224,6 +226,35 @@ export class ProjectCompatController {
         return resReturn(null, 405, '项目id不能为空');
       }
       const result = await this.projectService.updateProject(projectId, body, user);
+      return resReturn(result);
+    } catch (err) {
+      return this.mapProjectError(err);
+    }
+  }
+
+  @Post('api_markdown')
+  async generateApiMarkdown(@Req() req: FastifyRequest, @Body() body: InputMap) {
+    try {
+      const projectId = pickNumber(body.project_id) || pickNumber(body.id);
+      if (!projectId) {
+        return resReturn(null, 405, '项目id不能为空');
+      }
+
+      const token = pickString(body.token);
+      const user = await this.sessionService.getCurrentUser(req);
+      if (!user && !token) {
+        return resReturn(null, 40011, '请登录...');
+      }
+
+      const source = pickString(body.source) || pickString(body.urls) || '';
+      if (!source) {
+        return resReturn(null, 400, '请输入接口 URL');
+      }
+
+      const result = await this.projectApiMarkdownService.generate(projectId, source, {
+        user,
+        token
+      });
       return resReturn(result);
     } catch (err) {
       return this.mapProjectError(err);

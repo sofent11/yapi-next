@@ -7,7 +7,7 @@ import { AsyncRetryAction, AsyncState } from '../components/patterns/AsyncState'
 import { SecondaryNav } from '../components/patterns/SecondaryNav';
 import { ProjectHeader } from '../domains/project/ProjectHeader';
 
-const BUILT_IN_NAV_KEYS = new Set(['interface', 'activity', 'data', 'members', 'setting']);
+const BUILT_IN_NAV_KEYS = new Set(['interface', 'activity', 'data', 'members', 'setting', 'api-markdown']);
 
 function createLazyProjectPage(
   loader: () => Promise<{ default: ComponentType<any> }>
@@ -32,6 +32,9 @@ const ProjectMembersPage = createLazyProjectPage(() =>
 );
 const ProjectSettingPage = createLazyProjectPage(() =>
   import('./project/ProjectSettingPage').then(mod => ({ default: mod.ProjectSettingPage }))
+);
+const ProjectApiMarkdownPage = createLazyProjectPage(() =>
+  import('./project/ProjectApiMarkdownPage').then(mod => ({ default: mod.ProjectApiMarkdownPage }))
 );
 
 function normalizeProjectPath(path: string, projectId: number): string {
@@ -75,6 +78,10 @@ export function ProjectPage() {
       }
     };
     webPlugins.applySubNav(routes, { projectId });
+    routes['api-markdown'] = {
+      name: '接口 Markdown',
+      path: `/project/${projectId}/api-markdown`
+    };
 
     const normalized: Record<string, SubNavItem> = {};
     Object.keys(routes).forEach(key => {
@@ -161,7 +168,8 @@ export function ProjectPage() {
       activity: '查看项目级变更日志、操作记录和协作动态。',
       data: '执行 OpenAPI/Swagger 导入导出并跟踪任务状态。',
       members: '维护项目成员、角色和通知配置。',
-      setting: '配置项目基础信息、环境变量、Token 和全局 Mock。'
+      setting: '配置项目基础信息、环境变量、Token 和全局 Mock。',
+      'api-markdown': '按接口 URL 批量生成当前项目的 Markdown 接口说明。'
     };
     return {
       key,
@@ -218,6 +226,7 @@ export function ProjectPage() {
             <Route path="members" element={<ProjectMembersPage projectId={projectId} />} />
           ) : null}
           <Route path="setting" element={<ProjectSettingPage projectId={projectId} />} />
+          <Route path="api-markdown" element={<ProjectApiMarkdownPage projectId={projectId} />} />
           {pluginRouteItems.map(item => {
             const C = item.component;
             return <Route key={item.key} path={item.path} element={<C />} />;

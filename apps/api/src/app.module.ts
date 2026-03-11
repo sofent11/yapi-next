@@ -37,6 +37,7 @@ import { InterfaceConflictService } from './services/interface-conflict.service'
 import { OpenapiParserService } from './services/openapi-parser.service';
 import { PerfMetricsService } from './services/perf-metrics.service';
 import { ProjectAuthService } from './services/project-auth.service';
+import { ProjectApiMarkdownService } from './services/project-api-markdown.service';
 import { SpecImportTaskEntity, SpecImportTaskSchema } from './database/schemas/spec-import-task.schema';
 import { SpecImportTaskService } from './services/spec-import-task.service';
 import { SpecExportService } from './services/spec-export.service';
@@ -99,6 +100,7 @@ import { MockService } from './services/mock.service';
     OpenapiParserService,
     PerfMetricsService,
     ProjectAuthService,
+    ProjectApiMarkdownService,
     SpecImportTaskService,
     SpecExportService,
     SpecService,
