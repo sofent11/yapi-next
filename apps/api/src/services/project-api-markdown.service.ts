@@ -35,8 +35,21 @@ type MatchedInterfaceSummary = {
   catName: string;
 };
 
+type LooseObject = Record<string, unknown>;
+
+type SchemaMarkdownRow = {
+  field: string;
+  type: string;
+  required: string;
+  example: string;
+  description: string;
+  constraints: string;
+};
+
 @Injectable()
 export class ProjectApiMarkdownService {
+  private json5Parser: { parse: (input: string) => unknown } | null | undefined;
+
   constructor(
     @InjectModel(InterfaceEntity.name)
     private readonly interfaceModel: Model<InterfaceEntity>,
@@ -315,19 +328,8 @@ export class ProjectApiMarkdownService {
         this.pushParamTable(lines, `Body 参数 (${this.requestBodyModeLabel(item.req_body_type)})`, item.req_body_form);
       }
 
-      if (item.req_body_other) {
-        lines.push('');
-        lines.push(`### 请求体${item.req_body_is_json_schema ? ' Schema' : ''}`);
-        lines.push('');
-        lines.push(this.wrapCodeBlock(String(item.req_body_other), this.guessCodeLanguage(String(item.req_body_other), item.req_body_type)));
-      }
-
-      if (item.res_body) {
-        lines.push('');
-        lines.push(`### 返回体${item.res_body_is_json_schema ? ' Schema' : ''}`);
-        lines.push('');
-        lines.push(this.wrapCodeBlock(String(item.res_body), this.guessCodeLanguage(String(item.res_body), item.res_body_type)));
-      }
+      this.pushBodySection(lines, '请求体', item.req_body_other, item.req_body_type, item.req_body_is_json_schema === true);
+      this.pushBodySection(lines, '返回体', item.res_body, item.res_body_type, item.res_body_is_json_schema === true);
     });
 
     return lines.join('\n');
@@ -415,6 +417,349 @@ export class ProjectApiMarkdownService {
     const sec = Number(value || 0);
     if (!Number.isFinite(sec) || sec <= 0) return '-';
     return new Date(sec * 1000).toLocaleString();
+  }
+
+  private pushBodySection(
+    lines: string[],
+    title: string,
+    content: unknown,
+    bodyType: unknown,
+    isJsonSchema: boolean
+  ) {
+    const text = this.stringValue(content);
+    if (!text) return;
+
+    lines.push('');
+    lines.push(`### ${title}`);
+    lines.push('');
+
+    if (isJsonSchema) {
+      const schemaLines = this.renderJsonSchemaMarkdown(text);
+      if (schemaLines.length > 0) {
+        lines.push(...schemaLines);
+        return;
+      }
+    }
+
+    lines.push(this.wrapCodeBlock(text, this.guessCodeLanguage(text, bodyType)));
+  }
+
+  private renderJsonSchemaMarkdown(schemaText: string): string[] {
+    const parsed = this.parseJsonLoose<LooseObject | null>(schemaText, null);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return [];
+    }
+
+    const schema = this.ensureSchemaNodeType(parsed);
+    const lines: string[] = [];
+    const rootType = this.formatSchemaType(schema);
+    lines.push(`> 已根据 JSON Schema 自动整理，根类型：\`${rootType}\``);
+
+    const rootDescription = this.schemaDescription(schema);
+    if (rootDescription && rootDescription !== '-') {
+      lines.push(`> 结构说明：${rootDescription}`);
+    }
+
+    const rows = this.buildSchemaRows(schema);
+    if (rows.length > 0) {
+      lines.push('');
+      lines.push('#### 字段说明');
+      lines.push('');
+      lines.push('| 字段 | 类型 | 必填 | 示例 | 说明 | 约束 |');
+      lines.push('| --- | --- | --- | --- | --- | --- |');
+      rows.forEach(row => {
+        lines.push(
+          `| ${this.escapeTableCell(row.field)} | ${this.escapeTableCell(row.type)} | ${this.escapeTableCell(row.required)} | ${this.escapeTableCell(row.example)} | ${this.escapeTableCell(row.description)} | ${this.escapeTableCell(row.constraints)} |`
+        );
+      });
+    }
+
+    const example = this.schemaToExample(schema);
+    if (typeof example !== 'undefined') {
+      lines.push('');
+      lines.push('#### 示例 JSON');
+      lines.push('');
+      lines.push(this.wrapCodeBlock(JSON.stringify(example, null, 2), 'json'));
+    }
+
+    return lines;
+  }
+
+  private buildSchemaRows(schema: LooseObject): SchemaMarkdownRow[] {
+    const node = this.ensureSchemaNodeType(schema);
+    const type = this.resolveSchemaType(node);
+
+    if (type === 'object') {
+      const rows = this.buildObjectChildrenRows(node, '');
+      return rows.length > 0 ? rows : [this.createSchemaRow(node, '$', true)];
+    }
+
+    if (type === 'array') {
+      const rootPath = '$';
+      const rows = [this.createSchemaRow(node, rootPath, true)];
+      const itemNode = this.ensureSchemaNodeType(this.toLooseObject(node.items));
+      const itemType = this.resolveSchemaType(itemNode);
+      if (Object.keys(itemNode).length === 0) {
+        return rows;
+      }
+      if (itemType === 'object') {
+        return [...rows, ...this.buildObjectChildrenRows(itemNode, '$[]')];
+      }
+      return [...rows, this.createSchemaRow(itemNode, '$[]', true)];
+    }
+
+    return [this.createSchemaRow(node, '$', true)];
+  }
+
+  private buildObjectChildrenRows(node: LooseObject, basePath: string): SchemaMarkdownRow[] {
+    const properties = this.toLooseObject(node.properties);
+    const requiredSet = new Set(
+      Array.isArray(node.required) ? node.required.map(item => String(item)) : []
+    );
+    const rows: SchemaMarkdownRow[] = [];
+
+    Object.entries(properties).forEach(([name, value]) => {
+      const childNode = this.ensureSchemaNodeType(this.toLooseObject(value));
+      const childPath = basePath ? `${basePath}.${name}` : name;
+      const childType = this.resolveSchemaType(childNode);
+      rows.push(this.createSchemaRow(childNode, childPath, requiredSet.has(name)));
+
+      if (childType === 'object') {
+        rows.push(...this.buildObjectChildrenRows(childNode, childPath));
+      } else if (childType === 'array') {
+        const itemNode = this.ensureSchemaNodeType(this.toLooseObject(childNode.items));
+        const itemType = this.resolveSchemaType(itemNode);
+        if (Object.keys(itemNode).length === 0) {
+          return;
+        }
+        if (itemType === 'object') {
+          rows.push(...this.buildObjectChildrenRows(itemNode, `${childPath}[]`));
+        } else {
+          rows.push(this.createSchemaRow(itemNode, `${childPath}[]`, true));
+        }
+      }
+    });
+
+    return rows;
+  }
+
+  private createSchemaRow(node: LooseObject, field: string, required: boolean): SchemaMarkdownRow {
+    return {
+      field,
+      type: this.formatSchemaType(node),
+      required: required ? '是' : '否',
+      example: this.schemaExampleText(node),
+      description: this.schemaDescription(node),
+      constraints: this.schemaConstraintText(node)
+    };
+  }
+
+  private ensureSchemaNodeType(nodeInput: LooseObject): LooseObject {
+    const node = { ...nodeInput };
+    if (!node.type && node.properties && typeof node.properties === 'object' && !Array.isArray(node.properties)) {
+      node.type = 'object';
+    }
+    if (!node.type && node.items && typeof node.items === 'object') {
+      node.type = 'array';
+    }
+    return node;
+  }
+
+  private resolveSchemaType(nodeInput: LooseObject): string {
+    const node = this.ensureSchemaNodeType(nodeInput);
+    const rawType = node.type;
+    if (typeof rawType === 'string' && rawType.trim()) {
+      return rawType.trim().toLowerCase();
+    }
+    if (Array.isArray(rawType)) {
+      const candidates = rawType.map(item => String(item || '').trim().toLowerCase()).filter(Boolean);
+      const primary = candidates.find(item => item !== 'null');
+      if (primary) return primary;
+      if (candidates.length > 0) return candidates[0];
+    }
+    if (node.properties && typeof node.properties === 'object') return 'object';
+    if (node.items && typeof node.items === 'object') return 'array';
+    if (Array.isArray(node.enum) && node.enum.length > 0) {
+      const sample = node.enum[0];
+      if (typeof sample === 'number') return Number.isInteger(sample) ? 'integer' : 'number';
+      if (typeof sample === 'boolean') return 'boolean';
+    }
+    return 'any';
+  }
+
+  private formatSchemaType(nodeInput: LooseObject): string {
+    const node = this.ensureSchemaNodeType(nodeInput);
+    const type = this.resolveSchemaType(node);
+
+    if (type === 'array') {
+      const itemNode = this.ensureSchemaNodeType(this.toLooseObject(node.items));
+      const itemType = Object.keys(itemNode).length > 0 ? this.formatSchemaType(itemNode) : 'any';
+      return `array<${itemType}>`;
+    }
+
+    if ((type === 'string' || type === 'integer' || type === 'number') && typeof node.format === 'string' && node.format.trim()) {
+      return `${type}(${node.format.trim()})`;
+    }
+
+    return type;
+  }
+
+  private schemaDescription(node: LooseObject): string {
+    const title = this.stringValue(node.title);
+    const desc = this.stringValue(node.description);
+    return [title, desc].filter(Boolean).join('<br>') || '-';
+  }
+
+  private schemaExampleText(node: LooseObject): string {
+    if (Object.prototype.hasOwnProperty.call(node, 'example')) {
+      return this.displayValue(node.example);
+    }
+    if (Object.prototype.hasOwnProperty.call(node, 'default')) {
+      return this.displayValue(node.default);
+    }
+    if (Array.isArray(node.enum) && node.enum.length > 0) {
+      return this.displayValue(node.enum[0]);
+    }
+
+    const type = this.resolveSchemaType(node);
+    if (type === 'string') {
+      if (node.format === 'date-time') return '2026-01-01T00:00:00Z';
+      if (node.format === 'date') return '2026-01-01';
+      if (node.format === 'email') return 'user@example.com';
+      if (node.format === 'uuid') return '00000000-0000-0000-0000-000000000000';
+      return '-';
+    }
+    if (type === 'integer' || type === 'number') return '0';
+    if (type === 'boolean') return 'true';
+    if (type === 'array') return '[]';
+    if (type === 'object') return '{}';
+    if (type === 'null') return 'null';
+    return '-';
+  }
+
+  private schemaConstraintText(node: LooseObject): string {
+    const constraints: string[] = [];
+    if (Array.isArray(node.enum) && node.enum.length > 0) {
+      constraints.push(`枚举: ${node.enum.map(item => this.displayValue(item)).join(' / ')}`);
+    }
+    if (typeof node.pattern === 'string' && node.pattern) {
+      constraints.push(`pattern: ${node.pattern}`);
+    }
+    if (typeof node.minimum !== 'undefined' || typeof node.maximum !== 'undefined') {
+      constraints.push(`数值范围: ${this.rangeText(node.minimum, node.maximum)}`);
+    }
+    if (typeof node.minLength !== 'undefined' || typeof node.maxLength !== 'undefined') {
+      constraints.push(`长度: ${this.rangeText(node.minLength, node.maxLength)}`);
+    }
+    if (typeof node.minItems !== 'undefined' || typeof node.maxItems !== 'undefined') {
+      constraints.push(`数量: ${this.rangeText(node.minItems, node.maxItems)}`);
+    }
+    if (node.uniqueItems === true) {
+      constraints.push('元素唯一');
+    }
+    if (node.additionalProperties === false) {
+      constraints.push('不允许额外字段');
+    }
+    return constraints.join('<br>') || '-';
+  }
+
+  private rangeText(min: unknown, max: unknown): string {
+    const left = typeof min === 'undefined' ? '-∞' : this.displayValue(min);
+    const right = typeof max === 'undefined' ? '+∞' : this.displayValue(max);
+    return `${left} ~ ${right}`;
+  }
+
+  private displayValue(value: unknown): string {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (value === null) return 'null';
+    if (typeof value === 'undefined') return '-';
+    try {
+      return JSON.stringify(value);
+    } catch (_err) {
+      return String(value);
+    }
+  }
+
+  private schemaToExample(schemaInput: unknown): unknown {
+    if (!schemaInput || typeof schemaInput !== 'object') {
+      return undefined;
+    }
+
+    const schema = this.ensureSchemaNodeType(schemaInput as LooseObject);
+    if (Object.prototype.hasOwnProperty.call(schema, 'example')) {
+      return schema.example;
+    }
+    if (Object.prototype.hasOwnProperty.call(schema, 'default')) {
+      return schema.default;
+    }
+    if (Array.isArray(schema.enum) && schema.enum.length > 0) {
+      return schema.enum[0];
+    }
+
+    const type = this.resolveSchemaType(schema);
+    if (type === 'object') {
+      const properties = this.toLooseObject(schema.properties);
+      const output: LooseObject = {};
+      Object.entries(properties).forEach(([key, value]) => {
+        output[key] = this.schemaToExample(value);
+      });
+      return output;
+    }
+
+    if (type === 'array') {
+      const itemNode = this.toLooseObject(schema.items);
+      return Object.keys(itemNode).length > 0 ? [this.schemaToExample(itemNode)] : [];
+    }
+
+    if (type === 'integer' || type === 'number') return 0;
+    if (type === 'boolean') return true;
+    if (type === 'null') return null;
+    if (type === 'string') {
+      if (schema.format === 'date-time') return '2026-01-01T00:00:00Z';
+      if (schema.format === 'date') return '2026-01-01';
+      if (schema.format === 'email') return 'user@example.com';
+      if (schema.format === 'uuid') return '00000000-0000-0000-0000-000000000000';
+      return '';
+    }
+    return '';
+  }
+
+  private toLooseObject(input: unknown): LooseObject {
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      return input as LooseObject;
+    }
+    return {};
+  }
+
+  private parseJsonLoose<T>(input: unknown, fallback: T): T {
+    if (typeof input !== 'string') {
+      return (input as T) ?? fallback;
+    }
+    const value = input.trim();
+    if (!value) return fallback;
+    try {
+      return JSON.parse(value) as T;
+    } catch (_err) {}
+    const parser = this.loadJson5();
+    if (parser) {
+      try {
+        return parser.parse(value) as T;
+      } catch (_err) {}
+    }
+    return fallback;
+  }
+
+  private loadJson5(): { parse: (input: string) => unknown } | null {
+    if (typeof this.json5Parser !== 'undefined') return this.json5Parser;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      this.json5Parser = require('json5');
+      return this.json5Parser ?? null;
+    } catch (_err) {
+      this.json5Parser = null;
+      return null;
+    }
   }
 
   private wrapCodeBlock(content: string, language: string): string {
