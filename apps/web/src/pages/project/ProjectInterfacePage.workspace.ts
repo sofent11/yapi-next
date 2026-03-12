@@ -80,7 +80,9 @@ type BuildApiWorkspaceParams = {
   copyCatOpenApiJson: (catId: number) => void | Promise<void>;
   copyInterfaceSwaggerJson: (interfaceId: number) => void | Promise<void>;
   copyInterfaceOpenApiJson: (interfaceId: number) => void | Promise<void>;
+  copyInterfaceMarkdown: (interfaceId: number) => void | Promise<void>;
   copyingSpec: boolean;
+  copyingMarkdown: boolean;
   tab: string;
   interfaceTabs: Record<string, InterfaceTabItem>;
   handleSwitch: (next: string) => void;
@@ -245,7 +247,11 @@ export function buildProjectInterfaceApiWorkspace(
     onCopyInterfaceOpenApiJson: interfaceId => {
       void params.copyInterfaceOpenApiJson(interfaceId);
     },
+    onCopyInterfaceMarkdown: interfaceId => {
+      void params.copyInterfaceMarkdown(interfaceId);
+    },
     copyingSpec: params.copyingSpec,
+    copyingMarkdown: params.copyingMarkdown,
     onCopyInterface: row => void params.copyInterfaceRow(row),
     onDeleteInterface: params.confirmDeleteInterface,
     methodClassName: getHttpMethodBadgeClassName,

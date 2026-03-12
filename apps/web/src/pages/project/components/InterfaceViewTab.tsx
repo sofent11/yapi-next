@@ -48,7 +48,9 @@ type InterfaceViewTabProps = {
   onCopyText: (text: string, successText: string) => void;
   onCopySwaggerJson: (interfaceId: number) => void;
   onCopyOpenApiJson: (interfaceId: number) => void;
+  onCopyMarkdown: (interfaceId: number) => void;
   copyingSpec: boolean;
+  copyingMarkdown: boolean;
 };
 
 function renderCell(record: ParamRow, column: Record<string, unknown>) {
@@ -362,6 +364,17 @@ export function InterfaceViewTab(props: InterfaceViewTabProps) {
                 disabled={interfaceId <= 0}
               >
                 复制 OpenAPI
+              </Button>
+              <Button
+                size="xs"
+                variant="default"
+                radius="md"
+                className="bg-[var(--surface-panel)] font-medium hover:bg-[var(--surface-hover)] dark:!bg-[var(--surface-project-elevated)] dark:hover:brightness-110"
+                onClick={() => props.onCopyMarkdown(interfaceId)}
+                loading={props.copyingMarkdown}
+                disabled={interfaceId <= 0}
+              >
+                复制接口 Markdown
               </Button>
             </div>
           </div>

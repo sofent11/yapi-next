@@ -35,7 +35,9 @@ type InterfaceApiDetailTabsProps = {
   onCopyText: (text: string, successText: string) => void;
   onCopyInterfaceSwaggerJson: (interfaceId: number) => void;
   onCopyInterfaceOpenApiJson: (interfaceId: number) => void;
+  onCopyInterfaceMarkdown: (interfaceId: number) => void;
   copyingSpec: boolean;
+  copyingMarkdown: boolean;
   editConflictState: InterfaceEditConflictState;
   form: FormInstance;
   catRows: Array<{ _id: number; name: string }>;
@@ -124,7 +126,9 @@ export function InterfaceApiDetailTabs(props: InterfaceApiDetailTabsProps) {
             onCopyText={props.onCopyText}
             onCopySwaggerJson={props.onCopyInterfaceSwaggerJson}
             onCopyOpenApiJson={props.onCopyInterfaceOpenApiJson}
+            onCopyMarkdown={props.onCopyInterfaceMarkdown}
             copyingSpec={props.copyingSpec}
+            copyingMarkdown={props.copyingMarkdown}
           />
         )
       }];

@@ -41,7 +41,9 @@ export type InterfaceApiContentProps = {
   onCopyCatOpenApiJson: (catId: number) => void;
   onCopyInterfaceSwaggerJson: (interfaceId: number) => void;
   onCopyInterfaceOpenApiJson: (interfaceId: number) => void;
+  onCopyInterfaceMarkdown: (interfaceId: number) => void;
   copyingSpec: boolean;
+  copyingMarkdown: boolean;
   onCopyInterface: (row: InterfaceDTO) => void;
   onDeleteInterface: (id: number) => void;
   methodClassName: (method?: string) => string;
@@ -264,7 +266,9 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
             onCopyText={props.onCopyText}
             onCopySwaggerJson={props.onCopyInterfaceSwaggerJson}
             onCopyOpenApiJson={props.onCopyInterfaceOpenApiJson}
+            onCopyMarkdown={props.onCopyInterfaceMarkdown}
             copyingSpec={props.copyingSpec}
+            copyingMarkdown={props.copyingMarkdown}
           />
         ) : null}
         <InterfaceApiDetailTabs
@@ -295,7 +299,9 @@ export function InterfaceApiContent(props: InterfaceApiContentProps) {
           onCopyText={props.onCopyText}
           onCopyInterfaceSwaggerJson={props.onCopyInterfaceSwaggerJson}
           onCopyInterfaceOpenApiJson={props.onCopyInterfaceOpenApiJson}
+          onCopyInterfaceMarkdown={props.onCopyInterfaceMarkdown}
           copyingSpec={props.copyingSpec}
+          copyingMarkdown={props.copyingMarkdown}
           editConflictState={props.editConflictState}
           form={props.form}
           catRows={props.catRows}

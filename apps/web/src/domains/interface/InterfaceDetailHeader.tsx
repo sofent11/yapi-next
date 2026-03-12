@@ -12,7 +12,9 @@ type InterfaceDetailHeaderProps = {
   onCopyText: (text: string, successText: string) => void;
   onCopySwaggerJson: (interfaceId: number) => void;
   onCopyOpenApiJson: (interfaceId: number) => void;
+  onCopyMarkdown: (interfaceId: number) => void;
   copyingSpec: boolean;
+  copyingMarkdown: boolean;
 };
 
 export function InterfaceDetailHeader(props: InterfaceDetailHeaderProps) {
@@ -75,6 +77,15 @@ export function InterfaceDetailHeader(props: InterfaceDetailHeaderProps) {
           disabled={interfaceId <= 0}
         >
           复制 OpenAPI 3.0
+        </Button>
+        <Button
+          size="compact-sm"
+          variant="default"
+          onClick={() => props.onCopyMarkdown(interfaceId)}
+          loading={props.copyingMarkdown}
+          disabled={interfaceId <= 0}
+        >
+          复制接口 Markdown
         </Button>
       </div>
     </section>

@@ -3,7 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { useForm as useRcForm, useWatch as useRcWatch } from 'rc-field-form';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { InterfaceDTO } from '../../types/interface-dto';
-import { useExportSpecMutation } from '../../services/yapi-api';
+import { useExportSpecMutation, useGenerateProjectApiMarkdownMutation } from '../../services/yapi-api';
 import { safeApiRequest } from '../../utils/safe-request';
 import { useProjectInterfaceNavigationGuard } from './ProjectInterfacePage.navigation';
 import { useProjectInterfaceRequestRunner } from './ProjectInterfacePage.request-runner';
@@ -162,6 +162,7 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
   );
   const [editConflictState, setEditConflictState] = useState<EditConflictState>({ status: 'idle' });
   const [exportSpec, exportSpecState] = useExportSpecMutation();
+  const [generateApiMarkdown, generateApiMarkdownState] = useGenerateProjectApiMarkdownMutation();
 
   const [form] = useRcForm<EditForm>();
   const [addInterfaceForm] = useRcForm<AddInterfaceForm>();
@@ -706,6 +707,28 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     await copyExportedSpec('openapi3', { interfaceId: targetInterfaceId }, '接口 OpenAPI 3.0 已复制');
   }, [copyExportedSpec]);
 
+  const copyInterfaceMarkdown = useCallback(async (targetInterfaceId: number) => {
+    if (targetInterfaceId <= 0) {
+      message.warning('请先选择接口');
+      return;
+    }
+    const exportToken = projectTokenValue || props.token;
+    const response = await callApi(
+      generateApiMarkdown({
+        project_id: props.projectId,
+        source: String(targetInterfaceId),
+        token: exportToken
+      }).unwrap(),
+      '复制接口 Markdown 失败'
+    );
+    const markdown = String(response?.data?.markdown || '').trim();
+    if (!markdown) {
+      message.warning('当前接口没有可复制的 Markdown');
+      return;
+    }
+    await copyText(markdown, '接口 Markdown 已复制');
+  }, [callApi, copyText, generateApiMarkdown, projectTokenValue, props.projectId, props.token]);
+
   const { apiMenuProps, apiContentProps } = buildProjectInterfaceApiWorkspace({
     projectId: props.projectId,
     basepath: props.basepath,
@@ -751,7 +774,9 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     copyCatOpenApiJson,
     copyInterfaceSwaggerJson,
     copyInterfaceOpenApiJson,
+    copyInterfaceMarkdown,
     copyingSpec: exportSpecState.isLoading,
+    copyingMarkdown: generateApiMarkdownState.isLoading,
     tab,
     interfaceTabs,
     handleSwitch,
