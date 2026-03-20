@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Post, Query, Res } from '@nestjs/common';
-import { FastifyReply } from 'fastify';
+import { Body, Controller, Get, Post, Query, Req, Res } from '@nestjs/common';
+import { FastifyReply, FastifyRequest } from 'fastify';
 import type {
   InterfacePublishStatus,
   SpecExportFormat,
@@ -14,6 +14,8 @@ import { mapError } from './common/error-response';
 import { InputMap, pickJson, pickNumber, pickString, pickBoolean } from './common/request-utils';
 import { PerfMetricsService } from './services/perf-metrics.service';
 import { ProjectAuthService } from './services/project-auth.service';
+import { ProjectCompatService } from './services/project-compat.service';
+import { SessionAuthService } from './services/session-auth.service';
 import { SpecImportTaskService } from './services/spec-import-task.service';
 import { SpecService } from './services/spec.service';
 
@@ -22,20 +24,23 @@ export class SpecController {
   constructor(
     private readonly specService: SpecService,
     private readonly projectAuthService: ProjectAuthService,
+    private readonly projectCompatService: ProjectCompatService,
+    private readonly sessionService: SessionAuthService,
     private readonly metricsService: PerfMetricsService,
     private readonly taskService: SpecImportTaskService
   ) {}
 
   @Post('import')
-  async importSpec(@Body() body: InputMap) {
+  async importSpec(@Req() req: FastifyRequest, @Body() body: InputMap) {
     const startAt = Date.now();
     try {
       const token = pickString(body.token);
+      const user = await this.sessionService.getCurrentUser(req);
       const projectId = await this.projectAuthService.resolveProjectId(
         pickNumber(body.project_id),
         token
       );
-      await this.projectAuthService.assertProjectEditable(projectId, token);
+      await this.projectCompatService.assertProjectPermission(projectId, 'edit', { user, token });
 
       const source = this.normalizeSource(pickString(body.source));
       const format = this.normalizeFormat(pickString(body.format));
@@ -118,14 +123,15 @@ export class SpecController {
   }
 
   @Get('import/task')
-  async importTask(@Query() query: InputMap) {
+  async importTask(@Req() req: FastifyRequest, @Query() query: InputMap) {
     try {
       const token = pickString(query.token);
+      const user = await this.sessionService.getCurrentUser(req);
       const projectId = await this.projectAuthService.resolveProjectId(
         pickNumber(query.project_id),
         token
       );
-      await this.projectAuthService.assertProjectReadable(projectId, token);
+      await this.projectCompatService.assertProjectPermission(projectId, 'view', { user, token });
       const taskId = pickString(query.task_id);
       if (!taskId) {
         return resReturn(null, 400, 'task_id 不能为空');
@@ -139,14 +145,15 @@ export class SpecController {
   }
 
   @Get('import/tasks')
-  async importTasks(@Query() query: InputMap) {
+  async importTasks(@Req() req: FastifyRequest, @Query() query: InputMap) {
     try {
       const token = pickString(query.token);
+      const user = await this.sessionService.getCurrentUser(req);
       const projectId = await this.projectAuthService.resolveProjectId(
         pickNumber(query.project_id),
         token
       );
-      await this.projectAuthService.assertProjectReadable(projectId, token);
+      await this.projectCompatService.assertProjectPermission(projectId, 'view', { user, token });
       const limit = pickNumber(query.limit) || 20;
       const tasks = await this.taskService.listTasks(projectId, limit);
       return resReturn({
@@ -161,16 +168,18 @@ export class SpecController {
 
   @Get('import/task/download')
   async importTaskDownload(
+    @Req() req: FastifyRequest,
     @Query() query: InputMap,
     @Res({ passthrough: true }) reply: FastifyReply
   ) {
     try {
       const token = pickString(query.token);
+      const user = await this.sessionService.getCurrentUser(req);
       const projectId = await this.projectAuthService.resolveProjectId(
         pickNumber(query.project_id),
         token
       );
-      await this.projectAuthService.assertProjectReadable(projectId, token);
+      await this.projectCompatService.assertProjectPermission(projectId, 'view', { user, token });
       const taskId = pickString(query.task_id);
       if (!taskId) {
         return resReturn(null, 400, 'task_id 不能为空');
@@ -186,15 +195,16 @@ export class SpecController {
   }
 
   @Get('export')
-  async exportSpec(@Query() query: InputMap) {
+  async exportSpec(@Req() req: FastifyRequest, @Query() query: InputMap) {
     const startAt = Date.now();
     try {
       const token = pickString(query.token);
+      const user = await this.sessionService.getCurrentUser(req);
       const projectId = await this.projectAuthService.resolveProjectId(
         pickNumber(query.project_id) || pickNumber(query.pid),
         token
       );
-      await this.projectAuthService.assertProjectReadable(projectId, token);
+      await this.projectCompatService.assertProjectPermission(projectId, 'view', { user, token });
 
       const exportRequest: SpecExportQuery = {
         project_id: projectId,
