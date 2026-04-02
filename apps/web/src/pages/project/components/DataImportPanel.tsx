@@ -392,6 +392,9 @@ export default function DataImportPanel({ projectId, token, onTaskStart }: DataI
             value={defaultCatId > 0 ? String(defaultCatId) : null}
             onChange={value => setDefaultCatId(Number(value || 0))}
             disabled={catMenuQuery.isFetching}
+            searchable
+            nothingFoundMessage="没有匹配的分类"
+            limit={100}
             data={catList.map(item => ({
               label: String((item as Record<string, unknown>).name || ''),
               value: String(Number((item as Record<string, unknown>)._id || 0))

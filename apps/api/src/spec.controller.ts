@@ -36,10 +36,7 @@ export class SpecController {
     try {
       const token = pickString(body.token);
       const user = await this.sessionService.getCurrentUser(req);
-      const projectId = await this.projectAuthService.resolveProjectId(
-        pickNumber(body.project_id),
-        token
-      );
+      const projectId = await this.resolveProjectId(body, token);
       await this.projectCompatService.assertProjectPermission(projectId, 'edit', { user, token });
 
       const source = this.normalizeSource(pickString(body.source));
@@ -64,7 +61,7 @@ export class SpecController {
       if (asyncMode) {
         const task = await this.taskService.createTask({
           projectId,
-          uid: 0,
+          uid: user?._id || 0,
           source: importRequest.source || 'json',
           format: importRequest.format || 'auto',
           syncMode: importRequest.syncMode || 'merge',
@@ -80,6 +77,7 @@ export class SpecController {
             url: importRequest.url,
             syncMode: importRequest.syncMode || 'merge',
             dryRun: importRequest.dryRun,
+            uid: user?._id,
             onProgress: updateProgress
           })
         );
@@ -104,7 +102,8 @@ export class SpecController {
         json: importRequest.json,
         url: importRequest.url,
         syncMode: importRequest.syncMode || 'merge',
-        dryRun: importRequest.dryRun
+        dryRun: importRequest.dryRun,
+        uid: user?._id
       });
       this.metricsService.incCounter('yapi_api_spec_import_total', { status: 'ok', dryRun }, 1);
       this.metricsService.observeHistogram('yapi_api_spec_import_duration_ms', Date.now() - startAt, {
@@ -254,6 +253,12 @@ export class SpecController {
 
   private normalizeSource(source: string | undefined): SpecSource {
     return source === 'url' ? 'url' : 'json';
+  }
+
+  private async resolveProjectId(body: InputMap, token: string | undefined): Promise<number> {
+    const direct = pickNumber(body.project_id) || pickNumber(body.projectid) || pickNumber(body.id);
+    if (direct) return direct;
+    return this.projectAuthService.resolveProjectId(undefined, token);
   }
 
   private normalizeFormat(source: string | undefined): SpecFormat {
