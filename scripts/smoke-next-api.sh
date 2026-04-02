@@ -11,6 +11,7 @@ SERVER_BASE="http://127.0.0.1:${API_PORT}"
 API_BASE="http://127.0.0.1:${API_PORT}/api"
 
 COOKIE_JAR="$(mktemp -t yapi-next-cookie.XXXXXX)"
+COOKIE_JAR_MANAGER="$(mktemp -t yapi-next-manager-cookie.XXXXXX)"
 COOKIE_JAR_GUEST="$(mktemp -t yapi-next-guest-cookie.XXXXXX)"
 COOKIE_JAR_OTHER="$(mktemp -t yapi-next-other-cookie.XXXXXX)"
 API_LOG="$(mktemp -t yapi-next-api.XXXXXX)"
@@ -22,7 +23,7 @@ cleanup() {
     wait "${API_PID}" >/dev/null 2>&1 || true
   fi
   docker rm -f "${MONGO_CONTAINER}" >/dev/null 2>&1 || true
-  rm -f "${COOKIE_JAR}" "${COOKIE_JAR_GUEST}" "${COOKIE_JAR_OTHER}" "${API_LOG}"
+  rm -f "${COOKIE_JAR}" "${COOKIE_JAR_MANAGER}" "${COOKIE_JAR_GUEST}" "${COOKIE_JAR_OTHER}" "${API_LOG}"
 }
 trap cleanup EXIT
 
@@ -167,6 +168,8 @@ now_ts="$(date +%s)"
 email="smoke${now_ts}@example.com"
 username="smoke${now_ts}"
 password='Smoke123!'
+manager_email="smoke-manager${now_ts}@example.com"
+manager_username="smoke-manager${now_ts}"
 guest_email="smoke-guest${now_ts}@example.com"
 guest_username="smoke-guest${now_ts}"
 other_email="smoke-other${now_ts}@example.com"
@@ -185,10 +188,14 @@ resp="$(request_post_with_jar "${COOKIE_JAR_GUEST}" '/user/reg' "{\"email\":\"${
 assert_ok 'user/reg guest' "${resp}"
 guest_uid="$(json_pick "${resp}" 'data.uid')"
 
+log 'register manager user'
+resp="$(request_post_with_jar "${COOKIE_JAR_MANAGER}" '/user/reg' "{\"email\":\"${manager_email}\",\"username\":\"${manager_username}\",\"password\":\"${password}\"}")"
+assert_ok 'user/reg manager' "${resp}"
+manager_uid="$(json_pick "${resp}" 'data.uid')"
+
 log 'register unrelated user'
 resp="$(request_post_with_jar "${COOKIE_JAR_OTHER}" '/user/reg' "{\"email\":\"${other_email}\",\"username\":\"${other_username}\",\"password\":\"${password}\"}")"
 assert_ok 'user/reg other' "${resp}"
-other_uid="$(json_pick "${resp}" 'data.uid')"
 
 log 'get user status'
 resp="$(request_get '/user/status')"
@@ -209,6 +216,10 @@ log 'create shared public group'
 resp="$(request_post '/group/add' "{\"group_name\":\"${shared_group_name}\",\"group_desc\":\"smoke shared group\",\"owner_uids\":[${owner_uid}]}")"
 assert_ok 'group/add shared' "${resp}"
 shared_group_id="$(json_pick "${resp}" 'data._id')"
+
+log 'promote manager user to shared group owner'
+resp="$(request_post '/group/add_member' "{\"id\":${shared_group_id},\"member_uids\":[${manager_uid}],\"role\":\"owner\"}")"
+assert_ok 'group/add_member manager owner' "${resp}"
 
 log 'add guest user into shared group as guest'
 resp="$(request_post '/group/add_member' "{\"id\":${shared_group_id},\"member_uids\":[${guest_uid}],\"role\":\"guest\"}")"
@@ -246,6 +257,18 @@ const obj = JSON.parse(process.argv[1]);
 if ((obj?.data?.project || []).length !== 0) process.exit(1);
 if ((obj?.data?.interface || []).length !== 0) process.exit(1);
 ' "${resp}" || fail 'project/search leaked inaccessible project data'
+
+log 'group owner plus project dev inherits member management'
+resp="$(request_post '/project/add_member' "{\"id\":${shared_project_id},\"member_uids\":[${manager_uid}],\"role\":\"dev\"}")"
+assert_ok 'project/add_member manager dev' "${resp}"
+resp="$(request_get_with_jar "${COOKIE_JAR_MANAGER}" "/project/get?project_id=${shared_project_id}")"
+assert_ok 'project/get manager merged role' "${resp}"
+node -e '
+const obj = JSON.parse(process.argv[1]);
+if (String(obj?.data?.role || "") !== "owner") process.exit(1);
+' "${resp}" || fail 'group owner + project dev should resolve to owner'
+resp="$(request_post_with_jar "${COOKIE_JAR_MANAGER}" '/project/add_member' "{\"id\":${shared_project_id},\"member_uids\":[${guest_uid}],\"role\":\"guest\"}")"
+assert_ok 'project/add_member by merged owner' "${resp}"
 
 log 'read category menu'
 resp="$(request_get "/interface/getCatMenu?project_id=${project_id}")"

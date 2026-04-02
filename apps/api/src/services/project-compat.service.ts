@@ -957,19 +957,20 @@ export class ProjectCompatService {
   ): Promise<string> {
     if (!user) return 'guest';
     if (user.role === 'admin') return 'admin';
-    if (project.uid === user._id) return 'owner';
 
-    const members = Array.isArray(project.members) ? (project.members as ProjectMember[]) : [];
-    const found = members.find(member => Number(member?.uid) === user._id);
-    if (found?.role === 'owner') return 'owner';
-    if (found?.role === 'dev') return 'dev';
-    if (found?.role === 'guest') return 'guest';
+    let projectRole = 'member';
+    if (project.uid === user._id) {
+      projectRole = 'owner';
+    } else {
+      const members = Array.isArray(project.members) ? (project.members as ProjectMember[]) : [];
+      const found = members.find(member => Number(member?.uid) === user._id);
+      if (found?.role === 'owner') projectRole = 'owner';
+      else if (found?.role === 'dev') projectRole = 'dev';
+      else if (found?.role === 'guest') projectRole = 'guest';
+    }
 
     const groupRole = await this.resolveGroupRole(project.group_id, user);
-    if (groupRole === 'admin' || groupRole === 'owner' || groupRole === 'dev' || groupRole === 'guest') {
-      return groupRole;
-    }
-    return 'member';
+    return this.pickHigherRole(projectRole, groupRole);
   }
 
   private async resolveGroupRole(groupId: number, user: SessionUser): Promise<string> {
@@ -1131,6 +1132,18 @@ export class ProjectCompatService {
 
   private isReadableRole(role: string): boolean {
     return role === 'admin' || role === 'owner' || role === 'dev' || role === 'guest';
+  }
+
+  private pickHigherRole(left: string, right: string): string {
+    return this.roleRank(left) <= this.roleRank(right) ? left : right;
+  }
+
+  private roleRank(role: string): number {
+    if (role === 'admin') return 0;
+    if (role === 'owner') return 1;
+    if (role === 'dev') return 2;
+    if (role === 'guest') return 3;
+    return 4;
   }
 
   private now(): number {
