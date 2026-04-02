@@ -87,14 +87,10 @@ export class ProjectCompatService {
       const result: Array<Record<string, unknown>> = [];
       for (const item of rows) {
         if (item.project_type === 'private' && !canGroupView) {
-          const members = this.projectMembers(item);
-          const isMember =
-            user.role === 'admin' ||
-            Number(item.uid) === user._id ||
-            members.some(member => Number(member.uid) === user._id);
-          if (!isMember) {
-            continue;
-          }
+          continue;
+        }
+        if (!(await this.canViewByUser(item, user))) {
+          continue;
         }
         const withFollow = {
           ...item,
@@ -113,10 +109,16 @@ export class ProjectCompatService {
       .find({ _id: { $in: Array.from(followProjectIds) } })
       .sort({ _id: -1 })
       .lean();
-    const followed = followedProjects.map(item => ({
-      ...item,
-      follow: true
-    }));
+    const followed: Array<Record<string, unknown>> = [];
+    for (const item of followedProjects) {
+      if (!(await this.canViewByUser(item, user))) {
+        continue;
+      }
+      followed.push({
+        ...item,
+        follow: true
+      });
+    }
     const merged = followed.concat(
       rows.map(item => ({
         ...item,
@@ -483,7 +485,7 @@ export class ProjectCompatService {
     };
   }
 
-  async searchKeyword(keyword: string): Promise<Record<string, unknown>> {
+  async searchKeyword(keyword: string, user: SessionUser): Promise<Record<string, unknown>> {
     if (!keyword) {
       throw new Error('No keyword.');
     }
@@ -498,7 +500,52 @@ export class ProjectCompatService {
       this.interfaceModel.find({ title: regex }).limit(10).lean()
     ]);
 
-    const project = projectListRaw.map(item => ({
+    const visibleProjects: ProjectEntity[] = [];
+    for (const item of projectListRaw) {
+      if (await this.canViewByUser(item, user)) {
+        visibleProjects.push(item);
+      }
+    }
+
+    const visibleProjectIds = new Set<number>(visibleProjects.map(item => Number(item._id)));
+    const interfaceProjectIds = Array.from(
+      new Set(
+        interfaceListRaw
+          .map(item => Number(item.project_id))
+          .filter(projectId => Number.isFinite(projectId) && !visibleProjectIds.has(projectId))
+      )
+    );
+
+    let extraProjects: ProjectEntity[] = [];
+    if (interfaceProjectIds.length > 0) {
+      extraProjects = await this.projectModel.find({ _id: { $in: interfaceProjectIds } }).lean();
+      for (const item of extraProjects) {
+        if (await this.canViewByUser(item, user)) {
+          visibleProjectIds.add(Number(item._id));
+        }
+      }
+    }
+
+    const visibleProjectGroupIds = new Set<number>(
+      visibleProjects.map(item => Number(item.group_id)).filter(item => Number.isFinite(item))
+    );
+    extraProjects.forEach(item => {
+      if (visibleProjectIds.has(Number(item._id)) && Number.isFinite(Number(item.group_id))) {
+        visibleProjectGroupIds.add(Number(item.group_id));
+      }
+    });
+    const visibleGroups: GroupEntity[] = [];
+    for (const item of groupListRaw) {
+      const groupId = Number(item._id);
+      if (
+        visibleProjectGroupIds.has(groupId) ||
+        (Number.isFinite(groupId) && (await this.canViewGroup(groupId, user)))
+      ) {
+        visibleGroups.push(item);
+      }
+    }
+
+    const project = visibleProjects.map(item => ({
       _id: item._id,
       name: item.name,
       basepath: item.basepath,
@@ -509,7 +556,7 @@ export class ProjectCompatService {
       upTime: item.up_time,
       addTime: (item as any).add_time
     }));
-    const group = groupListRaw.map(item => ({
+    const group = visibleGroups.map(item => ({
       _id: item._id,
       uid: item.uid,
       groupName: item.group_name,
@@ -517,14 +564,16 @@ export class ProjectCompatService {
       addTime: item.add_time,
       upTime: item.up_time
     }));
-    const api = interfaceListRaw.map(item => ({
-      _id: item._id,
-      uid: item.uid,
-      title: item.title,
-      projectId: item.project_id,
-      addTime: item.add_time,
-      upTime: item.up_time
-    }));
+    const api = interfaceListRaw
+      .filter(item => visibleProjectIds.has(Number(item.project_id)))
+      .map(item => ({
+        _id: item._id,
+        uid: item.uid,
+        title: item.title,
+        projectId: item.project_id,
+        addTime: item.add_time,
+        upTime: item.up_time
+      }));
 
     return {
       project,
@@ -852,7 +901,7 @@ export class ProjectCompatService {
         if (!tokenAuth.user) {
           return project;
         }
-        if (this.canViewByUser(project, tokenAuth.user)) {
+        if (await this.canViewByUser(project, tokenAuth.user)) {
           return project;
         }
       }
@@ -894,18 +943,12 @@ export class ProjectCompatService {
     return this.canViewByUser(project, options.user);
   }
 
-  private canViewByUser(project: ProjectEntity, user: SessionUser): boolean {
-    if (user.role === 'admin') {
-      return true;
-    }
+  private async canViewByUser(project: ProjectEntity, user: SessionUser): Promise<boolean> {
     if (project.project_type !== 'private') {
       return true;
     }
-    if (project.uid === user._id) {
-      return true;
-    }
-    const members = Array.isArray(project.members) ? (project.members as ProjectMember[]) : [];
-    return members.some(member => Number(member?.uid) === user._id);
+    const role = await this.resolveProjectRole(project, user);
+    return this.isReadableRole(role);
   }
 
   private async resolveProjectRole(
@@ -944,7 +987,7 @@ export class ProjectCompatService {
 
   private async canViewGroup(groupId: number, user: SessionUser): Promise<boolean> {
     const role = await this.resolveGroupRole(groupId, user);
-    return role === 'admin' || role === 'owner' || role === 'dev' || role === 'guest';
+    return this.isReadableRole(role);
   }
 
   private async ensureGroupEditable(groupId: number, user: SessionUser): Promise<void> {
@@ -972,7 +1015,7 @@ export class ProjectCompatService {
       if (role === 'admin' || role === 'owner' || role === 'dev') return;
       throw new ForbiddenException('没有权限');
     }
-    if (role === 'admin' || role === 'owner' || role === 'dev' || role === 'guest') {
+    if (this.isReadableRole(role)) {
       return;
     }
     throw new ForbiddenException('没有权限');
@@ -1084,6 +1127,10 @@ export class ProjectCompatService {
 
   private isBadSearchKeyword(keyword: string): boolean {
     return /^\*|\?|\+|\$|\^|\\|\.$/.test(keyword);
+  }
+
+  private isReadableRole(role: string): boolean {
+    return role === 'admin' || role === 'owner' || role === 'dev' || role === 'guest';
   }
 
   private now(): number {

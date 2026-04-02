@@ -397,7 +397,14 @@ export class UserCompatController {
         const role = await this.resolveProjectRole(project, current);
         result.project = {
           ...project,
-          role: role === 'owner' ? 'owner' : role === 'dev' ? 'dev' : 'member'
+          role:
+            role === 'owner'
+              ? 'owner'
+              : role === 'dev'
+                ? 'dev'
+                : role === 'guest'
+                  ? 'guest'
+                  : 'member'
         };
         type = 'group';
         id = project.group_id;
@@ -411,7 +418,14 @@ export class UserCompatController {
         const role = this.resolveGroupRole(group, current);
         result.group = {
           ...group,
-          role: role === 'owner' ? 'owner' : role === 'dev' ? 'dev' : 'member'
+          role:
+            role === 'owner'
+              ? 'owner'
+              : role === 'dev'
+                ? 'dev'
+                : role === 'guest'
+                  ? 'guest'
+                  : 'member'
         };
       }
 

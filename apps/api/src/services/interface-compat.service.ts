@@ -310,13 +310,7 @@ export class InterfaceCompatService {
     if (!row) {
       throw new Error('不存在的接口');
     }
-
-    const actorUid = this.actorUid(options.user);
-    if (row.uid === actorUid) {
-      await this.projectService.assertProjectPermission(row.project_id, 'view', options);
-    } else {
-      await this.projectService.assertProjectPermission(row.project_id, 'danger', options);
-    }
+    await this.projectService.assertProjectPermission(row.project_id, 'edit', options);
 
     const result = await this.interfaceModel.deleteOne({ _id: id });
     await this.caseModel.deleteMany({ interface_id: id });
@@ -380,12 +374,7 @@ export class InterfaceCompatService {
 
   async delCat(catid: number, options: AccessOptions): Promise<Record<string, unknown>> {
     const cat = await this.requireCat(catid);
-    const actorUid = this.actorUid(options.user);
-    if (cat.uid === actorUid) {
-      await this.projectService.assertProjectPermission(cat.project_id, 'view', options);
-    } else {
-      await this.projectService.assertProjectPermission(cat.project_id, 'danger', options);
-    }
+    await this.projectService.assertProjectPermission(cat.project_id, 'edit', options);
 
     const interfaces = await this.interfaceModel.find({ catid }).select('_id').lean();
     const interfaceIds = interfaces.map(item => item._id);

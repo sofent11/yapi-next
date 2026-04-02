@@ -117,7 +117,7 @@ export class ProjectCompatController {
       if (!projectId) {
         return resReturn(null, 400, 'project_id不能为空');
       }
-      await this.projectService.assertProjectExists(projectId);
+      await this.projectService.assertProjectPermission(projectId, 'view', { user });
       const rawToken = await this.projectService.getOrCreateToken(projectId);
       const token = this.cryptoService.encodeProjectAccessToken(rawToken, user._id);
       return resReturn(token);
@@ -141,6 +141,7 @@ export class ProjectCompatController {
       if (!projectId) {
         return resReturn(null, 400, 'project_id不能为空');
       }
+      await this.projectService.assertProjectPermission(projectId, 'danger', { user });
       const result = await this.projectService.rotateToken(projectId);
       return resReturn({
         ...result.result,
@@ -423,7 +424,7 @@ export class ProjectCompatController {
         return resReturn(null, 40011, '请登录...');
       }
       const keyword = pickString(query.q);
-      const data = await this.projectService.searchKeyword(keyword || '');
+      const data = await this.projectService.searchKeyword(keyword || '', user);
       return resReturn(data, 0, 'ok');
     } catch (err) {
       const mapped = mapError(err);

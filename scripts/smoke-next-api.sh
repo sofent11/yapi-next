@@ -11,6 +11,8 @@ SERVER_BASE="http://127.0.0.1:${API_PORT}"
 API_BASE="http://127.0.0.1:${API_PORT}/api"
 
 COOKIE_JAR="$(mktemp -t yapi-next-cookie.XXXXXX)"
+COOKIE_JAR_GUEST="$(mktemp -t yapi-next-guest-cookie.XXXXXX)"
+COOKIE_JAR_OTHER="$(mktemp -t yapi-next-other-cookie.XXXXXX)"
 API_LOG="$(mktemp -t yapi-next-api.XXXXXX)"
 API_PID=""
 
@@ -20,7 +22,7 @@ cleanup() {
     wait "${API_PID}" >/dev/null 2>&1 || true
   fi
   docker rm -f "${MONGO_CONTAINER}" >/dev/null 2>&1 || true
-  rm -f "${COOKIE_JAR}" "${API_LOG}"
+  rm -f "${COOKIE_JAR}" "${COOKIE_JAR_GUEST}" "${COOKIE_JAR_OTHER}" "${API_LOG}"
 }
 trap cleanup EXIT
 
@@ -70,27 +72,63 @@ assert_ok() {
   fi
 }
 
+assert_errcode() {
+  local step="$1"
+  local resp="$2"
+  local expected="$3"
+  local code
+  code="$(json_errcode "${resp}" 2>/dev/null || true)"
+  if [[ "${code}" != "${expected}" ]]; then
+    fail "${step} expected errcode ${expected}, got ${code}: ${resp}"
+  fi
+}
+
+assert_not_ok() {
+  local step="$1"
+  local resp="$2"
+  local code
+  code="$(json_errcode "${resp}" 2>/dev/null || true)"
+  if [[ "${code}" == "0" ]]; then
+    fail "${step} should fail but succeeded: ${resp}"
+  fi
+}
+
 urlencode() {
   node -e 'process.stdout.write(encodeURIComponent(process.argv[1]));' "$1"
 }
 
+request_get_with_jar() {
+  local jar="$1"
+  local path="$2"
+  curl -sS -b "${jar}" -c "${jar}" "${API_BASE}${path}"
+}
+
 request_get() {
-  local path="$1"
-  curl -sS -b "${COOKIE_JAR}" -c "${COOKIE_JAR}" "${API_BASE}${path}"
+  request_get_with_jar "${COOKIE_JAR}" "$1"
+}
+
+request_get_root_with_jar() {
+  local jar="$1"
+  local path="$2"
+  curl -sS -b "${jar}" -c "${jar}" "${SERVER_BASE}${path}"
 }
 
 request_get_root() {
-  local path="$1"
-  curl -sS -b "${COOKIE_JAR}" -c "${COOKIE_JAR}" "${SERVER_BASE}${path}"
+  request_get_root_with_jar "${COOKIE_JAR}" "$1"
 }
 
-request_post() {
-  local path="$1"
-  local body="$2"
-  curl -sS -b "${COOKIE_JAR}" -c "${COOKIE_JAR}" \
+request_post_with_jar() {
+  local jar="$1"
+  local path="$2"
+  local body="$3"
+  curl -sS -b "${jar}" -c "${jar}" \
     -H 'Content-Type: application/json' \
     -X POST "${API_BASE}${path}" \
     --data "${body}"
+}
+
+request_post() {
+  request_post_with_jar "${COOKIE_JAR}" "$1" "$2"
 }
 
 log "checking prerequisites"
@@ -129,11 +167,28 @@ now_ts="$(date +%s)"
 email="smoke${now_ts}@example.com"
 username="smoke${now_ts}"
 password='Smoke123!'
+guest_email="smoke-guest${now_ts}@example.com"
+guest_username="smoke-guest${now_ts}"
+other_email="smoke-other${now_ts}@example.com"
+other_username="smoke-other${now_ts}"
 project_name="smoke-next-${now_ts}"
+shared_group_name="smoke-group-${now_ts}"
+shared_project_name="smoke-shared-${now_ts}"
 
 log 'register user'
 resp="$(request_post '/user/reg' "{\"email\":\"${email}\",\"username\":\"${username}\",\"password\":\"${password}\"}")"
 assert_ok 'user/reg' "${resp}"
+owner_uid="$(json_pick "${resp}" 'data.uid')"
+
+log 'register guest user'
+resp="$(request_post_with_jar "${COOKIE_JAR_GUEST}" '/user/reg' "{\"email\":\"${guest_email}\",\"username\":\"${guest_username}\",\"password\":\"${password}\"}")"
+assert_ok 'user/reg guest' "${resp}"
+guest_uid="$(json_pick "${resp}" 'data.uid')"
+
+log 'register unrelated user'
+resp="$(request_post_with_jar "${COOKIE_JAR_OTHER}" '/user/reg' "{\"email\":\"${other_email}\",\"username\":\"${other_username}\",\"password\":\"${password}\"}")"
+assert_ok 'user/reg other' "${resp}"
+other_uid="$(json_pick "${resp}" 'data.uid')"
 
 log 'get user status'
 resp="$(request_get '/user/status')"
@@ -150,20 +205,65 @@ resp="$(request_post '/project/add' "{\"name\":\"${project_name}\",\"group_id\":
 assert_ok 'project/add' "${resp}"
 project_id="$(json_pick "${resp}" 'data._id')"
 
+log 'create shared public group'
+resp="$(request_post '/group/add' "{\"group_name\":\"${shared_group_name}\",\"group_desc\":\"smoke shared group\",\"owner_uids\":[${owner_uid}]}")"
+assert_ok 'group/add shared' "${resp}"
+shared_group_id="$(json_pick "${resp}" 'data._id')"
+
+log 'add guest user into shared group as guest'
+resp="$(request_post '/group/add_member' "{\"id\":${shared_group_id},\"member_uids\":[${guest_uid}],\"role\":\"guest\"}")"
+assert_ok 'group/add_member guest' "${resp}"
+
+log 'create shared private project'
+resp="$(request_post '/project/add' "{\"name\":\"${shared_project_name}\",\"group_id\":${shared_group_id},\"basepath\":\"/api/shared\",\"project_type\":\"private\"}")"
+assert_ok 'project/add shared' "${resp}"
+shared_project_id="$(json_pick "${resp}" 'data._id')"
+
 log 'query project token'
 resp="$(request_get "/project/token?project_id=${project_id}")"
 assert_ok 'project/token' "${resp}"
 project_token="$(json_pick "${resp}" 'data')"
+
+log 'guest can read inherited private project and unrelated user cannot get token'
+resp="$(request_get_with_jar "${COOKIE_JAR_GUEST}" "/project/list?group_id=${shared_group_id}")"
+assert_ok 'project/list guest inherited' "${resp}"
+node -e '
+const obj = JSON.parse(process.argv[1]);
+if (!Array.isArray(obj?.data?.list) || !obj.data.list.some(item => Number(item._id) === Number(process.argv[2]))) process.exit(1);
+' "${resp}" "${shared_project_id}" || fail 'guest project list missing inherited project'
+resp="$(request_get_with_jar "${COOKIE_JAR_GUEST}" "/project/get?project_id=${shared_project_id}")"
+assert_ok 'project/get guest inherited' "${resp}"
+resp="$(request_get_with_jar "${COOKIE_JAR_GUEST}" "/project/token?project_id=${shared_project_id}")"
+assert_ok 'project/token guest view' "${resp}"
+resp="$(request_get_with_jar "${COOKIE_JAR_OTHER}" "/project/token?project_id=${shared_project_id}")"
+assert_not_ok 'project/token unrelated user' "${resp}"
+resp="$(request_get_with_jar "${COOKIE_JAR_GUEST}" "/project/update_token?project_id=${shared_project_id}")"
+assert_not_ok 'project/update_token guest' "${resp}"
+resp="$(request_get_with_jar "${COOKIE_JAR_OTHER}" "/project/search?q=$(urlencode "${shared_project_name}")")"
+assert_ok 'project/search unrelated user' "${resp}"
+node -e '
+const obj = JSON.parse(process.argv[1]);
+if ((obj?.data?.project || []).length !== 0) process.exit(1);
+if ((obj?.data?.interface || []).length !== 0) process.exit(1);
+' "${resp}" || fail 'project/search leaked inaccessible project data'
 
 log 'read category menu'
 resp="$(request_get "/interface/getCatMenu?project_id=${project_id}")"
 assert_ok 'interface/getCatMenu' "${resp}"
 cat_id="$(json_pick "${resp}" 'data.0._id')"
 
+resp="$(request_get "/interface/getCatMenu?project_id=${shared_project_id}")"
+assert_ok 'interface/getCatMenu shared' "${resp}"
+shared_cat_id="$(json_pick "${resp}" 'data.0._id')"
+
 log 'add one interface'
 resp="$(request_post '/interface/add' "{\"project_id\":${project_id},\"catid\":${cat_id},\"title\":\"smoke-api\",\"path\":\"/smoke/manual\",\"method\":\"GET\"}")"
 assert_ok 'interface/add' "${resp}"
 interface_id="$(json_pick "${resp}" 'data._id')"
+
+resp="$(request_post '/interface/add' "{\"project_id\":${shared_project_id},\"catid\":${shared_cat_id},\"title\":\"shared-smoke-api\",\"path\":\"/shared/manual\",\"method\":\"GET\"}")"
+assert_ok 'interface/add shared' "${resp}"
+shared_interface_id="$(json_pick "${resp}" 'data._id')"
 
 log 'check interface list/tree endpoints'
 resp="$(request_get "/interface/list_menu?project_id=${project_id}")"
@@ -172,6 +272,26 @@ resp="$(request_get "/interface/tree?project_id=${project_id}&page=1&limit=20&in
 assert_ok 'interface/tree' "${resp}"
 resp="$(request_get "/interface/tree/node?catid=${cat_id}&page=1&limit=20")"
 assert_ok 'interface/tree/node' "${resp}"
+
+log 'guest can read inherited interface but cannot delete it'
+resp="$(request_get_with_jar "${COOKIE_JAR_GUEST}" "/interface/list?project_id=${shared_project_id}")"
+assert_ok 'interface/list guest inherited' "${resp}"
+node -e '
+const obj = JSON.parse(process.argv[1]);
+if (!Array.isArray(obj?.data?.list) || !obj.data.list.some(item => Number(item._id) === Number(process.argv[2]))) process.exit(1);
+' "${resp}" "${shared_interface_id}" || fail 'guest interface list missing inherited interface'
+resp="$(request_get_with_jar "${COOKIE_JAR_GUEST}" "/interface/get?id=${shared_interface_id}&project_id=${shared_project_id}")"
+assert_ok 'interface/get guest inherited' "${resp}"
+resp="$(request_post_with_jar "${COOKIE_JAR_GUEST}" '/interface/del' "{\"id\":${shared_interface_id}}")"
+assert_not_ok 'interface/del guest should fail' "${resp}"
+resp="$(request_post_with_jar "${COOKIE_JAR_GUEST}" '/interface/del_cat' "{\"catid\":${shared_cat_id}}")"
+assert_not_ok 'interface/del_cat guest should fail' "${resp}"
+resp="$(request_get_with_jar "${COOKIE_JAR_OTHER}" "/project/search?q=$(urlencode "shared-smoke-api")")"
+assert_ok 'project/search unrelated interface filter' "${resp}"
+node -e '
+const obj = JSON.parse(process.argv[1]);
+if ((obj?.data?.interface || []).length !== 0) process.exit(1);
+' "${resp}" || fail 'project/search leaked inaccessible interface data'
 
 log 'prepare interface mock payload'
 resp="$(request_post '/interface/up' "{\"id\":${interface_id},\"res_body_type\":\"json\",\"res_body\":\"{\\\"code\\\":200,\\\"message\\\":\\\"mock-ok\\\"}\"}")"
