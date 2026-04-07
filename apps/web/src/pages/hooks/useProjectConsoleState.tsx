@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { modals } from '@mantine/modals';
-import { notifications } from '@mantine/notifications';
 import { Alert } from '@mantine/core';
 import { useForm as useRcForm, useWatch as useRcWatch } from 'rc-field-form';
 import type { GroupListItem, ProjectListItem, UserSearchItem } from '@yapi-next/shared-types';
@@ -25,7 +24,6 @@ import {
 } from '../../services/yapi-api';
 import type { GroupSettingForm } from '../components/ProjectConsoleSettingTab';
 import { useGuide } from '../../context/GuideContext';
-import { safeApiRequest } from '../../utils/safe-request';
 import type {
   ConsoleTabKey,
   CopyForm,
@@ -37,25 +35,7 @@ import {
   isConsoleTabKey,
   normalizeGroups
 } from '../ProjectConsolePage.utils';
-
-function showNotification(color: 'red' | 'teal' | 'yellow' | 'blue', message: string) {
-  notifications.show({ color, message });
-}
-
-const message = {
-  success(text: string) {
-    showNotification('teal', text);
-  },
-  error(text: string) {
-    showNotification('red', text);
-  },
-  warning(text: string) {
-    showNotification('yellow', text);
-  },
-  info(text: string) {
-    showNotification('blue', text);
-  }
-};
+import { projectConsoleMessage as message, useProjectConsoleApiCall } from './project-console-feedback';
 
 export function useProjectConsoleState() {
   const navigate = useNavigate();
@@ -100,11 +80,7 @@ export function useProjectConsoleState() {
   const [searchUsers] = useLazySearchUsersQuery();
   const [ownerUserOptions, setOwnerUserOptions] = useState<Array<{ label: string; value: number }>>([]);
   const guide = useGuide();
-  const callApi = useCallback(
-    <T extends { errcode?: number; errmsg?: string }>(request: Promise<T>, fallback: string) =>
-      safeApiRequest(request, { fallback, onError: msg => message.error(msg) }),
-    []
-  );
+  const callApi = useProjectConsoleApiCall();
 
   const groups = useMemo(() => {
     const rows = (groupListQuery.data?.data || []) as GroupListItem[];

@@ -13,9 +13,8 @@ import { resReturn } from './common/api-response';
 import { mapError } from './common/error-response';
 import { InputMap, pickJson, pickNumber, pickString, pickBoolean } from './common/request-utils';
 import { PerfMetricsService } from './services/perf-metrics.service';
+import { AccessContextService } from './services/access-context.service';
 import { ProjectAuthService } from './services/project-auth.service';
-import { ProjectCompatService } from './services/project-compat.service';
-import { SessionAuthService } from './services/session-auth.service';
 import { SpecImportTaskService } from './services/spec-import-task.service';
 import { SpecService } from './services/spec.service';
 
@@ -23,9 +22,8 @@ import { SpecService } from './services/spec.service';
 export class SpecController {
   constructor(
     private readonly specService: SpecService,
+    private readonly accessContextService: AccessContextService,
     private readonly projectAuthService: ProjectAuthService,
-    private readonly projectCompatService: ProjectCompatService,
-    private readonly sessionService: SessionAuthService,
     private readonly metricsService: PerfMetricsService,
     private readonly taskService: SpecImportTaskService
   ) {}
@@ -34,10 +32,14 @@ export class SpecController {
   async importSpec(@Req() req: FastifyRequest, @Body() body: InputMap) {
     const startAt = Date.now();
     try {
-      const token = pickString(body.token);
-      const user = await this.sessionService.getCurrentUser(req);
+      const token = this.accessContextService.pickToken(body);
       const projectId = await this.resolveProjectId(body, token);
-      await this.projectCompatService.assertProjectPermission(projectId, 'edit', { user, token });
+      const access = await this.accessContextService.assertProjectAccess({
+        req,
+        token,
+        projectId,
+        action: 'edit'
+      });
 
       const source = this.normalizeSource(pickString(body.source));
       const format = this.normalizeFormat(pickString(body.format));
@@ -61,7 +63,7 @@ export class SpecController {
       if (asyncMode) {
         const task = await this.taskService.createTask({
           projectId,
-          uid: user?._id || 0,
+          uid: access.user?._id || 0,
           source: importRequest.source || 'json',
           format: importRequest.format || 'auto',
           syncMode: importRequest.syncMode || 'merge',
@@ -77,7 +79,7 @@ export class SpecController {
             url: importRequest.url,
             syncMode: importRequest.syncMode || 'merge',
             dryRun: importRequest.dryRun,
-            uid: user?._id,
+            uid: access.user?._id,
             onProgress: updateProgress
           })
         );
@@ -103,7 +105,7 @@ export class SpecController {
         url: importRequest.url,
         syncMode: importRequest.syncMode || 'merge',
         dryRun: importRequest.dryRun,
-        uid: user?._id
+        uid: access.user?._id
       });
       this.metricsService.incCounter('yapi_api_spec_import_total', { status: 'ok', dryRun }, 1);
       this.metricsService.observeHistogram('yapi_api_spec_import_duration_ms', Date.now() - startAt, {
@@ -124,18 +126,17 @@ export class SpecController {
   @Get('import/task')
   async importTask(@Req() req: FastifyRequest, @Query() query: InputMap) {
     try {
-      const token = pickString(query.token);
-      const user = await this.sessionService.getCurrentUser(req);
-      const projectId = await this.projectAuthService.resolveProjectId(
-        pickNumber(query.project_id),
-        token
-      );
-      await this.projectCompatService.assertProjectPermission(projectId, 'view', { user, token });
+      const access = await this.accessContextService.assertProjectAccess({
+        req,
+        token: this.accessContextService.pickToken(query),
+        projectId: pickNumber(query.project_id),
+        action: 'view'
+      });
       const taskId = pickString(query.task_id);
       if (!taskId) {
         return resReturn(null, 400, 'task_id 不能为空');
       }
-      const task = await this.taskService.getTask(taskId, projectId);
+      const task = await this.taskService.getTask(taskId, access.projectId as number);
       return resReturn(task);
     } catch (err) {
       const mapped = mapError(err);
@@ -146,15 +147,14 @@ export class SpecController {
   @Get('import/tasks')
   async importTasks(@Req() req: FastifyRequest, @Query() query: InputMap) {
     try {
-      const token = pickString(query.token);
-      const user = await this.sessionService.getCurrentUser(req);
-      const projectId = await this.projectAuthService.resolveProjectId(
-        pickNumber(query.project_id),
-        token
-      );
-      await this.projectCompatService.assertProjectPermission(projectId, 'view', { user, token });
+      const access = await this.accessContextService.assertProjectAccess({
+        req,
+        token: this.accessContextService.pickToken(query),
+        projectId: pickNumber(query.project_id),
+        action: 'view'
+      });
       const limit = pickNumber(query.limit) || 20;
-      const tasks = await this.taskService.listTasks(projectId, limit);
+      const tasks = await this.taskService.listTasks(access.projectId as number, limit);
       return resReturn({
         count: tasks.length,
         list: tasks
@@ -172,18 +172,17 @@ export class SpecController {
     @Res({ passthrough: true }) reply: FastifyReply
   ) {
     try {
-      const token = pickString(query.token);
-      const user = await this.sessionService.getCurrentUser(req);
-      const projectId = await this.projectAuthService.resolveProjectId(
-        pickNumber(query.project_id),
-        token
-      );
-      await this.projectCompatService.assertProjectPermission(projectId, 'view', { user, token });
+      const access = await this.accessContextService.assertProjectAccess({
+        req,
+        token: this.accessContextService.pickToken(query),
+        projectId: pickNumber(query.project_id),
+        action: 'view'
+      });
       const taskId = pickString(query.task_id);
       if (!taskId) {
         return resReturn(null, 400, 'task_id 不能为空');
       }
-      const task = await this.taskService.getTask(taskId, projectId);
+      const task = await this.taskService.getTask(taskId, access.projectId as number);
       reply.header('Content-Type', 'application/json; charset=utf-8');
       reply.header('Content-Disposition', `attachment; filename=spec-import-task-${taskId}.json`);
       return JSON.stringify(task, null, 2);
@@ -197,22 +196,21 @@ export class SpecController {
   async exportSpec(@Req() req: FastifyRequest, @Query() query: InputMap) {
     const startAt = Date.now();
     try {
-      const token = pickString(query.token);
-      const user = await this.sessionService.getCurrentUser(req);
-      const projectId = await this.projectAuthService.resolveProjectId(
-        pickNumber(query.project_id) || pickNumber(query.pid),
-        token
-      );
-      await this.projectCompatService.assertProjectPermission(projectId, 'view', { user, token });
+      const access = await this.accessContextService.assertProjectAccess({
+        req,
+        token: this.accessContextService.pickToken(query),
+        projectId: pickNumber(query.project_id) || pickNumber(query.pid),
+        action: 'view'
+      });
 
       const exportRequest: SpecExportQuery = {
-        project_id: projectId,
+        project_id: access.projectId as number,
         format: this.normalizeExportFormat(pickString(query.format)),
         status: this.normalizeStatus(pickString(query.status)),
         withWiki: pickBoolean(query.withWiki) || pickBoolean(query.with_wiki),
         cat_id: pickNumber(query.cat_id),
         interface_id: pickNumber(query.interface_id),
-        token
+        token: access.token
       };
       const result = await this.specService.export({
         projectId: exportRequest.project_id,

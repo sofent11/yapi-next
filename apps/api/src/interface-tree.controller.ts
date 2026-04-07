@@ -4,39 +4,36 @@ import type { InterfaceTreeQuery } from '@yapi-next/shared-types';
 import { resReturn } from './common/api-response';
 import { mapError } from './common/error-response';
 import { InputMap, pickBoolean, pickNumber, pickOneOrMany, pickString } from './common/request-utils';
+import { AccessContextService } from './services/access-context.service';
 import { InterfaceCatService } from './services/interface-cat.service';
 import { InterfaceTreeService } from './services/interface-tree.service';
-import { ProjectAuthService } from './services/project-auth.service';
 import { ProjectCompatService } from './services/project-compat.service';
-import { SessionAuthService } from './services/session-auth.service';
 
 @Controller('interface')
 export class InterfaceTreeController {
   constructor(
     private readonly treeService: InterfaceTreeService,
     private readonly catService: InterfaceCatService,
-    private readonly projectAuthService: ProjectAuthService,
+    private readonly accessContextService: AccessContextService,
     private readonly projectCompatService: ProjectCompatService,
-    private readonly sessionService: SessionAuthService
   ) {}
 
   @Get('list_menu')
   async listMenu(@Req() req: FastifyRequest, @Query() query: InputMap) {
     try {
-      const token = pickString(query.token);
-      const projectId = await this.projectAuthService.resolveProjectId(
-        pickNumber(query.project_id),
-        token
-      );
-      const user = await this.sessionService.getCurrentUser(req);
-      await this.projectCompatService.assertProjectPermission(projectId, 'view', { user, token });
+      const access = await this.accessContextService.assertProjectAccess({
+        req,
+        token: this.accessContextService.pickToken(query),
+        projectId: pickNumber(query.project_id),
+        action: 'view'
+      });
 
       const typedQuery: InterfaceTreeQuery = {
-        project_id: projectId,
+        project_id: access.projectId as number,
         status: pickOneOrMany(query.status),
         tag: pickOneOrMany(query.tag),
         detail: this.normalizeDetail(pickString(query.detail)),
-        token
+        token: access.token
       };
       const result = await this.treeService.listMenu({
         projectId: typedQuery.project_id,
@@ -54,23 +51,22 @@ export class InterfaceTreeController {
   @Get('tree')
   async tree(@Req() req: FastifyRequest, @Query() query: InputMap) {
     try {
-      const token = pickString(query.token);
-      const projectId = await this.projectAuthService.resolveProjectId(
-        pickNumber(query.project_id),
-        token
-      );
-      const user = await this.sessionService.getCurrentUser(req);
-      await this.projectCompatService.assertProjectPermission(projectId, 'view', { user, token });
+      const access = await this.accessContextService.assertProjectAccess({
+        req,
+        token: this.accessContextService.pickToken(query),
+        projectId: pickNumber(query.project_id),
+        action: 'view'
+      });
 
       const typedQuery: InterfaceTreeQuery = {
-        project_id: projectId,
+        project_id: access.projectId as number,
         page: pickNumber(query.page),
         limit: pickNumber(query.limit),
         status: pickOneOrMany(query.status),
         tag: pickOneOrMany(query.tag),
         include_list: pickBoolean(query.include_list),
         detail: this.normalizeDetail(pickString(query.detail)),
-        token
+        token: access.token
       };
       const result = await this.treeService.tree({
         projectId: typedQuery.project_id,
@@ -101,11 +97,11 @@ export class InterfaceTreeController {
         return resReturn(null, 404, '不存在的分类');
       }
 
-      const token = pickString(query.token);
-      const user = await this.sessionService.getCurrentUser(req);
+      const token = this.accessContextService.pickToken(query);
+      const access = await this.accessContextService.resolveContext(req, token);
       await this.projectCompatService.assertProjectPermission(cat.project_id, 'view', {
-        user,
-        token
+        user: access.user,
+        token: access.token
       });
 
       const result = await this.treeService.treeNode({
