@@ -260,6 +260,10 @@
     @apply rounded-none border-0 bg-transparent px-0 py-0 shadow-none;
   }
 
+  .schema-editor-head-scroll {
+    @apply overflow-x-auto;
+  }
+
   .schema-editor-head-grid {
     @apply grid min-w-[980px] grid-cols-[minmax(220px,260px)_88px_140px_180px_220px_150px] items-center gap-3;
   }
