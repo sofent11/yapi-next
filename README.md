@@ -110,6 +110,7 @@ npm run perf:roundtrip
 
 ### Docker 构建相关
 - 根目录 `.env` 中的 `VITE_APP_BASE` 会传入 Docker 构建阶段，用于生成前端静态资源路径
+- Docker 多阶段构建已按 `api` 和 `web` 分离；仅修改 `apps/web` 时，不会再因为共享 builder 把 `api` 目标一并重编译
 - 可从 [`.env.example`](/Users/sofent/work/yapi/.env.example) 复制一份为根目录 `.env`
 
 部署到子路径（例如 `/yapi/`）时，可使用：
