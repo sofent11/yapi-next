@@ -377,6 +377,76 @@ export function useProjectInterfaceApiActions(params: UseProjectInterfaceApiActi
     });
   }, [params]);
 
+  const deleteInterfacesDirect = useCallback(async (ids: number[]) => {
+    const normalizedIds = Array.from(new Set(ids.map(item => Number(item || 0)).filter(item => item > 0)));
+    if (normalizedIds.length === 0) return [] as number[];
+
+    const deletedIds = (
+      await Promise.all(
+        normalizedIds.map(async id => {
+          const response = await params.callApi(
+            params.delInterface({
+              id,
+              project_id: params.projectId,
+              token: params.token
+            }).unwrap(),
+            `删除接口 #${id} 失败`
+          );
+          return response ? id : 0;
+        })
+      )
+    ).filter((item): item is number => item > 0);
+
+    if (deletedIds.length === 0) return [];
+
+    if (deletedIds.length === normalizedIds.length) {
+      message.success(deletedIds.length === 1 ? '接口已删除' : `已删除 ${deletedIds.length} 个接口`);
+    } else {
+      message.warning(`已删除 ${deletedIds.length} 个接口，部分删除失败`);
+    }
+
+    await Promise.all([params.refetchInterfaceListSafe(), params.refreshInterfaceMenu()]);
+    if (deletedIds.includes(params.interfaceId)) {
+      params.navigate(`/project/${params.projectId}/interface/api`);
+    }
+    return deletedIds;
+  }, [params]);
+
+  const deleteInterfaceCatsDirect = useCallback(async (catIds: number[]) => {
+    const normalizedCatIds = Array.from(new Set(catIds.map(item => Number(item || 0)).filter(item => item > 0)));
+    if (normalizedCatIds.length === 0) return [] as number[];
+
+    const deletedCatIds = (
+      await Promise.all(
+        normalizedCatIds.map(async catid => {
+          const response = await params.callApi(
+            params.delInterfaceCat({
+              catid,
+              project_id: params.projectId,
+              token: params.token
+            }).unwrap(),
+            `删除分类 #${catid} 失败`
+          );
+          return response ? catid : 0;
+        })
+      )
+    ).filter((item): item is number => item > 0);
+
+    if (deletedCatIds.length === 0) return [];
+
+    if (deletedCatIds.length === normalizedCatIds.length) {
+      message.success(deletedCatIds.length === 1 ? '分类已删除' : `已删除 ${deletedCatIds.length} 个空分类`);
+    } else {
+      message.warning(`已删除 ${deletedCatIds.length} 个空分类，部分删除失败`);
+    }
+
+    await Promise.all([params.refreshInterfaceMenu(), params.refetchInterfaceListSafe()]);
+    if (deletedCatIds.includes(params.catId)) {
+      params.navigate(`/project/${params.projectId}/interface/api`);
+    }
+    return deletedCatIds;
+  }, [params]);
+
   const copyInterfaceRow = useCallback(async (row: InterfaceDTO) => {
     const sourceId = Number(row._id || 0);
     if (sourceId <= 0) {
@@ -565,6 +635,8 @@ export function useProjectInterfaceApiActions(params: UseProjectInterfaceApiActi
     openEditCatModal,
     confirmDeleteCat,
     confirmDeleteInterface,
+    deleteInterfacesDirect,
+    deleteInterfaceCatsDirect,
     copyInterfaceRow,
     openAddCatModal,
     openTagSettingModal,

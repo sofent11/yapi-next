@@ -1,4 +1,5 @@
 import json5 from 'json5';
+import type { InterfaceTreeNode } from '@yapi-next/shared-types';
 import type { InterfaceDTO } from '../../types/interface-dto';
 import type { 
   InterfaceNodePageResponse, SchemaRow, ParamRow,
@@ -578,4 +579,100 @@ export function parseColId(value: string | undefined): number {
 export function toRecord(input: unknown): Record<string, unknown> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
   return input as Record<string, unknown>;
+}
+
+export type DuplicateInterfaceGroupItem = {
+  id: number;
+  title: string;
+  path: string;
+  method: string;
+  catid: number;
+  categoryName: string;
+  variant: 'short' | 'long';
+  pathDepth: number;
+};
+
+export type DuplicateInterfaceGroup = {
+  key: string;
+  shortPath: string;
+  shortItems: DuplicateInterfaceGroupItem[];
+  longItems: DuplicateInterfaceGroupItem[];
+  items: DuplicateInterfaceGroupItem[];
+};
+
+type DuplicateInterfaceCandidate = Omit<DuplicateInterfaceGroupItem, 'variant'>;
+
+function normalizeDuplicatePathSegments(path: string): string[] {
+  const normalized = normalizePathInput(path);
+  if (!normalized) return [];
+  return normalized.split('/').filter(Boolean);
+}
+
+function sortDuplicateItems(a: DuplicateInterfaceGroupItem, b: DuplicateInterfaceGroupItem): number {
+  if (a.variant !== b.variant) {
+    return a.variant === 'short' ? -1 : 1;
+  }
+  if (a.pathDepth !== b.pathDepth) {
+    return a.pathDepth - b.pathDepth;
+  }
+  const pathCompare = a.path.localeCompare(b.path, 'zh-CN');
+  if (pathCompare !== 0) return pathCompare;
+  return a.id - b.id;
+}
+
+export function buildDuplicateInterfaceGroups(
+  rows: InterfaceTreeNode[],
+  hiddenIds: number[] = []
+): DuplicateInterfaceGroup[] {
+  const hiddenIdSet = new Set(hiddenIds.map(item => Number(item || 0)).filter(item => item > 0));
+  const exactPathMap = new Map<string, DuplicateInterfaceCandidate[]>();
+  const longPathMap = new Map<string, DuplicateInterfaceCandidate[]>();
+
+  rows.forEach(cat => {
+    const categoryName = String(cat.name || '未分类');
+    (cat.list || []).forEach(item => {
+      const id = Number(item._id || 0);
+      if (id <= 0 || hiddenIdSet.has(id)) return;
+      const path = normalizePathInput(String(item.path || ''));
+      if (!path) return;
+      const segments = normalizeDuplicatePathSegments(path);
+      if (segments.length === 0) return;
+      const candidate: DuplicateInterfaceCandidate = {
+        id,
+        title: String(item.title || path),
+        path,
+        method: String(item.method || 'GET').toUpperCase(),
+        catid: Number(item.catid || cat._id || 0),
+        categoryName,
+        pathDepth: segments.length
+      };
+      exactPathMap.set(path, [...(exactPathMap.get(path) || []), candidate]);
+      if (segments.length < 2) return;
+      const shortPath = `/${segments.slice(1).join('/')}`;
+      longPathMap.set(shortPath, [...(longPathMap.get(shortPath) || []), candidate]);
+    });
+  });
+
+  return Array.from(longPathMap.entries())
+    .map(([shortPath, candidates]) => {
+      const shortItems = (exactPathMap.get(shortPath) || []).map(item => ({ ...item, variant: 'short' as const }));
+      const longItems = candidates
+        .filter(item => item.path !== shortPath)
+        .map(item => ({ ...item, variant: 'long' as const }));
+      if (shortItems.length === 0 || longItems.length === 0) return null;
+      const items = [...shortItems, ...longItems].sort(sortDuplicateItems);
+      return {
+        key: shortPath,
+        shortPath,
+        shortItems: [...shortItems].sort(sortDuplicateItems),
+        longItems: [...longItems].sort(sortDuplicateItems),
+        items
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const sizeDiff = (b?.items.length || 0) - (a?.items.length || 0);
+      if (sizeDiff !== 0) return sizeDiff;
+      return String(a?.shortPath || '').localeCompare(String(b?.shortPath || ''), 'zh-CN');
+    }) as DuplicateInterfaceGroup[];
 }

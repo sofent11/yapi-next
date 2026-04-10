@@ -11,6 +11,7 @@ export type ProjectInterfaceApiMenuProps = {
   canEdit: boolean;
   hasCategories: boolean;
   menuDisplayRows: InterfaceTreeNode[];
+  governanceRows: InterfaceTreeNode[];
   catId: number;
   interfaceId: number;
   expandedCatIds: number[];
@@ -31,6 +32,8 @@ export type ProjectInterfaceApiMenuProps = {
   confirmDeleteCat: (cat: InterfaceTreeNode) => void;
   copyInterfaceRow: (item: InterfaceDTO) => void;
   confirmDeleteInterface: (id: number) => void;
+  deleteInterfacesDirect: (ids: number[]) => Promise<number[]>;
+  deleteInterfaceCatsDirect: (catIds: number[]) => Promise<number[]>;
 };
 
 export function ProjectInterfaceApiMenu(props: ProjectInterfaceApiMenuProps) {
@@ -40,6 +43,7 @@ export function ProjectInterfaceApiMenu(props: ProjectInterfaceApiMenuProps) {
       canEdit={props.canEdit}
       hasCategories={props.hasCategories}
       menuDisplayRows={props.menuDisplayRows}
+      governanceRows={props.governanceRows}
       catId={props.catId}
       interfaceId={props.interfaceId}
       expandedCatIds={props.expandedCatIds}
@@ -75,6 +79,8 @@ export function ProjectInterfaceApiMenu(props: ProjectInterfaceApiMenuProps) {
       onNavigateInterface={ifaceId => props.navigateWithGuard(`/project/${props.projectId}/interface/api/${ifaceId}`)}
       onCopyInterface={item => void props.copyInterfaceRow(item)}
       onDeleteInterface={props.confirmDeleteInterface}
+      onDeleteInterfacesDirect={props.deleteInterfacesDirect}
+      onDeleteInterfaceCatsDirect={props.deleteInterfaceCatsDirect}
       methodClassName={getHttpMethodBadgeClassName}
     />
   );

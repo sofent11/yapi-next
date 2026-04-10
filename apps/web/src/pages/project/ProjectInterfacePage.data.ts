@@ -335,8 +335,8 @@ export function useProjectInterfaceData(params: UseProjectInterfaceDataParams) {
     params.catLoadedRef.current = {};
     params.setCatInterfaceMap({});
     params.setCatLoadingMap({});
-    await Promise.all([treeQuery.refetch(), catMenuQuery.refetch()]);
-  }, [catMenuQuery, params, treeQuery]);
+    await Promise.all([treeQuery.refetch(), catMenuQuery.refetch(), menuSearchQuery.refetch()]);
+  }, [catMenuQuery, menuSearchQuery, params, treeQuery]);
 
   const refetchInterfaceListSafe = useCallback(async () => {
     if (params.addCaseOpen || shouldFetchGlobalInterfaceList) {
@@ -459,6 +459,7 @@ export function useProjectInterfaceData(params: UseProjectInterfaceDataParams) {
     importTreeQuery,
     allInterfaces,
     treeRows,
+    menuSearchRows,
     catRows,
     currentInterface,
     colRows,

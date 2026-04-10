@@ -41,6 +41,7 @@ type BuildApiWorkspaceParams = {
   canEdit: boolean;
   menuKeyword: string;
   menuDisplayRows: InterfaceTreeNode[];
+  governanceRows: InterfaceTreeNode[];
   catId: number;
   interfaceId: number;
   expandedCatIds: number[];
@@ -60,6 +61,8 @@ type BuildApiWorkspaceParams = {
   confirmDeleteCat: (cat: InterfaceTreeNode) => void;
   copyInterfaceRow: (item: InterfaceDTO) => void | Promise<void>;
   confirmDeleteInterface: (id: number) => void;
+  deleteInterfacesDirect: (ids: number[]) => Promise<number[]>;
+  deleteInterfaceCatsDirect: (catIds: number[]) => Promise<number[]>;
   detailLoading: boolean;
   currentInterface: InterfaceDTO | null;
   currentCat: { _id?: number; name?: string; desc?: string } | null;
@@ -179,6 +182,7 @@ export function buildProjectInterfaceApiWorkspace(
     canEdit: params.canEdit,
     hasCategories: params.catRows.length > 0,
     menuDisplayRows: params.menuDisplayRows,
+    governanceRows: params.governanceRows,
     catId: params.catId,
     interfaceId: params.interfaceId,
     expandedCatIds: params.expandedCatIds,
@@ -198,7 +202,9 @@ export function buildProjectInterfaceApiWorkspace(
     openEditCatModal: params.openEditCatModal,
     confirmDeleteCat: params.confirmDeleteCat,
     copyInterfaceRow: params.copyInterfaceRow,
-    confirmDeleteInterface: params.confirmDeleteInterface
+    confirmDeleteInterface: params.confirmDeleteInterface,
+    deleteInterfacesDirect: params.deleteInterfacesDirect,
+    deleteInterfaceCatsDirect: params.deleteInterfaceCatsDirect
   };
 
   const apiContentProps: InterfaceApiContentProps = {

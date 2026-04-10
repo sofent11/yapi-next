@@ -1,25 +1,20 @@
-import type { KeyboardEvent } from 'react';
-import { Badge, Button, Text, Tooltip } from '@mantine/core';
-import {
-  IconChevronDown,
-  IconChevronRight,
-  IconCopy,
-  IconPlus,
-  IconTrash,
-  IconEdit
-} from '@tabler/icons-react';
+import { useState, type KeyboardEvent } from 'react';
+import { Button, Text, Tooltip } from '@mantine/core';
+import { IconCopy, IconHierarchy3, IconPlus, IconTrash, IconEdit } from '@tabler/icons-react';
 import type { InterfaceTreeNode } from '@yapi-next/shared-types';
 import type { InterfaceDTO } from '../../../types/interface-dto';
 import { ResourceGroupCard } from '../../../domains/interface/ResourceGroupCard';
 import { ResourceIconButton } from '../../../domains/interface/ResourceIconButton';
 import { ResourceLeafRow } from '../../../domains/interface/ResourceLeafRow';
 import { ResourceNavShell } from '../../../domains/interface/ResourceNavShell';
+import { InterfaceDuplicateGovernanceModal } from './InterfaceDuplicateGovernanceModal';
 
 type InterfaceMenuPanelProps = {
   menuKeyword: string;
   canEdit: boolean;
   hasCategories: boolean;
   menuDisplayRows: InterfaceTreeNode[];
+  governanceRows: InterfaceTreeNode[];
   catId: number;
   interfaceId: number;
   expandedCatIds: number[];
@@ -43,10 +38,13 @@ type InterfaceMenuPanelProps = {
   onNavigateInterface: (interfaceId: number) => void;
   onCopyInterface: (row: InterfaceDTO) => void;
   onDeleteInterface: (interfaceId: number) => void;
+  onDeleteInterfacesDirect: (ids: number[]) => Promise<number[]>;
+  onDeleteInterfaceCatsDirect: (catIds: number[]) => Promise<number[]>;
   methodClassName: (method?: string) => string;
 };
 
 export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
+  const [duplicateGovernanceOpen, setDuplicateGovernanceOpen] = useState(false);
   const keywordMode = props.menuKeyword.trim().length > 0;
   const totalInterfaceCount = props.menuDisplayRows.reduce(
     (sum, cat) => sum + Number(cat.interface_count || cat.list?.length || 0),
@@ -76,6 +74,9 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
               <Button size="xs" onClick={props.onOpenAddInterface} disabled={!props.hasCategories} leftSection={<IconPlus size={14} />}>
                 接口
               </Button>
+              <Button size="xs" variant="default" onClick={() => setDuplicateGovernanceOpen(true)} leftSection={<IconHierarchy3 size={14} />}>
+                接口治理
+              </Button>
               <Button size="xs" variant="default" onClick={props.onOpenAddCat} leftSection={<IconPlus size={14} />}>
                 分类
               </Button>
@@ -97,6 +98,14 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
         ) : null
       }
     >
+      <InterfaceDuplicateGovernanceModal
+        opened={duplicateGovernanceOpen}
+        onClose={() => setDuplicateGovernanceOpen(false)}
+        rows={props.governanceRows}
+        onNavigateInterface={props.onNavigateInterface}
+        onDeleteInterfaces={props.onDeleteInterfacesDirect}
+        onDeleteEmptyCategories={props.onDeleteInterfaceCatsDirect}
+      />
 
       {props.menuDisplayRows.map(cat => {
         const catIdNum = Number(cat._id || 0);
