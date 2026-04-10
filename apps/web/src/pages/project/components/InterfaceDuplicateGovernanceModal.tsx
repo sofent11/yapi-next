@@ -188,7 +188,7 @@ export function InterfaceDuplicateGovernanceModal(props: InterfaceDuplicateGover
     >
       <div className="space-y-4">
         <Alert color="blue" variant="light" title="重复判定规则">
-          仅当两个 path 的尾部完全一致，且长路径只比短路径多 1 个前缀段时，才会归为重复。
+          仅当两个接口的 HTTP Method 相同，且 path 尾部完全一致、长路径只比短路径多 1 个前缀段时，才会归为重复。
           例如 `/no-auth/product/page` 和 `/product/page` 会命中，`/product/page` 和 `/sku/page` 不会命中。
         </Alert>
 
@@ -257,6 +257,9 @@ export function InterfaceDuplicateGovernanceModal(props: InterfaceDuplicateGover
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
+                        <Badge color="dark" variant="outline">
+                          {group.method}
+                        </Badge>
                         <Badge color="blue" variant="light">
                           尾部路径
                         </Badge>

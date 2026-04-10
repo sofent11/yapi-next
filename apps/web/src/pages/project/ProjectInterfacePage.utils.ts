@@ -594,6 +594,7 @@ export type DuplicateInterfaceGroupItem = {
 
 export type DuplicateInterfaceGroup = {
   key: string;
+  method: string;
   shortPath: string;
   shortItems: DuplicateInterfaceGroupItem[];
   longItems: DuplicateInterfaceGroupItem[];
@@ -646,23 +647,28 @@ export function buildDuplicateInterfaceGroups(
         categoryName,
         pathDepth: segments.length
       };
-      exactPathMap.set(path, [...(exactPathMap.get(path) || []), candidate]);
+      const exactKey = `${candidate.method} ${path}`;
+      exactPathMap.set(exactKey, [...(exactPathMap.get(exactKey) || []), candidate]);
       if (segments.length < 2) return;
       const shortPath = `/${segments.slice(1).join('/')}`;
-      longPathMap.set(shortPath, [...(longPathMap.get(shortPath) || []), candidate]);
+      const longKey = `${candidate.method} ${shortPath}`;
+      longPathMap.set(longKey, [...(longPathMap.get(longKey) || []), candidate]);
     });
   });
 
   return Array.from(longPathMap.entries())
-    .map(([shortPath, candidates]) => {
-      const shortItems = (exactPathMap.get(shortPath) || []).map(item => ({ ...item, variant: 'short' as const }));
+    .map(([groupKey, candidates]) => {
+      const [method, ...pathParts] = groupKey.split(' ');
+      const shortPath = pathParts.join(' ');
+      const shortItems = (exactPathMap.get(groupKey) || []).map(item => ({ ...item, variant: 'short' as const }));
       const longItems = candidates
         .filter(item => item.path !== shortPath)
         .map(item => ({ ...item, variant: 'long' as const }));
       if (shortItems.length === 0 || longItems.length === 0) return null;
       const items = [...shortItems, ...longItems].sort(sortDuplicateItems);
       return {
-        key: shortPath,
+        key: groupKey,
+        method,
         shortPath,
         shortItems: [...shortItems].sort(sortDuplicateItems),
         longItems: [...longItems].sort(sortDuplicateItems),
@@ -673,6 +679,8 @@ export function buildDuplicateInterfaceGroups(
     .sort((a, b) => {
       const sizeDiff = (b?.items.length || 0) - (a?.items.length || 0);
       if (sizeDiff !== 0) return sizeDiff;
+      const methodCompare = String(a?.method || '').localeCompare(String(b?.method || ''), 'zh-CN');
+      if (methodCompare !== 0) return methodCompare;
       return String(a?.shortPath || '').localeCompare(String(b?.shortPath || ''), 'zh-CN');
     }) as DuplicateInterfaceGroup[];
 }
