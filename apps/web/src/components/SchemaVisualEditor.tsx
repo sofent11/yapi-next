@@ -348,12 +348,12 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
         <Table className="schema-editor-table" withTableBorder striped highlightOnHover>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th className="w-[260px]">字段名</Table.Th>
-              <Table.Th className="w-[88px]">必填</Table.Th>
-              <Table.Th className="w-[140px]">类型</Table.Th>
-              <Table.Th className="w-[180px]">mock</Table.Th>
-              <Table.Th className="w-[220px]">description</Table.Th>
-              <Table.Th className="w-[150px]">操作</Table.Th>
+              <Table.Th className="w-[220px]">字段名</Table.Th>
+              <Table.Th className="w-[72px]">必填</Table.Th>
+              <Table.Th className="w-[120px]">类型</Table.Th>
+              <Table.Th className="w-[140px]">mock</Table.Th>
+              <Table.Th className="w-[180px]">description</Table.Th>
+              <Table.Th className="w-[120px]">操作</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>

@@ -265,7 +265,7 @@
   }
 
   .schema-editor-head-grid {
-    @apply grid min-w-[980px] grid-cols-[minmax(220px,260px)_88px_140px_180px_220px_150px] items-center gap-3;
+    @apply grid min-w-[760px] grid-cols-[minmax(180px,1fr)_72px_120px_140px_180px_120px] items-center gap-2;
   }
 
   .schema-editor-head-actions {
@@ -306,7 +306,7 @@
   }
 
   .schema-editor-table {
-    @apply min-w-[980px];
+    @apply min-w-[760px];
   }
 
   .schema-editor-table thead {
@@ -317,7 +317,7 @@
   }
 
   .schema-editor-table th {
-    @apply border-slate-200 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500;
+    @apply border-slate-200 px-3 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-subtle);
       color: rgb(148 163 184);
@@ -325,7 +325,7 @@
   }
 
   .schema-editor-table td {
-    @apply border-slate-200 px-4 py-3 align-top;
+    @apply border-slate-200 px-3 py-3 align-top;
     &:is([data-theme="dark"], [data-theme="dark"] *) {
       border-color: var(--border-project-subtle);
     }
