@@ -19,6 +19,7 @@ import {
   useGetColListQuery,
   useGetCatMenuQuery,
   useGetInterfaceListQuery,
+  useGetListMenuQuery,
   useGetInterfaceTreeQuery,
   useGetInterfaceQuery,
   useGetProjectTokenQuery,
@@ -120,6 +121,14 @@ export function useProjectInterfaceData(params: UseProjectInterfaceDataParams) {
     },
     { skip: params.props.projectId <= 0 || (!params.addCaseOpen && !shouldFetchGlobalInterfaceList) }
   );
+  const menuSearchQuery = useGetListMenuQuery(
+    {
+      projectId: params.props.projectId,
+      token: params.props.token,
+      detail: 'full'
+    },
+    { skip: params.props.projectId <= 0 || params.action !== 'api' }
+  );
 
   const detailQuery = useGetInterfaceQuery(
     {
@@ -213,6 +222,7 @@ export function useProjectInterfaceData(params: UseProjectInterfaceDataParams) {
 
   const allInterfaces = (listQuery.data?.data?.list || STABLE_EMPTY_ARRAY) as InterfaceDTO[];
   const treeRows = (treeQuery.data?.data?.list || STABLE_EMPTY_ARRAY) as InterfaceTreeNode[];
+  const menuSearchRows = (menuSearchQuery.data?.data || STABLE_EMPTY_ARRAY) as InterfaceTreeNode[];
   const catRows = (catMenuQuery.data?.data || STABLE_EMPTY_ARRAY) as Array<{ _id: number; name: string; desc?: string }>;
   const currentInterface = (detailQuery.data?.data || null) as InterfaceDTO | null;
   const colRows = (colListQuery.data?.data || STABLE_EMPTY_ARRAY) as any[];
@@ -240,6 +250,7 @@ export function useProjectInterfaceData(params: UseProjectInterfaceDataParams) {
   } = useProjectInterfaceApiSection({
     allInterfaces,
     treeRows,
+    menuSearchRows,
     catInterfaceMap: params.catInterfaceMap,
     catRows,
     catId: params.catId,

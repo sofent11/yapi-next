@@ -20,6 +20,7 @@ type CollectionRow = Record<string, unknown>;
 type ApiSectionParams = {
   allInterfaces: InterfaceDTO[];
   treeRows: InterfaceTreeNode[];
+  menuSearchRows: InterfaceTreeNode[];
   catInterfaceMap: Record<number, InterfaceDTO[]>;
   catRows: CategoryRow[];
   catId: number;
@@ -33,6 +34,14 @@ type ApiSectionParams = {
 };
 
 export function useProjectInterfaceApiSection(params: ApiSectionParams) {
+  const matchesInterfaceKeyword = (item: Pick<InterfaceDTO, 'title' | 'path' | 'desc'>, keyword: string) => {
+    if (!keyword) return true;
+    const title = String(item.title || '').toLowerCase();
+    const path = String(item.path || '').toLowerCase();
+    const desc = String(item.desc || '').toLowerCase();
+    return title.includes(keyword) || path.includes(keyword) || desc.includes(keyword);
+  };
+
   const allInterfaceMapByCat = useMemo(() => {
     const map = new Map<number, InterfaceDTO[]>();
     params.allInterfaces.forEach(item => {
@@ -72,11 +81,7 @@ export function useProjectInterfaceApiSection(params: ApiSectionParams) {
     }
     const keyword = params.listKeyword.trim().toLowerCase();
     if (keyword) {
-      rows = rows.filter(item => {
-        const title = String(item.title || '').toLowerCase();
-        const path = String(item.path || '').toLowerCase();
-        return title.includes(keyword) || path.includes(keyword);
-      });
+      rows = rows.filter(item => matchesInterfaceKeyword(item, keyword));
     }
     return rows;
   }, [currentList, params.listKeyword, params.statusFilter]);
@@ -109,17 +114,15 @@ export function useProjectInterfaceApiSection(params: ApiSectionParams) {
   const filteredMenuRows = useMemo(() => {
     const keyword = params.menuKeyword.trim().toLowerCase();
     if (!keyword) return menuRows;
-    return menuRows
+    const keywordSourceRows = params.menuSearchRows.length > 0 ? params.menuSearchRows : menuRows;
+    return keywordSourceRows
       .map(cat => {
         const catIdNum = Number(cat._id || 0);
         const catName = String(cat.name || '').toLowerCase();
-        const sourceList = allInterfaceMapByCat.get(catIdNum) || cat.list || [];
-        const list = sourceList.filter(item => {
-          const title = String(item.title || '').toLowerCase();
-          const path = String(item.path || '').toLowerCase();
-          return title.includes(keyword) || path.includes(keyword);
-        });
-        if (catName.includes(keyword)) {
+        const catDesc = String(cat.desc || '').toLowerCase();
+        const sourceList = cat.list || allInterfaceMapByCat.get(catIdNum) || [];
+        const list = sourceList.filter(item => matchesInterfaceKeyword(item, keyword));
+        if (catName.includes(keyword) || catDesc.includes(keyword)) {
           return { ...cat, list: sourceList };
         }
         if (list.length > 0) {
@@ -128,7 +131,7 @@ export function useProjectInterfaceApiSection(params: ApiSectionParams) {
         return null;
       })
       .filter(Boolean) as InterfaceTreeNode[];
-  }, [allInterfaceMapByCat, params.menuKeyword, menuRows]);
+  }, [allInterfaceMapByCat, menuRows, params.menuKeyword, params.menuSearchRows]);
 
   const menuDragEnabled = params.canEdit && params.menuKeyword.trim().length === 0;
 
