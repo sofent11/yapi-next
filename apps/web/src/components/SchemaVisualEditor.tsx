@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
-  Button,
+  Menu,
   Switch,
   Table,
   Text,
@@ -26,6 +26,7 @@ import {
   buildSchemaFromPlainJsonText,
   createEmptyRow,
   findRowIndex,
+  getParentRow,
   getSubtreeEnd,
   getSubtreeIds,
   isRequiredEditable,
@@ -157,6 +158,27 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
       const child = createEmptyRow({ parentId: itemRow.id, depth: itemRow.depth + 1 });
       emitRows([...nextRows.slice(0, insertAt), child, ...nextRows.slice(insertAt)]);
     }
+  }
+
+  function addSiblingRow(targetId: string) {
+    const index = findRowIndex(rows, targetId);
+    if (index < 0) return;
+    const target = rows[index];
+
+    if (target.isArrayItem) {
+      const arrayRow = getParentRow(rows, target);
+      if (!arrayRow) return;
+      const arrayIndex = findRowIndex(rows, arrayRow.id);
+      if (arrayIndex < 0) return;
+      const insertAt = getSubtreeEnd(rows, arrayIndex);
+      const sibling = createEmptyRow({ parentId: arrayRow.parentId, depth: arrayRow.depth });
+      emitRows([...rows.slice(0, insertAt), sibling, ...rows.slice(insertAt)]);
+      return;
+    }
+
+    const insertAt = getSubtreeEnd(rows, index);
+    const sibling = createEmptyRow({ parentId: target.parentId, depth: target.depth });
+    emitRows([...rows.slice(0, insertAt), sibling, ...rows.slice(insertAt)]);
   }
 
   function patchRow(rowId: string, patch: Partial<SchemaFieldRow>) {
@@ -347,6 +369,9 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
               visibleRows.map(row => {
                 const hasChildren = (childrenMap.get(row.id) || []).length > 0;
                 const expanded = !collapsedIds.has(row.id);
+                const canAddChild = row.type === 'object' || row.type === 'array';
+                const showAddMenu = canAddChild && !row.isArrayItem;
+                const addTooltip = showAddMenu ? '添加同级节点或子节点' : '添加同级节点';
                 return (
                   <Table.Tr key={row.id}>
                     <Table.Td>
@@ -412,18 +437,38 @@ export function SchemaVisualEditor(props: SchemaVisualEditorProps) {
                             <IconSettings size={16} />
                           </ActionIcon>
                         </Tooltip>
-                        {row.type === 'object' || row.type === 'array' ? (
-                          <Tooltip label="添加子节点">
+                        {showAddMenu ? (
+                          <Menu shadow="md" width={180} position="bottom-end">
+                            <Menu.Target>
+                              <div>
+                                <Tooltip label={addTooltip}>
+                                  <ActionIcon
+                                    variant="subtle"
+                                    className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[var(--border-project-subtle)] dark:hover:!bg-[var(--surface-project-elevated)] dark:hover:!text-slate-100"
+                                    aria-label={`为字段 ${row.name || '未命名字段'} 选择新增方式`}
+                                  >
+                                    <IconPlus size={16} />
+                                  </ActionIcon>
+                                </Tooltip>
+                              </div>
+                            </Menu.Target>
+                            <Menu.Dropdown>
+                              <Menu.Item onClick={() => addSiblingRow(row.id)}>添加同级节点</Menu.Item>
+                              <Menu.Item onClick={() => addChildRow(row.id)}>添加子节点</Menu.Item>
+                            </Menu.Dropdown>
+                          </Menu>
+                        ) : (
+                          <Tooltip label={addTooltip}>
                             <ActionIcon
                               variant="subtle"
                               className="dark:!border-transparent dark:!bg-transparent dark:!text-slate-400 dark:hover:!border-[var(--border-project-subtle)] dark:hover:!bg-[var(--surface-project-elevated)] dark:hover:!text-slate-100"
-                              onClick={() => addChildRow(row.id)}
-                              aria-label={`为字段 ${row.name || '未命名字段'} 添加子节点`}
+                              onClick={() => addSiblingRow(row.id)}
+                              aria-label={`为字段 ${row.name || '未命名字段'} 添加同级节点`}
                             >
                               <IconPlus size={16} />
                             </ActionIcon>
                           </Tooltip>
-                        ) : null}
+                        )}
                         <Tooltip label="删除字段">
                           <ActionIcon
                             color="red"
