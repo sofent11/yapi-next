@@ -126,8 +126,7 @@ export default function DataExportPanel({ projectId, token }: DataExportPanelPro
 
   const wikiSupported = useMemo(() => {
     const key = String(exportMethod || '').toLowerCase();
-    if (key === 'openapi3' || key === 'swagger2') return false;
-    return !key.includes('json');
+    return key === 'html' || key === 'markdown';
   }, [exportMethod]);
 
   useEffect(() => {

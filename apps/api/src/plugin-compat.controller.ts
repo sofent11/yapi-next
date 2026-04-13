@@ -97,6 +97,11 @@ export class PluginCompatController {
         reply.header('Content-Disposition', 'attachment; filename=api.json');
         return JSON.stringify(payload.list, null, 2);
       }
+      if (exportType === 'har') {
+        reply.header('Content-Type', 'application/json; charset=utf-8');
+        reply.header('Content-Disposition', 'attachment; filename=api.har');
+        return JSON.stringify(this.renderHar(payload.project, payload.list), null, 2);
+      }
       if (exportType === 'markdown') {
         reply.header('Content-Disposition', 'attachment; filename=api.md');
         return this.renderMarkdown(payload.project, payload.list, payload.wikiMarkdown);
@@ -824,6 +829,104 @@ export class PluginCompatController {
     return lines.join('\n');
   }
 
+  private renderHar(project: ProjectEntity, list: Array<Record<string, unknown>>) {
+    const startedDateTime = new Date().toISOString();
+    const baseUrl = this.resolveHarBaseUrl(project);
+    const projectName = String(project.name || 'YApi 项目');
+    const entries: Array<Record<string, unknown>> = [];
+
+    list.forEach(cate => {
+      const catName = String(cate.name || '未命名分类');
+      const rows = Array.isArray(cate.list) ? (cate.list as Array<Record<string, unknown>>) : [];
+
+      rows.forEach(api => {
+        const method = String(api.method || 'GET').toUpperCase();
+        const requestPath = this.ensureHarPath(String(api.path || '/'));
+        const pathParams = Array.isArray(api.req_params) ? (api.req_params as Array<Record<string, unknown>>) : [];
+        const queryParams = Array.isArray(api.req_query) ? (api.req_query as Array<Record<string, unknown>>) : [];
+        const requestHeaders = Array.isArray(api.req_headers) ? (api.req_headers as Array<Record<string, unknown>>) : [];
+        const resolvedPath = this.applyHarPathParams(requestPath, pathParams);
+        const requestUrl = this.buildHarRequestUrl(baseUrl, resolvedPath, queryParams);
+        const postData = this.buildHarPostData(api);
+        const responseBody = this.buildHarResponseBody(api);
+        const responseMimeType = this.buildHarResponseMimeType(api);
+        const title = String(api.title || requestPath || '');
+
+        entries.push({
+          startedDateTime,
+          time: 0,
+          request: {
+            method,
+            url: requestUrl,
+            httpVersion: 'HTTP/1.1',
+            cookies: [],
+            headers: requestHeaders.map(item => ({
+              name: String(item.name || ''),
+              value: this.stringifyHarParamValue(item)
+            })),
+            queryString: queryParams.map(item => ({
+              name: String(item.name || ''),
+              value: this.stringifyHarParamValue(item)
+            })),
+            postData,
+            headersSize: -1,
+            bodySize: typeof postData?.text === 'string' ? Buffer.byteLength(postData.text, 'utf8') : 0,
+            comment: [catName, title].filter(Boolean).join(' / ')
+          },
+          response: {
+            status: 200,
+            statusText: 'OK',
+            httpVersion: 'HTTP/1.1',
+            cookies: [],
+            headers: [
+              {
+                name: 'Content-Type',
+                value: responseMimeType
+              }
+            ],
+            content: {
+              size: Buffer.byteLength(responseBody, 'utf8'),
+              mimeType: responseMimeType,
+              text: responseBody
+            },
+            redirectURL: '',
+            headersSize: -1,
+            bodySize: Buffer.byteLength(responseBody, 'utf8')
+          },
+          cache: {},
+          timings: {
+            blocked: 0,
+            dns: 0,
+            connect: 0,
+            send: 0,
+            wait: 0,
+            receive: 0,
+            ssl: 0
+          }
+        });
+      });
+    });
+
+    return {
+      log: {
+        version: '1.2',
+        creator: {
+          name: 'YApi Next',
+          version: '1.0.0'
+        },
+        pages: [
+          {
+            startedDateTime,
+            id: `project-${Number(project._id || 0)}`,
+            title: projectName,
+            pageTimings: {}
+          }
+        ],
+        entries
+      }
+    };
+  }
+
   private renderHtml(
     project: ProjectEntity,
     list: Array<Record<string, unknown>>,
@@ -840,5 +943,112 @@ export class PluginCompatController {
     )}</title><style>body{font-family:Arial,sans-serif;padding:24px;line-height:1.6}pre{white-space:pre-wrap;word-break:break-word}</style></head><body><pre>${escapeHtml(
       markdown
     )}</pre></body></html>`;
+  }
+
+  private resolveHarBaseUrl(project: ProjectEntity): string {
+    const envList = Array.isArray(project.env) ? project.env : [];
+    for (const env of envList) {
+      const domain = String((env as PluginDoc)?.domain || '').trim();
+      if (/^https?:\/\//i.test(domain)) {
+        return domain.replace(/\/+$/, '');
+      }
+    }
+    return 'http://localhost';
+  }
+
+  private ensureHarPath(path: string): string {
+    const value = String(path || '').trim();
+    if (!value) return '/';
+    return value.startsWith('/') ? value : `/${value}`;
+  }
+
+  private applyHarPathParams(path: string, params: Array<Record<string, unknown>>): string {
+    let nextPath = path;
+    params.forEach(item => {
+      const name = String(item.name || '').trim();
+      if (!name) return;
+      const value = encodeURIComponent(this.stringifyHarParamValue(item) || name);
+      nextPath = nextPath
+        .replace(new RegExp(`\\{${this.escapeRegExp(name)}\\}`, 'g'), value)
+        .replace(new RegExp(`:${this.escapeRegExp(name)}(?=\\/|$)`, 'g'), value);
+    });
+    return nextPath;
+  }
+
+  private buildHarRequestUrl(baseUrl: string, path: string, queryParams: Array<Record<string, unknown>>): string {
+    const url = new URL(path, `${baseUrl}/`);
+    queryParams.forEach(item => {
+      const name = String(item.name || '').trim();
+      if (!name) return;
+      url.searchParams.append(name, this.stringifyHarParamValue(item));
+    });
+    return url.toString();
+  }
+
+  private buildHarPostData(api: Record<string, unknown>) {
+    const method = String(api.method || 'GET').toUpperCase();
+    if (method === 'GET' || method === 'HEAD') return undefined;
+
+    const reqBodyType = String(api.req_body_type || 'raw').toLowerCase();
+    if (reqBodyType === 'form') {
+      const params = Array.isArray(api.req_body_form) ? (api.req_body_form as Array<Record<string, unknown>>) : [];
+      return {
+        mimeType: 'application/x-www-form-urlencoded',
+        params: params.map(item => ({
+          name: String(item.name || ''),
+          value: this.stringifyHarParamValue(item)
+        })),
+        text: params
+          .map(item => `${encodeURIComponent(String(item.name || ''))}=${encodeURIComponent(this.stringifyHarParamValue(item))}`)
+          .join('&')
+      };
+    }
+
+    const bodyText = String(api.req_body_other || '').trim();
+    const isJson = reqBodyType === 'json' || api.req_body_is_json_schema === true;
+    if (!bodyText) {
+      return isJson
+        ? {
+            mimeType: 'application/json',
+            text: '{}'
+          }
+        : undefined;
+    }
+
+    return {
+      mimeType: isJson ? 'application/json' : 'text/plain',
+      text: bodyText
+    };
+  }
+
+  private buildHarResponseBody(api: Record<string, unknown>): string {
+    const body = String(api.res_body || '');
+    if (body.trim()) return body;
+    if (String(api.res_body_type || '').toLowerCase() === 'json') {
+      return '{}';
+    }
+    return '';
+  }
+
+  private buildHarResponseMimeType(api: Record<string, unknown>): string {
+    return String(api.res_body_type || '').toLowerCase() === 'json' ? 'application/json' : 'text/plain';
+  }
+
+  private stringifyHarParamValue(item: Record<string, unknown>): string {
+    const candidates = [item.value, item.example, item.default, item.enum];
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) {
+        const first = candidate.find(entry => entry !== null && typeof entry !== 'undefined' && String(entry).trim() !== '');
+        if (typeof first !== 'undefined') return String(first);
+      }
+      if (candidate !== null && typeof candidate !== 'undefined' && String(candidate).trim() !== '') {
+        return String(candidate);
+      }
+    }
+    return '';
+  }
+
+  private escapeRegExp(input: string): string {
+    return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 }

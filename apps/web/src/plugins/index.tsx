@@ -380,6 +380,11 @@ const exportDataPlugin: ModernWebPlugin = {
       route: apiPath(`plugin/export?type=json&pid=${context?.projectId || 0}`),
       desc: '导出项目接口文档为 json 文件'
     }));
+    api.registerExporter('har', context => ({
+      name: 'har',
+      route: apiPath(`plugin/export?type=har&pid=${context?.projectId || 0}`),
+      desc: '导出项目接口文档为 HAR 文件，便于导入 Postman 等调试工具'
+    }));
   }
 };
 
