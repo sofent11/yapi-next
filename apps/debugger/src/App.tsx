@@ -348,23 +348,21 @@ export function App() {
 
   return (
     <div className="app-shell app-shell-v4">
-      <header className="desktop-topbar">
+      <header className="desktop-topbar native-topbar">
         <div className="desktop-topbar-left">
-          <span className="traffic traffic-red" />
-          <span className="traffic traffic-yellow" />
-          <span className="traffic traffic-green" />
           <div className="desktop-title-group">
+            <span className="desktop-caption">YApi Debugger</span>
             <span className="desktop-title">{store.workspace.project.name}</span>
-            <Text c="dimmed" size="sm">
-              {store.selectedNode.kind === 'project'
-                ? '项目首页'
-                : store.selectedNode.kind === 'category'
-                  ? store.selectedNode.path
-                  : selectedRecord?.request.path || selectedRecord?.request.url || '/'}
-            </Text>
           </div>
+          <Text c="dimmed" size="sm" className="desktop-location">
+            {store.selectedNode.kind === 'project'
+              ? '项目首页'
+              : store.selectedNode.kind === 'category'
+                ? store.selectedNode.path
+                : selectedRecord?.request.path || selectedRecord?.request.url || '/'}
+          </Text>
         </div>
-        <Group>
+        <Group className="native-topbar-actions">
           <Select
             value={store.activeEnvironmentName}
             data={store.workspace.environments.map(item => ({

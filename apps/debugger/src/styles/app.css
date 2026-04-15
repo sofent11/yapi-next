@@ -4,21 +4,20 @@
   color-scheme: light;
   --font-ui: "Manrope", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
-  --canvas: #f3f4fb;
+  --canvas: #eef1f7;
   --shell: rgba(255, 255, 255, 0.92);
   --panel: #ffffff;
-  --panel-soft: #f7f8fe;
-  --line: #e2e5f2;
-  --line-strong: #ccd4ea;
-  --text: #283042;
-  --muted: #7e87a0;
+  --panel-soft: #f5f7fc;
+  --line: #dde3ef;
+  --line-strong: #c9d3e5;
+  --text: #222b3d;
+  --muted: #7c869b;
   --brand: #5d6adf;
   --brand-soft: #edf0ff;
   --green: #1e9f67;
   --blue: #316ddc;
   --orange: #ca7a2f;
   --red: #c94c5e;
-  --shadow: 0 18px 40px rgba(106, 116, 160, 0.12);
 }
 
 * {
@@ -28,16 +27,15 @@
 html,
 body,
 #root {
-  min-height: 100%;
+  height: 100%;
   margin: 0;
 }
 
 body {
   font-family: var(--font-ui);
   color: var(--text);
-  background:
-    radial-gradient(circle at top center, rgba(147, 164, 255, 0.18), transparent 34%),
-    linear-gradient(180deg, #eff2ff 0%, #f6f7fc 34%, var(--canvas) 100%);
+  background: var(--canvas);
+  overflow: hidden;
 }
 
 button,
@@ -56,26 +54,31 @@ textarea {
 }
 
 .welcome-shell {
-  min-height: 100vh;
-  padding: clamp(28px, 6vw, 56px);
+  min-height: 100%;
+  padding: clamp(24px, 5vw, 48px);
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 24px;
+  overflow: auto;
+}
+
+.welcome-hero,
+.welcome-card {
+  border: 1px solid rgba(93, 106, 223, 0.1);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 24px rgba(106, 116, 160, 0.06);
 }
 
 .welcome-hero {
   max-width: 72rem;
-  padding: clamp(32px, 5vw, 54px);
-  border-radius: 34px;
-  border: 1px solid rgba(93, 106, 223, 0.14);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(243, 245, 255, 0.94));
-  box-shadow: var(--shadow);
+  padding: clamp(28px, 4vw, 46px);
+  border-radius: 22px;
 }
 
 .welcome-hero h1 {
   margin: 14px 0 0;
-  font-size: clamp(2.8rem, 7vw, 5.4rem);
-  line-height: 0.92;
+  font-size: clamp(2.4rem, 6vw, 4.8rem);
+  line-height: 0.94;
   max-width: 12ch;
 }
 
@@ -83,28 +86,25 @@ textarea {
   max-width: 58ch;
   margin: 16px 0 0;
   color: var(--muted);
-  font-size: 1.02rem;
+  font-size: 1rem;
 }
 
 .hero-actions {
   display: flex;
   gap: 12px;
-  margin-top: 26px;
+  margin-top: 24px;
   flex-wrap: wrap;
 }
 
 .welcome-grid {
   display: grid;
-  gap: 20px;
+  gap: 18px;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 
 .welcome-card {
-  padding: 24px;
-  border-radius: 24px;
-  border: 1px solid rgba(93, 106, 223, 0.12);
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: var(--shadow);
+  padding: 22px;
+  border-radius: 18px;
 }
 
 .welcome-card-head {
@@ -121,11 +121,12 @@ textarea {
 }
 
 .app-shell-v4 {
-  min-height: 100vh;
-  padding: 20px;
+  height: 100vh;
+  padding: 8px;
   display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 16px;
+  grid-template-rows: 52px minmax(0, 1fr);
+  gap: 8px;
+  overflow: hidden;
 }
 
 .desktop-topbar {
@@ -133,17 +134,18 @@ textarea {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 12px 18px;
-  border-radius: 22px;
-  border: 1px solid rgba(93, 106, 223, 0.12);
-  background: var(--shell);
-  box-shadow: var(--shadow);
+  min-height: 52px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 2px 10px rgba(106, 116, 160, 0.04);
 }
 
 .desktop-topbar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
 }
 
@@ -154,64 +156,64 @@ textarea {
   gap: 2px;
 }
 
+.desktop-caption {
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .desktop-title {
   font-weight: 800;
 }
 
-.traffic {
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  display: inline-block;
+.desktop-location {
+  max-width: 42vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.traffic-red {
-  background: #f57171;
-}
-
-.traffic-yellow {
-  background: #f4c045;
-}
-
-.traffic-green {
-  background: #71c96a;
+.native-topbar-actions {
+  flex-wrap: nowrap;
 }
 
 .workspace-shell {
   min-height: 0;
   display: grid;
-  grid-template-columns: 78px 340px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: 72px 320px minmax(0, 1fr);
+  gap: 8px;
+  overflow: hidden;
 }
 
 .app-rail,
 .interface-tree-panel,
 .workspace-main {
   min-height: 0;
-  border: 1px solid rgba(93, 106, 223, 0.12);
-  border-radius: 28px;
-  background: var(--shell);
-  box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 14px rgba(106, 116, 160, 0.04);
+  overflow: hidden;
 }
 
 .app-rail {
-  padding: 18px 10px;
+  padding: 12px 8px;
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 18px;
+  gap: 12px;
 }
 
 .app-rail-brand {
-  width: 46px;
-  height: 46px;
+  width: 40px;
+  height: 40px;
   margin: 0 auto;
-  border-radius: 16px;
+  border-radius: 12px;
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, #ffdbb7, #ffb870);
-  color: #fff;
+  background: #f0f3fb;
+  color: var(--text);
   font-weight: 800;
-  box-shadow: 0 14px 24px rgba(255, 168, 98, 0.28);
 }
 
 .app-rail-items {
@@ -223,8 +225,8 @@ textarea {
 .app-rail-item {
   border: 0;
   background: transparent;
-  border-radius: 18px;
-  padding: 12px 6px;
+  border-radius: 12px;
+  padding: 10px 6px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -244,35 +246,35 @@ textarea {
 }
 
 .interface-tree-panel {
-  padding: 18px;
+  padding: 14px;
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
-  gap: 14px;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 12px;
 }
 
 .interface-tree-header h2 {
-  margin: 8px 0 0;
-  font-size: 1.45rem;
+  margin: 6px 0 0;
+  font-size: 1.2rem;
 }
 
 .interface-tree-tools {
   display: grid;
-  grid-template-columns: 1fr 42px 42px 42px;
-  gap: 10px;
+  grid-template-columns: 1fr 40px 40px 40px;
+  gap: 8px;
 }
 
 .category-draft-shell {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 10px;
+  gap: 8px;
 }
 
 .category-draft-input {
   width: 100%;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid var(--line-strong);
   background: #fff;
-  padding: 11px 14px;
+  padding: 10px 12px;
 }
 
 .interface-tree-scroll,
@@ -280,12 +282,7 @@ textarea {
   min-height: 0;
 }
 
-.tree-root-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
+.tree-root-shell,
 .tree-branch,
 .tree-children {
   display: flex;
@@ -296,7 +293,7 @@ textarea {
 .tree-row {
   width: 100%;
   border: 0;
-  border-radius: 16px;
+  border-radius: 10px;
   background: transparent;
   display: flex;
   align-items: center;
@@ -314,17 +311,7 @@ textarea {
 .tree-row-project,
 .tree-row-category,
 .tree-row-case {
-  padding: 11px 14px;
-}
-
-.tree-row-project strong {
-  font-size: 0.98rem;
-}
-
-.tree-row-project span,
-.tree-row-category span,
-.tree-row-case span {
-  color: var(--muted);
+  padding: 10px 12px;
 }
 
 .tree-row-request {
@@ -340,7 +327,7 @@ textarea {
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
-  padding: 11px 12px 11px 0;
+  padding: 10px 10px 10px 0;
   text-align: left;
   cursor: pointer;
 }
@@ -351,7 +338,7 @@ textarea {
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -379,7 +366,7 @@ textarea {
 
 .tree-row-copy span {
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -395,32 +382,31 @@ textarea {
 .tree-count-badge {
   padding: 4px 8px;
   border-radius: 999px;
-  background: #eef1f8;
+  background: #eef2f8;
   color: var(--muted);
   font-size: 0.74rem;
 }
 
 .tree-case-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
   background: var(--brand);
   flex-shrink: 0;
-  margin-top: 2px;
 }
 
 .tree-empty-state {
-  padding: 24px;
+  padding: 20px;
   border: 1px dashed var(--line-strong);
-  border-radius: 18px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.72);
 }
 
 .workspace-main {
-  padding: 18px 20px 20px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   overflow: auto;
 }
 
@@ -440,11 +426,11 @@ textarea {
 }
 
 .workspace-crumb {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: 999px;
-  background: #f1f3fb;
+  background: #f1f4fb;
   color: var(--muted);
-  font-size: 0.86rem;
+  font-size: 0.82rem;
 }
 
 .workspace-toolbar-right {
@@ -455,10 +441,10 @@ textarea {
 
 .workspace-overview-hero,
 .workspace-request-head {
-  padding: 22px 24px;
-  border-radius: 24px;
-  border: 1px solid rgba(93, 106, 223, 0.14);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 246, 255, 0.94));
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: #fff;
 }
 
 .workspace-overview-hero {
@@ -471,13 +457,13 @@ textarea {
 .workspace-overview-hero h2,
 .workspace-request-head h2 {
   margin: 8px 0 0;
-  font-size: 1.75rem;
+  font-size: 1.52rem;
 }
 
 .workspace-request-head {
   display: flex;
   justify-content: space-between;
-  gap: 18px;
+  gap: 16px;
 }
 
 .workspace-request-facts {
@@ -488,9 +474,9 @@ textarea {
 }
 
 .request-fact-pill {
-  min-width: 110px;
-  padding: 12px 14px;
-  border-radius: 18px;
+  min-width: 102px;
+  padding: 10px 12px;
+  border-radius: 12px;
   border: 1px solid var(--line);
   background: #fff;
 }
@@ -498,14 +484,14 @@ textarea {
 .request-fact-pill span {
   display: block;
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .request-fact-pill strong {
   display: block;
-  margin-top: 8px;
+  margin-top: 7px;
 }
 
 .project-config-grid,
@@ -516,17 +502,16 @@ textarea {
 .workspace-case-stack,
 .request-param-grid {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .project-config-grid {
-  grid-template-columns: minmax(0, 1.15fr) 360px;
+  grid-template-columns: minmax(0, 1.15fr) 340px;
   align-items: start;
 }
 
 .project-kv-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 16px;
 }
 
 .project-side-stack {
@@ -535,8 +520,8 @@ textarea {
 
 .workspace-card {
   min-height: 0;
-  padding: 16px;
-  border-radius: 22px;
+  padding: 14px;
+  border-radius: 14px;
   border: 1px solid var(--line);
   background: #fff;
 }
@@ -551,26 +536,21 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.workspace-note-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
+.workspace-note-card,
 .project-import-card {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .category-interface-row {
   width: 100%;
-  padding: 16px 18px;
-  border-radius: 20px;
+  padding: 14px 16px;
+  border-radius: 14px;
   border: 1px solid var(--line);
   background: #fff;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 14px;
+  gap: 12px;
   align-items: center;
   text-align: left;
   cursor: pointer;
@@ -578,14 +558,22 @@ textarea {
 
 .category-interface-meta {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.84rem;
 }
 
 .request-runner-bar {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) 220px auto auto;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(10px);
 }
 
 .request-url-input,
@@ -617,15 +605,15 @@ textarea {
 
 .runner-split {
   display: grid;
-  grid-template-columns: minmax(0, 1.18fr) 360px;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.16fr) 340px;
+  gap: 12px;
   min-height: 0;
 }
 
 .runner-left,
 .runner-right {
   min-height: 0;
-  border-radius: 24px;
+  border-radius: 14px;
   border: 1px solid var(--line);
   background: #fff;
 }
@@ -639,7 +627,7 @@ textarea {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--line);
   background: #fbfcff;
 }
@@ -652,7 +640,7 @@ textarea {
 
 .runner-pane-tab {
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
   color: var(--muted);
   padding: 6px 10px;
@@ -668,11 +656,11 @@ textarea {
   display: flex;
   gap: 12px;
   color: var(--muted);
-  font-size: 0.84rem;
+  font-size: 0.82rem;
 }
 
 .runner-pane-body {
-  padding: 16px;
+  padding: 14px;
 }
 
 .workspace-body-modes {
@@ -699,14 +687,14 @@ textarea {
 
 .request-body-shell {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .runner-right {
-  padding: 16px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .runner-stats {
@@ -716,8 +704,8 @@ textarea {
 }
 
 .runner-stat-card {
-  padding: 14px;
-  border-radius: 16px;
+  padding: 12px;
+  border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--panel-soft);
 }
@@ -725,7 +713,7 @@ textarea {
 .runner-stat-card span {
   display: block;
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -736,8 +724,8 @@ textarea {
 }
 
 .runner-result-card {
-  padding: 16px;
-  border-radius: 20px;
+  padding: 14px;
+  border-radius: 14px;
   border: 1px solid var(--line);
   background: #fff;
 }
@@ -756,14 +744,14 @@ textarea {
 
 .runner-feedback-item {
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--panel-soft);
 }
 
 .workspace-case-card {
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 .import-panel {
@@ -789,8 +777,8 @@ textarea {
 
 .import-summary > div,
 .import-summary > button {
-  padding: 16px;
-  border-radius: 18px;
+  padding: 14px;
+  border-radius: 14px;
   border: 1px solid var(--line);
   background: var(--panel-soft);
 }
@@ -798,7 +786,7 @@ textarea {
 .import-summary span {
   display: block;
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -810,7 +798,7 @@ textarea {
 
 .key-value-editor {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   margin-top: 12px;
 }
 
@@ -824,14 +812,14 @@ textarea {
 
 .kv-head {
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .code-editor-shell {
   overflow: hidden;
-  border-radius: 18px;
+  border-radius: 12px;
   border: 1px solid var(--line);
 }
 
@@ -854,21 +842,31 @@ textarea {
 
 @media (max-width: 1440px) {
   .workspace-shell {
-    grid-template-columns: 78px 320px minmax(0, 1fr);
+    grid-template-columns: 72px 300px minmax(0, 1fr);
   }
 
   .request-runner-bar {
-    grid-template-columns: auto minmax(0, 1fr) 190px auto auto;
+    grid-template-columns: auto minmax(0, 1fr) 180px auto auto;
   }
 
   .runner-split {
-    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-columns: minmax(0, 1fr) 300px;
   }
 }
 
 @media (max-width: 1240px) {
+  body {
+    overflow: auto;
+  }
+
+  .app-shell-v4 {
+    height: auto;
+    min-height: 100vh;
+  }
+
   .workspace-shell {
     grid-template-columns: 1fr;
+    overflow: visible;
   }
 
   .app-rail {
@@ -885,7 +883,8 @@ textarea {
 
   .workspace-overview-hero,
   .workspace-request-head,
-  .workspace-tabs-head {
+  .workspace-tabs-head,
+  .desktop-topbar {
     flex-direction: column;
     align-items: stretch;
   }
@@ -894,7 +893,7 @@ textarea {
 @media (max-width: 760px) {
   .app-shell-v4,
   .welcome-shell {
-    padding: 14px;
+    padding: 12px;
   }
 
   .import-summary,
@@ -904,9 +903,9 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .desktop-topbar {
-    flex-direction: column;
-    align-items: stretch;
+  .workspace-case-strip,
+  .workspace-toolbar-right {
+    flex-wrap: wrap;
   }
 }
 
