@@ -1,32 +1,50 @@
-import { IconApi, IconClockBolt, IconFolderCog, IconLayoutGrid, IconSettings, IconStack3 } from '@tabler/icons-react';
+import { IconApi, IconFolderCog, IconPlugConnected, IconPointFilled } from '@tabler/icons-react';
 
-const RAIL_ITEMS = [
-  { key: 'interfaces', label: '接口管理', icon: IconApi, active: true },
-  { key: 'projects', label: '项目视图', icon: IconLayoutGrid },
-  { key: 'history', label: '请求历史', icon: IconClockBolt },
-  { key: 'imports', label: '导入记录', icon: IconStack3 },
-  { key: 'workspace', label: '工作区', icon: IconFolderCog },
-  { key: 'settings', label: '设置', icon: IconSettings }
-];
-
-export function AppRail() {
+export function AppRail(props: {
+  workspaceName: string;
+  requestCount: number;
+  activeEnvironment: string;
+  isDirty: boolean;
+}) {
   return (
-    <aside className="app-rail">
-      <div className="app-rail-brand">狐</div>
-      <div className="app-rail-items">
-        {RAIL_ITEMS.map(item => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.key}
-              className={['app-rail-item', item.active ? 'is-active' : ''].filter(Boolean).join(' ')}
-              type="button"
-            >
-              <Icon size={20} />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
+    <aside className="app-rail" aria-label="Workspace status rail">
+      <div className="app-rail-brand" title={props.workspaceName}>
+        <span>YA</span>
+      </div>
+
+      <div className="app-rail-metrics">
+        <div className="app-rail-metric">
+          <IconFolderCog size={17} />
+          <span className="app-rail-metric-label">项目</span>
+          <strong className="app-rail-metric-value">{props.workspaceName.slice(0, 2).toUpperCase()}</strong>
+        </div>
+
+        <div className="app-rail-metric">
+          <IconApi size={17} />
+          <span className="app-rail-metric-label">接口</span>
+          <strong className="app-rail-metric-value">{props.requestCount}</strong>
+        </div>
+
+        <div className="app-rail-metric">
+          <IconPlugConnected size={17} />
+          <span className="app-rail-metric-label">环境</span>
+          <strong className="app-rail-metric-value">{props.activeEnvironment.slice(0, 3).toUpperCase()}</strong>
+        </div>
+      </div>
+
+      <div className="app-rail-shortcuts">
+        <div className="app-rail-shortcut">
+          <span>Open</span>
+          <strong>Cmd+O</strong>
+        </div>
+        <div className="app-rail-shortcut">
+          <span>Save</span>
+          <strong>Cmd+S</strong>
+        </div>
+        <div className={['app-rail-shortcut', props.isDirty ? 'is-dirty' : ''].filter(Boolean).join(' ')}>
+          <IconPointFilled size={10} />
+          <strong>{props.isDirty ? 'Dirty' : 'Ready'}</strong>
+        </div>
       </div>
     </aside>
   );

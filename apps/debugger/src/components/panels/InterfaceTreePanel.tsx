@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ActionIcon, Button, ScrollArea, Text, TextInput } from '@mantine/core';
 import {
   IconChevronDown,
@@ -46,6 +46,11 @@ function requestCount(node: WorkspaceTreeNode): number {
   return node.children.reduce((total, child) => total + requestCount(child), 0);
 }
 
+function caseCount(node: WorkspaceTreeNode): number {
+  if (node.kind === 'case') return 1;
+  return node.children.reduce((total, child) => total + caseCount(child), 0);
+}
+
 function categoryPathFromSelection(node: SelectedNode) {
   if (node.kind === 'category') return node.path;
   return null;
@@ -64,9 +69,31 @@ function rowClass(active: boolean, tone: string) {
   return ['tree-row', tone, active ? 'is-active' : ''].filter(Boolean).join(' ');
 }
 
+function highlightText(value: string, normalized: string) {
+  if (!normalized) return value;
+  const index = value.toLowerCase().indexOf(normalized);
+  if (index === -1) return value;
+
+  return (
+    <>
+      {value.slice(0, index)}
+      <mark className="tree-highlight">{value.slice(index, index + normalized.length)}</mark>
+      {value.slice(index + normalized.length)}
+    </>
+  );
+}
+
+function contextLabel(selectedNode: SelectedNode) {
+  if (selectedNode.kind === 'project') return '项目操作';
+  if (selectedNode.kind === 'category') return '分类操作';
+  if (selectedNode.kind === 'request') return '接口操作';
+  return '用例上下文';
+}
+
 function renderNode(props: {
   node: WorkspaceTreeNode;
   depth?: number;
+  normalized: string;
   selectedNode: SelectedNode;
   expandedRequestIds: Set<string>;
   onToggleRequest: (requestId: string) => void;
@@ -86,7 +113,7 @@ function renderNode(props: {
       <div key={props.node.id} className="tree-branch">
         <button type="button" className={rowClass(active, 'tree-row-project')} onClick={props.onSelectProject}>
           <span className="tree-row-copy">
-            <strong>{props.node.name}</strong>
+            <strong>{highlightText(props.node.name, props.normalized)}</strong>
             <span>{requestCount(props.node)} 个接口</span>
           </span>
         </button>
@@ -111,11 +138,11 @@ function renderNode(props: {
         <button
           type="button"
           className={rowClass(active, 'tree-row-category')}
-          style={{ paddingLeft: `${16 + depth * 16}px` }}
+          style={{ paddingLeft: `${14 + depth * 14}px` }}
           onClick={() => props.onSelectCategory(node.path)}
         >
           <span className="tree-row-copy">
-            <strong>{node.name}</strong>
+            <strong>{highlightText(node.name, props.normalized)}</strong>
             <span>{requestCount(node)} 个接口</span>
           </span>
         </button>
@@ -138,20 +165,20 @@ function renderNode(props: {
     const expanded = active || props.expandedRequestIds.has(node.requestId);
     return (
       <div key={node.id} className="tree-branch">
-        <div className={rowClass(active, 'tree-row-request')} style={{ paddingLeft: `${16 + depth * 16}px` }}>
+        <div className={rowClass(active, 'tree-row-request')} style={{ paddingLeft: `${14 + depth * 14}px` }}>
           <button
             type="button"
             className="tree-expand-button"
             onClick={() => props.onToggleRequest(node.requestId)}
             aria-label={expanded ? '折叠用例' : '展开用例'}
           >
-            {expanded ? <IconChevronDown size={15} /> : <IconChevronRight size={15} />}
+            {expanded ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
           </button>
           <button type="button" className="tree-row-main" onClick={() => props.onSelectRequest(node.requestId)}>
             <span className={`tree-method-pill method-${node.method.toLowerCase()}`}>{node.method}</span>
             <span className="tree-row-copy">
-              <strong>{node.name}</strong>
-              <span>{node.requestPath}</span>
+              <strong>{highlightText(node.name, props.normalized)}</strong>
+              <span>{highlightText(node.requestPath, props.normalized)}</span>
             </span>
             <span className="tree-count-badge">{node.caseCount}</span>
           </button>
@@ -178,13 +205,13 @@ function renderNode(props: {
       key={node.id}
       type="button"
       className={rowClass(active, 'tree-row-case')}
-      style={{ paddingLeft: `${28 + depth * 16}px` }}
+      style={{ paddingLeft: `${24 + depth * 14}px` }}
       onClick={() => props.onSelectCase(node.requestId, node.caseId)}
     >
       <span className="tree-case-dot" />
       <span className="tree-row-copy">
-        <strong>{node.name}</strong>
-        <span>用例</span>
+        <strong>{highlightText(node.name, props.normalized)}</strong>
+        <span>用例覆盖</span>
       </span>
     </button>
   );
@@ -196,6 +223,7 @@ export function InterfaceTreePanel(props: {
   searchText: string;
   categoryDraft: string;
   creatingCategory: boolean;
+  expandedRequestIds: string[];
   onSearchChange: (value: string) => void;
   onSelectProject: () => void;
   onSelectCategory: (category: string) => void;
@@ -203,59 +231,90 @@ export function InterfaceTreePanel(props: {
   onSelectCase: (requestId: string, caseId: string) => void;
   onOpenImport: () => void;
   onCreateInterface: () => void;
+  onAddCase: () => void;
   onToggleCategoryDraft: () => void;
   onCategoryDraftChange: (value: string) => void;
   onConfirmCreateCategory: () => void;
+  onToggleRequest: (requestId: string) => void;
 }) {
-  const [expandedRequestIds, setExpandedRequestIds] = useState<Set<string>>(new Set());
+  const searchRef = useRef<HTMLInputElement | null>(null);
   const normalized = props.searchText.trim().toLowerCase();
   const rootNode = props.workspace.tree[0];
+  const expandedRequestIds = useMemo(() => new Set(props.expandedRequestIds), [props.expandedRequestIds]);
 
   const filteredRoot = useMemo(() => {
     if (!rootNode) return null;
     return filterTree(rootNode, normalized);
   }, [rootNode, normalized]);
 
-  function toggleRequest(requestId: string) {
-    setExpandedRequestIds(current => {
-      const next = new Set(current);
-      if (next.has(requestId)) {
-        next.delete(requestId);
-      } else {
-        next.add(requestId);
-      }
-      return next;
-    });
-  }
+  useEffect(() => {
+    function focusSearch() {
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    }
+
+    window.addEventListener('debugger://focus-search', focusSearch as EventListener);
+    return () => window.removeEventListener('debugger://focus-search', focusSearch as EventListener);
+  }, []);
 
   return (
-    <section className="interface-tree-panel">
-      <div className="interface-tree-header">
+    <section className="tree-panel">
+      <div className="tree-panel-header">
         <div>
-          <p className="eyebrow">Workspace Tree</p>
-          <h2>{props.workspace.project.name}</h2>
-          <Text c="dimmed" size="sm">
-            项目 / 分类 / 接口 / 用例
-          </Text>
+          <p className="tree-caption">Workspace Explorer</p>
+          <h2 className="tree-title">{props.workspace.project.name}</h2>
         </div>
+        <Text c="dimmed" size="xs">
+          项目 / 分类 / 接口 / 用例
+        </Text>
       </div>
 
-      <div className="interface-tree-tools">
-        <TextInput
-          value={props.searchText}
-          leftSection={<IconSearch size={16} />}
-          placeholder="搜索分类、接口、用例"
-          onChange={event => props.onSearchChange(event.currentTarget.value)}
-        />
-        <ActionIcon variant="light" color="dark" onClick={props.onToggleCategoryDraft}>
-          <IconFolderPlus size={18} />
-        </ActionIcon>
-        <ActionIcon variant="light" color="dark" onClick={props.onCreateInterface}>
-          <IconPlus size={18} />
-        </ActionIcon>
-        <ActionIcon variant="light" color="dark" onClick={props.onOpenImport}>
-          <IconUpload size={18} />
-        </ActionIcon>
+      <TextInput
+        ref={searchRef}
+        value={props.searchText}
+        leftSection={<IconSearch size={14} />}
+        placeholder="搜索接口、路径、用例"
+        size="xs"
+        onChange={event => props.onSearchChange(event.currentTarget.value)}
+      />
+
+      <div className="tree-contextbar">
+        <div className="tree-context-copy">
+          <span className="tree-context-label">{contextLabel(props.selectedNode)}</span>
+          <strong>
+            {props.selectedNode.kind === 'project'
+              ? '当前项目'
+              : props.selectedNode.kind === 'category'
+                ? props.selectedNode.path
+                : props.selectedNode.kind === 'request'
+                  ? '当前接口'
+                  : '当前用例'}
+          </strong>
+        </div>
+        <div className="tree-context-actions">
+          {props.selectedNode.kind === 'project' ? (
+            <>
+              <ActionIcon variant="subtle" color="dark" onClick={props.onOpenImport} aria-label="导入到项目">
+                <IconUpload size={16} />
+              </ActionIcon>
+              <ActionIcon variant="subtle" color="dark" onClick={props.onToggleCategoryDraft} aria-label="新建分类">
+                <IconFolderPlus size={16} />
+              </ActionIcon>
+            </>
+          ) : null}
+
+          {props.selectedNode.kind === 'category' ? (
+            <ActionIcon variant="subtle" color="dark" onClick={props.onCreateInterface} aria-label="新建接口">
+              <IconPlus size={16} />
+            </ActionIcon>
+          ) : null}
+
+          {(props.selectedNode.kind === 'request' || props.selectedNode.kind === 'case') ? (
+            <ActionIcon variant="subtle" color="dark" onClick={props.onAddCase} aria-label="新建用例">
+              <IconPlus size={16} />
+            </ActionIcon>
+          ) : null}
+        </div>
       </div>
 
       {props.creatingCategory ? (
@@ -263,23 +322,24 @@ export function InterfaceTreePanel(props: {
           <input
             className="category-draft-input"
             value={props.categoryDraft}
-            placeholder="新建分类"
+            placeholder="输入分类路径"
             onChange={event => props.onCategoryDraftChange(event.currentTarget.value)}
           />
-          <Button color="dark" onClick={props.onConfirmCreateCategory}>
+          <Button size="xs" color="dark" onClick={props.onConfirmCreateCategory}>
             添加
           </Button>
         </div>
       ) : null}
 
-      <ScrollArea className="interface-tree-scroll">
+      <ScrollArea className="tree-scroll" offsetScrollbars="y" scrollbarSize={8}>
         <div className="tree-root-shell">
           {filteredRoot ? (
             renderNode({
               node: filteredRoot,
+              normalized,
               selectedNode: props.selectedNode,
               expandedRequestIds,
-              onToggleRequest: toggleRequest,
+              onToggleRequest: props.onToggleRequest,
               onSelectProject: props.onSelectProject,
               onSelectCategory: props.onSelectCategory,
               onSelectRequest: props.onSelectRequest,
@@ -287,14 +347,19 @@ export function InterfaceTreePanel(props: {
             })
           ) : (
             <div className="tree-empty-state">
-              <Text fw={700}>没有匹配结果</Text>
-              <Text c="dimmed" size="sm">
-                试试搜索分类名、接口名、HTTP Method 或用例名。
+              <Text fw={600}>没有匹配结果</Text>
+              <Text c="dimmed" size="xs">
+                试试接口名、Method、路径或用例名。
               </Text>
             </div>
           )}
         </div>
       </ScrollArea>
+
+      <div className="tree-panel-footer">
+        <span>{rootNode ? requestCount(rootNode) : 0} 个接口</span>
+        <span>{rootNode ? caseCount(rootNode) : 0} 个用例</span>
+      </div>
     </section>
   );
 }

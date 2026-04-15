@@ -19,6 +19,29 @@ export type SelectedNode =
   | { kind: 'request'; requestId: string }
   | { kind: 'case'; requestId: string; caseId: string };
 
+export type RequestTab = 'query' | 'headers' | 'body' | 'auth' | 'settings';
+export type ResponseTab = 'body' | 'headers' | 'raw';
+
+export type WorkspaceUiState = {
+  treeWidth: number;
+  mainSplitRatio: number;
+  expandedRequestIds: string[];
+  lastSelectedNode: SelectedNode;
+  activeRequestTab: RequestTab;
+  activeResponseTab: ResponseTab;
+};
+
+export function defaultWorkspaceUiState(): WorkspaceUiState {
+  return {
+    treeWidth: 316,
+    mainSplitRatio: 0.62,
+    expandedRequestIds: [],
+    lastSelectedNode: { kind: 'project' },
+    activeRequestTab: 'query',
+    activeResponseTab: 'body'
+  };
+}
+
 type WorkspaceStore = {
   workspace: WorkspaceIndex | null;
   selectedNode: SelectedNode;
@@ -233,4 +256,3 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 export function ensureWorkspaceEnvironment(name: string, workspace: WorkspaceIndex | null) {
   return workspace?.environments.find(item => item.document.name === name)?.document || createDefaultEnvironment(name);
 }
-

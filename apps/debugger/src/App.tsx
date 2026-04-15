@@ -1,5 +1,5 @@
-import { startTransition, useEffect, useMemo, useState } from 'react';
-import { ActionIcon, Drawer, Group, Select, Text } from '@mantine/core';
+import { startTransition, useEffect, useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { ActionIcon, Drawer, Select, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
 import { IconRefresh } from '@tabler/icons-react';
@@ -24,14 +24,20 @@ import {
   saveProject,
   saveRequestRecord
 } from './lib/workspace';
-import { useWorkspaceStore } from './store/workspace-store';
-import { WelcomePanel } from './components/panels/WelcomePanel';
-import { ImportPanel } from './components/panels/ImportPanel';
 import { AppRail } from './components/panels/AppRail';
+import { ImportPanel } from './components/panels/ImportPanel';
 import { InterfaceTreePanel } from './components/panels/InterfaceTreePanel';
+import { WelcomePanel } from './components/panels/WelcomePanel';
 import { WorkspaceMainPanel } from './components/panels/WorkspaceMainPanel';
+import {
+  defaultWorkspaceUiState,
+  type SelectedNode,
+  type WorkspaceUiState,
+  useWorkspaceStore
+} from './store/workspace-store';
 
 const RECENT_STORAGE_KEY = 'yapi-debugger.recent-roots';
+const UI_STORAGE_KEY_PREFIX = 'yapi-debugger.ui';
 
 function loadRecentRoots() {
   try {
@@ -46,21 +52,63 @@ function saveRecentRoots(roots: string[]) {
   window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(roots.slice(0, 6)));
 }
 
-function selectedRequestId(node: ReturnType<typeof useWorkspaceStore.getState>['selectedNode']) {
+function uiStorageKey(root: string) {
+  return `${UI_STORAGE_KEY_PREFIX}:${root}`;
+}
+
+function loadWorkspaceUiState(root: string): WorkspaceUiState {
+  try {
+    const raw = window.localStorage.getItem(uiStorageKey(root));
+    if (!raw) return defaultWorkspaceUiState();
+    const parsed = JSON.parse(raw) as Partial<WorkspaceUiState>;
+    return {
+      ...defaultWorkspaceUiState(),
+      ...parsed,
+      expandedRequestIds: Array.isArray(parsed.expandedRequestIds) ? parsed.expandedRequestIds : [],
+      lastSelectedNode: parsed.lastSelectedNode || { kind: 'project' }
+    };
+  } catch (_err) {
+    return defaultWorkspaceUiState();
+  }
+}
+
+function saveWorkspaceUiState(root: string, state: WorkspaceUiState) {
+  window.localStorage.setItem(uiStorageKey(root), JSON.stringify(state));
+}
+
+function selectedRequestId(node: SelectedNode) {
   return node.kind === 'request' || node.kind === 'case' ? node.requestId : null;
 }
 
-function selectedCaseId(node: ReturnType<typeof useWorkspaceStore.getState>['selectedNode']) {
+function selectedCaseId(node: SelectedNode) {
   return node.kind === 'case' ? node.caseId : null;
 }
 
-function selectedCategoryPath(node: ReturnType<typeof useWorkspaceStore.getState>['selectedNode'], workspace: WorkspaceIndex | null) {
+function selectedCategoryPath(node: SelectedNode, workspace: WorkspaceIndex | null) {
   if (node.kind === 'category') return node.path;
   if (node.kind === 'request' || node.kind === 'case') {
     const record = workspace?.requests.find(item => item.request.id === node.requestId);
     return record?.folderSegments.join('/') || null;
   }
   return null;
+}
+
+function selectionLabel(node: SelectedNode, workspace: WorkspaceIndex | null) {
+  if (node.kind === 'project') return '项目配置';
+  if (node.kind === 'category') return node.path;
+  if (node.kind === 'request' || node.kind === 'case') {
+    const record = workspace?.requests.find(item => item.request.id === node.requestId);
+    if (node.kind === 'case') {
+      const matchedCase = record?.cases.find(item => item.id === node.caseId);
+      return matchedCase?.name || '用例';
+    }
+    return record?.request.path || record?.request.url || record?.request.name || '/';
+  }
+  return '项目配置';
+}
+
+function clampTreeWidth(value: number) {
+  return Math.max(260, Math.min(420, Math.round(value)));
 }
 
 export function App() {
@@ -70,10 +118,15 @@ export function App() {
   const [importOpened, setImportOpened] = useState(false);
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState('');
+  const [uiState, setUiState] = useState<WorkspaceUiState>(defaultWorkspaceUiState());
 
   const requestId = selectedRequestId(store.selectedNode);
   const caseId = selectedCaseId(store.selectedNode);
   const categoryPath = selectedCategoryPath(store.selectedNode, store.workspace);
+
+  const selectedEnvironment = store.workspace?.environments.find(
+    item => item.document.name === store.activeEnvironmentName
+  )?.document || null;
 
   const selectedRecord = useMemo(
     () => store.workspace?.requests.find(item => item.request.id === requestId) || null,
@@ -88,9 +141,47 @@ export function App() {
     });
   }, [store.workspace, categoryPath]);
 
-  const selectedEnvironment = store.workspace?.environments.find(
-    item => item.document.name === store.activeEnvironmentName
-  )?.document || null;
+  function applyWorkspaceState(workspace: WorkspaceIndex) {
+    const nextUi = loadWorkspaceUiState(workspace.root);
+    setUiState(nextUi);
+    startTransition(() => {
+      store.setWorkspace(workspace);
+      store.selectNode(nextUi.lastSelectedNode);
+    });
+  }
+
+  function updateUiState(updater: (current: WorkspaceUiState) => WorkspaceUiState) {
+    setUiState(current => updater(current));
+  }
+
+  function expandRequest(requestIdToExpand: string) {
+    updateUiState(current =>
+      current.expandedRequestIds.includes(requestIdToExpand)
+        ? current
+        : {
+            ...current,
+            expandedRequestIds: [...current.expandedRequestIds, requestIdToExpand]
+          }
+    );
+  }
+
+  function handleSelectProject() {
+    store.selectNode({ kind: 'project' });
+  }
+
+  function handleSelectCategory(path: string) {
+    store.selectNode({ kind: 'category', path });
+  }
+
+  function handleSelectRequest(nextRequestId: string) {
+    expandRequest(nextRequestId);
+    store.selectNode({ kind: 'request', requestId: nextRequestId });
+  }
+
+  function handleSelectCase(nextRequestId: string, nextCaseId: string) {
+    expandRequest(nextRequestId);
+    store.selectNode({ kind: 'case', requestId: nextRequestId, caseId: nextCaseId });
+  }
 
   useEffect(() => {
     const roots = loadRecentRoots();
@@ -100,6 +191,20 @@ export function App() {
   useEffect(() => {
     syncMenuState(store.recentRoots, Boolean(store.workspace)).catch(() => undefined);
   }, [store.recentRoots, store.workspace?.root]);
+
+  useEffect(() => {
+    if (!store.workspace?.root) return;
+    saveWorkspaceUiState(store.workspace.root, {
+      ...uiState,
+      lastSelectedNode: store.selectedNode
+    });
+  }, [store.workspace?.root, uiState, store.selectedNode]);
+
+  useEffect(() => {
+    const selectedId = requestId;
+    if (!selectedId) return;
+    expandRequest(selectedId);
+  }, [requestId]);
 
   useEffect(() => {
     const unlistenPromise = listenMenuActions(payload => {
@@ -116,6 +221,7 @@ export function App() {
         return;
       }
       if (payload.action === 'close-workspace') {
+        setUiState(defaultWorkspaceUiState());
         store.setWorkspace(null);
         return;
       }
@@ -127,7 +233,7 @@ export function App() {
     return () => {
       unlistenPromise.then(unlisten => unlisten()).catch(() => undefined);
     };
-  }, [store.workspace, store.recentRoots, projectName]);
+  }, [store.workspace, projectName]);
 
   useEffect(() => {
     if (!store.workspace?.root) return;
@@ -135,7 +241,7 @@ export function App() {
 
     watchWorkspace(store.workspace.root, async () => {
       const workspace = await openWorkspace(store.workspace!.root);
-      startTransition(() => store.setWorkspace(workspace));
+      applyWorkspaceState(workspace);
     }).then(listener => {
       unlisten = listener;
     });
@@ -146,10 +252,45 @@ export function App() {
     };
   }, [store.workspace?.root]);
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const isCommand = event.metaKey || event.ctrlKey;
+      if (!isCommand) return;
+
+      const key = event.key.toLowerCase();
+
+      if (key === 'o') {
+        event.preventDefault();
+        handleOpenDirectory();
+        return;
+      }
+
+      if (key === 's' && store.workspace) {
+        event.preventDefault();
+        saveMutation.mutate();
+        return;
+      }
+
+      if (key === 'enter' && requestId) {
+        event.preventDefault();
+        runMutation.mutate();
+        return;
+      }
+
+      if (key === 'f' && event.shiftKey) {
+        event.preventDefault();
+        window.dispatchEvent(new Event('debugger://focus-search'));
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [store.workspace, requestId]);
+
   const openMutation = useMutation({
     mutationFn: async (root: string) => openWorkspace(root),
     onSuccess(workspace) {
-      startTransition(() => store.setWorkspace(workspace));
+      applyWorkspaceState(workspace);
       const recent = [workspace.root, ...store.recentRoots.filter(item => item !== workspace.root)];
       store.setRecentRoots(recent);
       saveRecentRoots(recent);
@@ -167,7 +308,7 @@ export function App() {
       return createWorkspace(root, projectName.trim() || 'New API Workspace');
     },
     onSuccess(workspace) {
-      startTransition(() => store.setWorkspace(workspace));
+      applyWorkspaceState(workspace);
       const recent = [workspace.root, ...store.recentRoots.filter(item => item !== workspace.root)];
       store.setRecentRoots(recent);
       saveRecentRoots(recent);
@@ -210,7 +351,7 @@ export function App() {
       throw new Error('Nothing to save on this view');
     },
     onSuccess(workspace) {
-      startTransition(() => store.setWorkspace(workspace));
+      applyWorkspaceState(workspace);
       notifications.show({ color: 'teal', message: 'Saved' });
     },
     onError(error) {
@@ -271,7 +412,7 @@ export function App() {
       return openWorkspace(store.workspace.root);
     },
     onSuccess(workspace) {
-      startTransition(() => store.setWorkspace(workspace));
+      applyWorkspaceState(workspace);
       store.setImportPreview(null);
       setImportOpened(false);
       notifications.show({ color: 'teal', message: 'Import applied to project' });
@@ -290,8 +431,8 @@ export function App() {
     onSuccess(nextRequestId) {
       if (!store.workspace) return;
       openWorkspace(store.workspace.root).then(workspace => {
-        store.setWorkspace(workspace);
-        startTransition(() => store.selectNode({ kind: 'request', requestId: nextRequestId }));
+        applyWorkspaceState(workspace);
+        handleSelectRequest(nextRequestId);
       });
       notifications.show({ color: 'teal', message: 'Interface created' });
     },
@@ -313,121 +454,183 @@ export function App() {
     const seed = categoryDraft.trim();
     if (!seed) return;
     const nextPath = categoryPath ? `${categoryPath}/${seed}` : seed;
-    store.selectNode({ kind: 'category', path: nextPath });
+    handleSelectCategory(nextPath);
     setCategoryDraft('');
     setCreatingCategory(false);
     notifications.show({ color: 'teal', message: `Category ${nextPath} is ready. Create an interface inside it.` });
   }
 
+  function handleTreeResizeStart(event: ReactMouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = uiState.treeWidth;
+
+    function handleMove(moveEvent: MouseEvent) {
+      const nextWidth = startWidth + (moveEvent.clientX - startX);
+      updateUiState(current => ({
+        ...current,
+        treeWidth: clampTreeWidth(nextWidth)
+      }));
+    }
+
+    function handleUp() {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    }
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  }
+
   if (!store.workspace) {
     return (
-      <>
-        <WelcomePanel
-          recentRoots={store.recentRoots}
-          projectName={projectName}
-          setProjectName={setProjectName}
-          onOpenDirectory={handleOpenDirectory}
-          onCreateProject={() => createMutation.mutate()}
-          onOpenRecent={openExistingWorkspace}
-        />
-        <Drawer opened={importOpened} onClose={() => setImportOpened(false)} title="导入接口规范" position="right" size="lg">
-          <ImportPanel
-            preview={store.importPreview}
-            importAuth={store.importAuth}
-            importUrl={importUrl}
-            setImportUrl={setImportUrl}
-            setImportAuth={auth => store.setImportAuth(auth)}
-            onPickFile={() => importFileMutation.mutate()}
-            onImportUrl={() => importUrlMutation.mutate()}
-            onApplyImport={() => applyImportMutation.mutate()}
-          />
-        </Drawer>
-      </>
+      <WelcomePanel
+        recentRoots={store.recentRoots}
+        projectName={projectName}
+        setProjectName={setProjectName}
+        onOpenDirectory={handleOpenDirectory}
+        onCreateProject={() => createMutation.mutate()}
+        onOpenRecent={openExistingWorkspace}
+      />
     );
   }
 
   return (
-    <div className="app-shell app-shell-v4">
-      <header className="desktop-topbar native-topbar">
-        <div className="desktop-topbar-left">
-          <div className="desktop-title-group">
-            <span className="desktop-caption">YApi Debugger</span>
-            <span className="desktop-title">{store.workspace.project.name}</span>
+    <>
+      <div className="app-shell-native">
+        <div className="workspace-frame">
+          <div className="workspace-contextbar">
+            <div className="workspace-context-copy">
+              <span className="workspace-context-label">YApi Debugger</span>
+              <strong className="workspace-context-title">{store.workspace.project.name}</strong>
+              <Text c="dimmed" size="xs" className="workspace-context-path">
+                {selectionLabel(store.selectedNode, store.workspace)}
+              </Text>
+            </div>
+
+            <div className="workspace-context-actions">
+              <Select
+                size="xs"
+                className="compact-select"
+                value={store.activeEnvironmentName}
+                data={store.workspace.environments.map(item => ({
+                  value: item.document.name,
+                  label: item.document.name
+                }))}
+                onChange={value => value && store.setActiveEnvironment(value)}
+              />
+              <span className={['workspace-indicator', runMutation.isPending ? 'is-busy' : ''].filter(Boolean).join(' ')}>
+                {runMutation.isPending ? 'Running' : 'Idle'}
+              </span>
+              <span className={['workspace-indicator', store.isDirty ? 'is-dirty' : ''].filter(Boolean).join(' ')}>
+                {store.isDirty ? 'Unsaved' : 'Saved'}
+              </span>
+              <ActionIcon variant="subtle" color="dark" onClick={() => openMutation.mutate(store.workspace!.root)}>
+                <IconRefresh size={15} />
+              </ActionIcon>
+            </div>
           </div>
-          <Text c="dimmed" size="sm" className="desktop-location">
-            {store.selectedNode.kind === 'project'
-              ? '项目首页'
-              : store.selectedNode.kind === 'category'
-                ? store.selectedNode.path
-                : selectedRecord?.request.path || selectedRecord?.request.url || '/'}
-          </Text>
+
+          <main
+            className="workspace-grid"
+            style={
+              {
+                '--tree-width': `${uiState.treeWidth}px`
+              } as CSSProperties
+            }
+          >
+            <AppRail
+              workspaceName={store.workspace.project.name}
+              requestCount={store.workspace.requests.length}
+              activeEnvironment={store.activeEnvironmentName}
+              isDirty={store.isDirty}
+            />
+
+            <InterfaceTreePanel
+              workspace={store.workspace}
+              selectedNode={store.selectedNode}
+              searchText={store.searchText}
+              categoryDraft={categoryDraft}
+              creatingCategory={creatingCategory}
+              expandedRequestIds={uiState.expandedRequestIds}
+              onSearchChange={value => store.setSearchText(value)}
+              onSelectProject={handleSelectProject}
+              onSelectCategory={handleSelectCategory}
+              onSelectRequest={handleSelectRequest}
+              onSelectCase={handleSelectCase}
+              onOpenImport={() => setImportOpened(true)}
+              onCreateInterface={() => addRequestMutation.mutate()}
+              onAddCase={() => store.addDraftCase()}
+              onToggleCategoryDraft={() => setCreatingCategory(current => !current)}
+              onCategoryDraftChange={setCategoryDraft}
+              onConfirmCreateCategory={handleConfirmCreateCategory}
+              onToggleRequest={requestIdToToggle =>
+                updateUiState(current => ({
+                  ...current,
+                  expandedRequestIds: current.expandedRequestIds.includes(requestIdToToggle)
+                    ? current.expandedRequestIds.filter(item => item !== requestIdToToggle)
+                    : [...current.expandedRequestIds, requestIdToToggle]
+                }))
+              }
+            />
+
+            <div className="workspace-resizer" onMouseDown={handleTreeResizeStart} />
+
+            <WorkspaceMainPanel
+              workspace={store.workspace}
+              selectedNode={store.selectedNode}
+              categoryRequests={categoryRequests}
+              draftProject={store.draftProject}
+              request={store.draftRequest}
+              response={store.response}
+              cases={store.draftCases}
+              activeEnvironmentName={store.activeEnvironmentName}
+              selectedEnvironment={selectedEnvironment}
+              isRunning={runMutation.isPending}
+              isDirty={store.isDirty}
+              activeRequestTab={uiState.activeRequestTab}
+              activeResponseTab={uiState.activeResponseTab}
+              mainSplitRatio={uiState.mainSplitRatio}
+              onProjectChange={project => store.updateProject(project)}
+              onEnvironmentChange={name => store.setActiveEnvironment(name)}
+              onEnvironmentUpdate={(name, updater) => store.updateEnvironment(name, updater)}
+              onRequestChange={requestDocument => store.updateRequest(requestDocument)}
+              onCasesChange={cases => store.updateCaseList(cases)}
+              onCaseSelect={nextCaseId =>
+                requestId
+                  ? nextCaseId
+                    ? handleSelectCase(requestId, nextCaseId)
+                    : handleSelectRequest(requestId)
+                  : undefined
+              }
+              onAddCase={() => store.addDraftCase()}
+              onRun={() => runMutation.mutate()}
+              onSave={() => saveMutation.mutate()}
+              onSelectRequest={handleSelectRequest}
+              onOpenImport={() => setImportOpened(true)}
+              onCreateInterface={() => addRequestMutation.mutate()}
+              onRequestTabChange={tab =>
+                updateUiState(current => ({
+                  ...current,
+                  activeRequestTab: tab
+                }))
+              }
+              onResponseTabChange={tab =>
+                updateUiState(current => ({
+                  ...current,
+                  activeResponseTab: tab
+                }))
+              }
+              onMainSplitRatioChange={ratio =>
+                updateUiState(current => ({
+                  ...current,
+                  mainSplitRatio: ratio
+                }))
+              }
+            />
+          </main>
         </div>
-        <Group className="native-topbar-actions">
-          <Select
-            value={store.activeEnvironmentName}
-            data={store.workspace.environments.map(item => ({
-              value: item.document.name,
-              label: item.document.name
-            }))}
-            onChange={value => value && store.setActiveEnvironment(value)}
-          />
-          <ActionIcon variant="light" color="dark" onClick={() => openMutation.mutate(store.workspace!.root)}>
-            <IconRefresh size={16} />
-          </ActionIcon>
-        </Group>
-      </header>
-
-      <main className="workspace-shell">
-        <AppRail />
-
-        <InterfaceTreePanel
-          workspace={store.workspace}
-          selectedNode={store.selectedNode}
-          searchText={store.searchText}
-          categoryDraft={categoryDraft}
-          creatingCategory={creatingCategory}
-          onSearchChange={value => store.setSearchText(value)}
-          onSelectProject={() => store.selectNode({ kind: 'project' })}
-          onSelectCategory={path => store.selectNode({ kind: 'category', path })}
-          onSelectRequest={nextRequestId => store.selectNode({ kind: 'request', requestId: nextRequestId })}
-          onSelectCase={(nextRequestId, nextCaseId) => store.selectNode({ kind: 'case', requestId: nextRequestId, caseId: nextCaseId })}
-          onOpenImport={() => setImportOpened(true)}
-          onCreateInterface={() => addRequestMutation.mutate()}
-          onToggleCategoryDraft={() => setCreatingCategory(current => !current)}
-          onCategoryDraftChange={setCategoryDraft}
-          onConfirmCreateCategory={handleConfirmCreateCategory}
-        />
-
-        <WorkspaceMainPanel
-          workspace={store.workspace}
-          selectedNode={store.selectedNode}
-          categoryRequests={categoryRequests}
-          draftProject={store.draftProject}
-          request={store.draftRequest}
-          response={store.response}
-          cases={store.draftCases}
-          activeEnvironmentName={store.activeEnvironmentName}
-          selectedEnvironment={selectedEnvironment}
-          isRunning={runMutation.isPending}
-          isDirty={store.isDirty}
-          onProjectChange={project => store.updateProject(project)}
-          onEnvironmentChange={name => store.setActiveEnvironment(name)}
-          onEnvironmentUpdate={(name, updater) => store.updateEnvironment(name, updater)}
-          onRequestChange={request => store.updateRequest(request)}
-          onCasesChange={cases => store.updateCaseList(cases)}
-          onCaseSelect={nextCaseId =>
-            requestId
-              ? store.selectNode(nextCaseId ? { kind: 'case', requestId, caseId: nextCaseId } : { kind: 'request', requestId })
-              : undefined
-          }
-          onAddCase={() => store.addDraftCase()}
-          onRun={() => runMutation.mutate()}
-          onSave={() => saveMutation.mutate()}
-          onSelectRequest={nextRequestId => store.selectNode({ kind: 'request', requestId: nextRequestId })}
-          onOpenImport={() => setImportOpened(true)}
-          onCreateInterface={() => addRequestMutation.mutate()}
-        />
-      </main>
+      </div>
 
       <Drawer opened={importOpened} onClose={() => setImportOpened(false)} title="导入接口规范" position="right" size="lg">
         <ImportPanel
@@ -441,6 +644,6 @@ export function App() {
           onApplyImport={() => applyImportMutation.mutate()}
         />
       </Drawer>
-    </div>
+    </>
   );
 }

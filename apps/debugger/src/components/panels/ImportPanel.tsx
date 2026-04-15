@@ -21,18 +21,20 @@ export function ImportPanel(props: {
       </div>
 
       <Stack gap="md">
-        <Button color="dark" variant="light" onClick={props.onPickFile}>
+        <Button size="xs" color="dark" variant="light" onClick={props.onPickFile}>
           从本地文件导入
         </Button>
         <Divider label="或" labelPosition="center" />
         <TextInput
           label="规范 URL"
+          size="xs"
           placeholder="https://example.com/openapi.json"
           value={props.importUrl}
           onChange={event => props.setImportUrl(event.currentTarget.value)}
         />
         <Select
           label="Token 模式"
+          size="xs"
           value={props.importAuth.mode}
           data={[
             { value: 'none', label: '不使用 Token' },
@@ -53,12 +55,14 @@ export function ImportPanel(props: {
             {props.importAuth.mode === 'bearer' ? null : (
               <TextInput
                 label="Key"
+                size="xs"
                 value={props.importAuth.key || ''}
                 onChange={event => props.setImportAuth({ ...props.importAuth, key: event.currentTarget.value })}
               />
             )}
             <TextInput
               label={props.importAuth.mode === 'bearer' ? 'Token' : 'Value'}
+              size="xs"
               value={props.importAuth.mode === 'bearer' ? props.importAuth.token || '' : props.importAuth.value || ''}
               onChange={event =>
                 props.setImportAuth(
@@ -70,7 +74,7 @@ export function ImportPanel(props: {
             />
           </Group>
         ) : null}
-        <Button color="dark" onClick={props.onImportUrl}>
+        <Button size="xs" color="dark" onClick={props.onImportUrl}>
           预览 URL 导入
         </Button>
       </Stack>
@@ -95,7 +99,7 @@ export function ImportPanel(props: {
               <span>环境</span>
               <strong>{props.preview.summary.environments}</strong>
             </div>
-            <Button color="dark" onClick={props.onApplyImport}>
+            <Button size="xs" color="dark" onClick={props.onApplyImport}>
               应用到当前项目
             </Button>
           </div>
