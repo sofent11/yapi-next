@@ -15,30 +15,30 @@ export function ImportPanel(props: {
     <section className="import-panel">
       <div className="import-panel-head">
         <div>
-          <p className="eyebrow">Import</p>
-          <h3>Bring external specs into this workspace</h3>
+          <p className="eyebrow">Project Import</p>
+          <h3>把外部规范导入到当前项目</h3>
         </div>
       </div>
 
       <Stack gap="md">
         <Button color="dark" variant="light" onClick={props.onPickFile}>
-          Import From Local File
+          从本地文件导入
         </Button>
-        <Divider label="or" labelPosition="center" />
+        <Divider label="或" labelPosition="center" />
         <TextInput
-          label="Spec URL"
+          label="规范 URL"
           placeholder="https://example.com/openapi.json"
           value={props.importUrl}
           onChange={event => props.setImportUrl(event.currentTarget.value)}
         />
         <Select
-          label="Token Mode"
+          label="Token 模式"
           value={props.importAuth.mode}
           data={[
-            { value: 'none', label: 'No Token' },
+            { value: 'none', label: '不使用 Token' },
             { value: 'bearer', label: 'Bearer Token' },
-            { value: 'header', label: 'Custom Header' },
-            { value: 'query', label: 'Query Parameter' }
+            { value: 'header', label: '自定义 Header' },
+            { value: 'query', label: 'Query 参数' }
           ]}
           onChange={value =>
             value &&
@@ -71,36 +71,36 @@ export function ImportPanel(props: {
           </Group>
         ) : null}
         <Button color="dark" onClick={props.onImportUrl}>
-          Preview URL Import
+          预览 URL 导入
         </Button>
       </Stack>
 
       <div className="import-preview">
-        <Text fw={700}>Preview</Text>
+        <Text fw={700}>导入预览</Text>
         {props.preview ? (
           <div className="import-summary">
             <div>
-              <span>Format</span>
+              <span>格式</span>
               <strong>{props.preview.detectedFormat}</strong>
             </div>
             <div>
-              <span>Requests</span>
+              <span>接口</span>
               <strong>{props.preview.summary.requests}</strong>
             </div>
             <div>
-              <span>Folders</span>
+              <span>分类</span>
               <strong>{props.preview.summary.folders}</strong>
             </div>
             <div>
-              <span>Environments</span>
+              <span>环境</span>
               <strong>{props.preview.summary.environments}</strong>
             </div>
             <Button color="dark" onClick={props.onApplyImport}>
-              Apply Import
+              应用到当前项目
             </Button>
           </div>
         ) : (
-          <Text c="dimmed">Preview a local file or a remote URL first. We will convert it into request and case files in this project.</Text>
+          <Text c="dimmed">先预览本地文件或远程 URL。导入后会自动转换为项目 / 分类 / 接口 / 用例结构。</Text>
         )}
       </div>
     </section>

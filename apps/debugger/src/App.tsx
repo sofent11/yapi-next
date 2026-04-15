@@ -1,10 +1,17 @@
 import { startTransition, useEffect, useMemo, useState } from 'react';
-import { ActionIcon, Button, Drawer, Group, Select, TextInput } from '@mantine/core';
+import { ActionIcon, Drawer, Group, Select, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
-import { IconFolderOpen, IconRefresh, IconUpload } from '@tabler/icons-react';
+import { IconRefresh } from '@tabler/icons-react';
 import type { WorkspaceIndex } from '@yapi-debugger/schema';
-import { chooseDirectory, chooseImportFile, unwatchWorkspace, watchWorkspace } from './lib/desktop';
+import {
+  chooseDirectory,
+  chooseImportFile,
+  listenMenuActions,
+  syncMenuState,
+  unwatchWorkspace,
+  watchWorkspace
+} from './lib/desktop';
 import {
   createRequestInWorkspace,
   createWorkspace,
@@ -14,6 +21,7 @@ import {
   openWorkspace,
   runResolvedRequest,
   saveEnvironment,
+  saveProject,
   saveRequestRecord
 } from './lib/workspace';
 import { useWorkspaceStore } from './store/workspace-store';
@@ -38,14 +46,21 @@ function saveRecentRoots(roots: string[]) {
   window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(roots.slice(0, 6)));
 }
 
-function categoryFromRecord(record?: WorkspaceIndex['requests'][number] | null) {
-  return record?.folderSegments.join('/') || '';
+function selectedRequestId(node: ReturnType<typeof useWorkspaceStore.getState>['selectedNode']) {
+  return node.kind === 'request' || node.kind === 'case' ? node.requestId : null;
 }
 
-function belongsToCategory(record: WorkspaceIndex['requests'][number], category: string) {
-  if (category === '__overview__') return true;
-  const path = categoryFromRecord(record);
-  return path === category || path.startsWith(`${category}/`);
+function selectedCaseId(node: ReturnType<typeof useWorkspaceStore.getState>['selectedNode']) {
+  return node.kind === 'case' ? node.caseId : null;
+}
+
+function selectedCategoryPath(node: ReturnType<typeof useWorkspaceStore.getState>['selectedNode'], workspace: WorkspaceIndex | null) {
+  if (node.kind === 'category') return node.path;
+  if (node.kind === 'request' || node.kind === 'case') {
+    const record = workspace?.requests.find(item => item.request.id === node.requestId);
+    return record?.folderSegments.join('/') || null;
+  }
+  return null;
 }
 
 export function App() {
@@ -55,16 +70,64 @@ export function App() {
   const [importOpened, setImportOpened] = useState(false);
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('__overview__');
 
-  const selectedCategoryRequests = useMemo(
-    () => store.workspace?.requests.filter((record: WorkspaceIndex['requests'][number]) => belongsToCategory(record, selectedCategory)) || [],
-    [store.workspace, selectedCategory]
+  const requestId = selectedRequestId(store.selectedNode);
+  const caseId = selectedCaseId(store.selectedNode);
+  const categoryPath = selectedCategoryPath(store.selectedNode, store.workspace);
+
+  const selectedRecord = useMemo(
+    () => store.workspace?.requests.find(item => item.request.id === requestId) || null,
+    [store.workspace, requestId]
   );
 
+  const categoryRequests = useMemo(() => {
+    if (!store.workspace || !categoryPath) return [];
+    return store.workspace.requests.filter(record => {
+      const value = record.folderSegments.join('/');
+      return value === categoryPath || value.startsWith(`${categoryPath}/`);
+    });
+  }, [store.workspace, categoryPath]);
+
+  const selectedEnvironment = store.workspace?.environments.find(
+    item => item.document.name === store.activeEnvironmentName
+  )?.document || null;
+
   useEffect(() => {
-    store.setRecentRoots(loadRecentRoots());
+    const roots = loadRecentRoots();
+    store.setRecentRoots(roots);
   }, []);
+
+  useEffect(() => {
+    syncMenuState(store.recentRoots, Boolean(store.workspace)).catch(() => undefined);
+  }, [store.recentRoots, store.workspace?.root]);
+
+  useEffect(() => {
+    const unlistenPromise = listenMenuActions(payload => {
+      if (payload.action === 'open-workspace') {
+        handleOpenDirectory();
+        return;
+      }
+      if (payload.action === 'create-workspace') {
+        createMutation.mutate();
+        return;
+      }
+      if (payload.action === 'import-project') {
+        if (store.workspace) setImportOpened(true);
+        return;
+      }
+      if (payload.action === 'close-workspace') {
+        store.setWorkspace(null);
+        return;
+      }
+      if (payload.action === 'open-recent' && payload.root) {
+        openExistingWorkspace(payload.root);
+      }
+    });
+
+    return () => {
+      unlistenPromise.then(unlisten => unlisten()).catch(() => undefined);
+    };
+  }, [store.workspace, store.recentRoots, projectName]);
 
   useEffect(() => {
     if (!store.workspace?.root) return;
@@ -83,30 +146,11 @@ export function App() {
     };
   }, [store.workspace?.root]);
 
-  useEffect(() => {
-    if (!store.workspace) return;
-    const selectedRecord = store.workspace.requests.find(
-      (item: WorkspaceIndex['requests'][number]) => item.request.id === store.selectedRequestId
-    );
-    if (selectedRecord) {
-      setSelectedCategory(categoryFromRecord(selectedRecord) || '__overview__');
-      return;
-    }
-    if (
-      selectedCategory !== '__overview__' &&
-      !store.workspace.requests.some((item: WorkspaceIndex['requests'][number]) => belongsToCategory(item, selectedCategory))
-    ) {
-      setSelectedCategory('__overview__');
-    }
-  }, [store.workspace, store.selectedRequestId, selectedCategory]);
-
   const openMutation = useMutation({
     mutationFn: async (root: string) => openWorkspace(root),
     onSuccess(workspace) {
-      const preserveCategory = store.workspace?.root === workspace.root ? selectedCategory : null;
       startTransition(() => store.setWorkspace(workspace));
-      setSelectedCategory(preserveCategory || categoryFromRecord(workspace.requests[0]) || '__overview__');
-      const recent = [workspace.root, ...store.recentRoots.filter((item: string) => item !== workspace.root)];
+      const recent = [workspace.root, ...store.recentRoots.filter(item => item !== workspace.root)];
       store.setRecentRoots(recent);
       saveRecentRoots(recent);
       notifications.show({ color: 'teal', message: `Opened ${workspace.project.name}` });
@@ -124,8 +168,7 @@ export function App() {
     },
     onSuccess(workspace) {
       startTransition(() => store.setWorkspace(workspace));
-      setSelectedCategory(categoryFromRecord(workspace.requests[0]) || '__overview__');
-      const recent = [workspace.root, ...store.recentRoots.filter((item: string) => item !== workspace.root)];
+      const recent = [workspace.root, ...store.recentRoots.filter(item => item !== workspace.root)];
       store.setRecentRoots(recent);
       saveRecentRoots(recent);
       notifications.show({ color: 'teal', message: 'Workspace created' });
@@ -137,32 +180,38 @@ export function App() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!store.workspace || !store.draftRequest || !store.selectedRequestId) {
-        throw new Error('Nothing to save');
+      if (!store.workspace) throw new Error('Open a workspace first');
+
+      if (store.selectedNode.kind === 'project') {
+        if (!store.draftProject) throw new Error('Project draft missing');
+        await saveProject(store.workspace.root, store.draftProject);
+        await Promise.all(
+          store.workspace.environments.map(item => saveEnvironment(store.workspace!.root, item.document))
+        );
+        return openWorkspace(store.workspace.root);
       }
-      const record = store.workspace.requests.find(
-        (item: WorkspaceIndex['requests'][number]) => item.request.id === store.selectedRequestId
-      );
-      if (!record) throw new Error('Selected interface missing');
-      await saveRequestRecord(
-        store.workspace.root,
-        record.folderSegments,
-        store.draftRequest,
-        store.draftCases,
-        record.resourceDirPath,
-        record.requestFilePath
-      );
-      const environmentRecord = store.workspace.environments.find(
-        (item: WorkspaceIndex['environments'][number]) => item.document.name === store.activeEnvironmentName
-      );
-      if (environmentRecord) {
-        await saveEnvironment(store.workspace.root, environmentRecord.document);
+
+      if (store.selectedNode.kind === 'request' || store.selectedNode.kind === 'case') {
+        if (!store.draftRequest) throw new Error('Request draft missing');
+        const requestNode = store.selectedNode;
+        const record = store.workspace.requests.find(item => item.request.id === requestNode.requestId);
+        if (!record) throw new Error('Selected interface missing');
+        await saveRequestRecord(
+          store.workspace.root,
+          record.folderSegments,
+          store.draftRequest,
+          store.draftCases,
+          record.resourceDirPath,
+          record.requestFilePath
+        );
+        return openWorkspace(store.workspace.root);
       }
-      return openWorkspace(store.workspace.root);
+
+      throw new Error('Nothing to save on this view');
     },
     onSuccess(workspace) {
       startTransition(() => store.setWorkspace(workspace));
-      notifications.show({ color: 'teal', message: 'Interface saved' });
+      notifications.show({ color: 'teal', message: 'Saved' });
     },
     onError(error) {
       notifications.show({ color: 'red', message: (error as Error).message || 'Save failed' });
@@ -171,8 +220,8 @@ export function App() {
 
   const runMutation = useMutation({
     mutationFn: async () => {
-      if (!store.workspace || !store.selectedRequestId) throw new Error('Select an interface first');
-      return runResolvedRequest(store.workspace, store.selectedRequestId, store.selectedCaseId || undefined);
+      if (!store.workspace || !requestId) throw new Error('Select an interface first');
+      return runResolvedRequest(store.workspace, requestId, caseId || undefined);
     },
     onSuccess(response) {
       store.setResponse(response);
@@ -225,7 +274,7 @@ export function App() {
       startTransition(() => store.setWorkspace(workspace));
       store.setImportPreview(null);
       setImportOpened(false);
-      notifications.show({ color: 'teal', message: 'Import applied to workspace' });
+      notifications.show({ color: 'teal', message: 'Import applied to project' });
     },
     onError(error) {
       notifications.show({ color: 'red', message: (error as Error).message || 'Apply import failed' });
@@ -235,14 +284,14 @@ export function App() {
   const addRequestMutation = useMutation({
     mutationFn: async () => {
       if (!store.workspace) throw new Error('Open a workspace first');
-      const folder = selectedCategory && selectedCategory !== '__overview__' ? selectedCategory.split('/').filter(Boolean) : ['default'];
-      return createRequestInWorkspace(store.workspace.root, folder);
+      const segments = categoryPath ? categoryPath.split('/').filter(Boolean) : ['default'];
+      return createRequestInWorkspace(store.workspace.root, segments);
     },
-    onSuccess(requestId) {
+    onSuccess(nextRequestId) {
       if (!store.workspace) return;
       openWorkspace(store.workspace.root).then(workspace => {
         store.setWorkspace(workspace);
-        startTransition(() => store.selectRequest(requestId));
+        startTransition(() => store.selectNode({ kind: 'request', requestId: nextRequestId }));
       });
       notifications.show({ color: 'teal', message: 'Interface created' });
     },
@@ -260,56 +309,65 @@ export function App() {
     if (root) openExistingWorkspace(root);
   }
 
-  function handleSelectRequest(requestId: string) {
-    const record = store.workspace?.requests.find(
-      (item: WorkspaceIndex['requests'][number]) => item.request.id === requestId
-    );
-    setSelectedCategory(categoryFromRecord(record) || '__overview__');
-    store.selectRequest(requestId);
-  }
-
   function handleConfirmCreateCategory() {
     const seed = categoryDraft.trim();
-    const nextKey =
-      selectedCategory !== '__overview__' && seed && !seed.includes('/') ? `${selectedCategory}/${seed}` : seed;
-    if (!nextKey) return;
-    setSelectedCategory(nextKey);
+    if (!seed) return;
+    const nextPath = categoryPath ? `${categoryPath}/${seed}` : seed;
+    store.selectNode({ kind: 'category', path: nextPath });
     setCategoryDraft('');
     setCreatingCategory(false);
-    store.selectRequest(null);
-    notifications.show({ color: 'teal', message: `Category ${nextKey} is ready. Create an interface inside it.` });
+    notifications.show({ color: 'teal', message: `Category ${nextPath} is ready. Create an interface inside it.` });
   }
-
-  const selectedEnvironment = store.workspace?.environments.find(
-    (item: WorkspaceIndex['environments'][number]) => item.document.name === store.activeEnvironmentName
-  )?.document;
 
   if (!store.workspace) {
     return (
-      <WelcomePanel
-        recentRoots={store.recentRoots}
-        projectName={projectName}
-        setProjectName={setProjectName}
-        onOpenDirectory={handleOpenDirectory}
-        onCreateProject={() => createMutation.mutate()}
-        onOpenRecent={openExistingWorkspace}
-      />
+      <>
+        <WelcomePanel
+          recentRoots={store.recentRoots}
+          projectName={projectName}
+          setProjectName={setProjectName}
+          onOpenDirectory={handleOpenDirectory}
+          onCreateProject={() => createMutation.mutate()}
+          onOpenRecent={openExistingWorkspace}
+        />
+        <Drawer opened={importOpened} onClose={() => setImportOpened(false)} title="导入接口规范" position="right" size="lg">
+          <ImportPanel
+            preview={store.importPreview}
+            importAuth={store.importAuth}
+            importUrl={importUrl}
+            setImportUrl={setImportUrl}
+            setImportAuth={auth => store.setImportAuth(auth)}
+            onPickFile={() => importFileMutation.mutate()}
+            onImportUrl={() => importUrlMutation.mutate()}
+            onApplyImport={() => applyImportMutation.mutate()}
+          />
+        </Drawer>
+      </>
     );
   }
 
   return (
-    <div className="app-shell app-shell-v3">
+    <div className="app-shell app-shell-v4">
       <header className="desktop-topbar">
         <div className="desktop-topbar-left">
           <span className="traffic traffic-red" />
           <span className="traffic traffic-yellow" />
           <span className="traffic traffic-green" />
-          <span className="desktop-title">主页</span>
+          <div className="desktop-title-group">
+            <span className="desktop-title">{store.workspace.project.name}</span>
+            <Text c="dimmed" size="sm">
+              {store.selectedNode.kind === 'project'
+                ? '项目首页'
+                : store.selectedNode.kind === 'category'
+                  ? store.selectedNode.path
+                  : selectedRecord?.request.path || selectedRecord?.request.url || '/'}
+            </Text>
+          </div>
         </div>
         <Group>
           <Select
             value={store.activeEnvironmentName}
-            data={store.workspace.environments.map((item: WorkspaceIndex['environments'][number]) => ({
+            data={store.workspace.environments.map(item => ({
               value: item.document.name,
               label: item.document.name
             }))}
@@ -317,12 +375,6 @@ export function App() {
           />
           <ActionIcon variant="light" color="dark" onClick={() => openMutation.mutate(store.workspace!.root)}>
             <IconRefresh size={16} />
-          </ActionIcon>
-          <ActionIcon variant="light" color="dark" onClick={() => setImportOpened(true)}>
-            <IconUpload size={16} />
-          </ActionIcon>
-          <ActionIcon variant="light" color="dark" onClick={handleOpenDirectory}>
-            <IconFolderOpen size={16} />
           </ActionIcon>
         </Group>
       </header>
@@ -332,20 +384,15 @@ export function App() {
 
         <InterfaceTreePanel
           workspace={store.workspace}
-          selectedRequestId={store.selectedRequestId}
-          selectedCategory={selectedCategory}
-          selectedCaseId={store.selectedCaseId}
+          selectedNode={store.selectedNode}
           searchText={store.searchText}
-          cases={store.draftCases}
           categoryDraft={categoryDraft}
           creatingCategory={creatingCategory}
           onSearchChange={value => store.setSearchText(value)}
-          onSelectRequest={handleSelectRequest}
-          onSelectCategory={category => {
-            setSelectedCategory(category);
-            store.selectRequest(null);
-          }}
-          onSelectCase={caseId => store.selectRequest(store.selectedRequestId, caseId)}
+          onSelectProject={() => store.selectNode({ kind: 'project' })}
+          onSelectCategory={path => store.selectNode({ kind: 'category', path })}
+          onSelectRequest={nextRequestId => store.selectNode({ kind: 'request', requestId: nextRequestId })}
+          onSelectCase={(nextRequestId, nextCaseId) => store.selectNode({ kind: 'case', requestId: nextRequestId, caseId: nextCaseId })}
           onOpenImport={() => setImportOpened(true)}
           onCreateInterface={() => addRequestMutation.mutate()}
           onToggleCategoryDraft={() => setCreatingCategory(current => !current)}
@@ -354,56 +401,35 @@ export function App() {
         />
 
         <WorkspaceMainPanel
-          workspaceName={store.workspace.project.name}
-          selectedCategory={selectedCategory}
-          categoryRequests={selectedCategoryRequests}
+          workspace={store.workspace}
+          selectedNode={store.selectedNode}
+          categoryRequests={categoryRequests}
+          draftProject={store.draftProject}
           request={store.draftRequest}
           response={store.response}
           cases={store.draftCases}
-          selectedCaseId={store.selectedCaseId}
-          environments={store.workspace.environments.map((item: WorkspaceIndex['environments'][number]) => item.document)}
           activeEnvironmentName={store.activeEnvironmentName}
+          selectedEnvironment={selectedEnvironment}
           isRunning={runMutation.isPending}
           isDirty={store.isDirty}
+          onProjectChange={project => store.updateProject(project)}
+          onEnvironmentChange={name => store.setActiveEnvironment(name)}
+          onEnvironmentUpdate={(name, updater) => store.updateEnvironment(name, updater)}
           onRequestChange={request => store.updateRequest(request)}
           onCasesChange={cases => store.updateCaseList(cases)}
-          onCaseSelect={caseId => store.selectRequest(store.selectedRequestId, caseId)}
+          onCaseSelect={nextCaseId =>
+            requestId
+              ? store.selectNode(nextCaseId ? { kind: 'case', requestId, caseId: nextCaseId } : { kind: 'request', requestId })
+              : undefined
+          }
           onAddCase={() => store.addDraftCase()}
           onRun={() => runMutation.mutate()}
           onSave={() => saveMutation.mutate()}
-          onEnvironmentChange={name => store.setActiveEnvironment(name)}
-          onSelectRequest={handleSelectRequest}
+          onSelectRequest={nextRequestId => store.selectNode({ kind: 'request', requestId: nextRequestId })}
           onOpenImport={() => setImportOpened(true)}
           onCreateInterface={() => addRequestMutation.mutate()}
         />
       </main>
-
-      {selectedEnvironment ? (
-        <footer className="bottom-strip">
-          <TextInput
-            className="env-inline"
-            label={`当前环境: ${selectedEnvironment.name}`}
-            value={selectedEnvironment.vars.baseUrl || ''}
-            placeholder="https://api.example.com"
-            onChange={event => store.updateEnvironmentBaseUrl(selectedEnvironment.name, event.currentTarget.value)}
-          />
-          <Button
-            variant="light"
-            color="dark"
-            onClick={() => {
-              const environment = store.workspace!.environments.find(
-                (item: WorkspaceIndex['environments'][number]) => item.document.name === store.activeEnvironmentName
-              )?.document;
-              if (!environment) return;
-              saveEnvironment(store.workspace!.root, environment)
-                .then(() => notifications.show({ color: 'teal', message: 'Environment saved' }))
-                .catch(error => notifications.show({ color: 'red', message: (error as Error).message || 'Environment save failed' }));
-            }}
-          >
-            保存环境
-          </Button>
-        </footer>
-      ) : null}
 
       <Drawer opened={importOpened} onClose={() => setImportOpened(false)} title="导入接口规范" position="right" size="lg">
         <ImportPanel

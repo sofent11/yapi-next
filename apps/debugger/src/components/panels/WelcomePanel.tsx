@@ -13,17 +13,17 @@ export function WelcomePanel(props: {
     <div className="welcome-shell">
       <div className="welcome-hero">
         <p className="eyebrow">Independent Desktop API Debugger</p>
-        <h1>Text-first debugging for teams who live in Git.</h1>
+        <h1>本地优先、Git 友好的 API 调试工作台。</h1>
         <p className="welcome-copy">
-          Open a folder, keep every request as readable files, and collaborate on cases without shoving
-          your API workflows into a database.
+          用目录打开项目，把接口、分类、用例都保存成可读文本。工作区完全独立，不依赖 YApi 后台，
+          适合通过 Git 共享与协作。
         </p>
         <div className="hero-actions">
           <Button size="md" color="dark" rightSection={<IconArrowRight size={16} />} onClick={props.onOpenDirectory}>
-            Open Project Folder
+            打开 Workspace
           </Button>
           <Button size="md" variant="light" color="dark" leftSection={<IconFolderOpen size={16} />} onClick={props.onCreateProject}>
-            Create New Project
+            新建 Workspace
           </Button>
         </div>
       </div>
@@ -32,21 +32,21 @@ export function WelcomePanel(props: {
         <section className="welcome-card">
           <div className="welcome-card-head">
             <IconSparkles size={18} />
-            <Text fw={700}>Create a clean workspace</Text>
+            <Text fw={700}>创建一个干净的工作区</Text>
           </div>
           <TextInput
-            label="Project Name"
+            label="项目名称"
             value={props.projectName}
             placeholder="Payments Debugger"
             onChange={event => props.setProjectName(event.currentTarget.value)}
           />
           <Text className="helper-copy">
-            We will create `project.yaml`, shared environments, and a small bootstrap request you can edit immediately.
+            会生成 `project.yaml`、默认环境和一个示例接口，打开后就能直接开始调整。
           </Text>
         </section>
 
         <section className="welcome-card">
-          <Text fw={700}>Recent Projects</Text>
+          <Text fw={700}>最近项目</Text>
           <Stack gap="sm" mt="md">
             {props.recentRoots.length > 0 ? (
               props.recentRoots.map(root => (
@@ -56,7 +56,7 @@ export function WelcomePanel(props: {
                 </Button>
               ))
             ) : (
-              <Text c="dimmed">No recent project yet. Start by opening or creating a workspace folder.</Text>
+              <Text c="dimmed">还没有最近项目。先打开一个已有目录，或创建一个新的 workspace。</Text>
             )}
           </Stack>
         </section>

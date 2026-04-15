@@ -15,6 +15,7 @@ import {
   type EnvironmentDocument,
   type ImportAuth,
   type ImportResult,
+  type ProjectDocument,
   type RequestDocument,
   type WorkspaceIndex
 } from '@yapi-debugger/schema';
@@ -58,6 +59,11 @@ export async function createWorkspace(root: string, projectName: string) {
 
 export async function saveEnvironment(root: string, environment: EnvironmentDocument) {
   const file = materializeEnvironmentDocument(environment, root);
+  await writeDocument(file.path, file.content);
+}
+
+export async function saveProject(root: string, project: ProjectDocument) {
+  const file = materializeProjectDocument(project, root);
   await writeDocument(file.path, file.content);
 }
 
@@ -147,7 +153,7 @@ export async function runResolvedRequest(workspace: WorkspaceIndex, requestId: s
   const environment = workspace.environments.find(
     (item: WorkspaceIndex['environments'][number]) => item.document.name === environmentName
   )?.document;
-  const input = resolveRequest(record.request, caseDocument, environment);
+  const input = resolveRequest(workspace.project, record.request, caseDocument, environment);
   return sendRequest(input);
 }
 
@@ -172,7 +178,13 @@ export function emptyImportResult(): ImportResult {
       schemaVersion: 1,
       name: 'Untitled',
       defaultEnvironment: 'shared',
-      labels: []
+      labels: [],
+      runtime: {
+        baseUrl: 'https://api.example.com',
+        vars: {},
+        headers: [],
+        description: ''
+      }
     },
     environments: [],
     requests: []

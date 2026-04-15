@@ -24,6 +24,13 @@ export type ImportSourcePayload = {
   sourceType: 'file' | 'url';
 };
 
+export type MenuActionPayload =
+  | { action: 'open-workspace' }
+  | { action: 'create-workspace' }
+  | { action: 'import-project' }
+  | { action: 'close-workspace' }
+  | { action: 'open-recent'; root: string };
+
 export async function chooseDirectory() {
   const result = await open({
     directory: true,
@@ -77,6 +84,16 @@ export async function fetchImportUrl(url: string, auth: ImportAuth) {
 
 export async function sendRequest(input: SendRequestInput) {
   return invoke<SendRequestResult>('request_send', { input });
+}
+
+export async function syncMenuState(recentRoots: string[], hasWorkspace: boolean) {
+  return invoke<void>('menu_sync_state', { recentRoots, hasWorkspace });
+}
+
+export async function listenMenuActions(callback: (payload: MenuActionPayload) => void) {
+  return listen<MenuActionPayload>('menu://action', event => {
+    callback(event.payload);
+  });
 }
 
 export async function watchWorkspace(root: string, callback: () => void) {

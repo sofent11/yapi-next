@@ -19,10 +19,14 @@ import {
 import type {
   CaseDocument,
   EnvironmentDocument,
+  ParameterRow,
+  ProjectDocument,
+  RequestBody,
   RequestDocument,
   SendRequestResult,
   WorkspaceIndex
 } from '@yapi-debugger/schema';
+import type { SelectedNode } from '../../store/workspace-store';
 import { CodeEditor } from '../editors/CodeEditor';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
 
@@ -62,10 +66,6 @@ function validationMessages(response: SendRequestResult | null) {
   }
 }
 
-function caseOptions(cases: CaseDocument[]) {
-  return [{ value: '__base__', label: '基础请求' }, ...cases.map(item => ({ value: item.id, label: item.name }))];
-}
-
 function responseBodyLanguage(response: SendRequestResult | null) {
   if (!response?.bodyText) return 'text';
   try {
@@ -76,25 +76,8 @@ function responseBodyLanguage(response: SendRequestResult | null) {
   }
 }
 
-function pageTitle(selectedCategory: string) {
-  return selectedCategory === '__overview__' ? '项目概览' : selectedCategory.split('/').at(-1) || '未命名分类';
-}
-
 function responseHeadersText(response: SendRequestResult | null) {
   return (response?.headers || []).map(item => `${item.name}: ${item.value}`).join('\n');
-}
-
-function bodyModeLabel(mode: RequestDocument['body']['mode']) {
-  switch (mode) {
-    case 'json':
-      return 'JSON';
-    case 'form':
-      return 'Form';
-    case 'text':
-      return 'Raw';
-    default:
-      return 'None';
-  }
 }
 
 function responseSummaryText(response: SendRequestResult | null) {
@@ -102,200 +85,462 @@ function responseSummaryText(response: SendRequestResult | null) {
   return `${response.status} ${response.statusText}`;
 }
 
+function categoryLabel(path: string | null) {
+  if (!path) return '项目首页';
+  return path.split('/').at(-1) || path;
+}
+
+function selectedRequestId(node: SelectedNode) {
+  return node.kind === 'request' || node.kind === 'case' ? node.requestId : null;
+}
+
+function selectedCaseId(node: SelectedNode) {
+  return node.kind === 'case' ? node.caseId : null;
+}
+
+function caseOptions(cases: CaseDocument[]) {
+  return [{ value: '__base__', label: '基础请求' }, ...cases.map(item => ({ value: item.id, label: item.name }))];
+}
+
+function replaceCase(
+  cases: CaseDocument[],
+  caseId: string,
+  updater: (current: CaseDocument) => CaseDocument
+) {
+  return cases.map(item => (item.id === caseId ? updater(item) : item));
+}
+
+function bodyModeLabel(mode: RequestDocument['body']['mode']) {
+  switch (mode) {
+    case 'json':
+      return 'JSON';
+    case 'form':
+      return 'FORM';
+    case 'text':
+      return 'RAW';
+    default:
+      return 'NONE';
+  }
+}
+
+function projectBreadcrumbs(project: ProjectDocument, selectedNode: SelectedNode, request: RequestDocument | null) {
+  if (selectedNode.kind === 'project') return [project.name];
+  if (selectedNode.kind === 'category') return [project.name, categoryLabel(selectedNode.path)];
+  if (selectedNode.kind === 'case') {
+    return [project.name, request?.name || '接口', '用例'];
+  }
+  return [project.name, request?.name || '接口'];
+}
+
+function rowsOrFallback(rows: ParameterRow[] | undefined, fallback: ParameterRow[]) {
+  return rows ?? fallback;
+}
+
 export function WorkspaceMainPanel(props: {
-  workspaceName: string;
-  selectedCategory: string;
+  workspace: WorkspaceIndex;
+  selectedNode: SelectedNode;
   categoryRequests: WorkspaceIndex['requests'];
+  draftProject: ProjectDocument | null;
   request: RequestDocument | null;
   response: SendRequestResult | null;
   cases: CaseDocument[];
-  selectedCaseId: string | null;
-  environments: EnvironmentDocument[];
   activeEnvironmentName: string;
+  selectedEnvironment: EnvironmentDocument | null;
   isRunning: boolean;
   isDirty: boolean;
+  onProjectChange: (project: ProjectDocument) => void;
+  onEnvironmentChange: (name: string) => void;
+  onEnvironmentUpdate: (name: string, updater: (environment: EnvironmentDocument) => EnvironmentDocument) => void;
   onRequestChange: (request: RequestDocument) => void;
   onCasesChange: (cases: CaseDocument[]) => void;
   onCaseSelect: (caseId: string | null) => void;
   onAddCase: () => void;
   onRun: () => void;
   onSave: () => void;
-  onEnvironmentChange: (name: string) => void;
   onSelectRequest: (requestId: string) => void;
   onOpenImport: () => void;
   onCreateInterface: () => void;
 }) {
-  const [mainTab, setMainTab] = useState<'debug' | 'cases' | 'settings'>('debug');
-  const [requestTab, setRequestTab] = useState<'query' | 'headers' | 'body' | 'auth'>('query');
+  const [requestTab, setRequestTab] = useState<'query' | 'headers' | 'body' | 'auth' | 'settings'>('query');
   const [responseTab, setResponseTab] = useState<'body' | 'headers' | 'raw'>('body');
-  const request = props.request;
-  const selectedCase = props.cases.find(item => item.id === props.selectedCaseId) || null;
+  const [workspaceTab, setWorkspaceTab] = useState<'debug' | 'cases' | 'settings'>('debug');
   const stats = useMemo(() => statsFromResponse(props.response), [props.response]);
   const validation = useMemo(() => validationMessages(props.response), [props.response]);
+  const request = props.request;
+  const caseId = selectedCaseId(props.selectedNode);
+  const selectedCase = props.cases.find(item => item.id === caseId) || null;
+  const breadcrumbs = projectBreadcrumbs(props.workspace.project, props.selectedNode, request);
 
-  if (!request) {
-    if (props.selectedCategory === '__overview__') {
-      return (
-        <section className="workspace-main workspace-surface">
-          <div className="workspace-tabs-head">
-            <div className="workspace-page-tabs">
-              <button type="button" className="workspace-page-tab is-active">
-                {props.workspaceName}
-              </button>
-            </div>
-          </div>
+  function updateSelectedCase(updater: (current: CaseDocument) => CaseDocument) {
+    if (!selectedCase) return;
+    props.onCasesChange(replaceCase(props.cases, selectedCase.id, updater));
+  }
 
-          <div className="workspace-overview-hero">
-            <div>
-              <p className="eyebrow">项目</p>
-              <h2>{props.workspaceName}</h2>
-              <Text c="dimmed">按“项目 / 分类 / 接口”的层级管理本地接口工作区，导入只发生在项目层，不再混入单个接口编辑。</Text>
-            </div>
-            <Group>
-              <Button variant="light" color="dark" leftSection={<IconUpload size={16} />} onClick={props.onOpenImport}>
-                导入接口
-              </Button>
-              <Button color="dark" leftSection={<IconLayoutGridAdd size={16} />} onClick={props.onCreateInterface}>
-                新建接口
-              </Button>
-            </Group>
-          </div>
+  function updateCaseBody(body: RequestBody) {
+    updateSelectedCase(current => ({
+      ...current,
+      overrides: {
+        ...current.overrides,
+        body
+      }
+    }));
+  }
 
-          <div className="overview-grid">
-            <div className="overview-card">
-              <span>分类层级</span>
-              <strong>{new Set(props.categoryRequests.map(item => item.folderSegments.join('/'))).size}</strong>
-              <Text c="dimmed">分类由目录结构直接推导，可继续向下拆分子分类。</Text>
-            </div>
-            <div className="overview-card">
-              <span>接口数量</span>
-              <strong>{props.categoryRequests.length}</strong>
-              <Text c="dimmed">导入规范和手工接口统一进入左侧树，交互保持一致。</Text>
-            </div>
-            <div className="overview-card">
-              <span>环境数量</span>
-              <strong>{props.environments.length}</strong>
-              <Text c="dimmed">环境和本地 token 仍然保持文本友好，适合 Git 协作。</Text>
-            </div>
-          </div>
+  function updateCaseRows(
+    key: 'query' | 'headers' | 'pathParams',
+    rows: ParameterRow[]
+  ) {
+    updateSelectedCase(current => ({
+      ...current,
+      overrides: {
+        ...current.overrides,
+        [key]: rows
+      }
+    }));
+  }
 
-          <div className="workspace-card workspace-note-card">
-            <Text fw={700}>下一步</Text>
-            <Text c="dimmed">从左侧选择一个分类继续创建接口，或者直接在项目层导入 OpenAPI、Swagger、HAR、Postman Collection。</Text>
-          </div>
-        </section>
-      );
-    }
-
+  if (props.selectedNode.kind === 'project' && props.draftProject) {
+    const project = props.draftProject;
     return (
       <section className="workspace-main workspace-surface">
         <div className="workspace-tabs-head">
-          <div className="workspace-page-tabs">
-            <button type="button" className="workspace-page-tab">
-              {props.workspaceName}
-            </button>
-            <button type="button" className="workspace-page-tab is-active">
-              {pageTitle(props.selectedCategory)}
-            </button>
-          </div>
-        </div>
-
-        <div className="workspace-overview-hero">
-          <div>
-            <p className="eyebrow">分类</p>
-            <h2>{pageTitle(props.selectedCategory)}</h2>
-            <Text c="dimmed">在当前分类下维护接口列表。请求编辑、运行结果和用例会在选中接口后进入同一工作台页面。</Text>
+          <div className="workspace-breadcrumbs">
+            {breadcrumbs.map(item => (
+              <span key={item} className="workspace-crumb">
+                {item}
+              </span>
+            ))}
           </div>
           <Group>
             <Button variant="light" color="dark" leftSection={<IconUpload size={16} />} onClick={props.onOpenImport}>
-              项目导入
+              导入接口
             </Button>
-            <Button color="dark" leftSection={<IconLayoutGridAdd size={16} />} onClick={props.onCreateInterface}>
-              在此分类新建接口
+            <Button variant="default" color="dark" leftSection={<IconDeviceFloppy size={16} />} onClick={props.onSave}>
+              保存项目
             </Button>
           </Group>
         </div>
 
-        <div className="category-interface-list">
-          {props.categoryRequests.length > 0 ? (
-            props.categoryRequests.map(record => (
-              <button
-                key={record.request.id}
-                type="button"
-                className="category-interface-row"
-                onClick={() => props.onSelectRequest(record.request.id)}
-              >
-                <span className={`category-interface-method method-${record.request.method.toLowerCase()}`}>
-                  {record.request.method}
-                </span>
-                <span className="category-interface-copy">
-                  <strong>{record.request.name}</strong>
-                  <span>{record.request.path || record.request.url || '/'}</span>
-                </span>
-                <span className="category-interface-meta">{record.cases.length} 用例</span>
-              </button>
-            ))
-          ) : (
-            <div className="workspace-card workspace-note-card">
-              <Text fw={700}>这个分类还没有接口</Text>
-              <Text c="dimmed">可以在这里手工新建接口，也可以回到项目层执行导入，把接口分发到对应分类。</Text>
+        <div className="workspace-overview-hero project-hero">
+          <div>
+            <p className="eyebrow">Project Runtime</p>
+            <h2>{project.name}</h2>
+            <Text c="dimmed">
+              项目节点承载共享 baseUrl、公共变量、公共 Header 和导入入口。环境在这里作为覆盖层出现，不再和接口编辑混在一起。
+            </Text>
+          </div>
+          <div className="workspace-request-facts">
+            <div className="request-fact-pill">
+              <span>分类</span>
+              <strong>{new Set(props.workspace.requests.map(item => item.folderSegments.join('/')).filter(Boolean)).size}</strong>
             </div>
-          )}
+            <div className="request-fact-pill">
+              <span>接口</span>
+              <strong>{props.workspace.requests.length}</strong>
+            </div>
+            <div className="request-fact-pill">
+              <span>环境</span>
+              <strong>{props.workspace.environments.length}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div className="project-config-grid">
+          <div className="workspace-card project-main-card">
+            <div className="panel-section-head">
+              <Text fw={700}>项目配置</Text>
+              {props.isDirty ? <Badge variant="light" color="orange">未保存</Badge> : null}
+            </div>
+            <div className="workspace-settings-grid">
+              <TextInput
+                label="项目名称"
+                value={project.name}
+                onChange={event => props.onProjectChange({ ...project, name: event.currentTarget.value })}
+              />
+              <Select
+                label="默认环境"
+                value={project.defaultEnvironment}
+                data={props.workspace.environments.map(item => ({ value: item.document.name, label: item.document.name }))}
+                onChange={value => value && props.onProjectChange({ ...project, defaultEnvironment: value })}
+              />
+            </div>
+
+            <div className="workspace-settings-grid">
+              <TextInput
+                label="Base URL"
+                value={project.runtime.baseUrl}
+                placeholder="https://api.example.com"
+                onChange={event =>
+                  props.onProjectChange({
+                    ...project,
+                    runtime: {
+                      ...project.runtime,
+                      baseUrl: event.currentTarget.value
+                    }
+                  })
+                }
+              />
+              <Textarea
+                label="项目说明"
+                minRows={3}
+                autosize
+                value={project.runtime.description}
+                onChange={event =>
+                  props.onProjectChange({
+                    ...project,
+                    runtime: {
+                      ...project.runtime,
+                      description: event.currentTarget.value
+                    }
+                  })
+                }
+              />
+            </div>
+
+            <div className="project-kv-grid">
+              <div className="workspace-card nested-card">
+                <Text fw={700}>公共变量</Text>
+                <KeyValueEditor
+                  rows={Object.entries(project.runtime.vars).map(([name, value]) => ({ name, value, enabled: true }))}
+                  onChange={rows =>
+                    props.onProjectChange({
+                      ...project,
+                      runtime: {
+                        ...project.runtime,
+                        vars: Object.fromEntries(rows.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]))
+                      }
+                    })
+                  }
+                />
+              </div>
+              <div className="workspace-card nested-card">
+                <Text fw={700}>公共 Header</Text>
+                <KeyValueEditor
+                  rows={project.runtime.headers}
+                  onChange={rows =>
+                    props.onProjectChange({
+                      ...project,
+                      runtime: {
+                        ...project.runtime,
+                        headers: rows
+                      }
+                    })
+                  }
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="project-side-stack">
+            <div className="workspace-card">
+              <div className="panel-section-head">
+                <Text fw={700}>当前环境覆盖</Text>
+                <Select
+                  value={props.activeEnvironmentName}
+                  data={props.workspace.environments.map(item => ({ value: item.document.name, label: item.document.name }))}
+                  onChange={value => value && props.onEnvironmentChange(value)}
+                />
+              </div>
+              <Text c="dimmed" size="sm">
+                环境只负责覆盖共享变量。请求解析顺序为：项目共享配置、环境覆盖、接口配置、用例覆盖。
+              </Text>
+              <div className="workspace-card nested-card">
+                <KeyValueEditor
+                  rows={Object.entries(props.selectedEnvironment?.vars || {}).map(([name, value]) => ({ name, value, enabled: true }))}
+                  onChange={rows =>
+                    props.onEnvironmentUpdate(props.activeEnvironmentName, environment => ({
+                      ...environment,
+                      vars: Object.fromEntries(rows.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]))
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="workspace-card project-import-card">
+              <Text fw={700}>项目级入口</Text>
+              <Text c="dimmed" size="sm">
+                打开 workspace 已移到 File 菜单。导入入口保留在项目层，避免和单个接口编辑混淆。
+              </Text>
+              <Button color="dark" leftSection={<IconUpload size={16} />} onClick={props.onOpenImport}>
+                从规范导入到当前项目
+              </Button>
+              <Button variant="light" color="dark" leftSection={<IconLayoutGridAdd size={16} />} onClick={props.onCreateInterface}>
+                直接新建接口
+              </Button>
+            </div>
+          </div>
         </div>
       </section>
     );
   }
 
+  if (props.selectedNode.kind === 'category') {
+    return (
+      <section className="workspace-main workspace-surface">
+        <div className="workspace-tabs-head">
+          <div className="workspace-breadcrumbs">
+            {breadcrumbs.map(item => (
+              <span key={item} className="workspace-crumb">
+                {item}
+              </span>
+            ))}
+          </div>
+          <Button color="dark" leftSection={<IconLayoutGridAdd size={16} />} onClick={props.onCreateInterface}>
+            在此分类新建接口
+          </Button>
+        </div>
+
+        <div className="workspace-overview-hero category-hero">
+          <div>
+            <p className="eyebrow">Category</p>
+            <h2>{categoryLabel(props.selectedNode.path)}</h2>
+            <Text c="dimmed">分类页只负责摘要与组织，不承载请求编辑。接口与用例的实际工作流都在选中接口后进入同一工作台。</Text>
+          </div>
+          <div className="request-fact-pill">
+            <span>接口数量</span>
+            <strong>{props.categoryRequests.length}</strong>
+          </div>
+        </div>
+
+        <div className="category-interface-list">
+          {props.categoryRequests.map(record => (
+            <button
+              key={record.request.id}
+              type="button"
+              className="category-interface-row"
+              onClick={() => props.onSelectRequest(record.request.id)}
+            >
+              <span className={`tree-method-pill method-${record.request.method.toLowerCase()}`}>{record.request.method}</span>
+              <span className="tree-row-copy">
+                <strong>{record.request.name}</strong>
+                <span>{record.request.path || record.request.url || '/'}</span>
+              </span>
+              <span className="category-interface-meta">{record.cases.length} 个用例</span>
+            </button>
+          ))}
+          {props.categoryRequests.length === 0 ? (
+            <div className="workspace-card workspace-note-card">
+              <Text fw={700}>这个分类还没有接口</Text>
+              <Text c="dimmed">在左侧树或这里直接创建接口，导入后的接口也会统一进入这棵树。</Text>
+            </div>
+          ) : null}
+        </div>
+      </section>
+    );
+  }
+
+  if (!request) {
+    return (
+      <section className="workspace-main workspace-surface">
+        <div className="workspace-card workspace-note-card">
+          <Text fw={700}>选择一个接口开始调试</Text>
+          <Text c="dimmed">左侧树支持按项目、分类、接口、用例四层导航。选中接口后会进入单页工作台。</Text>
+        </div>
+      </section>
+    );
+  }
+
+  const requestDocument = request;
+  const effectiveMethod = selectedCase?.overrides.method || requestDocument.method;
+  const effectiveUrl = selectedCase?.overrides.url || requestDocument.url;
+  const effectivePath = selectedCase?.overrides.path || requestDocument.path;
+  const queryRows = rowsOrFallback(selectedCase?.overrides.query, requestDocument.query);
+  const pathRows = rowsOrFallback(selectedCase?.overrides.pathParams, requestDocument.pathParams);
+  const headerRows = rowsOrFallback(selectedCase?.overrides.headers, requestDocument.headers);
+  const body = selectedCase?.overrides.body || requestDocument.body;
+
+  function setMethod(method: RequestDocument['method']) {
+    if (!selectedCase) {
+      props.onRequestChange({ ...requestDocument, method });
+      return;
+    }
+    updateSelectedCase(current => ({
+      ...current,
+      overrides: {
+        ...current.overrides,
+        method
+      }
+    }));
+  }
+
+  function setUrl(url: string) {
+    if (!selectedCase) {
+      props.onRequestChange({ ...requestDocument, url });
+      return;
+    }
+    updateSelectedCase(current => ({
+      ...current,
+      overrides: {
+        ...current.overrides,
+        url
+      }
+    }));
+  }
+
+  function setPath(path: string) {
+    if (!selectedCase) {
+      props.onRequestChange({ ...requestDocument, path });
+      return;
+    }
+    updateSelectedCase(current => ({
+      ...current,
+      overrides: {
+        ...current.overrides,
+        path
+      }
+    }));
+  }
+
   return (
     <section className="workspace-main workspace-surface">
       <div className="workspace-tabs-head">
-        <div className="workspace-page-tabs">
-          <button type="button" className="workspace-page-tab">
-            {props.workspaceName}
-          </button>
-          <button type="button" className="workspace-page-tab">
-            {pageTitle(props.selectedCategory)}
-          </button>
-          <button type="button" className="workspace-page-tab is-active">
-            {request.name}
-          </button>
+        <div className="workspace-breadcrumbs">
+          {breadcrumbs.map(item => (
+            <span key={item} className="workspace-crumb">
+              {item}
+            </span>
+          ))}
         </div>
-        <Select
-          value={props.activeEnvironmentName}
-          data={props.environments.map(item => ({ value: item.name, label: item.name }))}
-          onChange={value => value && props.onEnvironmentChange(value)}
-        />
+        <div className="workspace-toolbar-right">
+          <Select
+            value={props.activeEnvironmentName}
+            data={props.workspace.environments.map(item => ({ value: item.document.name, label: item.document.name }))}
+            onChange={value => value && props.onEnvironmentChange(value)}
+          />
+          {props.isDirty ? <Badge color="orange" variant="light">未保存</Badge> : <Badge color="gray" variant="light">已保存</Badge>}
+        </div>
       </div>
 
       <div className="workspace-request-head">
         <div>
-          <p className="eyebrow">接口</p>
-          <h2>{request.name}</h2>
+          <p className="eyebrow">Interface Workspace</p>
+          <h2>{requestDocument.name}</h2>
           <Text c="dimmed">
-            {props.selectedCategory === '__overview__' ? '默认分类' : props.selectedCategory} / {request.path || request.url || '/'}
+            当前分类: {requestDocument.path || requestDocument.url || '/'} {selectedCase ? `· 用例 ${selectedCase.name}` : '· 基础请求'}
           </Text>
         </div>
         <div className="workspace-request-facts">
           <div className="request-fact-pill">
             <span>Method</span>
-            <strong>{request.method}</strong>
+            <strong>{effectiveMethod}</strong>
           </div>
           <div className="request-fact-pill">
             <span>Body</span>
-            <strong>{bodyModeLabel(request.body.mode)}</strong>
+            <strong>{bodyModeLabel(body.mode)}</strong>
           </div>
           <div className="request-fact-pill">
-            <span>Cases</span>
+            <span>用例</span>
             <strong>{props.cases.length}</strong>
           </div>
           <div className="request-fact-pill">
-            <span>状态</span>
-            <strong>{props.isDirty ? '未保存' : '已保存'}</strong>
+            <span>环境</span>
+            <strong>{props.activeEnvironmentName}</strong>
           </div>
         </div>
       </div>
 
-      <Tabs value={mainTab} onChange={value => value && setMainTab(value as typeof mainTab)}>
+      <Tabs value={workspaceTab} onChange={value => value && setWorkspaceTab(value as typeof workspaceTab)}>
         <Tabs.List>
           <Tabs.Tab value="debug">调试</Tabs.Tab>
           <Tabs.Tab value="cases">用例</Tabs.Tab>
@@ -305,15 +550,21 @@ export function WorkspaceMainPanel(props: {
         <Tabs.Panel value="debug" pt="md">
           <div className="request-runner-bar">
             <SegmentedControl
-              value={request.method}
+              value={effectiveMethod}
               data={['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']}
-              onChange={value => props.onRequestChange({ ...request, method: value as RequestDocument['method'] })}
+              onChange={value => setMethod(value as RequestDocument['method'])}
             />
             <TextInput
               className="request-url-input"
-              value={request.url}
+              value={effectiveUrl}
               placeholder="https://api.example.com/path"
-              onChange={event => props.onRequestChange({ ...request, url: event.currentTarget.value })}
+              onChange={event => setUrl(event.currentTarget.value)}
+            />
+            <Select
+              className="case-select"
+              value={caseId || '__base__'}
+              data={caseOptions(props.cases)}
+              onChange={value => props.onCaseSelect(value === '__base__' ? null : value)}
             />
             <Button color="dark" leftSection={<IconPlayerPlay size={16} />} loading={props.isRunning} onClick={props.onRun}>
               发送
@@ -324,14 +575,19 @@ export function WorkspaceMainPanel(props: {
           </div>
 
           <div className="workspace-case-strip">
-            <Select
-              value={props.selectedCaseId || '__base__'}
-              data={caseOptions(props.cases)}
-              onChange={value => props.onCaseSelect(value === '__base__' ? null : value)}
-            />
             <Button variant="light" color="dark" onClick={props.onAddCase}>
               新建用例
             </Button>
+            {props.cases.map(item => (
+              <button
+                key={item.id}
+                type="button"
+                className={['case-chip', caseId === item.id ? 'is-active' : ''].filter(Boolean).join(' ')}
+                onClick={() => props.onCaseSelect(item.id)}
+              >
+                {item.name}
+              </button>
+            ))}
           </div>
 
           <div className="runner-split">
@@ -342,7 +598,8 @@ export function WorkspaceMainPanel(props: {
                     { key: 'query', label: 'Query / Path' },
                     { key: 'headers', label: 'Headers' },
                     { key: 'body', label: 'Body' },
-                    { key: 'auth', label: 'Auth' }
+                    { key: 'auth', label: 'Auth' },
+                    { key: 'settings', label: 'Settings' }
                   ].map(item => (
                     <button
                       key={item.key}
@@ -356,49 +613,106 @@ export function WorkspaceMainPanel(props: {
                 </div>
                 <div className="runner-pane-toolbar">
                   <span>{props.activeEnvironmentName}</span>
-                  <span>{selectedCase ? selectedCase.name : '基础请求'}</span>
+                  <span>{selectedCase ? `正在编辑用例覆盖` : `正在编辑基础请求`}</span>
                 </div>
               </div>
 
               <div className="runner-pane-body">
                 {requestTab === 'query' ? (
                   <div className="request-param-grid">
-                    <div className="workspace-card">
+                    <div className="workspace-card nested-card">
                       <Text fw={700}>Query</Text>
-                      <KeyValueEditor rows={request.query} onChange={rows => props.onRequestChange({ ...request, query: rows })} />
+                      <KeyValueEditor
+                        rows={queryRows}
+                        onChange={rows => {
+                          if (selectedCase) {
+                            updateCaseRows('query', rows);
+                          } else {
+                            props.onRequestChange({ ...requestDocument, query: rows });
+                          }
+                        }}
+                      />
                     </div>
-                    <div className="workspace-card">
+                    <div className="workspace-card nested-card">
                       <Text fw={700}>Path Params</Text>
                       <KeyValueEditor
-                        rows={request.pathParams}
-                        onChange={rows => props.onRequestChange({ ...request, pathParams: rows })}
+                        rows={pathRows}
+                        onChange={rows => {
+                          if (selectedCase) {
+                            updateCaseRows('pathParams', rows);
+                          } else {
+                            props.onRequestChange({ ...requestDocument, pathParams: rows });
+                          }
+                        }}
                       />
                     </div>
                   </div>
                 ) : requestTab === 'headers' ? (
-                  <div className="workspace-card">
-                    <Text fw={700}>Headers</Text>
-                    <KeyValueEditor rows={request.headers} onChange={rows => props.onRequestChange({ ...request, headers: rows })} />
+                  <div className="workspace-card nested-card">
+                    <Text fw={700}>{selectedCase ? '用例 Header 覆盖' : 'Headers'}</Text>
+                    <KeyValueEditor
+                      rows={headerRows}
+                      onChange={rows => {
+                        if (selectedCase) {
+                          updateCaseRows('headers', rows);
+                        } else {
+                          props.onRequestChange({ ...requestDocument, headers: rows });
+                        }
+                      }}
+                    />
                   </div>
                 ) : requestTab === 'auth' ? (
                   <div className="workspace-card workspace-note-card">
                     <Text fw={700}>认证配置</Text>
-                    <Text c="dimmed">当前版本用 Header、Query 和 Case 覆盖表达认证，后续再补完整认证面板。</Text>
+                    <Text c="dimmed">
+                      当前版本保留轻量模型，认证主要通过公共 Header、接口 Header 或用例 Header 覆盖完成。后续再补完整认证向导。
+                    </Text>
                   </div>
-                ) : request.body.mode === 'form' ? (
-                  <div className="workspace-card">
+                ) : requestTab === 'settings' ? (
+                  <div className="workspace-settings-stack">
+                    <div className="workspace-card nested-card">
+                      <div className="workspace-settings-grid">
+                        <TextInput
+                          label="接口名称"
+                          value={requestDocument.name}
+                          onChange={event => props.onRequestChange({ ...requestDocument, name: event.currentTarget.value })}
+                        />
+                        <TextInput
+                          label={selectedCase ? 'Path Override' : 'Path'}
+                          value={effectivePath}
+                          onChange={event => setPath(event.currentTarget.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="workspace-card nested-card">
+                      <Textarea
+                        label="描述"
+                        minRows={4}
+                        autosize
+                        value={requestDocument.description}
+                        onChange={event => props.onRequestChange({ ...requestDocument, description: event.currentTarget.value })}
+                      />
+                    </div>
+                  </div>
+                ) : body.mode === 'form' ? (
+                  <div className="workspace-card nested-card">
                     <Text fw={700}>Form Data</Text>
                     <KeyValueEditor
-                      rows={request.body.fields}
-                      onChange={rows =>
-                        props.onRequestChange({
-                          ...request,
-                          body: {
-                            ...request.body,
-                            fields: rows
-                          }
-                        })
-                      }
+                      rows={body.fields}
+                      onChange={rows => {
+                        const nextBody = {
+                          ...body,
+                          fields: rows
+                        };
+                        if (selectedCase) {
+                          updateCaseBody(nextBody);
+                        } else {
+                          props.onRequestChange({
+                            ...requestDocument,
+                            body: nextBody
+                          });
+                        }
+                      }}
                     />
                   </div>
                 ) : (
@@ -413,58 +727,44 @@ export function WorkspaceMainPanel(props: {
                         <button
                           key={item.key}
                           type="button"
-                          className={['workspace-body-mode', request.body.mode === item.key ? 'is-active' : '']
-                            .filter(Boolean)
-                            .join(' ')}
-                          onClick={() =>
-                            props.onRequestChange({
-                              ...request,
-                              body: {
-                                ...request.body,
-                                mode: item.key as RequestDocument['body']['mode']
-                              }
-                            })
-                          }
+                          className={['workspace-body-mode', body.mode === item.key ? 'is-active' : ''].filter(Boolean).join(' ')}
+                          onClick={() => {
+                            const nextBody = {
+                              ...body,
+                              mode: item.key as RequestDocument['body']['mode']
+                            };
+                            if (selectedCase) {
+                              updateCaseBody(nextBody);
+                            } else {
+                              props.onRequestChange({
+                                ...requestDocument,
+                                body: nextBody
+                              });
+                            }
+                          }}
                         >
                           {item.label}
                         </button>
                       ))}
                     </div>
                     <CodeEditor
-                      value={selectedCase?.overrides.body?.text || request.body.text}
-                      language={request.body.mode === 'json' ? 'json' : 'text'}
+                      value={body.text}
+                      language={body.mode === 'json' ? 'json' : 'text'}
                       onChange={value => {
+                        const nextBody = {
+                          ...body,
+                          text: value
+                        };
                         if (selectedCase) {
-                          props.onCasesChange(
-                            props.cases.map(item =>
-                              item.id === selectedCase.id
-                                ? {
-                                    ...item,
-                                    overrides: {
-                                      ...item.overrides,
-                                      body: {
-                                        mode: request.body.mode,
-                                        mimeType: request.body.mimeType,
-                                        text: value,
-                                        fields: request.body.fields
-                                      }
-                                    }
-                                  }
-                                : item
-                            )
-                          );
-                          return;
+                          updateCaseBody(nextBody);
+                        } else {
+                          props.onRequestChange({
+                            ...requestDocument,
+                            body: nextBody
+                          });
                         }
-
-                        props.onRequestChange({
-                          ...request,
-                          body: {
-                            ...request.body,
-                            text: value
-                          }
-                        });
                       }}
-                      minHeight="420px"
+                      minHeight="430px"
                     />
                   </div>
                 )}
@@ -520,15 +820,15 @@ export function WorkspaceMainPanel(props: {
                 </div>
 
                 {responseTab === 'headers' ? (
-                  <CodeEditor value={responseHeadersText(props.response)} readOnly language="text" minHeight="220px" />
+                  <CodeEditor value={responseHeadersText(props.response)} readOnly language="text" minHeight="240px" />
                 ) : responseTab === 'raw' ? (
-                  <CodeEditor value={props.response?.bodyText || ''} readOnly language="text" minHeight="220px" />
+                  <CodeEditor value={props.response?.bodyText || ''} readOnly language="text" minHeight="240px" />
                 ) : (
                   <CodeEditor
                     value={props.response?.bodyText || ''}
                     readOnly
                     language={responseBodyLanguage(props.response)}
-                    minHeight="220px"
+                    minHeight="240px"
                   />
                 )}
               </div>
@@ -538,107 +838,83 @@ export function WorkspaceMainPanel(props: {
 
         <Tabs.Panel value="cases" pt="md">
           <div className="workspace-card workspace-case-card">
-            <div className="workspace-case-head">
-              <Select
-                value={props.selectedCaseId || '__base__'}
-                data={caseOptions(props.cases)}
-                onChange={value => props.onCaseSelect(value === '__base__' ? null : value)}
-              />
+            <div className="panel-section-head">
+              <Text fw={700}>用例配置</Text>
               <Button variant="light" color="dark" onClick={props.onAddCase}>
                 新建用例
               </Button>
             </div>
 
             {selectedCase ? (
-              <div className="workspace-case-grid">
-                <TextInput
-                  label="用例名称"
-                  value={selectedCase.name}
-                  onChange={event =>
-                    props.onCasesChange(
-                      props.cases.map(item =>
-                        item.id === selectedCase.id ? { ...item, name: event.currentTarget.value } : item
-                      )
-                    )
-                  }
-                />
-                <Select
-                  label="环境"
-                  clearable
-                  value={selectedCase.environment || null}
-                  data={props.environments.map(item => ({ value: item.name, label: item.name }))}
-                  onChange={value =>
-                    props.onCasesChange(
-                      props.cases.map(item =>
-                        item.id === selectedCase.id ? { ...item, environment: value || undefined } : item
-                      )
-                    )
-                  }
-                />
+              <div className="workspace-case-stack">
+                <div className="workspace-settings-grid">
+                  <TextInput
+                    label="用例名称"
+                    value={selectedCase.name}
+                    onChange={event =>
+                      updateSelectedCase(current => ({
+                        ...current,
+                        name: event.currentTarget.value
+                      }))
+                    }
+                  />
+                  <Select
+                    label="用例环境"
+                    clearable
+                    value={selectedCase.environment || null}
+                    data={props.workspace.environments.map(item => ({ value: item.document.name, label: item.document.name }))}
+                    onChange={value =>
+                      updateSelectedCase(current => ({
+                        ...current,
+                        environment: value || undefined
+                      }))
+                    }
+                  />
+                </div>
                 <Textarea
                   label="备注"
                   minRows={3}
                   autosize
                   value={selectedCase.notes}
                   onChange={event =>
-                    props.onCasesChange(
-                      props.cases.map(item =>
-                        item.id === selectedCase.id ? { ...item, notes: event.currentTarget.value } : item
-                      )
-                    )
+                    updateSelectedCase(current => ({
+                      ...current,
+                      notes: event.currentTarget.value
+                    }))
                   }
                 />
+                <div className="request-param-grid">
+                  <div className="workspace-card nested-card">
+                    <Text fw={700}>Query Override</Text>
+                    <KeyValueEditor
+                      rows={selectedCase.overrides.query || []}
+                      onChange={rows => updateCaseRows('query', rows)}
+                    />
+                  </div>
+                  <div className="workspace-card nested-card">
+                    <Text fw={700}>Header Override</Text>
+                    <KeyValueEditor
+                      rows={selectedCase.overrides.headers || []}
+                      onChange={rows => updateCaseRows('headers', rows)}
+                    />
+                  </div>
+                </div>
               </div>
             ) : (
-              <Text c="dimmed">基础请求不包含额外覆盖项。切换到某个用例后，可以继续补环境绑定和覆盖规则。</Text>
+              <Text c="dimmed">当前是基础请求。选择一个用例后，可以在这里管理环境绑定、说明和覆盖项。</Text>
             )}
           </div>
         </Tabs.Panel>
 
         <Tabs.Panel value="settings" pt="md">
-          <div className="workspace-settings-stack">
-            <div className="workspace-card workspace-settings-grid">
-              <TextInput
-                label="接口名称"
-                value={request.name}
-                onChange={event => props.onRequestChange({ ...request, name: event.currentTarget.value })}
-              />
-              <TextInput
-                label="Path"
-                value={request.path}
-                placeholder="/users/{id}"
-                onChange={event => props.onRequestChange({ ...request, path: event.currentTarget.value })}
-              />
-            </div>
-
-            <div className="workspace-card workspace-settings-grid">
-              <Textarea
-                label="描述"
-                minRows={3}
-                autosize
-                value={request.description}
-                onChange={event => props.onRequestChange({ ...request, description: event.currentTarget.value })}
-              />
-              <TextInput
-                label="标签"
-                value={request.tags.join(', ')}
-                placeholder="auth, user"
-                onChange={event =>
-                  props.onRequestChange({
-                    ...request,
-                    tags: event.currentTarget.value
-                      .split(',')
-                      .map(item => item.trim())
-                      .filter(Boolean)
-                  })
-                }
-              />
-            </div>
+          <div className="workspace-card workspace-note-card">
+            <Text fw={700}>接口设置</Text>
+            <Text c="dimmed">
+              这里保留为更深层的接口配置区域，一期先把主要编辑流集中在调试面板中，避免信息被拆碎。
+            </Text>
           </div>
         </Tabs.Panel>
       </Tabs>
-
-      {props.isDirty ? <div className="dirty-indicator">Unsaved changes</div> : null}
     </section>
   );
 }

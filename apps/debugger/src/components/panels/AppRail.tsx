@@ -1,12 +1,12 @@
-import { IconApi, IconClockBolt, IconDeviceDesktopAnalytics, IconSettings, IconShare2, IconUsers } from '@tabler/icons-react';
+import { IconApi, IconClockBolt, IconFolderCog, IconLayoutGrid, IconSettings, IconStack3 } from '@tabler/icons-react';
 
 const RAIL_ITEMS = [
   { key: 'interfaces', label: '接口管理', icon: IconApi, active: true },
-  { key: 'tests', label: '自动化测试', icon: IconDeviceDesktopAnalytics },
-  { key: 'share', label: '在线分享', icon: IconShare2 },
+  { key: 'projects', label: '项目视图', icon: IconLayoutGrid },
   { key: 'history', label: '请求历史', icon: IconClockBolt },
-  { key: 'settings', label: '项目设置', icon: IconSettings },
-  { key: 'members', label: '邀请成员', icon: IconUsers }
+  { key: 'imports', label: '导入记录', icon: IconStack3 },
+  { key: 'workspace', label: '工作区', icon: IconFolderCog },
+  { key: 'settings', label: '设置', icon: IconSettings }
 ];
 
 export function AppRail() {

@@ -50,11 +50,25 @@ export const responseExampleSchema = z.object({
 });
 export type ResponseExample = z.infer<typeof responseExampleSchema>;
 
+export const projectRuntimeConfigSchema = z.object({
+  baseUrl: z.string().default('https://api.example.com'),
+  vars: z.record(z.string(), z.string()).default({}),
+  headers: z.array(parameterRowSchema).default([]),
+  description: z.string().default('')
+});
+export type ProjectRuntimeConfig = z.infer<typeof projectRuntimeConfigSchema>;
+
 export const projectDocumentSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION).default(SCHEMA_VERSION),
   name: z.string().min(1),
   defaultEnvironment: z.string().default('shared'),
-  labels: z.array(z.string()).default([])
+  labels: z.array(z.string()).default([]),
+  runtime: projectRuntimeConfigSchema.default({
+    baseUrl: 'https://api.example.com',
+    vars: {},
+    headers: [],
+    description: ''
+  })
 });
 export type ProjectDocument = z.infer<typeof projectDocumentSchema>;
 
@@ -127,13 +141,19 @@ export const workspaceEnvironmentRecordSchema = z.object({
 });
 export type WorkspaceEnvironmentRecord = z.infer<typeof workspaceEnvironmentRecordSchema>;
 
-export type TreeNode =
+export type WorkspaceTreeNode =
   | {
       id: string;
       name: string;
-      kind: 'folder';
+      kind: 'project';
+      children: WorkspaceTreeNode[];
+    }
+  | {
+      id: string;
+      name: string;
+      kind: 'category';
       path: string;
-      children: TreeNode[];
+      children: WorkspaceTreeNode[];
     }
   | {
       id: string;
@@ -141,17 +161,33 @@ export type TreeNode =
       kind: 'request';
       path: string;
       requestId: string;
+      method: HttpMethod;
+      requestPath: string;
       caseCount: number;
+      children: WorkspaceTreeNode[];
+    }
+  | {
+      id: string;
+      name: string;
+      kind: 'case';
+      requestId: string;
+      caseId: string;
     };
 
-const treeNodeLazySchema: z.ZodType<TreeNode> = z.lazy(() =>
+const workspaceTreeNodeLazySchema: z.ZodType<WorkspaceTreeNode> = z.lazy(() =>
   z.union([
     z.object({
       id: z.string(),
       name: z.string(),
-      kind: z.literal('folder'),
+      kind: z.literal('project'),
+      children: z.array(workspaceTreeNodeLazySchema).default([])
+    }),
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      kind: z.literal('category'),
       path: z.string(),
-      children: z.array(treeNodeLazySchema).default([])
+      children: z.array(workspaceTreeNodeLazySchema).default([])
     }),
     z.object({
       id: z.string(),
@@ -159,19 +195,31 @@ const treeNodeLazySchema: z.ZodType<TreeNode> = z.lazy(() =>
       kind: z.literal('request'),
       path: z.string(),
       requestId: z.string(),
-      caseCount: z.number().int().default(0)
+      method: httpMethodSchema.default('GET'),
+      requestPath: z.string().default('/'),
+      caseCount: z.number().int().default(0),
+      children: z.array(workspaceTreeNodeLazySchema).default([])
+    }),
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      kind: z.literal('case'),
+      requestId: z.string(),
+      caseId: z.string()
     })
   ])
 );
 
-export const treeNodeSchema = treeNodeLazySchema;
+export const workspaceTreeNodeSchema = workspaceTreeNodeLazySchema;
+export const treeNodeSchema = workspaceTreeNodeSchema;
+export type TreeNode = WorkspaceTreeNode;
 
 export const workspaceIndexSchema = z.object({
   root: z.string(),
   project: projectDocumentSchema,
   environments: z.array(workspaceEnvironmentRecordSchema).default([]),
   requests: z.array(workspaceRequestRecordSchema).default([]),
-  tree: z.array(treeNodeSchema).default([]),
+  tree: z.array(workspaceTreeNodeSchema).default([]),
   gitignorePath: z.string().optional()
 });
 export type WorkspaceIndex = z.infer<typeof workspaceIndexSchema>;
@@ -291,7 +339,13 @@ export function createDefaultProject(name: string): ProjectDocument {
     schemaVersion: SCHEMA_VERSION,
     name,
     defaultEnvironment: 'shared',
-    labels: []
+    labels: [],
+    runtime: {
+      baseUrl: 'https://api.example.com',
+      vars: {},
+      headers: [],
+      description: ''
+    }
   });
 }
 
@@ -299,9 +353,7 @@ export function createDefaultEnvironment(name = 'shared'): EnvironmentDocument {
   return environmentDocumentSchema.parse({
     schemaVersion: SCHEMA_VERSION,
     name,
-    vars: {
-      baseUrl: 'https://api.example.com'
-    },
+    vars: {},
     headers: [],
     authProfiles: []
   });

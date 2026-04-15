@@ -15,7 +15,7 @@ export function KeyValueEditor(props: {
       <div className="kv-head">
         <span>{props.nameLabel || 'Name'}</span>
         <span>{props.valueLabel || 'Value'}</span>
-        <span>Enabled</span>
+        <span>启用</span>
         <span />
       </div>
       {rows.map((row, index) => (
@@ -64,7 +64,7 @@ export function KeyValueEditor(props: {
           leftSection={<IconPlus size={15} />}
           onClick={() => props.onChange([...rows, emptyParameterRow()])}
         >
-          Add Row
+          添加一行
         </Button>
       </Group>
     </div>

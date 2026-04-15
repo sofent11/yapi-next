@@ -8,12 +8,20 @@ use std::{
     sync::{Mutex, OnceLock},
     time::Instant,
 };
-use tauri::{AppHandle, Emitter};
+use tauri::{
+    menu::{Menu, MenuItemBuilder, SubmenuBuilder},
+    AppHandle, Emitter, Runtime,
+};
 
 static WATCHERS: OnceLock<Mutex<HashMap<String, RecommendedWatcher>>> = OnceLock::new();
+static RECENT_ROOTS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 
 fn watcher_store() -> &'static Mutex<HashMap<String, RecommendedWatcher>> {
     WATCHERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn recent_root_store() -> &'static Mutex<Vec<String>> {
+    RECENT_ROOTS.get_or_init(|| Mutex::new(Vec::new()))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -40,6 +48,13 @@ struct ImportSourcePayload {
 struct WatchEventPayload {
     root: String,
     paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MenuActionPayload {
+    action: String,
+    root: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -123,6 +138,61 @@ fn should_skip_dir(path: &Path) -> bool {
         return false;
     };
     matches!(name, ".git" | "node_modules" | "target" | "dist" | ".yapi-debugger-cache")
+}
+
+fn build_menu<R: Runtime>(app: &AppHandle<R>, recent_roots: &[String], has_workspace: bool) -> Result<Menu<R>, String> {
+    let menu = Menu::new(app).map_err(|error| error.to_string())?;
+
+    let mut recent_builder = SubmenuBuilder::new(app, "Recent Workspaces");
+    if recent_roots.is_empty() {
+        recent_builder = recent_builder.text("menu://file/open-recent/empty", "No Recent Workspaces").enabled(false);
+    } else {
+        for (index, root) in recent_roots.iter().enumerate() {
+            let label = root
+                .split('/')
+                .last()
+                .filter(|item| !item.is_empty())
+                .map(|item| format!("{item}  ({root})"))
+                .unwrap_or_else(|| root.clone());
+            recent_builder =
+                recent_builder.text(format!("menu://file/open-recent/{index}"), label);
+        }
+    }
+    let recent_menu = recent_builder.build().map_err(|error| error.to_string())?;
+
+    let file_menu = SubmenuBuilder::new(app, "File")
+        .text("menu://file/open-workspace", "Open Workspace...")
+        .text("menu://file/create-workspace", "Create Workspace...")
+        .separator()
+        .item(
+            &MenuItemBuilder::with_id("menu://file/import-project", "Import Into Project...")
+                .enabled(has_workspace)
+                .build(app)
+                .map_err(|error| error.to_string())?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("menu://file/close-workspace", "Close Workspace")
+                .enabled(has_workspace)
+                .build(app)
+                .map_err(|error| error.to_string())?,
+        )
+        .separator()
+        .item(&recent_menu)
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    menu.append(&file_menu).map_err(|error| error.to_string())?;
+    Ok(menu)
+}
+
+fn emit_menu_action<R: Runtime>(app: &AppHandle<R>, action: &str, root: Option<String>) {
+    let _ = app.emit(
+        "menu://action",
+        MenuActionPayload {
+            action: action.to_string(),
+            root,
+        },
+    );
 }
 
 fn collect_workspace_files(root: &Path, files: &mut Vec<WorkspaceScanFile>) -> Result<(), String> {
@@ -306,6 +376,16 @@ fn workspace_unwatch(root: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn menu_sync_state(app: AppHandle, recent_roots: Vec<String>, has_workspace: bool) -> Result<(), String> {
+    *recent_root_store()
+        .lock()
+        .map_err(|_| "recent root store poisoned".to_string())? = recent_roots.clone();
+    app.set_menu(build_menu(&app, &recent_roots, has_workspace).map_err(|error| error.to_string())?)
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 fn header_map(rows: &[ParameterRow], body: &RequestBody) -> Result<HeaderMap, String> {
     let mut headers = HeaderMap::new();
     for row in rows.iter().filter(|row| row.enabled && !row.name.trim().is_empty()) {
@@ -422,8 +502,39 @@ fn chrono_timestamp() -> String {
 
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            let initial_menu = build_menu(&app.handle(), &[], false)?;
+            app.set_menu(initial_menu)?;
+            Ok(())
+        })
+        .on_menu_event(|app, event| {
+            let id = event.id().0.as_str();
+            match id {
+                "menu://file/open-workspace" => emit_menu_action(app, "open-workspace", None),
+                "menu://file/create-workspace" => emit_menu_action(app, "create-workspace", None),
+                "menu://file/import-project" => emit_menu_action(app, "import-project", None),
+                "menu://file/close-workspace" => emit_menu_action(app, "close-workspace", None),
+                value if value.starts_with("menu://file/open-recent/") => {
+                    let index = value
+                        .trim_start_matches("menu://file/open-recent/")
+                        .parse::<usize>()
+                        .ok();
+                    let root = index.and_then(|position| {
+                        recent_root_store()
+                            .lock()
+                            .ok()
+                            .and_then(|items| items.get(position).cloned())
+                    });
+                    if let Some(root) = root {
+                        emit_menu_action(app, "open-recent", Some(root));
+                    }
+                }
+                _ => {}
+            }
+        })
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            menu_sync_state,
             workspace_scan,
             workspace_read_document,
             workspace_write_document,

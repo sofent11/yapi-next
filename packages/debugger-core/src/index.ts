@@ -26,7 +26,8 @@ import {
   type SendRequestInput,
   type WorkspaceEnvironmentRecord,
   type WorkspaceIndex,
-  type WorkspaceRequestRecord
+  type WorkspaceRequestRecord,
+  type WorkspaceTreeNode
 } from '@yapi-debugger/schema';
 
 export type FileEntry = {
@@ -161,29 +162,34 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
     }
   }
 
-  const treeMap = new Map<string, { id: string; name: string; kind: 'folder'; path: string; children: any[] }>();
-  const tree: any[] = [];
+  const projectNode: WorkspaceTreeNode = {
+    id: 'project:root',
+    name: project.name,
+    kind: 'project',
+    children: []
+  };
+  const treeMap = new Map<string, Extract<WorkspaceTreeNode, { kind: 'category' }>>();
 
   for (const record of [...requestRecords].sort((left, right) =>
     left.requestFilePath.localeCompare(right.requestFilePath, 'zh-CN')
   )) {
-    let parentChildren = tree;
+    let parentChildren = projectNode.children;
     let currentPath = '';
     record.folderSegments.forEach((segment: string) => {
       currentPath = currentPath ? `${currentPath}/${segment}` : segment;
-      let folderNode = treeMap.get(currentPath);
-      if (!folderNode) {
-        folderNode = {
+      let categoryNode = treeMap.get(currentPath);
+      if (!categoryNode) {
+        categoryNode = {
           id: `folder:${currentPath}`,
           name: segment,
-          kind: 'folder',
+          kind: 'category',
           path: currentPath,
           children: []
         };
-        treeMap.set(currentPath, folderNode);
-        parentChildren.push(folderNode);
+        treeMap.set(currentPath, categoryNode);
+        parentChildren.push(categoryNode);
       }
-      parentChildren = folderNode.children;
+      parentChildren = categoryNode.children;
     });
 
     parentChildren.push({
@@ -192,7 +198,19 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
       kind: 'request',
       path: record.requestFilePath,
       requestId: record.request.id,
-      caseCount: record.cases.length
+      method: record.request.method,
+      requestPath: record.request.path || record.request.url || '/',
+      caseCount: record.cases.length,
+      children: record.cases
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
+        .map(caseItem => ({
+          id: `case:${record.request.id}:${caseItem.id}`,
+          name: caseItem.name,
+          kind: 'case',
+          requestId: record.request.id,
+          caseId: caseItem.id
+        }))
     });
   }
 
@@ -201,7 +219,7 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
     project,
     environments: sortRecords(environmentRecords.map(item => ({ ...item, name: item.document.name }))) as WorkspaceEnvironmentRecord[],
     requests: requestRecords,
-    tree,
+    tree: [projectNode],
     gitignorePath: `${input.root}/.gitignore`
   };
 }
@@ -386,6 +404,26 @@ export function applyEnvironmentVariables(input: string, environment: Environmen
   return input.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_, key: string) => environment.vars[key] ?? '');
 }
 
+function mergeVariableSources(
+  project: ProjectDocument,
+  environment: EnvironmentDocument | undefined
+) {
+  return {
+    baseUrl: environment?.vars.baseUrl || project.runtime.baseUrl || '',
+    ...project.runtime.vars,
+    ...environment?.vars
+  } as Record<string, string>;
+}
+
+function applyProjectVariables(
+  input: string,
+  project: ProjectDocument,
+  environment: EnvironmentDocument | undefined
+) {
+  const variables = mergeVariableSources(project, environment);
+  return input.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_, key: string) => variables[key] ?? '');
+}
+
 function mergeRows(baseRows: ParameterRow[], overrideRows?: ParameterRow[]) {
   if (!overrideRows || overrideRows.length === 0) return baseRows;
   return cleanRows(overrideRows);
@@ -398,30 +436,36 @@ function mergeAuth(baseAuth: AuthConfig, overrideAuth?: AuthConfig): AuthConfig 
 }
 
 export function resolveRequest(
+  project: ProjectDocument,
   request: RequestDocument,
   caseDocument: CaseDocument | undefined,
   environment: EnvironmentDocument | undefined
 ): ResolvedRequest {
   const body = caseDocument?.overrides.body ?? request.body;
   const auth = mergeAuth(request.auth, caseDocument?.overrides.auth);
-  const url = applyEnvironmentVariables(caseDocument?.overrides.url || request.url, environment);
-  const path = applyEnvironmentVariables(caseDocument?.overrides.path || request.path || '', environment);
-  const headers = mergeRows(request.headers, caseDocument?.overrides.headers).map((row: ParameterRow) => ({
+  const url = applyProjectVariables(caseDocument?.overrides.url || request.url, project, environment);
+  const path = applyProjectVariables(caseDocument?.overrides.path || request.path || '', project, environment);
+  const baseHeaders = [
+    ...project.runtime.headers,
+    ...(environment?.headers || []),
+    ...request.headers
+  ];
+  const headers = mergeRows(baseHeaders, caseDocument?.overrides.headers).map((row: ParameterRow) => ({
     ...row,
-    value: applyEnvironmentVariables(row.value, environment)
+    value: applyProjectVariables(row.value, project, environment)
   }));
   const query = mergeRows(request.query, caseDocument?.overrides.query).map((row: ParameterRow) => ({
     ...row,
-    value: applyEnvironmentVariables(row.value, environment)
+    value: applyProjectVariables(row.value, project, environment)
   }));
 
   const resolvedBody = normalizeBody(body);
   const mergedBody = {
     ...resolvedBody,
-    text: applyEnvironmentVariables(resolvedBody.text, environment),
+    text: applyProjectVariables(resolvedBody.text, project, environment),
     fields: resolvedBody.fields.map((row: ParameterRow) => ({
       ...row,
-      value: applyEnvironmentVariables(row.value, environment)
+      value: applyProjectVariables(row.value, project, environment)
     }))
   };
 
@@ -430,7 +474,7 @@ export function resolveRequest(
   if (auth.type === 'bearer' && auth.token) {
     authHeaders.push({
       name: 'Authorization',
-      value: `Bearer ${applyEnvironmentVariables(auth.token, environment)}`,
+      value: `Bearer ${applyProjectVariables(auth.token, project, environment)}`,
       enabled: true
     });
   }
@@ -438,7 +482,7 @@ export function resolveRequest(
     const target = auth.addTo || 'header';
     const row = {
       name: auth.key,
-      value: applyEnvironmentVariables(auth.value || '', environment),
+      value: applyProjectVariables(auth.value || '', project, environment),
       enabled: true
     };
     if (target === 'query') {
@@ -448,7 +492,9 @@ export function resolveRequest(
     }
   }
   if (auth.type === 'basic' && auth.username) {
-    const value = btoa(`${applyEnvironmentVariables(auth.username, environment)}:${applyEnvironmentVariables(auth.password || '', environment)}`);
+    const value = btoa(
+      `${applyProjectVariables(auth.username, project, environment)}:${applyProjectVariables(auth.password || '', project, environment)}`
+    );
     authHeaders.push({
       name: 'Authorization',
       value: `Basic ${value}`,
@@ -456,7 +502,8 @@ export function resolveRequest(
     });
   }
 
-  const candidateUrl = url || `${environment?.vars.baseUrl || ''}${path || ''}`;
+  const mergedVariables = mergeVariableSources(project, environment);
+  const candidateUrl = url || `${mergedVariables.baseUrl || ''}${path || ''}`;
   return {
     name: caseDocument ? `${request.name} / ${caseDocument.name}` : request.name,
     environmentName: caseDocument?.environment || environment?.name,
