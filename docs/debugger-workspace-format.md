@@ -1,0 +1,126 @@
+# Debugger Workspace Format
+
+`apps/debugger` 使用“目录即项目”的本地工作区模型。目录本身就是唯一事实源，适合直接纳入 Git。
+
+## 目录结构
+
+```text
+my-api-project/
+  project.yaml
+  environments/
+    shared.yaml
+    local.local.yaml
+  requests/
+    bootstrap/
+      health-check.request.yaml
+    users/
+      get-user.request.yaml
+      get-user/
+        cases/
+          smoke.case.yaml
+          unauthorized.case.yaml
+        bodies/
+          get-user.json
+        examples/
+          response-200.json
+  .gitignore
+```
+
+## 文件说明
+
+### `project.yaml`
+
+保存项目元信息：
+
+```yaml
+schemaVersion: 1
+name: Payments Debugger
+defaultEnvironment: shared
+labels: []
+```
+
+### `environments/*.yaml`
+
+保存可共享环境变量、公共请求头和认证配置。建议把可提交的共享变量放进 `shared.yaml`。
+
+### `environments/*.local.yaml`
+
+保存本地敏感信息，例如 token、临时 baseUrl。默认应通过项目根 `.gitignore` 忽略：
+
+```gitignore
+environments/*.local.yaml
+```
+
+### `requests/**/*.request.yaml`
+
+每个接口一个文件，保存请求模板：
+
+```yaml
+schemaVersion: 1
+id: req_f3p9s2
+name: Get User
+method: GET
+url: "{{baseUrl}}/users/{{userId}}"
+path: /users/{userId}
+description: Fetch the current user profile.
+tags:
+  - users
+headers:
+  - name: Accept
+    value: application/json
+    enabled: true
+query: []
+pathParams:
+  - name: userId
+    value: "1"
+    enabled: true
+body:
+  mode: none
+  text: ""
+  fields: []
+auth:
+  type: inherit
+examples: []
+order: 0
+```
+
+### `requests/**/<request>/cases/*.case.yaml`
+
+每个接口下可以有多个 Case。Case 只保存对基础请求的覆盖项，不保存运行结果：
+
+```yaml
+schemaVersion: 1
+id: case_a91k2z
+name: unauthorized
+extendsRequest: req_f3p9s2
+environment: local
+notes: Missing auth token
+overrides:
+  headers:
+    - name: Authorization
+      value: ""
+      enabled: false
+```
+
+### `requests/**/<request>/bodies/*`
+
+当请求体内容较大时，会自动拆分到 sidecar 文件，主 YAML 里通过 `body.file` 指向该文件。
+
+### `requests/**/<request>/examples/*`
+
+导入的响应示例或较大的示例文本会以 sidecar 文件保存，避免在 YAML 中嵌入大段文本。
+
+## 设计约束
+
+- `schemaVersion` 当前固定为 `1`
+- 文件名使用可读 slug，稳定 ID 放在文档内容中
+- 不维护全局索引文件，目录结构即导航结构
+- 运行历史不回写项目目录，只保留在应用本地缓存目录
+- 大文本拆 sidecar，小文本保留在 YAML 中，兼顾可读性与 diff 质量
+
+## Git 建议
+
+- 提交共享环境：`environments/shared.yaml`
+- 忽略本地敏感环境：`environments/*.local.yaml`
+- 一个请求一个文件、一个 Case 一个文件，减少多人改同一文件的冲突
+- 避免在 YAML 中放超长 JSON 文本，优先让应用自动拆 sidecar

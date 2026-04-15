@@ -20,6 +20,10 @@
     "next:web:typecheck": "npm run typecheck --prefix apps/web",
     "next:web:style:audit": "node ./scripts/check-web-legacy-styles.mjs",
     "next:web:build": "npm run build --prefix apps/web",
+    "debugger:dev": "npm run dev --prefix apps/debugger",
+    "debugger:web:dev": "npm run dev:web --prefix apps/debugger",
+    "debugger:build": "npm run build:web --prefix apps/debugger",
+    "debugger:bundle": "npm run build --prefix apps/debugger",
     "next:build": "npm run next:types:build && npm run next:api:build && npm run next:web:build",
     "next:start": "./scripts/start-next.sh"
   },
@@ -29,6 +33,10 @@
     "next:web:dev": "运行新版前端开发服务器",
     "next:web:typecheck": "运行新版前端 TypeScript 类型检查",
     "next:web:style:audit": "检查 web 端 legacy 样式类是否在 tailwind.css 中定义",
+    "debugger:dev": "启动 Tauri 桌面调试器开发环境",
+    "debugger:web:dev": "仅启动调试器前端开发服务器",
+    "debugger:build": "构建调试器前端资源",
+    "debugger:bundle": "构建调试器桌面安装包",
     "next:smoke:api": "运行新版 API 兼容冒烟测试",
     "next:self-assess:api": "运行新版 API 全量自评",
     "test": "执行 Next 构建校验"

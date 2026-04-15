@@ -1,0 +1,23 @@
+[package]
+name = "yapi-debugger"
+version = "0.1.0"
+description = "YApi independent desktop API debugger"
+authors = ["OpenAI"]
+edition = "2021"
+
+[lib]
+name = "yapi_debugger_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+notify = "8"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tokio = { version = "1", features = ["sync"] }
+
