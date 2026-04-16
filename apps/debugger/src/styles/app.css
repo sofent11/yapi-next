@@ -746,6 +746,21 @@ mark {
   background: var(--surface);
 }
 
+.danger-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-color: rgba(208, 54, 54, 0.28);
+  background: rgba(208, 54, 54, 0.04);
+}
+
+.danger-section-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .form-grid {
   display: grid;
   gap: 16px;
@@ -781,6 +796,13 @@ mark {
   font-size: 1.1rem;
   display: block;
   margin-top: 4px;
+}
+
+@media (max-width: 800px) {
+  .danger-section {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 /* KeyValueEditor */

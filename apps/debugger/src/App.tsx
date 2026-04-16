@@ -1,5 +1,6 @@
 import { startTransition, useEffect, useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
-import { ActionIcon, Badge, Drawer, Select, Text } from '@mantine/core';
+import { ActionIcon, Badge, Drawer, Select, Text, TextInput } from '@mantine/core';
+import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
 import { IconRefresh } from '@tabler/icons-react';
@@ -7,6 +8,7 @@ import { slugify, type WorkspaceIndex } from '@yapi-debugger/schema';
 import {
   chooseDirectory,
   chooseImportFile,
+  deleteEntry,
   listenMenuActions,
   syncMenuState,
   unwatchWorkspace,
@@ -655,6 +657,60 @@ export function App() {
     }
   }
 
+  function handleDeleteProject() {
+    if (!store.workspace || !store.draftProject) return;
+    const workspaceRoot = store.workspace.root;
+    const projectTitle = store.draftProject.name;
+    let typedProjectName = '';
+
+    modals.openConfirmModal({
+      title: '删除整个项目',
+      centered: true,
+      labels: { confirm: '继续删除', cancel: '取消' },
+      confirmProps: { color: 'red' },
+      children: (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <Text size="sm">
+            这是高危操作，将删除整个 debugger workspace 目录及其全部分类、接口、用例文件，且不可恢复。
+          </Text>
+          <Text size="sm" c="dimmed">
+            请输入项目名 <strong>{projectTitle}</strong> 以确认删除。
+          </Text>
+          <TextInput
+            placeholder={projectTitle}
+            onChange={event => {
+              typedProjectName = event.currentTarget.value.trim();
+            }}
+          />
+        </div>
+      ),
+      onConfirm: async () => {
+        if (!typedProjectName) {
+          notifications.show({ color: 'red', message: '请输入项目名以确认删除' });
+          return;
+        }
+        if (typedProjectName !== projectTitle) {
+          notifications.show({ color: 'red', message: '项目名不匹配，已取消删除' });
+          return;
+        }
+
+        try {
+          await unwatchWorkspace(workspaceRoot).catch(() => undefined);
+          await deleteEntry(workspaceRoot, true);
+          const nextRecentRoots = store.recentRoots.filter(item => item !== workspaceRoot);
+          store.setRecentRoots(nextRecentRoots);
+          saveRecentRoots(nextRecentRoots);
+          setUiState(defaultWorkspaceUiState());
+          setImportOpened(false);
+          store.setWorkspace(null);
+          notifications.show({ color: 'teal', message: `项目 ${projectTitle} 已删除` });
+        } catch (error) {
+          notifications.show({ color: 'red', message: (error as Error).message || 'Delete project failed' });
+        }
+      }
+    });
+  }
+
   function openExistingWorkspace(root: string) {
     openMutation.mutate(root);
   }
@@ -810,6 +866,7 @@ export function App() {
               activeResponseTab={uiState.activeResponseTab}
               mainSplitRatio={uiState.mainSplitRatio}
               onProjectChange={project => store.updateProject(project)}
+              onDeleteProject={handleDeleteProject}
               onEnvironmentChange={name => store.setActiveEnvironment(name)}
               onEnvironmentUpdate={(name, updater) => store.updateEnvironment(name, updater)}
               onRequestChange={requestDocument => store.updateRequest(requestDocument)}

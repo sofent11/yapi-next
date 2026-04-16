@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { Badge, Button, Select, Text, TextInput, Textarea } from '@mantine/core';
 import {
+  IconAlertTriangle,
   IconDeviceFloppy,
   IconLayoutGridAdd,
   IconPlus,
@@ -63,6 +64,7 @@ export function WorkspaceMainPanel(props: {
   activeResponseTab: ResponseTab;
   mainSplitRatio: number;
   onProjectChange: (project: ProjectDocument) => void;
+  onDeleteProject: () => void;
   onEnvironmentChange: (name: string) => void;
   onEnvironmentUpdate: (name: string, updater: (environment: EnvironmentDocument) => EnvironmentDocument) => void;
   onRequestChange: (request: RequestDocument) => void;
@@ -199,6 +201,24 @@ export function WorkspaceMainPanel(props: {
               <span>Cases</span>
               <strong>{counts.cases}</strong>
             </div>
+          </div>
+
+          <div className="inspector-section danger-section">
+            <div className="danger-section-copy">
+              <h3 className="section-title">Danger Zone</h3>
+              <Text c="dimmed" size="sm">
+                删除整个项目会移除当前 workspace 目录下的所有调试数据，包括分类、接口和用例。这是不可恢复操作。
+              </Text>
+            </div>
+            <Button
+              size="xs"
+              color="red"
+              variant="light"
+              leftSection={<IconAlertTriangle size={14} />}
+              onClick={props.onDeleteProject}
+            >
+              删除整个项目
+            </Button>
           </div>
         </div>
       </section>
