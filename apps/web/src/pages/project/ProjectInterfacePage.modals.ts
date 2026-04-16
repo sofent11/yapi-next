@@ -13,9 +13,15 @@ type BuildCoreModalsParams = {
   addInterfaceOpen: boolean;
   addInterfaceForm: InterfaceCoreModalsProps['addInterfaceForm'];
   addInterfaceLoading: boolean;
+  renameInterfaceOpen: boolean;
+  renameInterfaceForm: InterfaceCoreModalsProps['renameInterfaceForm'];
+  renameInterfaceLoading: boolean;
   catRows: InterfaceCoreModalsProps['catRows'];
   setAddInterfaceOpen: (open: boolean) => void;
+  setRenameInterfaceOpen: (open: boolean) => void;
+  setRenamingInterface: (value: { id: number; title: string } | null) => void;
   handleAddNewInterface: (values: any) => void | Promise<void>;
+  handleRenameInterface: (values: any) => void | Promise<void>;
   tagSettingOpen: boolean;
   tagSettingInput: string;
   tagSettingLoading: boolean;
@@ -65,10 +71,17 @@ type BuildCollectionModalsParams = {
   addCaseOpen: boolean;
   addCaseForm: CollectionModalsProps['addCaseForm'];
   addCaseLoading: boolean;
+  colRows: Array<{ _id?: number; name?: string }>;
   caseInterfaceTruncated: boolean;
   caseInterfaceOptions: CollectionModalsProps['caseInterfaceOptions'];
   setAddCaseOpen: (open: boolean) => void;
   handleAddCase: (values: any) => void | Promise<void>;
+  renameCaseOpen: boolean;
+  renameCaseForm: CollectionModalsProps['renameCaseForm'];
+  renameCaseLoading: boolean;
+  setRenameCaseOpen: (open: boolean) => void;
+  setRenamingCase: (value: { id: string; casename: string; colId?: number } | null) => void;
+  handleRenameCase: (values: any) => void | Promise<void>;
   commonSettingOpen: boolean;
   commonSettingForm: CollectionModalsProps['commonSettingForm'];
   commonSettingLoading: boolean;
@@ -95,6 +108,9 @@ export function buildProjectInterfaceCoreModalsProps(
     addInterfaceOpen: params.addInterfaceOpen,
     addInterfaceForm: params.addInterfaceForm,
     addInterfaceLoading: params.addInterfaceLoading,
+    renameInterfaceOpen: params.renameInterfaceOpen,
+    renameInterfaceForm: params.renameInterfaceForm,
+    renameInterfaceLoading: params.renameInterfaceLoading,
     runMethods: RUN_METHODS,
     catRows: params.catRows,
     onCancelAddInterface: () => {
@@ -102,6 +118,12 @@ export function buildProjectInterfaceCoreModalsProps(
       params.addInterfaceForm.resetFields();
     },
     onSubmitAddInterface: values => void params.handleAddNewInterface(values),
+    onCancelRenameInterface: () => {
+      params.setRenameInterfaceOpen(false);
+      params.setRenamingInterface(null);
+      params.renameInterfaceForm.resetFields();
+    },
+    onSubmitRenameInterface: values => void params.handleRenameInterface(values),
     tagSettingOpen: params.tagSettingOpen,
     tagSettingInput: params.tagSettingInput,
     tagSettingLoading: params.tagSettingLoading,
@@ -174,6 +196,12 @@ export function buildProjectInterfaceCollectionModalsProps(
     addCaseOpen: params.addCaseOpen,
     addCaseForm: params.addCaseForm,
     addCaseLoading: params.addCaseLoading,
+    collectionOptions: params.colRows
+      .map(item => ({
+        label: String(item.name || ''),
+        value: Number(item._id || 0)
+      }))
+      .filter(item => item.value > 0),
     caseInterfaceTruncated: params.caseInterfaceTruncated,
     caseInterfaceOptions: params.caseInterfaceOptions,
     onCancelAddCase: () => {
@@ -181,6 +209,15 @@ export function buildProjectInterfaceCollectionModalsProps(
       params.addCaseForm.resetFields();
     },
     onSubmitAddCase: values => void params.handleAddCase(values),
+    renameCaseOpen: params.renameCaseOpen,
+    renameCaseForm: params.renameCaseForm,
+    renameCaseLoading: params.renameCaseLoading,
+    onCancelRenameCase: () => {
+      params.setRenameCaseOpen(false);
+      params.setRenamingCase(null);
+      params.renameCaseForm.resetFields();
+    },
+    onSubmitRenameCase: values => void params.handleRenameCase(values),
     commonSettingOpen: params.commonSettingOpen,
     commonSettingForm: params.commonSettingForm,
     commonSettingLoading: params.commonSettingLoading,

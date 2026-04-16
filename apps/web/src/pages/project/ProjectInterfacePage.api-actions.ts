@@ -12,7 +12,8 @@ import type {
   EditCatForm,
   EditForm,
   EditFormBodyParam,
-  EditFormParam
+  EditFormParam,
+  RenameInterfaceForm
 } from './ProjectInterfacePage.types';
 import {
   checkIsJsonSchema,
@@ -52,14 +53,18 @@ type UseProjectInterfaceApiActionsParams = {
   catId: number;
   catRows: Array<{ _id?: number; name?: string }>;
   editingCat: { _id: number; name: string; desc?: string } | null;
+  renamingInterface: { id: number; title: string } | null;
   form: FormInstance<EditForm>;
   addInterfaceForm: FormInstance<AddInterfaceForm>;
   addCatForm: FormInstance<AddCatForm>;
   editCatForm: FormInstance<EditCatForm>;
+  renameInterfaceForm: FormInstance<RenameInterfaceForm>;
   setAddInterfaceOpen: (open: boolean) => void;
   setAddCatOpen: (open: boolean) => void;
   setEditCatOpen: (open: boolean) => void;
+  setRenameInterfaceOpen: (open: boolean) => void;
   setEditingCat: (value: { _id: number; name: string; desc?: string } | null) => void;
+  setRenamingInterface: (value: { id: number; title: string } | null) => void;
   setTagSettingOpen: (open: boolean) => void;
   setTagSettingInput: (value: string) => void;
   setBulkFieldName: (value: 'req_query' | 'req_body_form' | null) => void;
@@ -377,6 +382,49 @@ export function useProjectInterfaceApiActions(params: UseProjectInterfaceApiActi
     });
   }, [params]);
 
+  const openRenameInterfaceModal = useCallback((row: Pick<InterfaceDTO, '_id' | 'title'>) => {
+    const id = Number(row._id || 0);
+    if (id <= 0) {
+      message.error('接口不存在');
+      return;
+    }
+    params.setRenamingInterface({
+      id,
+      title: String(row.title || '')
+    });
+    params.renameInterfaceForm.setFieldsValue({
+      title: String(row.title || '')
+    });
+    params.setRenameInterfaceOpen(true);
+  }, [params]);
+
+  const handleRenameInterface = useCallback(async (values: RenameInterfaceForm) => {
+    if (!params.renamingInterface?.id) {
+      message.error('接口不存在');
+      return;
+    }
+    const interfaceId = params.renamingInterface.id;
+    const response = await params.callApi(
+      params.updateInterface({
+        id: interfaceId,
+        project_id: params.projectId,
+        title: values.title.trim(),
+        token: params.token
+      }).unwrap(),
+      '重命名接口失败'
+    );
+    if (!response) return;
+    message.success('接口已重命名');
+    params.setRenameInterfaceOpen(false);
+    params.setRenamingInterface(null);
+    params.renameInterfaceForm.resetFields();
+    await Promise.all([
+      params.refetchInterfaceListSafe(),
+      params.refreshInterfaceMenu(),
+      params.interfaceId === interfaceId ? params.refetchDetail() : Promise.resolve()
+    ]);
+  }, [params]);
+
   const deleteInterfacesDirect = useCallback(async (ids: number[]) => {
     const normalizedIds = Array.from(new Set(ids.map(item => Number(item || 0)).filter(item => item > 0)));
     if (normalizedIds.length === 0) return [] as number[];
@@ -634,6 +682,8 @@ export function useProjectInterfaceApiActions(params: UseProjectInterfaceApiActi
     handleUpdateCat,
     openEditCatModal,
     confirmDeleteCat,
+    openRenameInterfaceModal,
+    handleRenameInterface,
     confirmDeleteInterface,
     deleteInterfacesDirect,
     deleteInterfaceCatsDirect,

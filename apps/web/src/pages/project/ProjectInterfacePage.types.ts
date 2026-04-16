@@ -75,9 +75,18 @@ export type ColForm = {
 };
 
 export type AddCaseForm = {
+  col_id?: number;
   interface_id: number;
   casename: string;
   case_env?: string;
+};
+
+export type RenameInterfaceForm = {
+  title: string;
+};
+
+export type RenameCaseForm = {
+  casename: string;
 };
 
 export type CaseEditForm = {

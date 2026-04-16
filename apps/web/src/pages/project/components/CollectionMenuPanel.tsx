@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { Badge, Button, Text, Tooltip } from '@mantine/core';
 import {
   IconCopy,
@@ -9,6 +9,7 @@ import {
   IconTrash
 } from '@tabler/icons-react';
 import { ResourceGroupCard } from '../../../domains/interface/ResourceGroupCard';
+import { ResourceContextMenu, type ResourceContextMenuItem } from '../../../domains/interface/ResourceContextMenu';
 import { ResourceIconButton } from '../../../domains/interface/ResourceIconButton';
 import { ResourceLeafRow } from '../../../domains/interface/ResourceLeafRow';
 import { ResourceNavShell } from '../../../domains/interface/ResourceNavShell';
@@ -51,11 +52,19 @@ type CollectionMenuPanelProps = {
   onEditCol: (col: CollectionRow) => void;
   onImportCol: (colId: number) => void;
   onCopyCol: (col: CollectionRow) => void;
+  onOpenAddCaseInCol: (colId: number) => void;
   onDeleteCase: (caseId: string) => void;
+  onRenameCase: (item: CollectionCaseRow) => void;
   onCopyCase: (caseId: string) => void;
 };
 
+type CollectionMenuContextState =
+  | { kind: 'root'; x: number; y: number }
+  | { kind: 'col'; x: number; y: number; col: CollectionRow }
+  | { kind: 'case'; x: number; y: number; item: CollectionCaseRow };
+
 export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
+  const [contextMenu, setContextMenu] = useState<CollectionMenuContextState | null>(null);
   const keywordMode = props.colKeyword.trim().length > 0;
   const totalCases = props.colDisplayRows.reduce((sum, col) => sum + (col.caseList?.length || 0), 0);
 
@@ -67,11 +76,86 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
     }
   };
 
+  const contextMenuItems: ResourceContextMenuItem[] = (() => {
+    if (!props.canEdit || !contextMenu) return [];
+    if (contextMenu.kind === 'root') {
+      return [
+        {
+          key: 'add-col',
+          label: '添加集合',
+          onClick: props.onOpenAddCol
+        }
+      ];
+    }
+    if (contextMenu.kind === 'col') {
+      const colId = Number(contextMenu.col._id || 0);
+      return [
+        {
+          key: 'add-case',
+          label: '添加用例',
+          onClick: () => props.onOpenAddCaseInCol(colId)
+        },
+        {
+          key: 'edit-col',
+          label: '编辑集合',
+          onClick: () => props.onEditCol(contextMenu.col)
+        },
+        {
+          key: 'import-col',
+          label: '导入接口',
+          onClick: () => props.onImportCol(colId)
+        },
+        {
+          key: 'copy-col',
+          label: '复制集合',
+          onClick: () => props.onCopyCol(contextMenu.col)
+        },
+        {
+          key: 'delete-col',
+          label: '删除集合',
+          onClick: () => props.onDeleteCol(colId),
+          danger: true
+        }
+      ];
+    }
+    const caseId = String(contextMenu.item._id || '');
+    return [
+      {
+        key: 'rename-case',
+        label: '重命名用例',
+        onClick: () => props.onRenameCase(contextMenu.item)
+      },
+      {
+        key: 'copy-case',
+        label: '复制用例',
+        onClick: () => props.onCopyCase(caseId)
+      },
+      {
+        key: 'delete-case',
+        label: '删除用例',
+        onClick: () => props.onDeleteCase(caseId),
+        danger: true
+      }
+    ];
+  })();
+
   return (
     <ResourceNavShell
       searchValue={props.colKeyword}
       onSearchChange={props.onColKeywordChange}
       searchPlaceholder="搜索测试集合"
+      onListContextMenu={
+        props.canEdit
+          ? event => {
+              event.preventDefault();
+              setContextMenu({
+                kind: 'root',
+                x: event.clientX,
+                y: event.clientY
+              });
+            }
+          : undefined
+      }
       actions={
         props.canEdit ? (
           <div className="interface-nav-filter-actions flex flex-wrap items-center gap-2">
@@ -134,6 +218,20 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
               event.dataTransfer.effectAllowed = 'move';
             }}
             onDragEnd={props.onDragEnd}
+            onContextMenu={
+              props.canEdit
+                ? event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setContextMenu({
+                      kind: 'col',
+                      x: event.clientX,
+                      y: event.clientY,
+                      col
+                    });
+                  }
+                : undefined
+            }
             onNavigate={() => props.onNavigateCol(colId)}
             onKeyNavigate={event => triggerWithKeyboard(event, () => props.onNavigateCol(colId))}
             onToggle={() => {
@@ -145,6 +243,9 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
             actions={
               props.canEdit ? (
                 <>
+                  <ResourceIconButton label="添加用例" onClick={() => props.onOpenAddCaseInCol(colId)}>
+                    <IconPlus size={14} />
+                  </ResourceIconButton>
                   <ResourceIconButton label="删除集合" onClick={() => props.onDeleteCol(colId)}>
                     <IconTrash size={14} />
                   </ResourceIconButton>
@@ -184,6 +285,20 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                     event.stopPropagation();
                     props.onDropCase(colId, id);
                   }}
+                  onContextMenu={
+                    props.canEdit
+                      ? event => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setContextMenu({
+                            kind: 'case',
+                            x: event.clientX,
+                            y: event.clientY,
+                            item
+                          });
+                        }
+                      : undefined
+                  }
                   onNavigate={() => props.onNavigateCase(id)}
                   onKeyNavigate={event => triggerWithKeyboard(event, () => props.onNavigateCase(id))}
                   leading={<Badge color="blue" variant="light">CASE</Badge>}
@@ -195,11 +310,14 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
                   actions={
                     props.canEdit ? (
                       <div className="interface-nav-item-actions flex items-center gap-1">
-                        <ResourceIconButton label="删除用例" onClick={() => props.onDeleteCase(id)}>
-                          <IconTrash size={14} />
+                        <ResourceIconButton label="重命名用例" onClick={() => props.onRenameCase(item)}>
+                          <IconEdit size={14} />
                         </ResourceIconButton>
                         <ResourceIconButton label="复制用例" onClick={() => props.onCopyCase(id)}>
                           <IconCopy size={14} />
+                        </ResourceIconButton>
+                        <ResourceIconButton label="删除用例" onClick={() => props.onDeleteCase(id)}>
+                          <IconTrash size={14} />
                         </ResourceIconButton>
                       </div>
                     ) : null
@@ -210,6 +328,14 @@ export function CollectionMenuPanel(props: CollectionMenuPanelProps) {
           </ResourceGroupCard>
         );
       })}
+
+      <ResourceContextMenu
+        opened={contextMenu !== null}
+        x={contextMenu?.x || 0}
+        y={contextMenu?.y || 0}
+        items={contextMenuItems}
+        onClose={() => setContextMenu(null)}
+      />
     </ResourceNavShell>
   );
 }

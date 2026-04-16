@@ -24,7 +24,9 @@ export type ProjectInterfaceCollectionMenuProps = {
   confirmDeleteCol: (colId: number) => void;
   openImportInterfaceModal: (colId: number) => void;
   handleCopyCol: (col: { _id?: number; name?: string; desc?: string }) => void;
+  openAddCaseModalForCollection: (colId: number) => void;
   confirmDeleteCase: (caseItemId: string) => void;
+  openRenameCaseModal: (item: { _id?: string | number; casename?: string; col_id?: number }) => void;
   handleCopyCase: (caseItemId: string) => void;
 };
 
@@ -53,7 +55,9 @@ export function ProjectInterfaceCollectionMenu(props: ProjectInterfaceCollection
       onEditCol={col => props.openColModal('edit', col as { _id?: number; name?: string; desc?: string })}
       onImportCol={props.openImportInterfaceModal}
       onCopyCol={col => void props.handleCopyCol(col as { _id?: number; name?: string; desc?: string })}
+      onOpenAddCaseInCol={props.openAddCaseModalForCollection}
       onDeleteCase={props.confirmDeleteCase}
+      onRenameCase={item => props.openRenameCaseModal(item)}
       onCopyCase={id => void props.handleCopyCase(id)}
     />
   );

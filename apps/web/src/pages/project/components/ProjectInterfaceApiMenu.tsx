@@ -30,6 +30,8 @@ export type ProjectInterfaceApiMenuProps = {
   handleDropOnInterface: (catIdNum: number, ifaceId: number) => void;
   openEditCatModal: (cat: InterfaceTreeNode) => void;
   confirmDeleteCat: (cat: InterfaceTreeNode) => void;
+  openRenameInterfaceModal: (item: Pick<InterfaceDTO, '_id' | 'title'>) => void;
+  openAddCaseModalForInterface: (item: Pick<InterfaceDTO, '_id' | 'title'>) => void;
   copyInterfaceRow: (item: InterfaceDTO) => void;
   confirmDeleteInterface: (id: number) => void;
   deleteInterfacesDirect: (ids: number[]) => Promise<number[]>;
@@ -76,6 +78,8 @@ export function ProjectInterfaceApiMenu(props: ProjectInterfaceApiMenuProps) {
       onOpenAddInterfaceInCat={props.openAddInterfaceModal}
       onEditCat={props.openEditCatModal}
       onDeleteCat={props.confirmDeleteCat}
+      onRenameInterface={item => props.openRenameInterfaceModal(item)}
+      onOpenAddCaseForInterface={item => props.openAddCaseModalForInterface(item)}
       onNavigateInterface={ifaceId => props.navigateWithGuard(`/project/${props.projectId}/interface/api/${ifaceId}`)}
       onCopyInterface={item => void props.copyInterfaceRow(item)}
       onDeleteInterface={props.confirmDeleteInterface}

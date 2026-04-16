@@ -102,6 +102,7 @@ export type ColFormValues = {
 };
 
 export type AddCaseFormValues = {
+  col_id?: number;
   interface_id: number;
   casename: string;
   case_env?: string;

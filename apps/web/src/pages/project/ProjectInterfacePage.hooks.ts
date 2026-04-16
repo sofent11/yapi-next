@@ -42,6 +42,8 @@ import type {
   ColForm,
   AddCaseForm,
   CaseEditForm,
+  RenameCaseForm,
+  RenameInterfaceForm,
   AutoTestResultItem,
   AutoTestReport,
   CommonSettingForm,
@@ -120,13 +122,17 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
   const [expandedColIds, setExpandedColIds] = useState<number[]>([]);
   const [draggingColItem, setDraggingColItem] = useState<ColDragItem | null>(null);
   const [addInterfaceOpen, setAddInterfaceOpen] = useState(false);
+  const [renameInterfaceOpen, setRenameInterfaceOpen] = useState(false);
   const [addCatOpen, setAddCatOpen] = useState(false);
   const [editCatOpen, setEditCatOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<{ _id: number; name: string; desc?: string } | null>(null);
+  const [renamingInterface, setRenamingInterface] = useState<{ id: number; title: string } | null>(null);
   const [colModalOpen, setColModalOpen] = useState(false);
   const [colModalType, setColModalType] = useState<'add' | 'edit'>('add');
   const [editingCol, setEditingCol] = useState<{ _id: number; name: string; desc?: string } | null>(null);
   const [addCaseOpen, setAddCaseOpen] = useState(false);
+  const [renameCaseOpen, setRenameCaseOpen] = useState(false);
+  const [renamingCase, setRenamingCase] = useState<{ id: string; casename: string; colId?: number } | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importColId, setImportColId] = useState(0);
   const [importProjectId, setImportProjectId] = useState(0);
@@ -166,10 +172,12 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
 
   const [form] = useRcForm<EditForm>();
   const [addInterfaceForm] = useRcForm<AddInterfaceForm>();
+  const [renameInterfaceForm] = useRcForm<RenameInterfaceForm>();
   const [addCatForm] = useRcForm<AddCatForm>();
   const [editCatForm] = useRcForm<EditCatForm>();
   const [colForm] = useRcForm<ColForm>();
   const [addCaseForm] = useRcForm<AddCaseForm>();
+  const [renameCaseForm] = useRcForm<RenameCaseForm>();
   const [caseForm] = useRcForm<CaseEditForm>();
   const [commonSettingForm] = useRcForm<CommonSettingForm>();
 
@@ -390,6 +398,8 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     handleUpdateCat,
     openEditCatModal,
     confirmDeleteCat,
+    openRenameInterfaceModal,
+    handleRenameInterface,
     confirmDeleteInterface,
     deleteInterfacesDirect,
     deleteInterfaceCatsDirect,
@@ -410,14 +420,18 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     catId,
     catRows,
     editingCat,
+    renamingInterface,
     form,
     addInterfaceForm,
     addCatForm,
     editCatForm,
+    renameInterfaceForm,
     setAddInterfaceOpen,
     setAddCatOpen,
     setEditCatOpen,
+    setRenameInterfaceOpen,
     setEditingCat,
+    setRenamingInterface,
     setTagSettingOpen,
     setTagSettingInput,
     setBulkFieldName,
@@ -460,6 +474,8 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     handleImportInterfaces,
     confirmDeleteCase,
     handleCopyCase,
+    openRenameCaseModal,
+    handleRenameCase,
     handleSaveCase,
     openAutoTest,
     runAutoTestInPage,
@@ -481,6 +497,7 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     colForm,
     addCaseForm,
     caseForm,
+    renameCaseForm,
     commonSettingForm,
     setColModalType,
     setColModalOpen,
@@ -490,13 +507,16 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     setImportSelectedRowKeys,
     setImportModalOpen,
     setAddCaseOpen,
+    setRenameCaseOpen,
     setAutoTestRunning,
     setAutoTestReport,
     setAutoTestModalOpen,
     setAutoTestDetailItem,
     setCommonSettingOpen,
+    setRenamingCase,
     importColId,
     importProjectId,
+    renamingCase,
     selectedImportInterfaceIds,
     callApi,
     navigate,
@@ -514,6 +534,37 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     upColCase,
     fetchInterfaceDetail
   });
+
+  const openAddCaseModalForInterface = useCallback((item: Pick<InterfaceDTO, '_id' | 'title'>) => {
+    if (colRows.length === 0) {
+      message.error('请先创建测试集合');
+      return;
+    }
+    const nextInterfaceId = Number(item._id || 0);
+    if (nextInterfaceId <= 0) {
+      message.error('接口不存在');
+      return;
+    }
+    const defaultColId = selectedColId > 0 ? selectedColId : Number(colRows[0]?._id || 0);
+    addCaseForm.setFieldsValue({
+      col_id: defaultColId > 0 ? defaultColId : undefined,
+      interface_id: nextInterfaceId,
+      casename: '',
+      case_env: ''
+    });
+    setAddCaseOpen(true);
+  }, [addCaseForm, colRows, selectedColId]);
+
+  const openAddCaseModalForCollection = useCallback((colId: number) => {
+    const targetColId = colId > 0 ? colId : selectedColId;
+    addCaseForm.setFieldsValue({
+      col_id: targetColId > 0 ? targetColId : undefined,
+      interface_id: Number(caseInterfaceOptions[0]?.value || 0) || undefined,
+      casename: '',
+      case_env: ''
+    });
+    setAddCaseOpen(true);
+  }, [addCaseForm, caseInterfaceOptions, selectedColId]);
 
   const {
     toggleExpandedCol,
@@ -756,6 +807,8 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     handleDropOnInterface,
     openEditCatModal,
     confirmDeleteCat,
+    openRenameInterfaceModal,
+    openAddCaseModalForInterface,
     copyInterfaceRow,
     confirmDeleteInterface,
     deleteInterfacesDirect,
@@ -837,7 +890,9 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     confirmDeleteCol,
     openImportInterfaceModal,
     handleCopyCol,
+    openAddCaseModalForCollection,
     confirmDeleteCase,
+    openRenameCaseModal,
     handleCopyCase,
     colRows,
     autoTestRunning,
@@ -875,9 +930,15 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     addInterfaceOpen,
     addInterfaceForm,
     addInterfaceLoading: addInterfaceState.isLoading,
+    renameInterfaceOpen,
+    renameInterfaceForm,
+    renameInterfaceLoading: updateState.isLoading,
     catRows,
     setAddInterfaceOpen,
+    setRenameInterfaceOpen,
+    setRenamingInterface,
     handleAddNewInterface,
+    handleRenameInterface,
     tagSettingOpen,
     tagSettingInput,
     tagSettingLoading: updateProjectTagState.isLoading,
@@ -928,10 +989,17 @@ export function useProjectInterfaceLogic(props: ProjectInterfacePageProps) {
     addCaseOpen,
     addCaseForm,
     addCaseLoading: addColCaseState.isLoading,
+    colRows,
     caseInterfaceTruncated,
     caseInterfaceOptions,
     setAddCaseOpen,
     handleAddCase,
+    renameCaseOpen,
+    renameCaseForm,
+    renameCaseLoading: upColCaseState.isLoading,
+    setRenameCaseOpen,
+    setRenamingCase,
+    handleRenameCase,
     commonSettingOpen,
     commonSettingForm,
     commonSettingLoading: updateColState.isLoading,

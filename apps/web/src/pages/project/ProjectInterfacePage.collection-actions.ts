@@ -13,7 +13,8 @@ import type {
   CaseEditForm,
   CaseEnvProjectItem,
   ColForm,
-  CommonSettingForm
+  CommonSettingForm,
+  RenameCaseForm
 } from './ProjectInterfacePage.types';
 import { parseJsonText } from './ProjectInterfacePage.request-runner';
 import { toRecord } from './ProjectInterfacePage.utils';
@@ -47,6 +48,7 @@ type UseProjectInterfaceCollectionActionsParams = {
   colForm: FormInstance<ColForm>;
   addCaseForm: FormInstance<AddCaseForm>;
   caseForm: FormInstance<CaseEditForm>;
+  renameCaseForm: FormInstance<RenameCaseForm>;
   commonSettingForm: FormInstance<CommonSettingForm>;
   setColModalType: (value: 'add' | 'edit') => void;
   setColModalOpen: (open: boolean) => void;
@@ -56,13 +58,16 @@ type UseProjectInterfaceCollectionActionsParams = {
   setImportSelectedRowKeys: (value: Array<string | number>) => void;
   setImportModalOpen: (open: boolean) => void;
   setAddCaseOpen: (open: boolean) => void;
+  setRenameCaseOpen: (open: boolean) => void;
   setAutoTestRunning: (value: boolean) => void;
   setAutoTestReport: (value: AutoTestReport | null) => void;
   setAutoTestModalOpen: (open: boolean) => void;
   setAutoTestDetailItem: (item: AutoTestResultItem | null) => void;
   setCommonSettingOpen: (open: boolean) => void;
+  setRenamingCase: (value: { id: string; casename: string; colId?: number } | null) => void;
   importColId: number;
   importProjectId: number;
+  renamingCase: { id: string; casename: string; colId?: number } | null;
   selectedImportInterfaceIds: number[];
   callApi: <T>(promise: Promise<T>, errorText: string) => Promise<T | null>;
   navigate: NavigateFunction;
@@ -346,6 +351,53 @@ export function useProjectInterfaceCollectionActions(params: UseProjectInterface
     },
     [params]
   );
+
+  const openRenameCaseModal = useCallback(
+    (caseItem: { _id?: string | number; casename?: string; col_id?: number }) => {
+      const id = String(caseItem._id || '');
+      if (!id) {
+        message.error('用例不存在');
+        return;
+      }
+      params.setRenamingCase({
+        id,
+        casename: String(caseItem.casename || ''),
+        colId: Number(caseItem.col_id || params.selectedColId || 0) || undefined
+      });
+      params.renameCaseForm.setFieldsValue({
+        casename: String(caseItem.casename || '')
+      });
+      params.setRenameCaseOpen(true);
+    },
+    [params]
+  );
+
+  const handleRenameCase = useCallback(async (values: RenameCaseForm) => {
+    if (!params.renamingCase?.id) {
+      message.error('用例不存在');
+      return;
+    }
+    const targetCaseId = params.renamingCase.id;
+    const response = await params.callApi(
+      params.upColCase({
+        id: targetCaseId,
+        col_id: params.renamingCase.colId || params.selectedColId || undefined,
+        casename: values.casename.trim(),
+        token: params.token
+      }).unwrap(),
+      '重命名用例失败'
+    );
+    if (!response) return;
+    message.success('用例已重命名');
+    params.setRenameCaseOpen(false);
+    params.setRenamingCase(null);
+    params.renameCaseForm.resetFields();
+    await Promise.all([
+      params.refetchCaseList(),
+      params.refetchColList(),
+      params.action === 'case' && params.caseId === targetCaseId ? params.refetchCaseDetail() : Promise.resolve()
+    ]);
+  }, [params]);
 
   const handleSaveCase = useCallback(async () => {
     if (!params.caseId) {
@@ -640,7 +692,8 @@ export function useProjectInterfaceCollectionActions(params: UseProjectInterface
 
   const handleAddCase = useCallback(
     async (values: AddCaseForm) => {
-      if (params.selectedColId <= 0) {
+      const targetColId = Number(values.col_id || params.selectedColId || 0);
+      if (targetColId <= 0) {
         message.error('请选择测试集合');
         return;
       }
@@ -663,7 +716,7 @@ export function useProjectInterfaceCollectionActions(params: UseProjectInterface
         params.addColCase({
           casename: values.casename.trim() || String(detail.title || `case-${interfaceId}`),
           project_id: params.projectId,
-          col_id: params.selectedColId,
+          col_id: targetColId,
           interface_id: interfaceId,
           case_env: values.case_env?.trim() || '',
           req_params: Array.isArray(detail.req_params) ? detail.req_params : [],
@@ -698,6 +751,8 @@ export function useProjectInterfaceCollectionActions(params: UseProjectInterface
     handleImportInterfaces,
     confirmDeleteCase,
     handleCopyCase,
+    openRenameCaseModal,
+    handleRenameCase,
     handleSaveCase,
     openAutoTest,
     runAutoTestInPage,

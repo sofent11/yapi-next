@@ -59,6 +59,8 @@ type BuildApiWorkspaceParams = {
   handleDropOnInterface: (catIdNum: number, ifaceId: number) => void;
   openEditCatModal: (cat: InterfaceTreeNode) => void;
   confirmDeleteCat: (cat: InterfaceTreeNode) => void;
+  openRenameInterfaceModal: (item: Pick<InterfaceDTO, '_id' | 'title'>) => void;
+  openAddCaseModalForInterface: (item: Pick<InterfaceDTO, '_id' | 'title'>) => void;
   copyInterfaceRow: (item: InterfaceDTO) => void | Promise<void>;
   confirmDeleteInterface: (id: number) => void;
   deleteInterfacesDirect: (ids: number[]) => Promise<number[]>;
@@ -140,7 +142,9 @@ type BuildCollectionWorkspaceParams = {
   confirmDeleteCol: (colId: number) => void;
   openImportInterfaceModal: (colId: number) => void;
   handleCopyCol: (col: { _id?: number; name?: string; desc?: string }) => void | Promise<void>;
+  openAddCaseModalForCollection: (colId: number) => void;
   confirmDeleteCase: (caseItemId: string) => void;
+  openRenameCaseModal: (item: { _id?: string | number; casename?: string; col_id?: number }) => void;
   handleCopyCase: (caseItemId: string) => void | Promise<void>;
   colRows: InterfaceCollectionContentProps['colRows'];
   autoTestRunning: boolean;
@@ -201,6 +205,8 @@ export function buildProjectInterfaceApiWorkspace(
     handleDropOnInterface: params.handleDropOnInterface,
     openEditCatModal: params.openEditCatModal,
     confirmDeleteCat: params.confirmDeleteCat,
+    openRenameInterfaceModal: params.openRenameInterfaceModal,
+    openAddCaseModalForInterface: params.openAddCaseModalForInterface,
     copyInterfaceRow: params.copyInterfaceRow,
     confirmDeleteInterface: params.confirmDeleteInterface,
     deleteInterfacesDirect: params.deleteInterfacesDirect,
@@ -375,7 +381,9 @@ export function buildProjectInterfaceCollectionWorkspace(
     confirmDeleteCol: params.confirmDeleteCol,
     openImportInterfaceModal: params.openImportInterfaceModal,
     handleCopyCol: params.handleCopyCol,
+    openAddCaseModalForCollection: params.openAddCaseModalForCollection,
     confirmDeleteCase: params.confirmDeleteCase,
+    openRenameCaseModal: params.openRenameCaseModal,
     handleCopyCase: params.handleCopyCase
   };
 

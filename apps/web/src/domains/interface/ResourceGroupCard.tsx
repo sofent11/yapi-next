@@ -1,4 +1,4 @@
-import type { DragEvent, KeyboardEvent, ReactNode } from 'react';
+import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { Badge } from '@mantine/core';
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 
@@ -18,6 +18,7 @@ type ResourceGroupCardProps = {
   onDragEnd?: () => void;
   onDragOver?: (event: DragEvent<HTMLElement>) => void;
   onDrop?: (event: DragEvent<HTMLElement>) => void;
+  onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
   toggleLabelExpanded: string;
   toggleLabelCollapsed: string;
 };
@@ -29,7 +30,16 @@ export function ResourceGroupCard(props: ResourceGroupCardProps) {
       onDragOver={props.onDragOver}
       onDrop={props.onDrop}
     >
-      <div className={`interface-nav-group-title${props.active ? ' active' : ''}`}>
+      <div
+        className={`interface-nav-group-title${props.active ? ' active' : ''}`}
+        onMouseDown={event => {
+          if (event.button === 2) {
+            event.preventDefault();
+          }
+        }}
+        onContextMenuCapture={props.onContextMenu}
+        onContextMenu={props.onContextMenu}
+      >
         <div className="interface-nav-group-main flex-1">
           <button
             type="button"

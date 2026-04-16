@@ -14,6 +14,7 @@ import {
 } from '@mantine/core';
 import RcForm, { Field } from 'rc-field-form';
 import type { FormInstance } from 'rc-field-form';
+import { createNameValidator } from '../../../utils/name-validator';
 import { normalizeHttpMethod } from '../../../utils/http-method';
 import type { AddCaseFormValues, ColFormValues, CommonSettingFormValues } from './collection-types';
 
@@ -34,6 +35,10 @@ type ImportInterfaceRow = {
   status?: string;
   isCategory: boolean;
   children?: ImportInterfaceRow[];
+};
+
+type RenameCaseFormValues = {
+  casename: string;
 };
 
 export type CollectionModalsProps = {
@@ -60,10 +65,16 @@ export type CollectionModalsProps = {
   addCaseOpen: boolean;
   addCaseForm: FormInstance<AddCaseFormValues>;
   addCaseLoading: boolean;
+  collectionOptions: Array<{ label: string; value: number }>;
   caseInterfaceTruncated: boolean;
   caseInterfaceOptions: Array<{ value: number; label: string; title?: string; path?: string }>;
   onCancelAddCase: () => void;
   onSubmitAddCase: (values: AddCaseFormValues) => void;
+  renameCaseOpen: boolean;
+  renameCaseForm: FormInstance<RenameCaseFormValues>;
+  renameCaseLoading: boolean;
+  onCancelRenameCase: () => void;
+  onSubmitRenameCase: (values: RenameCaseFormValues) => void;
   commonSettingOpen: boolean;
   commonSettingForm: FormInstance<CommonSettingFormValues>;
   commonSettingLoading: boolean;
@@ -274,6 +285,20 @@ export function CollectionModals(props: CollectionModalsProps) {
                 title={`接口选项仅展示前 ${props.caseInterfaceOptions.length} 条，请通过左侧筛选或搜索后再添加。`}
               />
             ) : null}
+            <Field<AddCaseFormValues> name="col_id" rules={[{ required: true, message: '请选择测试集合' }]}>
+              {(control, meta) => (
+                <Select
+                  label="测试集合"
+                  value={control.value ? String(control.value) : null}
+                  onChange={value => control.onChange(value ? Number(value) : undefined)}
+                  data={props.collectionOptions.map(item => ({
+                    value: String(item.value),
+                    label: item.label
+                  }))}
+                  error={meta.errors[0]}
+                />
+              )}
+            </Field>
             <Field<AddCaseFormValues> name="interface_id" rules={[{ required: true, message: '请选择接口' }]}>
               {(control, meta) => (
                 <Select
@@ -315,6 +340,32 @@ export function CollectionModals(props: CollectionModalsProps) {
               loading={props.addCaseLoading}
               onCancel={props.onCancelAddCase}
               onConfirm={() => props.addCaseForm.submit()}
+            />
+          </Stack>
+        </RcForm>
+      </Modal>
+
+      <Modal title="重命名测试用例" opened={props.renameCaseOpen} onClose={props.onCancelRenameCase} classNames={modalClassNames}>
+        <RcForm<RenameCaseFormValues> form={props.renameCaseForm} onFinish={values => void props.onSubmitRenameCase(values)}>
+          <Stack>
+            <Field<RenameCaseFormValues>
+              name="casename"
+              rules={[{ required: true, validator: createNameValidator('用例') }]}
+            >
+              {(control, meta) => (
+                <TextInput
+                  label="用例名称"
+                  value={String(control.value ?? '')}
+                  onChange={event => control.onChange(event.currentTarget.value)}
+                  error={meta.errors[0]}
+                />
+              )}
+            </Field>
+            <ModalActions
+              loading={props.renameCaseLoading}
+              confirmText="保存"
+              onCancel={props.onCancelRenameCase}
+              onConfirm={() => props.renameCaseForm.submit()}
             />
           </Stack>
         </RcForm>

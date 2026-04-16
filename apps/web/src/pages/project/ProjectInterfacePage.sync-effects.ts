@@ -172,13 +172,16 @@ export function useProjectInterfaceMenuSyncEffects(params: UseProjectInterfaceMe
 
   useEffect(() => {
     if (!params.addCaseOpen) return;
-    const firstInterfaceId = Number(params.caseInterfaceOptions[0]?.value || 0);
+    const currentValues = params.addCaseForm.getFieldsValue();
+    const defaultColId = Number(currentValues.col_id || params.selectedColId || params.colRows[0]?._id || 0);
+    const firstInterfaceId = Number(currentValues.interface_id || params.caseInterfaceOptions[0]?.value || 0);
     params.addCaseForm.setFieldsValue({
+      col_id: defaultColId > 0 ? defaultColId : undefined,
       interface_id: firstInterfaceId > 0 ? firstInterfaceId : undefined,
-      casename: '',
-      case_env: ''
+      casename: typeof currentValues.casename === 'string' ? currentValues.casename : '',
+      case_env: typeof currentValues.case_env === 'string' ? currentValues.case_env : ''
     });
-  }, [params.addCaseForm, params.addCaseOpen, params.caseInterfaceOptions]);
+  }, [params.addCaseForm, params.addCaseOpen, params.caseInterfaceOptions, params.colRows, params.selectedColId]);
 
   useEffect(() => {
     if (!Array.isArray(params.caseEnvProjects) || params.caseEnvProjects.length === 0) return;

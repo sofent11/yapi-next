@@ -4,6 +4,7 @@ import { IconCopy, IconHierarchy3, IconPlus, IconTrash, IconEdit } from '@tabler
 import type { InterfaceTreeNode } from '@yapi-next/shared-types';
 import type { InterfaceDTO } from '../../../types/interface-dto';
 import { ResourceGroupCard } from '../../../domains/interface/ResourceGroupCard';
+import { ResourceContextMenu, type ResourceContextMenuItem } from '../../../domains/interface/ResourceContextMenu';
 import { ResourceIconButton } from '../../../domains/interface/ResourceIconButton';
 import { ResourceLeafRow } from '../../../domains/interface/ResourceLeafRow';
 import { ResourceNavShell } from '../../../domains/interface/ResourceNavShell';
@@ -35,6 +36,8 @@ type InterfaceMenuPanelProps = {
   onOpenAddInterfaceInCat: (catId: number) => void;
   onEditCat: (cat: InterfaceTreeNode) => void;
   onDeleteCat: (cat: InterfaceTreeNode) => void;
+  onRenameInterface: (item: InterfaceDTO) => void;
+  onOpenAddCaseForInterface: (item: InterfaceDTO) => void;
   onNavigateInterface: (interfaceId: number) => void;
   onCopyInterface: (row: InterfaceDTO) => void;
   onDeleteInterface: (interfaceId: number) => void;
@@ -43,8 +46,14 @@ type InterfaceMenuPanelProps = {
   methodClassName: (method?: string) => string;
 };
 
+type InterfaceMenuContextState =
+  | { kind: 'root'; x: number; y: number }
+  | { kind: 'cat'; x: number; y: number; cat: InterfaceTreeNode }
+  | { kind: 'interface'; x: number; y: number; item: InterfaceDTO };
+
 export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
   const [duplicateGovernanceOpen, setDuplicateGovernanceOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<InterfaceMenuContextState | null>(null);
   const keywordMode = props.menuKeyword.trim().length > 0;
   const totalInterfaceCount = props.menuDisplayRows.reduce(
     (sum, cat) => sum + Number(cat.interface_count || cat.list?.length || 0),
@@ -59,11 +68,86 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
     }
   };
 
+  const contextMenuItems: ResourceContextMenuItem[] = (() => {
+    if (!props.canEdit || !contextMenu) return [];
+    if (contextMenu.kind === 'root') {
+      return [
+        {
+          key: 'add-cat',
+          label: '添加分类',
+          onClick: props.onOpenAddCat
+        },
+        {
+          key: 'add-interface',
+          label: '添加接口',
+          onClick: props.onOpenAddInterface,
+          disabled: !props.hasCategories
+        }
+      ];
+    }
+    if (contextMenu.kind === 'cat') {
+      const catIdNum = Number(contextMenu.cat._id || 0);
+      return [
+        {
+          key: 'add-interface-in-cat',
+          label: '添加接口',
+          onClick: () => props.onOpenAddInterfaceInCat(catIdNum)
+        },
+        {
+          key: 'rename-cat',
+          label: '重命名分类',
+          onClick: () => props.onEditCat(contextMenu.cat)
+        },
+        {
+          key: 'delete-cat',
+          label: '删除分类',
+          onClick: () => props.onDeleteCat(contextMenu.cat),
+          danger: true
+        }
+      ];
+    }
+    return [
+      {
+        key: 'add-case',
+        label: '添加用例',
+        onClick: () => props.onOpenAddCaseForInterface(contextMenu.item)
+      },
+      {
+        key: 'rename-interface',
+        label: '重命名接口',
+        onClick: () => props.onRenameInterface(contextMenu.item)
+      },
+      {
+        key: 'copy-interface',
+        label: '复制接口',
+        onClick: () => props.onCopyInterface(contextMenu.item)
+      },
+      {
+        key: 'delete-interface',
+        label: '删除接口',
+        onClick: () => props.onDeleteInterface(Number(contextMenu.item._id || 0)),
+        danger: true
+      }
+    ];
+  })();
+
   return (
     <ResourceNavShell
       searchValue={props.menuKeyword}
       onSearchChange={props.onMenuKeywordChange}
       searchPlaceholder="搜索接口"
+      onListContextMenu={
+        props.canEdit
+          ? event => {
+              event.preventDefault();
+              setContextMenu({
+                kind: 'root',
+                x: event.clientX,
+                y: event.clientY
+              });
+            }
+          : undefined
+      }
       actions={
         <div className="interface-nav-filter-actions flex flex-wrap items-center gap-2">
           <button type="button" className="interface-link-button" onClick={props.onNavigateAll}>
@@ -138,6 +222,20 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
               event.dataTransfer.effectAllowed = 'move';
             }}
             onDragEnd={props.onDragEnd}
+            onContextMenu={
+              props.canEdit
+                ? event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setContextMenu({
+                      kind: 'cat',
+                      x: event.clientX,
+                      y: event.clientY,
+                      cat
+                    });
+                  }
+                : undefined
+            }
             onNavigate={() => props.onNavigateCat(catIdNum)}
             onKeyNavigate={event => triggerWithKeyboard(event, () => props.onNavigateCat(catIdNum))}
             onToggle={() => {
@@ -199,6 +297,20 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
                     event.stopPropagation();
                     props.onDropInterface(catIdNum, interfaceId);
                   }}
+                  onContextMenu={
+                    props.canEdit
+                      ? event => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setContextMenu({
+                            kind: 'interface',
+                            x: event.clientX,
+                            y: event.clientY,
+                            item
+                          });
+                        }
+                      : undefined
+                  }
                   onNavigate={() => props.onNavigateInterface(interfaceId)}
                   onKeyNavigate={event => triggerWithKeyboard(event, () => props.onNavigateInterface(interfaceId))}
                   leading={
@@ -214,6 +326,12 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
                   actions={
                     props.canEdit ? (
                       <div className="interface-nav-item-actions flex items-center gap-1">
+                        <ResourceIconButton label="添加用例" onClick={() => props.onOpenAddCaseForInterface(item)}>
+                          <IconPlus size={14} />
+                        </ResourceIconButton>
+                        <ResourceIconButton label="重命名接口" onClick={() => props.onRenameInterface(item)}>
+                          <IconEdit size={14} />
+                        </ResourceIconButton>
                         <ResourceIconButton label="复制接口" onClick={() => props.onCopyInterface(item)}>
                           <IconCopy size={14} />
                         </ResourceIconButton>
@@ -229,6 +347,14 @@ export function InterfaceMenuPanel(props: InterfaceMenuPanelProps) {
           </ResourceGroupCard>
         );
       })}
+
+      <ResourceContextMenu
+        opened={contextMenu !== null}
+        x={contextMenu?.x || 0}
+        y={contextMenu?.y || 0}
+        items={contextMenuItems}
+        onClose={() => setContextMenu(null)}
+      />
     </ResourceNavShell>
   );
 }

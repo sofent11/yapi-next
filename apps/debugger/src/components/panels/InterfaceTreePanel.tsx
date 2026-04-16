@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActionIcon, Button, ScrollArea, Text, TextInput } from '@mantine/core';
 import {
   IconChevronDown,
@@ -10,6 +10,7 @@ import {
 } from '@tabler/icons-react';
 import type { WorkspaceIndex, WorkspaceTreeNode } from '@yapi-debugger/schema';
 import type { SelectedNode } from '../../store/workspace-store';
+import { ResourceContextMenu, type ResourceContextMenuItem } from '../primitives/ResourceContextMenu';
 
 function nodeMatchesSearch(node: WorkspaceTreeNode, normalized: string) {
   if (!normalized) return true;
@@ -101,6 +102,7 @@ function renderNode(props: {
   onSelectCategory: (path: string) => void;
   onSelectRequest: (requestId: string) => void;
   onSelectCase: (requestId: string, caseId: string) => void;
+  onContextMenu: (event: React.MouseEvent, node: WorkspaceTreeNode) => void;
 }) {
   const depth = props.depth || 0;
   const requestId = requestIdFromSelection(props.selectedNode);
@@ -111,7 +113,12 @@ function renderNode(props: {
     const active = props.selectedNode.kind === 'project';
     return (
       <div key={props.node.id} className="tree-branch">
-        <button type="button" className={rowClass(active, 'tree-row-project')} onClick={props.onSelectProject}>
+        <button
+          type="button"
+          className={rowClass(active, 'tree-row-project')}
+          onClick={props.onSelectProject}
+          onContextMenu={e => props.onContextMenu(e, props.node)}
+        >
           <span className="tree-row-copy">
             <strong>{highlightText(props.node.name, props.normalized)}</strong>
           </span>
@@ -139,6 +146,7 @@ function renderNode(props: {
           className={rowClass(active, 'tree-row-category')}
           style={{ paddingLeft: `${12 + depth * 12}px` }}
           onClick={() => props.onSelectCategory(node.path)}
+          onContextMenu={e => props.onContextMenu(e, node)}
         >
           <IconChevronRight size={14} style={{ opacity: 0.5 }} />
           <span className="tree-row-copy">
@@ -164,7 +172,11 @@ function renderNode(props: {
     const expanded = props.expandedRequestIds.has(node.requestId);
     return (
       <div key={node.id} className="tree-branch">
-        <div className={rowClass(active, 'tree-row-request')} style={{ paddingLeft: `${4 + depth * 12}px` }}>
+        <div
+          className={rowClass(active, 'tree-row-request')}
+          style={{ paddingLeft: `${4 + depth * 12}px` }}
+          onContextMenu={e => props.onContextMenu(e, node)}
+        >
           <button
             type="button"
             className="tree-expand-button"
@@ -207,6 +219,7 @@ function renderNode(props: {
       className={rowClass(active, 'tree-row-case')}
       style={{ paddingLeft: `${20 + depth * 12}px` }}
       onClick={() => props.onSelectCase(node.requestId, node.caseId)}
+      onContextMenu={e => props.onContextMenu(e, node)}
     >
       <span className="tree-case-dot" />
       <span className="tree-row-copy">
@@ -236,6 +249,7 @@ export function InterfaceTreePanel(props: {
   onConfirmCreateCategory: () => void;
   onToggleRequest: (requestId: string) => void;
 }) {
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: WorkspaceTreeNode } | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const normalized = props.searchText.trim().toLowerCase();
   const rootNode = props.workspace.tree[0];
@@ -256,8 +270,70 @@ export function InterfaceTreePanel(props: {
     return () => window.removeEventListener('debugger://focus-search', focusSearch as EventListener);
   }, []);
 
+  const contextMenuItems: ResourceContextMenuItem[] = useMemo(() => {
+    if (!contextMenu) return [];
+    const { node } = contextMenu;
+
+    if (node.kind === 'project') {
+      return [
+        {
+          key: 'import',
+          label: '导入到项目',
+          onClick: props.onOpenImport
+        },
+        {
+          key: 'new-cat',
+          label: '新建分类',
+          onClick: props.onToggleCategoryDraft
+        }
+      ];
+    }
+
+    if (node.kind === 'category') {
+      return [
+        {
+          key: 'new-interface',
+          label: '新建接口',
+          onClick: () => {
+            props.onSelectCategory(node.path);
+            props.onCreateInterface();
+          }
+        }
+      ];
+    }
+
+    if (node.kind === 'request' || node.kind === 'case') {
+      return [
+        {
+          key: 'new-case',
+          label: '新建用例',
+          onClick: () => {
+            if (node.kind === 'request') {
+              props.onSelectRequest(node.requestId);
+            } else {
+              props.onSelectCase(node.requestId, node.caseId);
+            }
+            props.onAddCase();
+          }
+        }
+      ];
+    }
+
+    return [];
+  }, [contextMenu, props]);
+
   return (
-    <section className="tree-panel">
+    <section
+      className="tree-panel"
+      onMouseDown={event => {
+        if (event.button === 2) {
+          event.preventDefault();
+        }
+      }}
+      onContextMenu={event => {
+        event.preventDefault();
+      }}
+    >
       <div className="tree-panel-header">
         <div>
           <p className="tree-caption">Workspace Explorer</p>
@@ -342,7 +418,12 @@ export function InterfaceTreePanel(props: {
               onSelectProject: props.onSelectProject,
               onSelectCategory: props.onSelectCategory,
               onSelectRequest: props.onSelectRequest,
-              onSelectCase: props.onSelectCase
+              onSelectCase: props.onSelectCase,
+              onContextMenu: (event, node) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setContextMenu({ x: event.clientX, y: event.clientY, node });
+              }
             })
           ) : (
             <div className="tree-empty-state">
@@ -359,6 +440,14 @@ export function InterfaceTreePanel(props: {
         <span>{rootNode ? requestCount(rootNode) : 0} 个接口</span>
         <span>{rootNode ? caseCount(rootNode) : 0} 个用例</span>
       </div>
+
+      <ResourceContextMenu
+        opened={contextMenu !== null}
+        x={contextMenu?.x || 0}
+        y={contextMenu?.y || 0}
+        items={contextMenuItems}
+        onClose={() => setContextMenu(null)}
+      />
     </section>
   );
 }

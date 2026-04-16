@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { Text, TextInput } from '@mantine/core';
 import { IconSearch } from '@tabler/icons-react';
 import { FilterBar } from '../../components/layout';
@@ -11,6 +11,7 @@ type ResourceNavShellProps = {
   summary: ReactNode;
   emptyState?: ReactNode;
   children: ReactNode;
+  onListContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
 };
 
 export function ResourceNavShell(props: ResourceNavShellProps) {
@@ -43,7 +44,16 @@ export function ResourceNavShell(props: ResourceNavShellProps) {
         </Text>
       </div>
 
-      <div className="interface-nav-list">
+      <div
+        className="interface-nav-list"
+        onMouseDown={event => {
+          if (event.button === 2 && props.onListContextMenu) {
+            event.preventDefault();
+          }
+        }}
+        onContextMenuCapture={props.onListContextMenu}
+        onContextMenu={props.onListContextMenu}
+      >
         {props.emptyState}
         {props.children}
       </div>

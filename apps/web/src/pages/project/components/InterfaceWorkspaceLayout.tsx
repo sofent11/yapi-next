@@ -25,7 +25,14 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
 
   const sidePanel = useMemo(
     () => (
-      <div className="interface-workspace-pane">
+      <div
+        className="interface-workspace-pane select-none"
+        onMouseDown={event => {
+          if (event.button === 2) {
+            event.preventDefault();
+          }
+        }}
+      >
         <div className="interface-workspace-switch">
           <SegmentedControl
             fullWidth
@@ -34,7 +41,7 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
               root: 'dark:!bg-[var(--surface-project-panel)]',
               control: 'dark:!border-transparent',
               indicator: 'dark:!border-[var(--border-project-strong)] dark:!bg-[var(--surface-project-elevated)]',
-              label: 'dark:!text-slate-300',
+              label: 'dark:!text-slate-300 select-none',
               innerLabel: 'dark:!text-inherit'
             }}
             onChange={value => {
@@ -44,11 +51,11 @@ export function InterfaceWorkspaceLayout(props: InterfaceWorkspaceLayoutProps) {
             data={[
               {
                 value: 'api',
-                label: <span className="inline-flex items-center gap-1"><IconListDetails size={14} />接口</span>
+                label: <span className="inline-flex select-none items-center gap-1"><IconListDetails size={14} />接口</span>
               },
               {
                 value: 'col',
-                label: <span className="inline-flex items-center gap-1"><IconFolders size={14} />集合</span>
+                label: <span className="inline-flex select-none items-center gap-1"><IconFolders size={14} />集合</span>
               }
             ]}
           />

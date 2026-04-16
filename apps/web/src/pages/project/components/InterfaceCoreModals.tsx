@@ -18,6 +18,10 @@ type AddInterfaceModalForm = {
   catid: number;
 };
 
+type RenameInterfaceModalForm = {
+  title: string;
+};
+
 type CategoryModalForm = {
   name: string;
   desc?: string;
@@ -30,10 +34,15 @@ export type InterfaceCoreModalsProps = {
   addInterfaceOpen: boolean;
   addInterfaceForm: FormInstance<AddInterfaceModalForm>;
   addInterfaceLoading: boolean;
+  renameInterfaceOpen: boolean;
+  renameInterfaceForm: FormInstance<RenameInterfaceModalForm>;
+  renameInterfaceLoading: boolean;
   runMethods: readonly string[];
   catRows: Array<{ _id?: number; name?: string }>;
   onCancelAddInterface: () => void;
   onSubmitAddInterface: (values: AddInterfaceModalForm) => void;
+  onCancelRenameInterface: () => void;
+  onSubmitRenameInterface: (values: RenameInterfaceModalForm) => void;
   tagSettingOpen: boolean;
   tagSettingInput: string;
   tagSettingLoading: boolean;
@@ -194,6 +203,32 @@ export function InterfaceCoreModals(props: InterfaceCoreModalsProps) {
               onCancel={props.onCancelAddInterface}
               onConfirm={() => props.addInterfaceForm.submit()}
               confirmText="确认"
+            />
+          </Stack>
+        </RcForm>
+      </Modal>
+
+      <Modal title="重命名接口" opened={props.renameInterfaceOpen} onClose={props.onCancelRenameInterface} classNames={modalClassNames}>
+        <RcForm<RenameInterfaceModalForm> form={props.renameInterfaceForm} onFinish={props.onSubmitRenameInterface}>
+          <Stack>
+            <Field<RenameInterfaceModalForm>
+              name="title"
+              rules={[{ required: true, validator: createNameValidator('接口') }]}
+            >
+              {(control, meta) => (
+                <TextInput
+                  label="接口名称"
+                  value={String(control.value ?? '')}
+                  onChange={event => control.onChange(event.currentTarget.value)}
+                  error={meta.errors[0]}
+                />
+              )}
+            </Field>
+            <ModalActions
+              loading={props.renameInterfaceLoading}
+              onCancel={props.onCancelRenameInterface}
+              onConfirm={() => props.renameInterfaceForm.submit()}
+              confirmText="保存"
             />
           </Stack>
         </RcForm>

@@ -278,12 +278,14 @@ mark {
   display: flex;
   flex-direction: column;
   background: var(--surface);
+  user-select: none;
 }
 
 .tree-panel-header {
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-muted);
+  user-select: none;
 }
 
 .tree-title {
@@ -362,6 +364,7 @@ mark {
   text-align: left;
   gap: 8px;
   transition: background 0.1s;
+  user-select: none;
 }
 
 .tree-row:hover {
@@ -378,6 +381,7 @@ mark {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  user-select: none;
 }
 
 .tree-row-copy strong {
@@ -876,6 +880,39 @@ mark {
 
 .launchpad-section:last-child {
   margin-bottom: 0;
+}
+
+.debugger-context-menu {
+  user-select: none;
+}
+
+.debugger-context-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+
+.debugger-context-menu-item:hover:not(:disabled) {
+  background: var(--surface-muted);
+}
+
+.debugger-context-menu-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.debugger-context-menu-item.danger {
+  color: var(--red);
 }
 
 @media (max-width: 1000px) {
