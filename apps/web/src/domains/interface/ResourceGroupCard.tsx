@@ -37,7 +37,6 @@ export function ResourceGroupCard(props: ResourceGroupCardProps) {
             event.preventDefault();
           }
         }}
-        onContextMenuCapture={props.onContextMenu}
         onContextMenu={props.onContextMenu}
       >
         <div className="interface-nav-group-main flex-1">

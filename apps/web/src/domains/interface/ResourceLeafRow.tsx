@@ -31,7 +31,6 @@ export function ResourceLeafRow(props: ResourceLeafRowProps) {
       onDragEnd={props.onDragEnd}
       onDragOver={props.onDragOver}
       onDrop={props.onDrop}
-      onContextMenuCapture={props.onContextMenu}
       onContextMenu={props.onContextMenu}
       onClick={props.onNavigate}
       onKeyDown={props.onKeyNavigate}

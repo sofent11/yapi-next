@@ -51,8 +51,11 @@ export function ResourceNavShell(props: ResourceNavShellProps) {
             event.preventDefault();
           }
         }}
-        onContextMenuCapture={props.onListContextMenu}
-        onContextMenu={props.onListContextMenu}
+        onContextMenu={event => {
+          if (!props.onListContextMenu) return;
+          if (event.target !== event.currentTarget) return;
+          props.onListContextMenu(event);
+        }}
       >
         {props.emptyState}
         {props.children}
