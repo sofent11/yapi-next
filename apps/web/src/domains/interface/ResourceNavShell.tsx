@@ -53,7 +53,8 @@ export function ResourceNavShell(props: ResourceNavShellProps) {
         }}
         onContextMenu={event => {
           if (!props.onListContextMenu) return;
-          if (event.target !== event.currentTarget) return;
+          const target = event.target as HTMLElement | null;
+          if (target?.closest('.interface-nav-group, .interface-nav-item')) return;
           props.onListContextMenu(event);
         }}
       >

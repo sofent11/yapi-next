@@ -27,18 +27,16 @@ export function ResourceGroupCard(props: ResourceGroupCardProps) {
   return (
     <div
       className="interface-nav-group"
+      onMouseDown={event => {
+        if (event.button === 2) {
+          event.preventDefault();
+        }
+      }}
       onDragOver={props.onDragOver}
       onDrop={props.onDrop}
+      onContextMenu={props.onContextMenu}
     >
-      <div
-        className={`interface-nav-group-title${props.active ? ' active' : ''}`}
-        onMouseDown={event => {
-          if (event.button === 2) {
-            event.preventDefault();
-          }
-        }}
-        onContextMenu={props.onContextMenu}
-      >
+      <div className={`interface-nav-group-title${props.active ? ' active' : ''}`}>
         <div className="interface-nav-group-main flex-1">
           <button
             type="button"

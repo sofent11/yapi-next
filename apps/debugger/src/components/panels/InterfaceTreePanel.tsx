@@ -229,6 +229,8 @@ function renderNode(props: {
   );
 }
 
+const selectedCategoryPath = (node: SelectedNode) => (node.kind === 'category' ? node.path : null);
+
 export function InterfaceTreePanel(props: {
   workspace: WorkspaceIndex;
   selectedNode: SelectedNode;
@@ -242,18 +244,31 @@ export function InterfaceTreePanel(props: {
   onSelectRequest: (requestId: string) => void;
   onSelectCase: (requestId: string, caseId: string) => void;
   onOpenImport: () => void;
-  onCreateInterface: () => void;
-  onAddCase: () => void;
+  onCreateInterface: (categoryPath?: string | null) => void;
+  onAddCase: (requestId?: string) => void;
+  onRenameCategory: (path: string) => void;
+  onDeleteCategory: (path: string) => void;
+  onRenameRequest: (requestId: string) => void;
+  onDuplicateRequest: (requestId: string) => void;
+  onDeleteRequest: (requestId: string) => void;
+  onRenameCase: (requestId: string, caseId: string) => void;
+  onDuplicateCase: (requestId: string, caseId: string) => void;
+  onDeleteCase: (requestId: string, caseId: string) => void;
   onToggleCategoryDraft: () => void;
   onCategoryDraftChange: (value: string) => void;
   onConfirmCreateCategory: () => void;
   onToggleRequest: (requestId: string) => void;
 }) {
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: WorkspaceTreeNode } | null>(null);
+  const [contextMenu, setContextMenu] = useState<
+    | { x: number; y: number; target: { kind: 'blank' } }
+    | { x: number; y: number; target: { kind: 'node'; node: WorkspaceTreeNode } }
+    | null
+  >(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const normalized = props.searchText.trim().toLowerCase();
   const rootNode = props.workspace.tree[0];
   const expandedRequestIds = useMemo(() => new Set(props.expandedRequestIds), [props.expandedRequestIds]);
+  const selectedCategoryNodePath = selectedCategoryPath(props.selectedNode);
 
   const filteredRoot = useMemo(() => {
     if (!rootNode) return null;
@@ -272,49 +287,93 @@ export function InterfaceTreePanel(props: {
 
   const contextMenuItems: ResourceContextMenuItem[] = useMemo(() => {
     if (!contextMenu) return [];
-    const { node } = contextMenu;
+    const target = contextMenu.target.kind === 'blank' ? null : contextMenu.target.node;
 
-    if (node.kind === 'project') {
+    if (!target || target.kind === 'project') {
       return [
         {
-          key: 'import',
-          label: '导入到项目',
-          onClick: props.onOpenImport
+          key: 'new-cat',
+          label: '添加分类',
+          onClick: props.onToggleCategoryDraft
         },
         {
-          key: 'new-cat',
-          label: '新建分类',
-          onClick: props.onToggleCategoryDraft
+          key: 'new-interface',
+          label: '添加接口',
+          onClick: () => props.onCreateInterface(null)
         }
       ];
     }
 
-    if (node.kind === 'category') {
+    if (target.kind === 'category') {
       return [
         {
           key: 'new-interface',
-          label: '新建接口',
+          label: '添加接口',
           onClick: () => {
-            props.onSelectCategory(node.path);
-            props.onCreateInterface();
+            props.onSelectCategory(target.path);
+            props.onCreateInterface(target.path);
           }
+        },
+        {
+          key: 'rename-category',
+          label: '重命名分类',
+          onClick: () => props.onRenameCategory(target.path)
+        },
+        {
+          key: 'delete-category',
+          label: '删除分类',
+          danger: true,
+          onClick: () => props.onDeleteCategory(target.path)
         }
       ];
     }
 
-    if (node.kind === 'request' || node.kind === 'case') {
+    if (target.kind === 'request') {
       return [
         {
           key: 'new-case',
-          label: '新建用例',
+          label: '添加用例',
           onClick: () => {
-            if (node.kind === 'request') {
-              props.onSelectRequest(node.requestId);
-            } else {
-              props.onSelectCase(node.requestId, node.caseId);
-            }
-            props.onAddCase();
+            props.onSelectRequest(target.requestId);
+            props.onAddCase(target.requestId);
           }
+        },
+        {
+          key: 'rename-request',
+          label: '重命名接口',
+          onClick: () => props.onRenameRequest(target.requestId)
+        },
+        {
+          key: 'duplicate-request',
+          label: '复制接口',
+          onClick: () => props.onDuplicateRequest(target.requestId)
+        },
+        {
+          key: 'delete-request',
+          label: '删除接口',
+          danger: true,
+          onClick: () => props.onDeleteRequest(target.requestId)
+        }
+      ];
+    }
+
+    if (target.kind === 'case') {
+      return [
+        {
+          key: 'rename-case',
+          label: '重命名用例',
+          onClick: () => props.onRenameCase(target.requestId, target.caseId)
+        },
+        {
+          key: 'duplicate-case',
+          label: '复制用例',
+          onClick: () => props.onDuplicateCase(target.requestId, target.caseId)
+        },
+        {
+          key: 'delete-case',
+          label: '删除用例',
+          danger: true,
+          onClick: () => props.onDeleteCase(target.requestId, target.caseId)
         }
       ];
     }
@@ -379,13 +438,23 @@ export function InterfaceTreePanel(props: {
           ) : null}
 
           {props.selectedNode.kind === 'category' ? (
-            <ActionIcon variant="subtle" color="dark" onClick={props.onCreateInterface} aria-label="新建接口">
+            <ActionIcon
+              variant="subtle"
+              color="dark"
+              onClick={() => props.onCreateInterface(selectedCategoryNodePath)}
+              aria-label="新建接口"
+            >
               <IconPlus size={16} />
             </ActionIcon>
           ) : null}
 
           {(props.selectedNode.kind === 'request' || props.selectedNode.kind === 'case') ? (
-            <ActionIcon variant="subtle" color="dark" onClick={props.onAddCase} aria-label="新建用例">
+            <ActionIcon
+              variant="subtle"
+              color="dark"
+              onClick={() => props.onAddCase(requestIdFromSelection(props.selectedNode) || undefined)}
+              aria-label="新建用例"
+            >
               <IconPlus size={16} />
             </ActionIcon>
           ) : null}
@@ -407,7 +476,15 @@ export function InterfaceTreePanel(props: {
       ) : null}
 
       <ScrollArea className="tree-scroll" offsetScrollbars="y" scrollbarSize={8}>
-        <div className="tree-root-shell">
+        <div
+          className="tree-root-shell"
+          onContextMenu={event => {
+            if (event.target !== event.currentTarget) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setContextMenu({ x: event.clientX, y: event.clientY, target: { kind: 'blank' } });
+          }}
+        >
           {filteredRoot ? (
             renderNode({
               node: filteredRoot,
@@ -422,7 +499,7 @@ export function InterfaceTreePanel(props: {
               onContextMenu: (event, node) => {
                 event.preventDefault();
                 event.stopPropagation();
-                setContextMenu({ x: event.clientX, y: event.clientY, node });
+                setContextMenu({ x: event.clientX, y: event.clientY, target: { kind: 'node', node } });
               }
             })
           ) : (

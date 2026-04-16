@@ -3,7 +3,7 @@ import { ActionIcon, Badge, Drawer, Select, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
 import { IconRefresh } from '@tabler/icons-react';
-import type { WorkspaceIndex } from '@yapi-debugger/schema';
+import { slugify, type WorkspaceIndex } from '@yapi-debugger/schema';
 import {
   chooseDirectory,
   chooseImportFile,
@@ -13,12 +13,21 @@ import {
   watchWorkspace
 } from './lib/desktop';
 import {
+  createCaseForRequest,
   createRequestInWorkspace,
   createWorkspace,
+  deleteCaseInWorkspace,
+  deleteCategoryInWorkspace,
+  deleteRequestInWorkspace,
+  duplicateCaseInWorkspace,
+  duplicateRequestInWorkspace,
   importFromFile,
   importFromUrl,
   importIntoWorkspace,
   openWorkspace,
+  renameCaseInWorkspace,
+  renameCategoryInWorkspace,
+  renameRequestInWorkspace,
   runResolvedRequest,
   saveEnvironment,
   saveProject,
@@ -111,6 +120,10 @@ function clampTreeWidth(value: number) {
   return Math.max(260, Math.min(420, Math.round(value)));
 }
 
+function isSameOrChildPath(path: string, target: string) {
+  return path === target || path.startsWith(`${target}/`);
+}
+
 export function App() {
   const store = useWorkspaceStore();
   const [projectName, setProjectName] = useState('New API Workspace');
@@ -128,16 +141,11 @@ export function App() {
     item => item.document.name === store.activeEnvironmentName
   )?.document || null;
 
-  const selectedRecord = useMemo(
-    () => store.workspace?.requests.find(item => item.request.id === requestId) || null,
-    [store.workspace, requestId]
-  );
-
   const categoryRequests = useMemo(() => {
     if (!store.workspace || !categoryPath) return [];
     return store.workspace.requests.filter(record => {
       const value = record.folderSegments.join('/');
-      return value === categoryPath || value.startsWith(`${categoryPath}/`);
+      return isSameOrChildPath(value, categoryPath);
     });
   }, [store.workspace, categoryPath]);
 
@@ -423,9 +431,9 @@ export function App() {
   });
 
   const addRequestMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (targetCategoryPath: string | null | undefined) => {
       if (!store.workspace) throw new Error('Open a workspace first');
-      const segments = categoryPath ? categoryPath.split('/').filter(Boolean) : ['default'];
+      const segments = targetCategoryPath ? targetCategoryPath.split('/').filter(Boolean) : ['default'];
       return createRequestInWorkspace(store.workspace.root, segments);
     },
     onSuccess(nextRequestId) {
@@ -440,6 +448,212 @@ export function App() {
       notifications.show({ color: 'red', message: (error as Error).message || 'Create interface failed' });
     }
   });
+
+  const addCaseMutation = useMutation({
+    mutationFn: async (targetRequestId: string) => {
+      if (!store.workspace) throw new Error('Open a workspace first');
+      const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
+      if (!record) throw new Error('Selected interface missing');
+      return createCaseForRequest(store.workspace.root, record.folderSegments, record.request, record.cases);
+    },
+    onSuccess(nextCaseId, targetRequestId) {
+      if (!store.workspace) return;
+      openWorkspace(store.workspace.root).then(workspace => {
+        applyWorkspaceState(workspace);
+        handleSelectCase(targetRequestId, nextCaseId);
+      });
+      notifications.show({ color: 'teal', message: 'Case created' });
+    },
+    onError(error) {
+      notifications.show({ color: 'red', message: (error as Error).message || 'Create case failed' });
+    }
+  });
+
+  async function reloadWorkspace(nextSelection?: SelectedNode) {
+    if (!store.workspace) return;
+    const workspace = await openWorkspace(store.workspace.root);
+    applyWorkspaceState(workspace);
+    if (nextSelection) {
+      store.selectNode(nextSelection);
+    }
+  }
+
+  function requestSlugExists(nextName: string, requestIdToIgnore?: string, targetCategoryPath?: string | null) {
+    if (!store.workspace) return false;
+    const nextSlug = slugify(nextName);
+    return store.workspace.requests.some(record => {
+      if (record.request.id === requestIdToIgnore) return false;
+      if ((targetCategoryPath || null) !== null && record.folderSegments.join('/') !== (targetCategoryPath || '')) {
+        return false;
+      }
+      return slugify(record.request.name) === nextSlug;
+    });
+  }
+
+  function caseSlugExists(record: WorkspaceIndex['requests'][number], nextName: string, caseIdToIgnore?: string) {
+    const nextSlug = slugify(nextName);
+    return record.cases.some(caseItem => caseItem.id !== caseIdToIgnore && slugify(caseItem.name) === nextSlug);
+  }
+
+  function handleCreateInterface(targetCategoryPath?: string | null) {
+    addRequestMutation.mutate(targetCategoryPath ?? categoryPath ?? null);
+  }
+
+  function handleAddCase(targetRequestId?: string) {
+    const nextRequestId = targetRequestId || requestId;
+    if (!nextRequestId) {
+      notifications.show({ color: 'red', message: '请先选择一个接口' });
+      return;
+    }
+    addCaseMutation.mutate(nextRequestId);
+  }
+
+  async function handleRenameCategory(path: string) {
+    if (!store.workspace) return;
+    const nextPath = window.prompt('输入新的分类路径', path)?.trim();
+    if (!nextPath || nextPath === path) return;
+    if (isSameOrChildPath(nextPath, path)) {
+      notifications.show({ color: 'red', message: '分类不能重命名到自身或子分类下' });
+      return;
+    }
+
+    const hasConflict = store.workspace.requests.some(record => {
+      const value = record.folderSegments.join('/');
+      return isSameOrChildPath(value, nextPath);
+    });
+    if (hasConflict) {
+      notifications.show({ color: 'red', message: '目标分类路径已存在，请换一个名称' });
+      return;
+    }
+
+    try {
+      await renameCategoryInWorkspace(store.workspace.root, store.workspace, path, nextPath);
+      await reloadWorkspace({ kind: 'category', path: nextPath });
+      notifications.show({ color: 'teal', message: '分类已重命名' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: (error as Error).message || 'Rename category failed' });
+    }
+  }
+
+  async function handleDeleteCategory(path: string) {
+    if (!store.workspace) return;
+    const total = store.workspace.requests.filter(record => isSameOrChildPath(record.folderSegments.join('/'), path)).length;
+    if (!window.confirm(`删除分类“${path}”及其 ${total} 个接口？`)) return;
+
+    try {
+      await deleteCategoryInWorkspace(store.workspace, path);
+      await reloadWorkspace({ kind: 'project' });
+      notifications.show({ color: 'teal', message: '分类已删除' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: (error as Error).message || 'Delete category failed' });
+    }
+  }
+
+  async function handleRenameRequest(targetRequestId: string) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
+    if (!record) return;
+    const nextName = window.prompt('输入新的接口名称', record.request.name)?.trim();
+    if (!nextName || nextName === record.request.name) return;
+    if (requestSlugExists(nextName, record.request.id, record.folderSegments.join('/'))) {
+      notifications.show({ color: 'red', message: '当前分类下已存在同名接口' });
+      return;
+    }
+
+    try {
+      await renameRequestInWorkspace(store.workspace.root, record, nextName);
+      await reloadWorkspace({ kind: 'request', requestId: targetRequestId });
+      notifications.show({ color: 'teal', message: '接口已重命名' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: (error as Error).message || 'Rename interface failed' });
+    }
+  }
+
+  async function handleDuplicateRequest(targetRequestId: string) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
+    if (!record) return;
+
+    try {
+      const nextRequestId = await duplicateRequestInWorkspace(
+        store.workspace.root,
+        record,
+        store.workspace.requests
+          .filter(item => item.folderSegments.join('/') === record.folderSegments.join('/'))
+          .map(item => item.request.name)
+      );
+      await reloadWorkspace({ kind: 'request', requestId: nextRequestId });
+      notifications.show({ color: 'teal', message: '接口已复制' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: (error as Error).message || 'Copy interface failed' });
+    }
+  }
+
+  async function handleDeleteRequest(targetRequestId: string) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
+    if (!record) return;
+    if (!window.confirm(`删除接口“${record.request.name}”？`)) return;
+
+    try {
+      await deleteRequestInWorkspace(record);
+      await reloadWorkspace({ kind: 'project' });
+      notifications.show({ color: 'teal', message: '接口已删除' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: (error as Error).message || 'Delete interface failed' });
+    }
+  }
+
+  async function handleRenameCase(targetRequestId: string, targetCaseId: string) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
+    const caseItem = record?.cases.find(item => item.id === targetCaseId);
+    if (!record || !caseItem) return;
+    const nextName = window.prompt('输入新的用例名称', caseItem.name)?.trim();
+    if (!nextName || nextName === caseItem.name) return;
+    if (caseSlugExists(record, nextName, caseItem.id)) {
+      notifications.show({ color: 'red', message: '当前接口下已存在同名用例' });
+      return;
+    }
+
+    try {
+      await renameCaseInWorkspace(store.workspace.root, record, targetCaseId, nextName);
+      await reloadWorkspace({ kind: 'case', requestId: targetRequestId, caseId: targetCaseId });
+      notifications.show({ color: 'teal', message: '用例已重命名' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: (error as Error).message || 'Rename case failed' });
+    }
+  }
+
+  async function handleDuplicateCase(targetRequestId: string, targetCaseId: string) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
+    if (!record) return;
+
+    try {
+      const nextCaseId = await duplicateCaseInWorkspace(store.workspace.root, record, targetCaseId);
+      await reloadWorkspace({ kind: 'case', requestId: targetRequestId, caseId: nextCaseId });
+      notifications.show({ color: 'teal', message: '用例已复制' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: (error as Error).message || 'Copy case failed' });
+    }
+  }
+
+  async function handleDeleteCase(targetRequestId: string, targetCaseId: string) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
+    const caseItem = record?.cases.find(item => item.id === targetCaseId);
+    if (!record || !caseItem) return;
+    if (!window.confirm(`删除用例“${caseItem.name}”？`)) return;
+
+    try {
+      await deleteCaseInWorkspace(store.workspace.root, record, targetCaseId);
+      await reloadWorkspace({ kind: 'request', requestId: targetRequestId });
+      notifications.show({ color: 'teal', message: '用例已删除' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: (error as Error).message || 'Delete case failed' });
+    }
+  }
 
   function openExistingWorkspace(root: string) {
     openMutation.mutate(root);
@@ -555,8 +769,16 @@ export function App() {
               onSelectRequest={handleSelectRequest}
               onSelectCase={handleSelectCase}
               onOpenImport={() => setImportOpened(true)}
-              onCreateInterface={() => addRequestMutation.mutate()}
-              onAddCase={() => store.addDraftCase()}
+              onCreateInterface={handleCreateInterface}
+              onAddCase={handleAddCase}
+              onRenameCategory={handleRenameCategory}
+              onDeleteCategory={handleDeleteCategory}
+              onRenameRequest={handleRenameRequest}
+              onDuplicateRequest={handleDuplicateRequest}
+              onDeleteRequest={handleDeleteRequest}
+              onRenameCase={handleRenameCase}
+              onDuplicateCase={handleDuplicateCase}
+              onDeleteCase={handleDeleteCase}
               onToggleCategoryDraft={() => setCreatingCategory(current => !current)}
               onCategoryDraftChange={setCategoryDraft}
               onConfirmCreateCategory={handleConfirmCreateCategory}
@@ -599,12 +821,12 @@ export function App() {
                     : handleSelectRequest(requestId)
                   : undefined
               }
-              onAddCase={() => store.addDraftCase()}
+              onAddCase={() => handleAddCase()}
               onRun={() => runMutation.mutate()}
               onSave={() => saveMutation.mutate()}
               onSelectRequest={handleSelectRequest}
               onOpenImport={() => setImportOpened(true)}
-              onCreateInterface={() => addRequestMutation.mutate()}
+              onCreateInterface={() => handleCreateInterface()}
               onRequestTabChange={tab =>
                 updateUiState(current => ({
                   ...current,

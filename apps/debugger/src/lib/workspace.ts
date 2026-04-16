@@ -7,10 +7,12 @@ import {
   resolveRequest
 } from '@yapi-debugger/core';
 import {
+  createId,
   createEmptyCase,
   createEmptyRequest,
   emptyParameterRow,
   importAuthSchema,
+  slugify,
   type CaseDocument,
   type EnvironmentDocument,
   type ImportAuth,
@@ -108,6 +110,166 @@ export async function createCaseForRequest(
   const nextCase = createEmptyCase(request.id, `Case ${cases.length + 1}`);
   await saveRequestRecord(root, folderSegments, request, [...cases, nextCase]);
   return nextCase.id;
+}
+
+function uniqueCopyName(baseName: string, existingNames: string[]) {
+  const existing = new Set(existingNames.map(name => slugify(name)));
+  if (!existing.has(slugify(baseName))) {
+    return baseName;
+  }
+
+  let index = 2;
+  while (existing.has(slugify(`${baseName} ${index}`))) {
+    index += 1;
+  }
+  return `${baseName} ${index}`;
+}
+
+export async function renameRequestInWorkspace(
+  root: string,
+  record: WorkspaceIndex['requests'][number],
+  nextName: string
+) {
+  await saveRequestRecord(
+    root,
+    record.folderSegments,
+    {
+      ...record.request,
+      name: nextName
+    },
+    record.cases,
+    record.resourceDirPath,
+    record.requestFilePath
+  );
+}
+
+export async function duplicateRequestInWorkspace(
+  root: string,
+  record: WorkspaceIndex['requests'][number],
+  siblingNames: string[]
+) {
+  const nextRequest = structuredClone(record.request);
+  nextRequest.id = createId('req');
+  nextRequest.name = uniqueCopyName(`${record.request.name} 副本`, siblingNames);
+
+  const nextCases = record.cases.map(caseItem => {
+    const nextCase = structuredClone(caseItem);
+    nextCase.id = createId('case');
+    nextCase.extendsRequest = nextRequest.id;
+    return nextCase;
+  });
+
+  await saveRequestRecord(root, record.folderSegments, nextRequest, nextCases);
+  return nextRequest.id;
+}
+
+export async function deleteRequestInWorkspace(record: WorkspaceIndex['requests'][number]) {
+  await Promise.all([
+    deleteEntry(record.resourceDirPath, true).catch(() => undefined),
+    deleteEntry(record.requestFilePath, false).catch(() => undefined)
+  ]);
+}
+
+export async function renameCaseInWorkspace(
+  root: string,
+  record: WorkspaceIndex['requests'][number],
+  caseId: string,
+  nextName: string
+) {
+  await saveRequestRecord(
+    root,
+    record.folderSegments,
+    record.request,
+    record.cases.map(caseItem =>
+      caseItem.id === caseId
+        ? {
+            ...caseItem,
+            name: nextName
+          }
+        : caseItem
+    ),
+    record.resourceDirPath,
+    record.requestFilePath
+  );
+}
+
+export async function duplicateCaseInWorkspace(
+  root: string,
+  record: WorkspaceIndex['requests'][number],
+  caseId: string
+) {
+  const sourceCase = record.cases.find(caseItem => caseItem.id === caseId);
+  if (!sourceCase) {
+    throw new Error('用例不存在');
+  }
+
+  const nextCase = structuredClone(sourceCase);
+  nextCase.id = createId('case');
+  nextCase.name = uniqueCopyName(
+    `${sourceCase.name} 副本`,
+    record.cases.map(caseItem => caseItem.name)
+  );
+
+  await saveRequestRecord(
+    root,
+    record.folderSegments,
+    record.request,
+    [...record.cases, nextCase],
+    record.resourceDirPath,
+    record.requestFilePath
+  );
+  return nextCase.id;
+}
+
+export async function deleteCaseInWorkspace(
+  root: string,
+  record: WorkspaceIndex['requests'][number],
+  caseId: string
+) {
+  await saveRequestRecord(
+    root,
+    record.folderSegments,
+    record.request,
+    record.cases.filter(caseItem => caseItem.id !== caseId),
+    record.resourceDirPath,
+    record.requestFilePath
+  );
+}
+
+export async function renameCategoryInWorkspace(
+  root: string,
+  workspace: WorkspaceIndex,
+  currentPath: string,
+  nextPath: string
+) {
+  const currentSegments = currentPath.split('/').filter(Boolean);
+  const nextSegments = nextPath.split('/').filter(Boolean);
+  const targets = workspace.requests.filter(record => {
+    const path = record.folderSegments.join('/');
+    return path === currentPath || path.startsWith(`${currentPath}/`);
+  });
+
+  await Promise.all(
+    targets.map(record =>
+      saveRequestRecord(
+        root,
+        [...nextSegments, ...record.folderSegments.slice(currentSegments.length)],
+        record.request,
+        record.cases,
+        record.resourceDirPath,
+        record.requestFilePath
+      )
+    )
+  );
+}
+
+export async function deleteCategoryInWorkspace(workspace: WorkspaceIndex, currentPath: string) {
+  const targets = workspace.requests.filter(record => {
+    const path = record.folderSegments.join('/');
+    return path === currentPath || path.startsWith(`${currentPath}/`);
+  });
+
+  await Promise.all(targets.map(record => deleteRequestInWorkspace(record)));
 }
 
 export async function importIntoWorkspace(
