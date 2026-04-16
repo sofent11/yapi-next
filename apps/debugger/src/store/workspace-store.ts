@@ -34,7 +34,7 @@ export type WorkspaceUiState = {
 export function defaultWorkspaceUiState(): WorkspaceUiState {
   return {
     treeWidth: 316,
-    mainSplitRatio: 0.62,
+    mainSplitRatio: 0.5,
     expandedRequestIds: [],
     lastSelectedNode: { kind: 'project' },
     activeRequestTab: 'query',

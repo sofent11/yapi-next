@@ -1,68 +1,102 @@
-import { Card, Group, Stack, Text } from '@mantine/core';
-import type { RequestDocument, SendRequestResult } from '@yapi-debugger/schema';
+import { Badge, Tabs, Text, ScrollArea } from '@mantine/core';
+import type { SendRequestResult } from '@yapi-debugger/schema';
+import type { ResponseTab } from '../../store/workspace-store';
 import { CodeEditor } from '../editors/CodeEditor';
-
-function stringifyHeaders(headers: SendRequestResult['headers']) {
-  return headers.map((header: SendRequestResult['headers'][number]) => `${header.name}: ${header.value}`).join('\n');
-}
 
 export function ResponsePanel(props: {
   response: SendRequestResult | null;
-  request: RequestDocument | null;
+  activeTab: ResponseTab;
+  onTabChange: (tab: ResponseTab) => void;
 }) {
+  const { response } = props;
+
+  function statsFromResponse(res: SendRequestResult | null) {
+    if (!res) return null;
+    return {
+      status: res.status,
+      ok: res.ok,
+      duration: `${res.durationMs} ms`,
+      size: `${res.sizeBytes} B`
+    };
+  }
+
+  const stats = statsFromResponse(response);
+
+  function responseHeadersText(res: SendRequestResult | null) {
+    return (res?.headers || []).map(item => `${item.name}: ${item.value}`).join('\n');
+  }
+
+  function responseBodyLanguage(res: SendRequestResult | null) {
+    if (!res?.bodyText) return 'text';
+    try {
+      JSON.parse(res.bodyText);
+      return 'json';
+    } catch (_err) {
+      return 'text';
+    }
+  }
+
   return (
-    <aside className="response-panel">
-      <div className="response-head">
-        <div>
-          <p className="eyebrow">Response</p>
-          <h3>Execution Output</h3>
+    <div className="response-panel">
+      <div className="response-header-ide">
+        <div className="response-status-group">
+          <Text size="xs" fw={700} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Response
+          </Text>
+          {stats && (
+            <div className="response-metrics">
+              <Badge color={stats.ok ? 'green' : 'red'} variant="dot" size="sm">
+                {stats.status}
+              </Badge>
+              <Text size="xs" fw={500}>{stats.duration}</Text>
+              <Text size="xs" fw={500}>{stats.size}</Text>
+            </div>
+          )}
         </div>
       </div>
 
-      {props.response ? (
-        <Stack gap="md">
-          <div className="stats-grid">
-            <Card className="stat-card" withBorder>
-              <Text size="xs" c="dimmed">
-                Status
-              </Text>
-              <Text fw={700}>{props.response.status}</Text>
-            </Card>
-            <Card className="stat-card" withBorder>
-              <Text size="xs" c="dimmed">
-                Duration
-              </Text>
-              <Text fw={700}>{props.response.durationMs} ms</Text>
-            </Card>
-            <Card className="stat-card" withBorder>
-              <Text size="xs" c="dimmed">
-                Size
-              </Text>
-              <Text fw={700}>{props.response.sizeBytes} bytes</Text>
-            </Card>
-          </div>
-          <div className="response-card">
-            <Group justify="space-between">
-              <Text fw={700}>Body</Text>
-              <Text c="dimmed" size="sm">
-                {props.response.url}
-              </Text>
-            </Group>
-            <CodeEditor value={props.response.bodyText} language="json" readOnly minHeight="280px" />
-          </div>
-          <div className="response-card">
-            <Text fw={700}>Headers</Text>
-            <CodeEditor value={stringifyHeaders(props.response.headers)} language="text" readOnly minHeight="180px" />
-          </div>
-        </Stack>
-      ) : (
-        <div className="response-empty">
-          <Text fw={700}>{props.request ? 'Run the selected request' : 'No request selected'}</Text>
-          <Text c="dimmed">
-            Response metadata, raw body and headers will appear here after the request is sent with the native desktop transport.
-          </Text>
+      <Tabs value={props.activeTab} onChange={val => props.onTabChange(val as ResponseTab)} className="response-tabs-ide">
+        <Tabs.List>
+          <Tabs.Tab value="body">Body</Tabs.Tab>
+          <Tabs.Tab value="headers">Headers</Tabs.Tab>
+          <Tabs.Tab value="raw">Raw</Tabs.Tab>
+        </Tabs.List>
+
+        <div className="response-tab-content">
+          {!response ? (
+            <div className="empty-response-state">
+              <Text size="sm" c="dimmed">Send a request to see the response here.</Text>
+            </div>
+          ) : (
+            <>
+              <Tabs.Panel value="body">
+                <CodeEditor
+                  value={response.bodyText || ''}
+                  readOnly
+                  language={responseBodyLanguage(response)}
+                  minHeight="400px"
+                />
+              </Tabs.Panel>
+              <Tabs.Panel value="headers">
+                <CodeEditor
+                  value={responseHeadersText(response)}
+                  readOnly
+                  language="text"
+                  minHeight="400px"
+                />
+              </Tabs.Panel>
+              <Tabs.Panel value="raw">
+                <CodeEditor
+                  value={response.bodyText || ''}
+                  readOnly
+                  language="text"
+                  minHeight="400px"
+                />
+              </Tabs.Panel>
+            </>
+          )}
         </div>
-      )}
-    </aside>
+      </Tabs>
+    </div>
   );
 }

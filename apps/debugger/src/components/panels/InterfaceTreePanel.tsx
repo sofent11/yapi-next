@@ -114,7 +114,6 @@ function renderNode(props: {
         <button type="button" className={rowClass(active, 'tree-row-project')} onClick={props.onSelectProject}>
           <span className="tree-row-copy">
             <strong>{highlightText(props.node.name, props.normalized)}</strong>
-            <span>{requestCount(props.node)} 个接口</span>
           </span>
         </button>
         <div className="tree-children">
@@ -138,12 +137,12 @@ function renderNode(props: {
         <button
           type="button"
           className={rowClass(active, 'tree-row-category')}
-          style={{ paddingLeft: `${14 + depth * 14}px` }}
+          style={{ paddingLeft: `${12 + depth * 12}px` }}
           onClick={() => props.onSelectCategory(node.path)}
         >
+          <IconChevronRight size={14} style={{ opacity: 0.5 }} />
           <span className="tree-row-copy">
             <strong>{highlightText(node.name, props.normalized)}</strong>
-            <span>{requestCount(node)} 个接口</span>
           </span>
         </button>
         <div className="tree-children">
@@ -161,16 +160,18 @@ function renderNode(props: {
 
   if (props.node.kind === 'request') {
     const node = props.node;
-    const active = requestId === node.requestId;
-    const expanded = active || props.expandedRequestIds.has(node.requestId);
+    const active = requestId === node.requestId && !selectedCaseId;
+    const expanded = props.expandedRequestIds.has(node.requestId);
     return (
       <div key={node.id} className="tree-branch">
-        <div className={rowClass(active, 'tree-row-request')} style={{ paddingLeft: `${14 + depth * 14}px` }}>
+        <div className={rowClass(active, 'tree-row-request')} style={{ paddingLeft: `${4 + depth * 12}px` }}>
           <button
             type="button"
             className="tree-expand-button"
-            onClick={() => props.onToggleRequest(node.requestId)}
-            aria-label={expanded ? '折叠用例' : '展开用例'}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onToggleRequest(node.requestId);
+            }}
           >
             {expanded ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
           </button>
@@ -178,9 +179,8 @@ function renderNode(props: {
             <span className={`tree-method-pill method-${node.method.toLowerCase()}`}>{node.method}</span>
             <span className="tree-row-copy">
               <strong>{highlightText(node.name, props.normalized)}</strong>
-              <span>{highlightText(node.requestPath, props.normalized)}</span>
             </span>
-            <span className="tree-count-badge">{node.caseCount}</span>
+            {node.caseCount > 0 && <span className="tree-count-badge">{node.caseCount}</span>}
           </button>
         </div>
         {expanded && node.children.length > 0 ? (
@@ -205,13 +205,12 @@ function renderNode(props: {
       key={node.id}
       type="button"
       className={rowClass(active, 'tree-row-case')}
-      style={{ paddingLeft: `${24 + depth * 14}px` }}
+      style={{ paddingLeft: `${20 + depth * 12}px` }}
       onClick={() => props.onSelectCase(node.requestId, node.caseId)}
     >
       <span className="tree-case-dot" />
       <span className="tree-row-copy">
         <strong>{highlightText(node.name, props.normalized)}</strong>
-        <span>用例覆盖</span>
       </span>
     </button>
   );

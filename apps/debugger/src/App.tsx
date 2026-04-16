@@ -1,5 +1,5 @@
 import { startTransition, useEffect, useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
-import { ActionIcon, Drawer, Select, Text } from '@mantine/core';
+import { ActionIcon, Badge, Drawer, Select, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
 import { IconRefresh } from '@tabler/icons-react';
@@ -501,11 +501,8 @@ export function App() {
         <div className="workspace-frame">
           <div className="workspace-contextbar">
             <div className="workspace-context-copy">
-              <span className="workspace-context-label">YApi Debugger</span>
+              <span className="workspace-context-label">Debugger</span>
               <strong className="workspace-context-title">{store.workspace.project.name}</strong>
-              <Text c="dimmed" size="xs" className="workspace-context-path">
-                {selectionLabel(store.selectedNode, store.workspace)}
-              </Text>
             </div>
 
             <div className="workspace-context-actions">
@@ -518,15 +515,14 @@ export function App() {
                   label: item.document.name
                 }))}
                 onChange={value => value && store.setActiveEnvironment(value)}
+                variant="unstyled"
+                style={{ width: 120 }}
               />
-              <span className={['workspace-indicator', runMutation.isPending ? 'is-busy' : ''].filter(Boolean).join(' ')}>
+              <Badge variant="dot" color={runMutation.isPending ? 'blue' : 'gray'} size="sm">
                 {runMutation.isPending ? 'Running' : 'Idle'}
-              </span>
-              <span className={['workspace-indicator', store.isDirty ? 'is-dirty' : ''].filter(Boolean).join(' ')}>
-                {store.isDirty ? 'Unsaved' : 'Saved'}
-              </span>
-              <ActionIcon variant="subtle" color="dark" onClick={() => openMutation.mutate(store.workspace!.root)}>
-                <IconRefresh size={15} />
+              </Badge>
+              <ActionIcon variant="subtle" color="gray" onClick={() => openMutation.mutate(store.workspace!.root)}>
+                <IconRefresh size={16} />
               </ActionIcon>
             </div>
           </div>

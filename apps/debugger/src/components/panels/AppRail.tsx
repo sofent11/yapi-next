@@ -1,4 +1,5 @@
-import { IconApi, IconFolderCog, IconPlugConnected, IconPointFilled } from '@tabler/icons-react';
+import { ActionIcon, Tooltip, Stack } from '@mantine/core';
+import { IconApi, IconFolderCog, IconPlugConnected, IconSettings, IconHistory } from '@tabler/icons-react';
 
 export function AppRail(props: {
   workspaceName: string;
@@ -7,45 +8,44 @@ export function AppRail(props: {
   isDirty: boolean;
 }) {
   return (
-    <aside className="app-rail" aria-label="Workspace status rail">
+    <aside className="app-rail" aria-label="Activity Bar">
       <div className="app-rail-brand" title={props.workspaceName}>
-        <span>YA</span>
+        <IconApi size={24} stroke={2.5} />
       </div>
 
-      <div className="app-rail-metrics">
-        <div className="app-rail-metric">
-          <IconFolderCog size={17} />
-          <span className="app-rail-metric-label">项目</span>
-          <strong className="app-rail-metric-value">{props.workspaceName.slice(0, 2).toUpperCase()}</strong>
-        </div>
+      <Stack gap="xs" style={{ flex: 1, alignItems: 'center', marginTop: 12 }}>
+        <Tooltip label="Collections" position="right" withArrow>
+          <ActionIcon variant="filled" size="lg" radius="md">
+            <IconFolderCog size={20} />
+          </ActionIcon>
+        </Tooltip>
+        
+        <Tooltip label="History" position="right" withArrow>
+          <ActionIcon variant="subtle" size="lg" radius="md" color="gray">
+            <IconHistory size={20} />
+          </ActionIcon>
+        </Tooltip>
 
-        <div className="app-rail-metric">
-          <IconApi size={17} />
-          <span className="app-rail-metric-label">接口</span>
-          <strong className="app-rail-metric-value">{props.requestCount}</strong>
-        </div>
+        <Tooltip label="Environments" position="right" withArrow>
+          <ActionIcon variant="subtle" size="lg" radius="md" color="gray">
+            <IconPlugConnected size={20} />
+          </ActionIcon>
+        </Tooltip>
+      </Stack>
 
-        <div className="app-rail-metric">
-          <IconPlugConnected size={17} />
-          <span className="app-rail-metric-label">环境</span>
-          <strong className="app-rail-metric-value">{props.activeEnvironment.slice(0, 3).toUpperCase()}</strong>
-        </div>
-      </div>
-
-      <div className="app-rail-shortcuts">
-        <div className="app-rail-shortcut">
-          <span>Open</span>
-          <strong>Cmd+O</strong>
-        </div>
-        <div className="app-rail-shortcut">
-          <span>Save</span>
-          <strong>Cmd+S</strong>
-        </div>
-        <div className={['app-rail-shortcut', props.isDirty ? 'is-dirty' : ''].filter(Boolean).join(' ')}>
-          <IconPointFilled size={10} />
-          <strong>{props.isDirty ? 'Dirty' : 'Ready'}</strong>
-        </div>
-      </div>
+      <Stack gap="xs" style={{ alignItems: 'center', marginBottom: 12 }}>
+        <Tooltip label="Settings" position="right" withArrow>
+          <ActionIcon variant="subtle" size="lg" radius="md" color="gray">
+            <IconSettings size={20} />
+          </ActionIcon>
+        </Tooltip>
+        
+        {props.isDirty && (
+          <Tooltip label="Unsaved Changes" position="right" withArrow>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--orange)', margin: '4px 0' }} />
+          </Tooltip>
+        )}
+      </Stack>
     </aside>
   );
 }

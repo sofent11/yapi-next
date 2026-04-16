@@ -138,7 +138,9 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
   const isSwagger2 = String(document.swagger || '').startsWith('2.');
   const serverUrl =
     document.servers?.[0]?.url ||
-    [document.schemes?.[0], '://', document.host || '', document.basePath || ''].join('').replace(/^undefined:\/\//, '');
+    (document.host
+      ? [document.schemes?.[0] || 'http', '://', document.host, document.basePath || ''].join('')
+      : '{{baseUrl}}');
 
   Object.entries(document.paths || {}).forEach(([pathKey, pathItem]) => {
     const commonParameters = Array.isArray((pathItem as any)?.parameters) ? (pathItem as any).parameters : [];

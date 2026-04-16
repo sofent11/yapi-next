@@ -415,7 +415,7 @@ function mergeVariableSources(
   } as Record<string, string>;
 }
 
-function applyProjectVariables(
+export function applyProjectVariables(
   input: string,
   project: ProjectDocument,
   environment: EnvironmentDocument | undefined
@@ -443,7 +443,8 @@ export function resolveRequest(
 ): ResolvedRequest {
   const body = caseDocument?.overrides.body ?? request.body;
   const auth = mergeAuth(request.auth, caseDocument?.overrides.auth);
-  const url = applyProjectVariables(caseDocument?.overrides.url || request.url, project, environment);
+  const rawUrl = caseDocument?.overrides.url || request.url;
+  const url = applyProjectVariables(rawUrl, project, environment);
   const path = applyProjectVariables(caseDocument?.overrides.path || request.path || '', project, environment);
   const baseHeaders = [
     ...project.runtime.headers,
@@ -503,7 +504,12 @@ export function resolveRequest(
   }
 
   const mergedVariables = mergeVariableSources(project, environment);
-  const candidateUrl = url || `${mergedVariables.baseUrl || ''}${path || ''}`;
+  let candidateUrl = url;
+  if (!candidateUrl || (!candidateUrl.includes('://') && !rawUrl.startsWith('{{'))) {
+    const baseUrl = mergedVariables.baseUrl || '';
+    candidateUrl = `${baseUrl}${candidateUrl || path || ''}`;
+  }
+
   return {
     name: caseDocument ? `${request.name} / ${caseDocument.name}` : request.name,
     environmentName: caseDocument?.environment || environment?.name,
