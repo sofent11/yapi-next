@@ -1,20 +1,52 @@
 import { useMemo } from 'react';
-import { Badge, Button, Select, Tabs, TextInput, Textarea, Text } from '@mantine/core';
-import { IconDeviceFloppy, IconPlayerPlay } from '@tabler/icons-react';
+import { Badge, Button, Checkbox, Group, NumberInput, Select, Tabs, Text, TextInput, Textarea } from '@mantine/core';
+import { IconDeviceFloppy, IconPlayerPlay, IconPlus } from '@tabler/icons-react';
+import { createEmptyCheck, resolveRequest } from '@yapi-debugger/core';
 import type {
+  AuthConfig,
+  CaseCheck,
   CaseDocument,
-  ParameterRow,
-  RequestDocument,
+  EnvironmentDocument,
   RequestBody,
-  WorkspaceIndex,
-  EnvironmentDocument
+  RequestDocument,
+  WorkspaceIndex
 } from '@yapi-debugger/schema';
-import { applyProjectVariables } from '@yapi-debugger/core';
 import type { RequestTab } from '../../store/workspace-store';
+import { chooseRequestBodyFile } from '../../lib/desktop';
 import { CodeEditor } from '../editors/CodeEditor';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
 
 const REQUEST_METHODS: RequestDocument['method'][] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+
+function bodyModeOptions() {
+  return [
+    { value: 'none', label: 'none' },
+    { value: 'json', label: 'json' },
+    { value: 'text', label: 'raw' },
+    { value: 'form-urlencoded', label: 'x-www-form-urlencoded' },
+    { value: 'multipart', label: 'multipart/form-data' }
+  ];
+}
+
+function authTypeOptions() {
+  return [
+    { value: 'inherit', label: 'inherit' },
+    { value: 'none', label: 'none' },
+    { value: 'bearer', label: 'bearer' },
+    { value: 'basic', label: 'basic' },
+    { value: 'apikey', label: 'api key' },
+    { value: 'profile', label: 'environment profile' }
+  ];
+}
+
+function checkOptions() {
+  return [
+    { value: 'status-equals', label: 'Status Equals' },
+    { value: 'header-includes', label: 'Header Includes' },
+    { value: 'json-exists', label: 'JSON Path Exists' },
+    { value: 'json-equals', label: 'JSON Path Equals' }
+  ];
+}
 
 export function RequestPanel(props: {
   workspace: WorkspaceIndex;
@@ -32,53 +64,81 @@ export function RequestPanel(props: {
   cases: CaseDocument[];
 }) {
   const { request: requestDocument, selectedCase, selectedEnvironment, workspace } = props;
-
   const effectiveMethod = selectedCase?.overrides.method || requestDocument.method;
-  const rawUrl = selectedCase?.overrides.url || requestDocument.url;
-  const effectiveUrl = rawUrl;
+  const effectiveUrl = selectedCase?.overrides.url || requestDocument.url;
   const effectivePath = selectedCase?.overrides.path || requestDocument.path;
   const queryRows = selectedCase?.overrides.query ?? requestDocument.query;
   const pathRows = selectedCase?.overrides.pathParams ?? requestDocument.pathParams;
   const headerRows = selectedCase?.overrides.headers ?? requestDocument.headers;
   const body = selectedCase?.overrides.body || requestDocument.body;
+  const auth = selectedCase?.overrides.auth || requestDocument.auth;
+  const runtime = {
+    ...requestDocument.runtime,
+    ...(selectedCase?.overrides.runtime || {})
+  };
 
-  const resolvedUrl = useMemo(() => {
-    const url = applyProjectVariables(rawUrl, workspace.project, selectedEnvironment || undefined);
-    const path = applyProjectVariables(effectivePath || '', workspace.project, selectedEnvironment || undefined);
-    
-    if (!url || (!url.includes('://') && !rawUrl.startsWith('{{'))) {
-      const baseUrl = selectedEnvironment?.vars.baseUrl || workspace.project.runtime.baseUrl || '';
-      return `${baseUrl}${url || path || ''}`;
-    }
-    return url;
-  }, [rawUrl, effectivePath, workspace.project, selectedEnvironment]);
+  const resolvedPreview = useMemo(
+    () => resolveRequest(workspace.project, requestDocument, selectedCase || undefined, selectedEnvironment || undefined),
+    [workspace.project, requestDocument, selectedCase, selectedEnvironment]
+  );
 
   function updateSelectedCase(updater: (current: CaseDocument) => CaseDocument) {
     if (!selectedCase) return;
-    const nextCases = props.cases.map(item => (item.id === selectedCase.id ? updater(item) : item));
-    props.onCasesChange(nextCases);
+    props.onCasesChange(props.cases.map(item => (item.id === selectedCase.id ? updater(item) : item)));
   }
 
-  function setMethod(method: RequestDocument['method']) {
-    if (!selectedCase) {
-      props.onRequestChange({ ...requestDocument, method });
-    } else {
+  function updateAuth(nextAuth: AuthConfig) {
+    if (selectedCase) {
       updateSelectedCase(current => ({
         ...current,
-        overrides: { ...current.overrides, method }
+        overrides: { ...current.overrides, auth: nextAuth }
       }));
+      return;
     }
+    props.onRequestChange({ ...requestDocument, auth: nextAuth });
   }
 
-  function setUrl(url: string) {
-    if (!selectedCase) {
-      props.onRequestChange({ ...requestDocument, url });
-    } else {
+  function updateBody(nextBody: RequestBody) {
+    if (selectedCase) {
       updateSelectedCase(current => ({
         ...current,
-        overrides: { ...current.overrides, url }
+        overrides: { ...current.overrides, body: nextBody }
       }));
+      return;
     }
+    props.onRequestChange({ ...requestDocument, body: nextBody });
+  }
+
+  function updateChecks(nextChecks: CaseCheck[]) {
+    if (!selectedCase) return;
+    updateSelectedCase(current => ({
+      ...current,
+      checks: nextChecks
+    }));
+  }
+
+  function updateRuntime(nextRuntime: { timeoutMs: number; followRedirects: boolean }) {
+    if (selectedCase) {
+      updateSelectedCase(current => ({
+        ...current,
+        overrides: { ...current.overrides, runtime: nextRuntime }
+      }));
+      return;
+    }
+    props.onRequestChange({ ...requestDocument, runtime: nextRuntime });
+  }
+
+  async function handlePickBodyFile(index: number) {
+    const selectedPath = await chooseRequestBodyFile();
+    if (!selectedPath) return;
+    const nextFields = [...(body.fields || [])];
+    nextFields[index] = {
+      ...nextFields[index],
+      kind: 'file',
+      filePath: selectedPath,
+      value: selectedPath
+    };
+    updateBody({ ...body, fields: nextFields });
   }
 
   return (
@@ -89,8 +149,15 @@ export function RequestPanel(props: {
             size="sm"
             className="method-select-ide"
             value={effectiveMethod}
-            data={REQUEST_METHODS.map(m => ({ value: m, label: m }))}
-            onChange={val => val && setMethod(val as RequestDocument['method'])}
+            data={REQUEST_METHODS.map(method => ({ value: method, label: method }))}
+            onChange={value => {
+              const nextMethod = value as RequestDocument['method'];
+              if (selectedCase) {
+                updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, method: nextMethod } }));
+              } else {
+                props.onRequestChange({ ...requestDocument, method: nextMethod });
+              }
+            }}
             variant="filled"
           />
           <TextInput
@@ -98,40 +165,83 @@ export function RequestPanel(props: {
             className="url-input-ide"
             value={effectiveUrl}
             placeholder="Enter request URL"
-            onChange={e => setUrl(e.currentTarget.value)}
+            onChange={event => {
+              const nextUrl = event.currentTarget.value;
+              if (selectedCase) {
+                updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, url: nextUrl } }));
+              } else {
+                props.onRequestChange({ ...requestDocument, url: nextUrl });
+              }
+            }}
             variant="filled"
           />
-          <Button
-            size="sm"
-            leftSection={<IconPlayerPlay size={14} />}
-            loading={props.isRunning}
-            onClick={props.onRun}
-            className="send-button-ide"
-          >
+          <Button size="sm" leftSection={<IconPlayerPlay size={14} />} loading={props.isRunning} onClick={props.onRun}>
             Send
           </Button>
-          <Button
-            size="sm"
-            variant="default"
-            leftSection={<IconDeviceFloppy size={14} />}
-            onClick={props.onSave}
-          >
+          <Button size="sm" variant="default" leftSection={<IconDeviceFloppy size={14} />} onClick={props.onSave}>
             Save
           </Button>
         </div>
-        {resolvedUrl !== effectiveUrl && (
-          <Text size="xs" c="dimmed" mt={4} style={{ paddingLeft: 94, fontFamily: 'var(--font-mono)' }}>
-            Resolved: {resolvedUrl}
-          </Text>
-        )}
       </div>
 
-      <Tabs value={props.activeTab} onChange={val => props.onTabChange(val as RequestTab)} className="request-tabs-ide">
+      <div className="request-preview-card">
+        <div className="request-preview-head">
+          <div>
+            <Text size="xs" fw={700} c="dimmed">Resolved Request</Text>
+            <Text size="xs" c="dimmed">
+              {resolvedPreview.method} {resolvedPreview.url}
+            </Text>
+          </div>
+          <Group gap="xs">
+            <Badge variant="light" color="indigo">{resolvedPreview.authSource}</Badge>
+            <Badge variant="light" color="gray">{resolvedPreview.timeoutMs} ms</Badge>
+            <Badge variant="light" color={resolvedPreview.followRedirects ? 'green' : 'orange'}>
+              {resolvedPreview.followRedirects ? 'follow redirects' : 'no redirects'}
+            </Badge>
+          </Group>
+        </div>
+        <div className="request-preview-grid">
+          <CodeEditor
+            value={JSON.stringify(
+              {
+                headers: resolvedPreview.headers.filter(item => item.enabled),
+                query: resolvedPreview.query.filter(item => item.enabled)
+              },
+              null,
+              2
+            )}
+            readOnly
+            language="json"
+            minHeight="140px"
+          />
+          <CodeEditor
+            value={
+              resolvedPreview.body.mode === 'json'
+                ? resolvedPreview.body.text
+                : JSON.stringify(
+                    {
+                      mode: resolvedPreview.body.mode,
+                      fields: resolvedPreview.body.fields,
+                      text: resolvedPreview.body.text
+                    },
+                    null,
+                    2
+                  )
+            }
+            readOnly
+            language={resolvedPreview.body.mode === 'json' ? 'json' : 'text'}
+            minHeight="140px"
+          />
+        </div>
+      </div>
+
+      <Tabs value={props.activeTab} onChange={value => props.onTabChange(value as RequestTab)} className="request-tabs-ide">
         <Tabs.List>
           <Tabs.Tab value="query">Params</Tabs.Tab>
           <Tabs.Tab value="headers">Headers</Tabs.Tab>
           <Tabs.Tab value="body">Body</Tabs.Tab>
           <Tabs.Tab value="auth">Auth</Tabs.Tab>
+          <Tabs.Tab value="checks">Checks</Tabs.Tab>
           <Tabs.Tab value="settings">Settings</Tabs.Tab>
         </Tabs.List>
 
@@ -143,7 +253,7 @@ export function RequestPanel(props: {
                 rows={queryRows}
                 onChange={rows => {
                   if (selectedCase) {
-                    updateSelectedCase(c => ({ ...c, overrides: { ...c.overrides, query: rows } }));
+                    updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, query: rows } }));
                   } else {
                     props.onRequestChange({ ...requestDocument, query: rows });
                   }
@@ -156,7 +266,7 @@ export function RequestPanel(props: {
                 rows={pathRows}
                 onChange={rows => {
                   if (selectedCase) {
-                    updateSelectedCase(c => ({ ...c, overrides: { ...c.overrides, pathParams: rows } }));
+                    updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, pathParams: rows } }));
                   } else {
                     props.onRequestChange({ ...requestDocument, pathParams: rows });
                   }
@@ -172,7 +282,7 @@ export function RequestPanel(props: {
                 rows={headerRows}
                 onChange={rows => {
                   if (selectedCase) {
-                    updateSelectedCase(c => ({ ...c, overrides: { ...c.overrides, headers: rows } }));
+                    updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, headers: rows } }));
                   } else {
                     props.onRequestChange({ ...requestDocument, headers: rows });
                   }
@@ -186,48 +296,38 @@ export function RequestPanel(props: {
               <Select
                 size="xs"
                 value={body.mode}
-                data={[
-                  { value: 'none', label: 'none' },
-                  { value: 'form', label: 'form-data' },
-                  { value: 'json', label: 'json' },
-                  { value: 'text', label: 'raw' }
-                ]}
-                onChange={val => {
-                  const nextBody = { ...body, mode: val as RequestBody['mode'] };
-                  if (selectedCase) {
-                    updateSelectedCase(c => ({ ...c, overrides: { ...c.overrides, body: nextBody } }));
-                  } else {
-                    props.onRequestChange({ ...requestDocument, body: nextBody });
-                  }
+                data={bodyModeOptions()}
+                onChange={value => {
+                  const nextMode = (value as RequestBody['mode']) || 'none';
+                  updateBody({
+                    ...body,
+                    mode: nextMode,
+                    mimeType:
+                      nextMode === 'json'
+                        ? 'application/json'
+                        : nextMode === 'form-urlencoded'
+                          ? 'application/x-www-form-urlencoded'
+                          : nextMode === 'multipart'
+                            ? 'multipart/form-data'
+                            : body.mimeType
+                  });
                 }}
                 variant="unstyled"
                 className="body-mode-select"
               />
             </div>
-            {body.mode === 'form' ? (
+            {body.mode === 'form-urlencoded' || body.mode === 'multipart' ? (
               <KeyValueEditor
                 rows={body.fields || []}
-                onChange={rows => {
-                  const nextBody = { ...body, fields: rows };
-                  if (selectedCase) {
-                    updateSelectedCase(c => ({ ...c, overrides: { ...c.overrides, body: nextBody } }));
-                  } else {
-                    props.onRequestChange({ ...requestDocument, body: nextBody });
-                  }
-                }}
+                allowFileRows={body.mode === 'multipart'}
+                onPickFile={handlePickBodyFile}
+                onChange={rows => updateBody({ ...body, fields: rows })}
               />
             ) : body.mode !== 'none' ? (
               <CodeEditor
                 value={body.text || ''}
                 language={body.mode === 'json' ? 'json' : 'text'}
-                onChange={val => {
-                  const nextBody = { ...body, text: val };
-                  if (selectedCase) {
-                    updateSelectedCase(c => ({ ...c, overrides: { ...c.overrides, body: nextBody } }));
-                  } else {
-                    props.onRequestChange({ ...requestDocument, body: nextBody });
-                  }
-                }}
+                onChange={value => updateBody({ ...body, text: value })}
                 minHeight="300px"
               />
             ) : (
@@ -236,7 +336,164 @@ export function RequestPanel(props: {
           </Tabs.Panel>
 
           <Tabs.Panel value="auth">
-            <div className="empty-tab-state">Authentication settings coming soon. Use Headers for now.</div>
+            <div className="settings-grid">
+              <Select
+                label="Auth Type"
+                value={auth.type}
+                data={authTypeOptions()}
+                onChange={value => updateAuth({ type: (value as AuthConfig['type']) || 'inherit' })}
+              />
+              {auth.type === 'bearer' ? (
+                <TextInput
+                  label="Bearer Token"
+                  value={auth.token || ''}
+                  onChange={event => updateAuth({ ...auth, token: event.currentTarget.value })}
+                />
+              ) : null}
+              {auth.type === 'basic' ? (
+                <>
+                  <TextInput
+                    label="Username"
+                    value={auth.username || ''}
+                    onChange={event => updateAuth({ ...auth, username: event.currentTarget.value })}
+                  />
+                  <TextInput
+                    label="Password"
+                    value={auth.password || ''}
+                    onChange={event => updateAuth({ ...auth, password: event.currentTarget.value })}
+                  />
+                </>
+              ) : null}
+              {auth.type === 'apikey' ? (
+                <>
+                  <TextInput
+                    label="Key"
+                    value={auth.key || ''}
+                    onChange={event => updateAuth({ ...auth, key: event.currentTarget.value })}
+                  />
+                  <TextInput
+                    label="Value"
+                    value={auth.value || ''}
+                    onChange={event => updateAuth({ ...auth, value: event.currentTarget.value })}
+                  />
+                  <Select
+                    label="Send To"
+                    value={auth.addTo || 'header'}
+                    data={[
+                      { value: 'header', label: 'Header' },
+                      { value: 'query', label: 'Query' }
+                    ]}
+                    onChange={value => updateAuth({ ...auth, addTo: (value as AuthConfig['addTo']) || 'header' })}
+                  />
+                </>
+              ) : null}
+              {auth.type === 'profile' ? (
+                <Select
+                  label="Environment Profile"
+                  value={auth.profileName || null}
+                  data={(selectedEnvironment?.authProfiles || []).map(item => ({ value: item.name, label: item.name }))}
+                  onChange={value => updateAuth({ ...auth, profileName: value || '' })}
+                />
+              ) : null}
+              {selectedEnvironment?.authProfiles?.length ? (
+                <div className="preview-note">
+                  <Text size="xs" c="dimmed">
+                    Active environment profiles: {selectedEnvironment.authProfiles.map(item => item.name).join(', ')}
+                  </Text>
+                </div>
+              ) : null}
+            </div>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="checks">
+            {!selectedCase ? (
+              <div className="empty-tab-state">Checks are case-scoped. Select or create a case to add smoke assertions.</div>
+            ) : (
+              <div className="checks-panel">
+                <div className="checks-head">
+                  <Text fw={600}>Smoke Checks</Text>
+                  <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={() => updateChecks([...(selectedCase.checks || []), createEmptyCheck()])}>
+                    Add Check
+                  </Button>
+                </div>
+                {(selectedCase.checks || []).length === 0 ? (
+                  <div className="empty-tab-state">No checks yet. Add one to validate status, headers or JSON fields after Send.</div>
+                ) : (
+                  <div className="checks-list">
+                    {(selectedCase.checks || []).map((check, index) => (
+                      <div key={check.id} className="check-card">
+                        <div className="check-card-head">
+                          <Checkbox
+                            checked={check.enabled}
+                            onChange={event =>
+                              updateChecks(
+                                (selectedCase.checks || []).map(item =>
+                                  item.id === check.id ? { ...item, enabled: event.currentTarget.checked } : item
+                                )
+                              )
+                            }
+                          />
+                          <Select
+                            value={check.type}
+                            data={checkOptions()}
+                            onChange={value =>
+                              updateChecks(
+                                (selectedCase.checks || []).map(item =>
+                                  item.id === check.id ? { ...item, type: (value as CaseCheck['type']) || item.type } : item
+                                )
+                              )
+                            }
+                          />
+                          <ActionButton
+                            label="Remove"
+                            onClick={() => updateChecks((selectedCase.checks || []).filter(item => item.id !== check.id))}
+                          />
+                        </div>
+                        <div className="settings-grid">
+                          <TextInput
+                            label="Label"
+                            value={check.label}
+                            onChange={event =>
+                              updateChecks(
+                                (selectedCase.checks || []).map(item =>
+                                  item.id === check.id ? { ...item, label: event.currentTarget.value } : item
+                                )
+                              )
+                            }
+                          />
+                          {check.type === 'status-equals' ? null : (
+                            <TextInput
+                              label={check.type === 'header-includes' ? 'Header Name' : 'JSON Path'}
+                              value={check.path}
+                              onChange={event =>
+                                updateChecks(
+                                  (selectedCase.checks || []).map(item =>
+                                    item.id === check.id ? { ...item, path: event.currentTarget.value } : item
+                                  )
+                                )
+                              }
+                            />
+                          )}
+                          {check.type === 'json-exists' ? null : (
+                            <TextInput
+                              label="Expected"
+                              value={check.expected}
+                              onChange={event =>
+                                updateChecks(
+                                  (selectedCase.checks || []).map(item =>
+                                    item.id === check.id ? { ...item, expected: event.currentTarget.value } : item
+                                  )
+                                )
+                              }
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </Tabs.Panel>
 
           <Tabs.Panel value="settings">
@@ -244,24 +501,38 @@ export function RequestPanel(props: {
               <TextInput
                 label="Name"
                 value={requestDocument.name}
-                onChange={e => props.onRequestChange({ ...requestDocument, name: e.currentTarget.value })}
+                onChange={event => props.onRequestChange({ ...requestDocument, name: event.currentTarget.value })}
               />
               <TextInput
                 label="Path"
                 value={effectivePath}
-                onChange={e => {
-                  const val = e.currentTarget.value;
+                onChange={event => {
+                  const nextPath = event.currentTarget.value;
                   if (selectedCase) {
-                    updateSelectedCase(c => ({ ...c, overrides: { ...c.overrides, path: val } }));
+                    updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, path: nextPath } }));
                   } else {
-                    props.onRequestChange({ ...requestDocument, path: val });
+                    props.onRequestChange({ ...requestDocument, path: nextPath });
                   }
                 }}
               />
+              <NumberInput
+                label="Timeout (ms)"
+                value={runtime.timeoutMs}
+                min={100}
+                step={500}
+                onChange={value => updateRuntime({ ...runtime, timeoutMs: Number(value) || 30000 })}
+              />
+              <div className="toggle-field">
+                <Checkbox
+                  label="Follow Redirects"
+                  checked={runtime.followRedirects}
+                  onChange={event => updateRuntime({ ...runtime, followRedirects: event.currentTarget.checked })}
+                />
+              </div>
               <Textarea
                 label="Description"
                 value={requestDocument.description}
-                onChange={e => props.onRequestChange({ ...requestDocument, description: e.currentTarget.value })}
+                onChange={event => props.onRequestChange({ ...requestDocument, description: event.currentTarget.value })}
                 minRows={3}
               />
             </div>
@@ -269,5 +540,13 @@ export function RequestPanel(props: {
         </div>
       </Tabs>
     </div>
+  );
+}
+
+function ActionButton(props: { label: string; onClick: () => void }) {
+  return (
+    <Button size="xs" variant="subtle" color="red" onClick={props.onClick}>
+      {props.label}
+    </Button>
   );
 }

@@ -195,7 +195,7 @@ export function RequestEditorPanel(props: {
                 { value: 'none', label: 'None' },
                 { value: 'json', label: 'JSON' },
                 { value: 'text', label: 'Text' },
-                { value: 'form', label: 'Form' }
+                { value: 'form-urlencoded', label: 'Form' }
               ]}
               onChange={value =>
                 value &&
@@ -208,7 +208,7 @@ export function RequestEditorPanel(props: {
                 })
               }
             />
-            {request.body.mode === 'form' ? (
+            {request.body.mode === 'form-urlencoded' ? (
               <div className="editor-card">
                 <KeyValueEditor
                   rows={request.body.fields}

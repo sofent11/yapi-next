@@ -4,6 +4,7 @@ import {
   createEmptyCase,
   createEmptyRequest,
   type CaseDocument,
+  type CheckResult,
   type EnvironmentDocument,
   type ImportAuth,
   type ImportResult,
@@ -19,7 +20,7 @@ export type SelectedNode =
   | { kind: 'request'; requestId: string }
   | { kind: 'case'; requestId: string; caseId: string };
 
-export type RequestTab = 'query' | 'headers' | 'body' | 'auth' | 'settings';
+export type RequestTab = 'query' | 'headers' | 'body' | 'auth' | 'checks' | 'settings';
 export type ResponseTab = 'body' | 'headers' | 'raw';
 
 export type WorkspaceUiState = {
@@ -50,6 +51,7 @@ type WorkspaceStore = {
   importPreview: ImportResult | null;
   importAuth: ImportAuth;
   response: SendRequestResult | null;
+  checkResults: CheckResult[];
   draftProject: ProjectDocument | null;
   draftRequest: RequestDocument | null;
   draftCases: CaseDocument[];
@@ -66,7 +68,7 @@ type WorkspaceStore = {
   updateCaseList: (cases: CaseDocument[]) => void;
   updateEnvironment: (name: string, updater: (environment: EnvironmentDocument) => EnvironmentDocument) => void;
   addDraftCase: () => void;
-  setResponse: (response: SendRequestResult | null) => void;
+  setResponse: (response: SendRequestResult | null, checkResults?: CheckResult[]) => void;
   setSearchText: (text: string) => void;
 };
 
@@ -157,6 +159,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   importPreview: null,
   importAuth: defaultImportAuth(),
   response: null,
+  checkResults: [],
   draftProject: null,
   draftRequest: null,
   draftCases: [],
@@ -181,6 +184,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       draftCases: draft.draftCases,
       isDirty: false,
       response: null,
+      checkResults: [],
       searchText: ''
     });
   },
@@ -197,7 +201,8 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       draftRequest: draft.draftRequest,
       draftCases: draft.draftCases,
       isDirty: false,
-      response: null
+      response: null,
+      checkResults: []
     });
   },
   setActiveEnvironment(name) {
@@ -245,8 +250,8 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       isDirty: true
     });
   },
-  setResponse(response) {
-    set({ response });
+  setResponse(response, checkResults = []) {
+    set({ response, checkResults });
   },
   setSearchText(text) {
     set({ searchText: text });

@@ -1,12 +1,16 @@
 import { Button, Divider, Group, Select, Stack, Text, TextInput } from '@mantine/core';
 import type { ImportAuth, ImportResult } from '@yapi-debugger/schema';
+import type { ImportPreviewSummary, ImportConflictStrategy } from '../../lib/workspace';
 
 export function ImportPanel(props: {
   preview: ImportResult | null;
+  previewInfo: ImportPreviewSummary | null;
   importAuth: ImportAuth;
   importUrl: string;
+  importStrategy: ImportConflictStrategy;
   setImportUrl: (value: string) => void;
   setImportAuth: (auth: ImportAuth) => void;
+  setImportStrategy: (strategy: ImportConflictStrategy) => void;
   onPickFile: () => void;
   onImportUrl: () => void;
   onApplyImport: () => void;
@@ -77,32 +81,69 @@ export function ImportPanel(props: {
         <Button size="xs" color="dark" onClick={props.onImportUrl}>
           预览 URL 导入
         </Button>
+        <Select
+          label="冲突策略"
+          size="xs"
+          value={props.importStrategy}
+          data={[
+            { value: 'append', label: '追加导入' },
+            { value: 'replace', label: '冲突时覆盖' }
+          ]}
+          onChange={value => props.setImportStrategy((value as ImportConflictStrategy) || 'append')}
+        />
       </Stack>
 
       <div className="import-preview">
         <Text fw={700}>导入预览</Text>
         {props.preview ? (
-          <div className="import-summary">
-            <div>
-              <span>格式</span>
-              <strong>{props.preview.detectedFormat}</strong>
+          <>
+            <div className="import-summary">
+              <div>
+                <span>格式</span>
+                <strong>{props.preview.detectedFormat}</strong>
+              </div>
+              <div>
+                <span>接口</span>
+                <strong>{props.preview.summary.requests}</strong>
+              </div>
+              <div>
+                <span>分类</span>
+                <strong>{props.preview.summary.folders}</strong>
+              </div>
+              <div>
+                <span>环境</span>
+                <strong>{props.preview.summary.environments}</strong>
+              </div>
+              <div>
+                <span>冲突</span>
+                <strong>{props.previewInfo?.conflicts.length || 0}</strong>
+              </div>
+              <Button size="xs" color="dark" onClick={props.onApplyImport}>
+                应用到当前项目
+              </Button>
             </div>
-            <div>
-              <span>接口</span>
-              <strong>{props.preview.summary.requests}</strong>
+            <div className="import-structure-list">
+              {props.preview.requests.slice(0, 8).map(item => (
+                <div key={item.request.id} className="import-structure-item">
+                  <strong>{item.request.method} {item.request.name}</strong>
+                  <span>{item.folderSegments.join('/') || 'root'} · {item.request.path || item.request.url}</span>
+                </div>
+              ))}
             </div>
-            <div>
-              <span>分类</span>
-              <strong>{props.preview.summary.folders}</strong>
-            </div>
-            <div>
-              <span>环境</span>
-              <strong>{props.preview.summary.environments}</strong>
-            </div>
-            <Button size="xs" color="dark" onClick={props.onApplyImport}>
-              应用到当前项目
-            </Button>
-          </div>
+            {props.previewInfo?.conflicts.length ? (
+              <div className="checks-list" style={{ marginTop: 12 }}>
+                {props.previewInfo.conflicts.slice(0, 6).map(item => (
+                  <div key={item.importedRequestId} className="check-result-row">
+                    <span className="tree-method-pill method-put">Conflict</span>
+                    <div className="tree-row-copy">
+                      <strong>{item.importedName}</strong>
+                      <span>{item.folderPath || 'root'} · target: {item.targetName}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </>
         ) : (
           <Text c="dimmed">先预览本地文件或远程 URL。导入后会自动转换为项目 / 分类 / 接口 / 用例结构。</Text>
         )}

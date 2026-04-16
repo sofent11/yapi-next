@@ -4,7 +4,8 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
 import { IconRefresh } from '@tabler/icons-react';
-import { slugify, type WorkspaceIndex } from '@yapi-debugger/schema';
+import { resolveRequest } from '@yapi-debugger/core';
+import { createEmptyCase, type RunHistoryEntry, slugify, type WorkspaceIndex } from '@yapi-debugger/schema';
 import {
   chooseDirectory,
   chooseImportFile,
@@ -18,11 +19,14 @@ import {
   createCaseForRequest,
   createRequestInWorkspace,
   createWorkspace,
+  buildImportPreviewSummary,
+  clearRunHistory,
   deleteCaseInWorkspace,
   deleteCategoryInWorkspace,
   deleteRequestInWorkspace,
   duplicateCaseInWorkspace,
   duplicateRequestInWorkspace,
+  loadRunHistory,
   importFromFile,
   importFromUrl,
   importIntoWorkspace,
@@ -31,11 +35,14 @@ import {
   renameCategoryInWorkspace,
   renameRequestInWorkspace,
   runResolvedRequest,
+  saveRunHistory,
   saveEnvironment,
   saveProject,
   saveRequestRecord
 } from './lib/workspace';
-import { AppRail } from './components/panels/AppRail';
+import { AppRail, type AppRailView } from './components/panels/AppRail';
+import { EnvironmentCenterPanel } from './components/panels/EnvironmentCenterPanel';
+import { HistoryPanel } from './components/panels/HistoryPanel';
 import { ImportPanel } from './components/panels/ImportPanel';
 import { InterfaceTreePanel } from './components/panels/InterfaceTreePanel';
 import { WelcomePanel } from './components/panels/WelcomePanel';
@@ -134,6 +141,11 @@ export function App() {
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState('');
   const [uiState, setUiState] = useState<WorkspaceUiState>(defaultWorkspaceUiState());
+  const [activeView, setActiveView] = useState<AppRailView>('workspace');
+  const [historyEntries, setHistoryEntries] = useState<RunHistoryEntry[]>([]);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [selectedExampleName, setSelectedExampleName] = useState<string | null>(null);
+  const [importStrategy, setImportStrategy] = useState<'append' | 'replace'>('append');
 
   const requestId = selectedRequestId(store.selectedNode);
   const caseId = selectedCaseId(store.selectedNode);
@@ -151,9 +163,29 @@ export function App() {
     });
   }, [store.workspace, categoryPath]);
 
+  const currentRequestPreview = useMemo(() => {
+    if (!store.workspace || !requestId || !store.draftRequest) return null;
+    try {
+      return resolveRequest(
+        store.workspace.project,
+        store.draftRequest,
+        store.draftCases.find(item => item.id === caseId),
+        selectedEnvironment || undefined
+      );
+    } catch (_error) {
+      return null;
+    }
+  }, [store.workspace, store.draftRequest, store.draftCases, caseId, selectedEnvironment, requestId]);
+
+  const importPreviewInfo = useMemo(() => {
+    if (!store.workspace || !store.importPreview) return null;
+    return buildImportPreviewSummary(store.workspace, store.importPreview);
+  }, [store.workspace, store.importPreview]);
+
   function applyWorkspaceState(workspace: WorkspaceIndex) {
     const nextUi = loadWorkspaceUiState(workspace.root);
     setUiState(nextUi);
+    setSelectedExampleName(null);
     startTransition(() => {
       store.setWorkspace(workspace);
       store.selectNode(nextUi.lastSelectedNode);
@@ -176,20 +208,24 @@ export function App() {
   }
 
   function handleSelectProject() {
+    setActiveView('settings');
     store.selectNode({ kind: 'project' });
   }
 
   function handleSelectCategory(path: string) {
+    setActiveView('workspace');
     store.selectNode({ kind: 'category', path });
   }
 
   function handleSelectRequest(nextRequestId: string) {
     expandRequest(nextRequestId);
+    setActiveView('workspace');
     store.selectNode({ kind: 'request', requestId: nextRequestId });
   }
 
   function handleSelectCase(nextRequestId: string, nextCaseId: string) {
     expandRequest(nextRequestId);
+    setActiveView('workspace');
     store.selectNode({ kind: 'case', requestId: nextRequestId, caseId: nextCaseId });
   }
 
@@ -215,6 +251,24 @@ export function App() {
     if (!selectedId) return;
     expandRequest(selectedId);
   }, [requestId]);
+
+  useEffect(() => {
+    setSelectedExampleName(null);
+  }, [requestId, caseId]);
+
+  useEffect(() => {
+    if (!store.workspace?.root) {
+      setHistoryEntries([]);
+      setSelectedHistoryId(null);
+      return;
+    }
+    loadRunHistory(store.workspace.root)
+      .then(entries => {
+        setHistoryEntries(entries);
+        setSelectedHistoryId(entries[0]?.id || null);
+      })
+      .catch(() => undefined);
+  }, [store.workspace?.root]);
 
   useEffect(() => {
     const unlistenPromise = listenMenuActions(payload => {
@@ -332,15 +386,10 @@ export function App() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!store.workspace) throw new Error('Open a workspace first');
-
-      if (store.selectedNode.kind === 'project') {
-        if (!store.draftProject) throw new Error('Project draft missing');
+      if (store.draftProject) {
         await saveProject(store.workspace.root, store.draftProject);
-        await Promise.all(
-          store.workspace.environments.map(item => saveEnvironment(store.workspace!.root, item.document))
-        );
-        return openWorkspace(store.workspace.root);
       }
+      await Promise.all(store.workspace.environments.map(item => saveEnvironment(store.workspace!.root, item.document)));
 
       if (store.selectedNode.kind === 'request' || store.selectedNode.kind === 'case') {
         if (!store.draftRequest) throw new Error('Request draft missing');
@@ -358,7 +407,7 @@ export function App() {
         return openWorkspace(store.workspace.root);
       }
 
-      throw new Error('Nothing to save on this view');
+      return openWorkspace(store.workspace.root);
     },
     onSuccess(workspace) {
       applyWorkspaceState(workspace);
@@ -369,14 +418,28 @@ export function App() {
     }
   });
 
+  async function finalizeRun(targetRequestId: string, targetCaseId: string | undefined, payload: Awaited<ReturnType<typeof runResolvedRequest>>) {
+    if (!store.workspace) return;
+    store.setResponse(payload.response, payload.checkResults);
+    setSelectedExampleName(null);
+    await saveRunHistory(store.workspace, targetRequestId, targetCaseId, payload.preview, payload.response, payload.checkResults);
+    const nextHistory = await loadRunHistory(store.workspace.root);
+    setHistoryEntries(nextHistory);
+    setSelectedHistoryId(nextHistory[0]?.id || null);
+    notifications.show({
+      color: payload.response.ok ? 'teal' : 'yellow',
+      message: `Request completed with ${payload.response.status}`
+    });
+  }
+
   const runMutation = useMutation({
     mutationFn: async () => {
       if (!store.workspace || !requestId) throw new Error('Select an interface first');
       return runResolvedRequest(store.workspace, requestId, caseId || undefined);
     },
-    onSuccess(response) {
-      store.setResponse(response);
-      notifications.show({ color: 'teal', message: `Request completed with ${response.status}` });
+    async onSuccess(payload) {
+      if (!requestId) return;
+      await finalizeRun(requestId, caseId || undefined, payload);
     },
     onError(error) {
       notifications.show({ color: 'red', message: (error as Error).message || 'Run failed' });
@@ -418,7 +481,11 @@ export function App() {
         ? (await importFromUrl(importUrl.trim(), store.importAuth)).source
         : importFileMutation.data?.source;
       if (!source) throw new Error('Import source missing');
-      await importIntoWorkspace(store.workspace.root, source);
+      const applied = await importIntoWorkspace(store.workspace.root, source, store.workspace, importStrategy);
+      notifications.show({
+        color: 'teal',
+        message: `Import applied: +${applied.summary.added}, updated ${applied.summary.updated}`
+      });
       return openWorkspace(store.workspace.root);
     },
     onSuccess(workspace) {
@@ -752,6 +819,153 @@ export function App() {
     window.addEventListener('mouseup', handleUp);
   }
 
+  async function handleAddEnvironment() {
+    if (!store.workspace) return;
+    const nextName = window.prompt('输入新的环境名称', 'staging')?.trim();
+    if (!nextName) return;
+    if (store.workspace.environments.some(item => item.document.name === nextName)) {
+      notifications.show({ color: 'red', message: '环境名称已存在' });
+      return;
+    }
+    await saveEnvironment(store.workspace.root, {
+      schemaVersion: 1,
+      name: nextName,
+      vars: {},
+      headers: [],
+      authProfiles: []
+    });
+    await reloadWorkspace();
+    store.setActiveEnvironment(nextName);
+    setActiveView('environments');
+  }
+
+  async function handleReplayHistory(entry: RunHistoryEntry) {
+    try {
+      if (!store.workspace) return;
+      handleSelectRequest(entry.requestId);
+      if (entry.caseId) {
+        handleSelectCase(entry.requestId, entry.caseId);
+      }
+      setActiveView('workspace');
+      const payload = await runResolvedRequest(store.workspace, entry.requestId, entry.caseId);
+      await finalizeRun(entry.requestId, entry.caseId, payload);
+    } catch (error) {
+      notifications.show({ color: 'red', message: (error as Error).message || 'Replay failed' });
+    }
+  }
+
+  async function handleDuplicateHistoryAsCase(entry: RunHistoryEntry) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === entry.requestId);
+    if (!record) {
+      notifications.show({ color: 'red', message: '原始接口不存在，无法复制为用例' });
+      return;
+    }
+
+    const nextCase = createEmptyCase(record.request.id, `${entry.caseName || 'Replay'} ${historyEntries.length + 1}`);
+    nextCase.environment = entry.environmentName;
+    nextCase.overrides = {
+      method: entry.request.method,
+      url: entry.request.url,
+      headers: entry.request.headers,
+      query: entry.request.query,
+      body: entry.request.body,
+      runtime: {
+        timeoutMs: entry.request.timeoutMs || 30000,
+        followRedirects: entry.request.followRedirects ?? true
+      }
+    };
+
+    await saveRequestRecord(
+      store.workspace.root,
+      record.folderSegments,
+      record.request,
+      [...record.cases, nextCase],
+      record.resourceDirPath,
+      record.requestFilePath
+    );
+    await reloadWorkspace({ kind: 'case', requestId: record.request.id, caseId: nextCase.id });
+    notifications.show({ color: 'teal', message: '已从历史记录创建用例' });
+  }
+
+  async function handleClearHistory() {
+    if (!store.workspace) return;
+    await clearRunHistory(store.workspace.root);
+    setHistoryEntries([]);
+    setSelectedHistoryId(null);
+    notifications.show({ color: 'teal', message: '历史记录已清空' });
+  }
+
+  async function copyToClipboard(value: string, successMessage: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      notifications.show({ color: 'teal', message: successMessage });
+    } catch (error) {
+      notifications.show({ color: 'red', message: (error as Error).message || 'Copy failed' });
+    }
+  }
+
+  function buildCurl(preview: NonNullable<typeof currentRequestPreview>) {
+    const parts = [`curl -X ${preview.method}`];
+    preview.headers
+      .filter(item => item.enabled)
+      .forEach(item => {
+        parts.push(`-H ${JSON.stringify(`${item.name}: ${item.value}`)}`);
+      });
+    preview.query
+      .filter(item => item.enabled)
+      .forEach(item => {
+        parts.push(`--data-urlencode ${JSON.stringify(`${item.name}=${item.value}`)}`);
+      });
+    if (preview.body.mode === 'json' || preview.body.mode === 'text') {
+      if (preview.body.text) parts.push(`--data ${JSON.stringify(preview.body.text)}`);
+    }
+    if (preview.body.mode === 'form-urlencoded') {
+      preview.body.fields
+        .filter(item => item.enabled)
+        .forEach(item => parts.push(`--data-urlencode ${JSON.stringify(`${item.name}=${item.value}`)}`));
+    }
+    if (preview.body.mode === 'multipart') {
+      preview.body.fields
+        .filter(item => item.enabled)
+        .forEach(item => {
+          if (item.kind === 'file') {
+            parts.push(`-F ${JSON.stringify(`${item.name}=@${item.filePath || item.value}`)}`);
+          } else {
+            parts.push(`-F ${JSON.stringify(`${item.name}=${item.value}`)}`);
+          }
+        });
+    }
+    parts.push(JSON.stringify(preview.url));
+    return parts.join(' ');
+  }
+
+  async function handleSaveResponseAsExample(replace = false) {
+    if (!store.response || !store.draftRequest) return;
+    const nextName = replace
+      ? selectedExampleName
+      : window.prompt('输入示例名称', `response-${store.response.status}`)?.trim();
+    if (!nextName) return;
+    const nextExamples = replace
+      ? store.draftRequest.examples.map(example =>
+          example.name === nextName
+            ? { ...example, status: store.response!.status, mimeType: 'application/json', text: store.response!.bodyText }
+            : example
+        )
+      : [
+          ...store.draftRequest.examples,
+          {
+            name: nextName,
+            status: store.response.status,
+            mimeType: 'application/json',
+            text: store.response.bodyText
+          }
+        ];
+    store.updateRequest({ ...store.draftRequest, examples: nextExamples });
+    setSelectedExampleName(nextName);
+    saveMutation.mutate();
+  }
+
   if (!store.workspace) {
     return (
       <WelcomePanel
@@ -807,9 +1021,14 @@ export function App() {
           >
             <AppRail
               workspaceName={store.workspace.project.name}
-              requestCount={store.workspace.requests.length}
-              activeEnvironment={store.activeEnvironmentName}
               isDirty={store.isDirty}
+              activeView={activeView}
+              onChangeView={view => {
+                setActiveView(view);
+                if (view === 'settings') {
+                  store.selectNode({ kind: 'project' });
+                }
+              }}
             />
 
             <InterfaceTreePanel
@@ -850,59 +1069,97 @@ export function App() {
 
             <div className="workspace-resizer" onMouseDown={handleTreeResizeStart} />
 
-            <WorkspaceMainPanel
-              workspace={store.workspace}
-              selectedNode={store.selectedNode}
-              categoryRequests={categoryRequests}
-              draftProject={store.draftProject}
-              request={store.draftRequest}
-              response={store.response}
-              cases={store.draftCases}
-              activeEnvironmentName={store.activeEnvironmentName}
-              selectedEnvironment={selectedEnvironment}
-              isRunning={runMutation.isPending}
-              isDirty={store.isDirty}
-              activeRequestTab={uiState.activeRequestTab}
-              activeResponseTab={uiState.activeResponseTab}
-              mainSplitRatio={uiState.mainSplitRatio}
-              onProjectChange={project => store.updateProject(project)}
-              onDeleteProject={handleDeleteProject}
-              onEnvironmentChange={name => store.setActiveEnvironment(name)}
-              onEnvironmentUpdate={(name, updater) => store.updateEnvironment(name, updater)}
-              onRequestChange={requestDocument => store.updateRequest(requestDocument)}
-              onCasesChange={cases => store.updateCaseList(cases)}
-              onCaseSelect={nextCaseId =>
-                requestId
-                  ? nextCaseId
-                    ? handleSelectCase(requestId, nextCaseId)
-                    : handleSelectRequest(requestId)
-                  : undefined
-              }
-              onAddCase={() => handleAddCase()}
-              onRun={() => runMutation.mutate()}
-              onSave={() => saveMutation.mutate()}
-              onSelectRequest={handleSelectRequest}
-              onOpenImport={() => setImportOpened(true)}
-              onCreateInterface={() => handleCreateInterface()}
-              onRequestTabChange={tab =>
-                updateUiState(current => ({
-                  ...current,
-                  activeRequestTab: tab
-                }))
-              }
-              onResponseTabChange={tab =>
-                updateUiState(current => ({
-                  ...current,
-                  activeResponseTab: tab
-                }))
-              }
-              onMainSplitRatioChange={ratio =>
-                updateUiState(current => ({
-                  ...current,
-                  mainSplitRatio: ratio
-                }))
-              }
-            />
+            {activeView === 'history' ? (
+              <HistoryPanel
+                entries={historyEntries}
+                selectedEntryId={selectedHistoryId}
+                onSelectEntry={setSelectedHistoryId}
+                onReplay={handleReplayHistory}
+                onDuplicateAsCase={handleDuplicateHistoryAsCase}
+                onClear={handleClearHistory}
+              />
+            ) : activeView === 'environments' ? (
+              <EnvironmentCenterPanel
+                workspace={store.workspace}
+                draftProject={store.draftProject}
+                activeEnvironmentName={store.activeEnvironmentName}
+                selectedEnvironment={selectedEnvironment}
+                onEnvironmentChange={name => store.setActiveEnvironment(name)}
+                onProjectChange={project => store.updateProject(project)}
+                onEnvironmentUpdate={(name, updater) => store.updateEnvironment(name, updater)}
+                onAddEnvironment={handleAddEnvironment}
+                onSave={() => saveMutation.mutate()}
+              />
+            ) : (
+              <WorkspaceMainPanel
+                workspace={store.workspace}
+                selectedNode={store.selectedNode}
+                categoryRequests={categoryRequests}
+                draftProject={store.draftProject}
+                request={store.draftRequest}
+                response={store.response}
+                requestPreview={currentRequestPreview}
+                checkResults={store.checkResults}
+                cases={store.draftCases}
+                activeEnvironmentName={store.activeEnvironmentName}
+                selectedEnvironment={selectedEnvironment}
+                isRunning={runMutation.isPending}
+                isDirty={store.isDirty}
+                activeRequestTab={uiState.activeRequestTab}
+                activeResponseTab={uiState.activeResponseTab}
+                selectedExampleName={selectedExampleName}
+                mainSplitRatio={uiState.mainSplitRatio}
+                onProjectChange={project => store.updateProject(project)}
+                onDeleteProject={handleDeleteProject}
+                onEnvironmentChange={name => store.setActiveEnvironment(name)}
+                onEnvironmentUpdate={(name, updater) => store.updateEnvironment(name, updater)}
+                onRequestChange={requestDocument => store.updateRequest(requestDocument)}
+                onCasesChange={cases => store.updateCaseList(cases)}
+                onCaseSelect={nextCaseId =>
+                  requestId
+                    ? nextCaseId
+                      ? handleSelectCase(requestId, nextCaseId)
+                      : handleSelectRequest(requestId)
+                    : undefined
+                }
+                onAddCase={() => handleAddCase()}
+                onRun={() => runMutation.mutate()}
+                onSave={() => saveMutation.mutate()}
+                onSelectRequest={handleSelectRequest}
+                onOpenImport={() => setImportOpened(true)}
+                onCreateInterface={() => handleCreateInterface()}
+                onRequestTabChange={tab =>
+                  updateUiState(current => ({
+                    ...current,
+                    activeRequestTab: tab
+                  }))
+                }
+                onResponseTabChange={tab =>
+                  updateUiState(current => ({
+                    ...current,
+                    activeResponseTab: tab
+                  }))
+                }
+                onSelectExample={setSelectedExampleName}
+                onCopyBody={() =>
+                  copyToClipboard(
+                    selectedExampleName
+                      ? store.draftRequest?.examples.find(item => item.name === selectedExampleName)?.text || ''
+                      : store.response?.bodyText || '',
+                    'Response body copied'
+                  )
+                }
+                onCopyCurl={() => currentRequestPreview && copyToClipboard(buildCurl(currentRequestPreview), 'cURL copied')}
+                onSaveExample={() => handleSaveResponseAsExample(false)}
+                onReplaceExample={() => handleSaveResponseAsExample(true)}
+                onMainSplitRatioChange={ratio =>
+                  updateUiState(current => ({
+                    ...current,
+                    mainSplitRatio: ratio
+                  }))
+                }
+              />
+            )}
           </main>
         </div>
       </div>
@@ -910,10 +1167,13 @@ export function App() {
       <Drawer opened={importOpened} onClose={() => setImportOpened(false)} title="导入接口规范" position="right" size="lg">
         <ImportPanel
           preview={store.importPreview}
+          previewInfo={importPreviewInfo}
           importAuth={store.importAuth}
           importUrl={importUrl}
+          importStrategy={importStrategy}
           setImportUrl={setImportUrl}
           setImportAuth={auth => store.setImportAuth(auth)}
+          setImportStrategy={setImportStrategy}
           onPickFile={() => importFileMutation.mutate()}
           onImportUrl={() => importUrlMutation.mutate()}
           onApplyImport={() => applyImportMutation.mutate()}

@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import type {
   ImportAuth,
+  RunHistoryEntry,
   SendRequestInput,
   SendRequestResult
 } from '@yapi-debugger/schema';
@@ -54,6 +55,14 @@ export async function chooseImportFile() {
   return typeof result === 'string' ? result : null;
 }
 
+export async function chooseRequestBodyFile() {
+  const result = await open({
+    multiple: false,
+    title: '选择上传文件'
+  });
+  return typeof result === 'string' ? result : null;
+}
+
 export async function scanWorkspace(root: string) {
   return invoke<WorkspaceScanPayload>('workspace_scan', { root });
 }
@@ -84,6 +93,18 @@ export async function fetchImportUrl(url: string, auth: ImportAuth) {
 
 export async function sendRequest(input: SendRequestInput) {
   return invoke<SendRequestResult>('request_send', { input });
+}
+
+export async function loadHistory(workspaceRoot?: string) {
+  return invoke<RunHistoryEntry[]>('history_load', { workspaceRoot });
+}
+
+export async function appendHistory(entry: RunHistoryEntry) {
+  return invoke<void>('history_append', { entry });
+}
+
+export async function clearHistory(workspaceRoot?: string) {
+  return invoke<void>('history_clear', { workspaceRoot });
 }
 
 export async function syncMenuState(recentRoots: string[], hasWorkspace: boolean) {

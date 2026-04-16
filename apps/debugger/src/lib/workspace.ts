@@ -1,12 +1,14 @@
 import {
   buildWorkspaceIndex,
   createProjectSeed,
+  evaluateChecks,
   materializeEnvironmentDocument,
   materializeProjectDocument,
   materializeRequestDocuments,
   resolveRequest
 } from '@yapi-debugger/core';
 import {
+  createDefaultEnvironment,
   createId,
   createEmptyCase,
   createEmptyRequest,
@@ -14,17 +16,23 @@ import {
   importAuthSchema,
   slugify,
   type CaseDocument,
+  type CheckResult,
   type EnvironmentDocument,
   type ImportAuth,
   type ImportResult,
   type ProjectDocument,
   type RequestDocument,
+  type ResolvedRequestPreview,
+  type RunHistoryEntry,
   type WorkspaceIndex
 } from '@yapi-debugger/schema';
 import { importSourceText } from '@yapi-debugger/importers';
 import {
+  appendHistory,
+  clearHistory,
   deleteEntry,
   fetchImportUrl,
+  loadHistory,
   readImportFile,
   scanWorkspace,
   sendRequest,
@@ -50,6 +58,53 @@ export async function openWorkspace(root: string) {
   const payload = await scanWorkspace(root);
   return scanPayloadToIndex(payload);
 }
+
+function requestKey(record: { request: RequestDocument; folderSegments: string[] }) {
+  const folderPath = record.folderSegments.join('/');
+  const methodPathKey = `${record.request.method}:${record.request.path || record.request.url || record.request.name}`;
+  const folderNameKey = `${folderPath}:${slugify(record.request.name)}`;
+  return { folderPath, methodPathKey, folderNameKey };
+}
+
+function conflictsWithRecord(
+  left: { request: RequestDocument; folderSegments: string[] },
+  right: { request: RequestDocument; folderSegments: string[] }
+) {
+  const leftKey = requestKey(left);
+  const rightKey = requestKey(right);
+  return leftKey.methodPathKey === rightKey.methodPathKey || leftKey.folderNameKey === rightKey.folderNameKey;
+}
+
+function ensureUniqueRequestName(
+  request: RequestDocument,
+  folderSegments: string[],
+  existingRecords: Array<{ request: RequestDocument; folderSegments: string[] }>
+) {
+  const siblingNames = existingRecords
+    .filter(record => record.folderSegments.join('/') === folderSegments.join('/'))
+    .map(record => record.request.name);
+  const nextName = uniqueCopyName(request.name, siblingNames);
+  return nextName === request.name ? request : { ...request, name: nextName };
+}
+
+export type ImportConflictStrategy = 'append' | 'replace';
+
+export type ImportApplySummary = {
+  added: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+};
+
+export type ImportPreviewSummary = {
+  source: ImportResult;
+  conflicts: Array<{
+    importedRequestId: string;
+    importedName: string;
+    targetName: string;
+    folderPath: string;
+  }>;
+};
 
 export async function createWorkspace(root: string, projectName: string) {
   const seed = createProjectSeed({ projectName, includeSampleRequest: true });
@@ -272,20 +327,121 @@ export async function deleteCategoryInWorkspace(workspace: WorkspaceIndex, curre
   await Promise.all(targets.map(record => deleteRequestInWorkspace(record)));
 }
 
+export function buildImportPreviewSummary(workspace: WorkspaceIndex, preview: ImportResult): ImportPreviewSummary {
+  const conflicts = preview.requests.flatMap(imported => {
+    const target = workspace.requests.find(record => conflictsWithRecord(record, imported));
+    return target
+      ? [
+          {
+            importedRequestId: imported.request.id,
+            importedName: imported.request.name,
+            targetName: target.request.name,
+            folderPath: imported.folderSegments.join('/')
+          }
+        ]
+      : [];
+  });
+
+  return {
+    source: preview,
+    conflicts
+  };
+}
+
 export async function importIntoWorkspace(
   root: string,
-  source: ImportSourcePayload
+  source: ImportSourcePayload,
+  workspace: WorkspaceIndex,
+  strategy: ImportConflictStrategy = 'append'
 ) {
   const result = importSourceText(source.content);
-  const projectFile = materializeProjectDocument(result.project, root);
+  const summary: ImportApplySummary = {
+    added: 0,
+    updated: 0,
+    skipped: 0,
+    failed: 0
+  };
+
+  const nextProject = {
+    ...workspace.project,
+    runtime: {
+      ...workspace.project.runtime,
+      baseUrl: result.project.runtime.baseUrl || workspace.project.runtime.baseUrl
+    }
+  };
+  const projectFile = materializeProjectDocument(nextProject, root);
   await writeDocument(projectFile.path, projectFile.content);
-  await Promise.all(result.environments.map((environment: EnvironmentDocument) => {
-    const file = materializeEnvironmentDocument(environment, root);
-    return writeDocument(file.path, file.content);
+
+  const nextEnvironments = new Map<string, EnvironmentDocument>();
+  workspace.environments.forEach(item => {
+    nextEnvironments.set(item.document.name, item.document);
+  });
+  result.environments.forEach(environment => {
+    const current = nextEnvironments.get(environment.name);
+    nextEnvironments.set(
+      environment.name,
+      current
+        ? {
+            ...current,
+            vars: strategy === 'replace' ? environment.vars : { ...current.vars, ...environment.vars },
+            headers: strategy === 'replace' ? environment.headers : [...current.headers, ...environment.headers],
+            authProfiles:
+              strategy === 'replace'
+                ? environment.authProfiles
+                : [...current.authProfiles, ...environment.authProfiles.filter(profile => !current.authProfiles.some(item => item.name === profile.name))]
+          }
+        : environment
+    );
+  });
+  if (!nextEnvironments.has('shared')) {
+    nextEnvironments.set('shared', createDefaultEnvironment('shared'));
+  }
+
+  await Promise.all(
+    [...nextEnvironments.values()].map(environment => {
+      const file = materializeEnvironmentDocument(environment, root);
+      return writeDocument(file.path, file.content);
+    })
+  );
+
+  const incomingRecords = result.requests.map(record => ({
+    ...record,
+    request: {
+      ...record.request,
+      name: record.request.name.trim() || 'Imported Request'
+    }
   }));
-  const writes = materializeRequestDocuments(result.requests, root);
+  const nextRecords: typeof incomingRecords = [];
+  const deleteTargets: WorkspaceIndex['requests'] = [];
+  for (const imported of incomingRecords) {
+    const target = workspace.requests.find(record => conflictsWithRecord(record, imported));
+    if (!target) {
+      summary.added += 1;
+      nextRecords.push({
+        ...imported,
+        request: ensureUniqueRequestName(imported.request, imported.folderSegments, [...workspace.requests, ...nextRecords])
+      });
+      continue;
+    }
+
+    if (strategy === 'replace') {
+      summary.updated += 1;
+      deleteTargets.push(target);
+      nextRecords.push(imported);
+      continue;
+    }
+
+    summary.added += 1;
+    nextRecords.push({
+      ...imported,
+      request: ensureUniqueRequestName(imported.request, imported.folderSegments, [...workspace.requests, ...nextRecords])
+    });
+  }
+
+  await Promise.all(deleteTargets.map(record => deleteRequestInWorkspace(record)));
+  const writes = materializeRequestDocuments(nextRecords, root);
   await Promise.all(writes.map(item => writeDocument(item.path, item.content)));
-  return result;
+  return { result, summary };
 }
 
 export async function importFromFile(path: string) {
@@ -305,7 +461,7 @@ export async function importFromUrl(url: string, auth: ImportAuth) {
   };
 }
 
-export async function runResolvedRequest(workspace: WorkspaceIndex, requestId: string, caseId?: string) {
+function resolveRunContext(workspace: WorkspaceIndex, requestId: string, caseId?: string) {
   const record = workspace.requests.find((item: WorkspaceIndex['requests'][number]) => item.request.id === requestId);
   if (!record) {
     throw new Error('请求不存在');
@@ -315,8 +471,60 @@ export async function runResolvedRequest(workspace: WorkspaceIndex, requestId: s
   const environment = workspace.environments.find(
     (item: WorkspaceIndex['environments'][number]) => item.document.name === environmentName
   )?.document;
-  const input = resolveRequest(workspace.project, record.request, caseDocument, environment);
-  return sendRequest(input);
+  const preview = resolveRequest(workspace.project, record.request, caseDocument, environment);
+  return { record, caseDocument, preview };
+}
+
+export async function runResolvedRequest(workspace: WorkspaceIndex, requestId: string, caseId?: string) {
+  const { record, caseDocument, preview } = resolveRunContext(workspace, requestId, caseId);
+  const response = await sendRequest(preview);
+  const checkResults = caseDocument ? evaluateChecks(response, caseDocument.checks || []) : [];
+  return {
+    preview,
+    response,
+    checkResults,
+    caseDocument,
+    record
+  };
+}
+
+export function previewResolvedRequest(workspace: WorkspaceIndex, requestId: string, caseId?: string): ResolvedRequestPreview {
+  return resolveRunContext(workspace, requestId, caseId).preview;
+}
+
+export async function saveRunHistory(
+  workspace: WorkspaceIndex,
+  requestId: string,
+  caseId: string | undefined,
+  preview: ResolvedRequestPreview,
+  response: Awaited<ReturnType<typeof sendRequest>>,
+  checkResults: CheckResult[]
+) {
+  const record = workspace.requests.find(item => item.request.id === requestId);
+  const caseDocument = record?.cases.find(item => item.id === caseId);
+  if (!record) return;
+
+  const entry: RunHistoryEntry = {
+    id: createId('run'),
+    workspaceRoot: workspace.root,
+    requestId,
+    requestName: record.request.name,
+    caseId,
+    caseName: caseDocument?.name,
+    environmentName: preview.environmentName,
+    request: preview,
+    response,
+    checkResults
+  };
+  await appendHistory(entry);
+}
+
+export async function loadRunHistory(workspaceRoot?: string) {
+  return loadHistory(workspaceRoot);
+}
+
+export async function clearRunHistory(workspaceRoot?: string) {
+  return clearHistory(workspaceRoot);
 }
 
 export function createImportAuth(mode: ImportAuth['mode'] = 'none'): ImportAuth {

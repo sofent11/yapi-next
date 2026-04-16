@@ -6,24 +6,33 @@ import {
   LOCAL_ENV_SUFFIX,
   REQUEST_SUFFIX,
   authConfigSchema,
+  caseCheckSchema,
   caseDocumentSchema,
   createDefaultEnvironment,
   createDefaultProject,
+  createId,
   emptyParameterRow,
   environmentDocumentSchema,
   projectDocumentSchema,
+  resolvedRequestPreviewSchema,
+  runtimeSettingsSchema,
+  sendRequestResultSchema,
   requestBodySchema,
   requestDocumentSchema,
   slugify,
   type AuthConfig,
+  type CaseCheck,
   type CaseDocument,
+  type CheckResult,
   type EnvironmentDocument,
   type ParameterRow,
   type ProjectDocument,
   type RequestBody,
   type RequestDocument,
+  type ResolvedRequestPreview,
   type ResponseExample,
   type SendRequestInput,
+  type SendRequestResult,
   type WorkspaceEnvironmentRecord,
   type WorkspaceIndex,
   type WorkspaceRequestRecord,
@@ -47,10 +56,7 @@ export type ProjectSeed = {
   includeSampleRequest?: boolean;
 };
 
-export type ResolvedRequest = SendRequestInput & {
-  name: string;
-  environmentName?: string;
-};
+export type ResolvedRequest = ResolvedRequestPreview;
 
 export function parseYamlDocument<T>(content: string): T {
   return YAML.parse(content) as T;
@@ -287,7 +293,7 @@ function cleanRows(rows: ParameterRow[]) {
 
 function normalizeBody(body: RequestBody): RequestBody {
   const next = requestBodySchema.parse(body);
-  if (next.mode === 'form') {
+  if (next.mode === 'form-urlencoded' || next.mode === 'multipart') {
     return {
       ...next,
       fields: cleanRows(next.fields)
@@ -429,10 +435,181 @@ function mergeRows(baseRows: ParameterRow[], overrideRows?: ParameterRow[]) {
   return cleanRows(overrideRows);
 }
 
-function mergeAuth(baseAuth: AuthConfig, overrideAuth?: AuthConfig): AuthConfig {
-  if (!overrideAuth) return authConfigSchema.parse(baseAuth);
-  if (overrideAuth.type === 'inherit') return authConfigSchema.parse(baseAuth);
-  return authConfigSchema.parse(overrideAuth);
+function mergeAuth(baseAuth: AuthConfig, overrideAuth?: AuthConfig, environment?: EnvironmentDocument) {
+  const next = !overrideAuth || overrideAuth.type === 'inherit' ? authConfigSchema.parse(baseAuth) : authConfigSchema.parse(overrideAuth);
+  if (next.type !== 'profile') {
+    return {
+      auth: next,
+      authSource: next.type === 'inherit' ? 'inherit' : next.type
+    };
+  }
+
+  const profile = environment?.authProfiles.find(item => item.name === next.profileName);
+  if (!profile) {
+    return {
+      auth: authConfigSchema.parse({ type: 'none' }),
+      authSource: `missing profile: ${next.profileName || 'unknown'}`
+    };
+  }
+
+  return {
+    auth: authConfigSchema.parse(profile.auth),
+    authSource: `environment profile: ${profile.name}`
+  };
+}
+
+function mergeRuntime(request: RequestDocument, caseDocument: CaseDocument | undefined) {
+  return runtimeSettingsSchema.parse({
+    ...request.runtime,
+    ...(caseDocument?.overrides.runtime || {})
+  });
+}
+
+function encodeBasicAuth(username: string, password: string) {
+  if (typeof btoa === 'function') {
+    return btoa(`${username}:${password}`);
+  }
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  const source = `${username}:${password}`;
+  let output = '';
+  let index = 0;
+  while (index < source.length) {
+    const first = source.charCodeAt(index++);
+    const second = source.charCodeAt(index++);
+    const third = source.charCodeAt(index++);
+    const missingSecond = Number.isNaN(second);
+    const missingThird = Number.isNaN(third);
+    const firstBlock = first >> 2;
+    const secondBlock = ((first & 3) << 4) | ((second || 0) >> 4);
+    const thirdBlock = missingSecond
+      ? 64
+      : ((second & 15) << 2) | ((third || 0) >> 6);
+    const fourthBlock = missingSecond || missingThird ? 64 : third & 63;
+    output +=
+      alphabet.charAt(firstBlock) +
+      alphabet.charAt(secondBlock) +
+      alphabet.charAt(thirdBlock) +
+      alphabet.charAt(fourthBlock);
+  }
+  return output;
+}
+
+function normalizedPathValue(input: string) {
+  const value = input.trim();
+  if (!value) return '/';
+  return value.startsWith('$.') ? value.slice(2) : value.startsWith('$') ? value.slice(1) : value;
+}
+
+function tokenizedPath(input: string) {
+  return normalizedPathValue(input)
+    .replace(/\[(\d+)\]/g, '.$1')
+    .split('.')
+    .filter(Boolean);
+}
+
+function readJsonPath(payload: unknown, path: string) {
+  return tokenizedPath(path).reduce<unknown>((current, segment) => {
+    if (current == null) return undefined;
+    if (Array.isArray(current)) {
+      const index = Number(segment);
+      return Number.isInteger(index) ? current[index] : undefined;
+    }
+    if (typeof current === 'object') {
+      return (current as Record<string, unknown>)[segment];
+    }
+    return undefined;
+  }, payload);
+}
+
+function stringifyValue(input: unknown) {
+  if (typeof input === 'string') return input;
+  if (input == null) return '';
+  try {
+    return JSON.stringify(input);
+  } catch (_error) {
+    return String(input);
+  }
+}
+
+function parseJsonPayload(bodyText: string) {
+  try {
+    return JSON.parse(bodyText) as unknown;
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+export function evaluateChecks(response: SendRequestResult, checks: CaseCheck[]): CheckResult[] {
+  const parsedResponse = sendRequestResultSchema.parse(response);
+  const jsonPayload = parseJsonPayload(parsedResponse.bodyText);
+  const headerMap = new Map(parsedResponse.headers.map(item => [item.name.toLowerCase(), item.value]));
+
+  return checks
+    .filter(check => check.enabled)
+    .map(check => {
+      const normalized = caseCheckSchema.parse(check);
+      const label = normalized.label || normalized.type;
+
+      if (normalized.type === 'status-equals') {
+        const expected = normalized.expected || '200';
+        const actual = String(parsedResponse.status);
+        return {
+          id: normalized.id,
+          label,
+          ok: actual === expected,
+          message: actual === expected ? `Status is ${actual}` : `Expected status ${expected}, got ${actual}`,
+          expected,
+          actual
+        };
+      }
+
+      if (normalized.type === 'header-includes') {
+        const actual = headerMap.get(normalized.path.trim().toLowerCase()) || '';
+        const expected = normalized.expected || '';
+        return {
+          id: normalized.id,
+          label,
+          ok: actual.includes(expected),
+          message: actual.includes(expected)
+            ? `Header ${normalized.path} contains expected value`
+            : `Header ${normalized.path} does not include "${expected}"`,
+          expected,
+          actual
+        };
+      }
+
+      if (normalized.type === 'json-exists') {
+        const actualValue = readJsonPath(jsonPayload, normalized.path);
+        const actual = stringifyValue(actualValue);
+        return {
+          id: normalized.id,
+          label,
+          ok: actualValue !== undefined,
+          message:
+            actualValue !== undefined ? `JSON path ${normalized.path} exists` : `JSON path ${normalized.path} not found`,
+          actual
+        };
+      }
+
+      const actualValue = readJsonPath(jsonPayload, normalized.path);
+      const actual = stringifyValue(actualValue);
+      let expectedValue: unknown = normalized.expected;
+      try {
+        expectedValue = JSON.parse(normalized.expected);
+      } catch (_error) {
+        expectedValue = normalized.expected;
+      }
+      const expected = stringifyValue(expectedValue);
+      const ok = stringifyValue(actualValue) === expected;
+      return {
+        id: normalized.id,
+        label,
+        ok,
+        message: ok ? `JSON path ${normalized.path} matches expected value` : `JSON path ${normalized.path} does not match`,
+        expected,
+        actual
+      };
+    });
 }
 
 export function resolveRequest(
@@ -442,7 +619,8 @@ export function resolveRequest(
   environment: EnvironmentDocument | undefined
 ): ResolvedRequest {
   const body = caseDocument?.overrides.body ?? request.body;
-  const auth = mergeAuth(request.auth, caseDocument?.overrides.auth);
+  const { auth, authSource } = mergeAuth(request.auth, caseDocument?.overrides.auth, environment);
+  const runtime = mergeRuntime(request, caseDocument);
   const rawUrl = caseDocument?.overrides.url || request.url;
   const url = applyProjectVariables(rawUrl, project, environment);
   const path = applyProjectVariables(caseDocument?.overrides.path || request.path || '', project, environment);
@@ -453,7 +631,8 @@ export function resolveRequest(
   ];
   const headers = mergeRows(baseHeaders, caseDocument?.overrides.headers).map((row: ParameterRow) => ({
     ...row,
-    value: applyProjectVariables(row.value, project, environment)
+    value: applyProjectVariables(row.value, project, environment),
+    filePath: row.filePath ? applyProjectVariables(row.filePath, project, environment) : row.filePath
   }));
   const query = mergeRows(request.query, caseDocument?.overrides.query).map((row: ParameterRow) => ({
     ...row,
@@ -466,7 +645,8 @@ export function resolveRequest(
     text: applyProjectVariables(resolvedBody.text, project, environment),
     fields: resolvedBody.fields.map((row: ParameterRow) => ({
       ...row,
-      value: applyProjectVariables(row.value, project, environment)
+      value: applyProjectVariables(row.value, project, environment),
+      filePath: row.filePath ? applyProjectVariables(row.filePath, project, environment) : row.filePath
     }))
   };
 
@@ -476,7 +656,9 @@ export function resolveRequest(
     authHeaders.push({
       name: 'Authorization',
       value: `Bearer ${applyProjectVariables(auth.token, project, environment)}`,
-      enabled: true
+      enabled: true,
+      kind: 'text',
+      filePath: undefined
     });
   }
   if (auth.type === 'apikey' && auth.key) {
@@ -484,7 +666,9 @@ export function resolveRequest(
     const row = {
       name: auth.key,
       value: applyProjectVariables(auth.value || '', project, environment),
-      enabled: true
+      enabled: true,
+      kind: 'text' as const,
+      filePath: undefined
     };
     if (target === 'query') {
       authQuery.push(row);
@@ -493,13 +677,15 @@ export function resolveRequest(
     }
   }
   if (auth.type === 'basic' && auth.username) {
-    const value = btoa(
-      `${applyProjectVariables(auth.username, project, environment)}:${applyProjectVariables(auth.password || '', project, environment)}`
-    );
+    const username = applyProjectVariables(auth.username, project, environment);
+    const password = applyProjectVariables(auth.password || '', project, environment);
+    const value = encodeBasicAuth(username, password);
     authHeaders.push({
       name: 'Authorization',
       value: `Basic ${value}`,
-      enabled: true
+      enabled: true,
+      kind: 'text',
+      filePath: undefined
     });
   }
 
@@ -510,16 +696,30 @@ export function resolveRequest(
     candidateUrl = `${baseUrl}${candidateUrl || path || ''}`;
   }
 
-  return {
+  return resolvedRequestPreviewSchema.parse({
     name: caseDocument ? `${request.name} / ${caseDocument.name}` : request.name,
     environmentName: caseDocument?.environment || environment?.name,
+    authSource,
+    requestPath: path || request.path || '/',
     method: caseDocument?.overrides.method || request.method,
     url: candidateUrl,
     headers: authHeaders,
     query: authQuery,
     body: mergedBody,
-    timeoutMs: 30000
-  };
+    timeoutMs: runtime.timeoutMs,
+    followRedirects: runtime.followRedirects
+  });
+}
+
+export function createEmptyCheck(type: CaseCheck['type'] = 'status-equals'): CaseCheck {
+  return caseCheckSchema.parse({
+    id: createId('check'),
+    type,
+    label: '',
+    enabled: true,
+    path: type === 'header-includes' ? 'content-type' : type.startsWith('json-') ? '$.data' : '',
+    expected: type === 'status-equals' ? '200' : ''
+  });
 }
 
 export function inferFolderSegmentsFromPath(filePath: string, root: string) {

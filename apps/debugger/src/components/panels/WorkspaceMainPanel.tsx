@@ -1,17 +1,17 @@
 import { useMemo, useRef } from 'react';
-import { Badge, Button, Select, Text, TextInput, Textarea } from '@mantine/core';
+import { Badge, Button, Select, Text, TextInput } from '@mantine/core';
 import {
   IconAlertTriangle,
   IconDeviceFloppy,
-  IconLayoutGridAdd,
-  IconPlus,
-  IconUpload
+  IconPlus
 } from '@tabler/icons-react';
 import type {
   CaseDocument,
+  CheckResult,
   EnvironmentDocument,
   ProjectDocument,
   RequestDocument,
+  ResolvedRequestPreview,
   SendRequestResult,
   WorkspaceIndex
 } from '@yapi-debugger/schema';
@@ -55,6 +55,8 @@ export function WorkspaceMainPanel(props: {
   draftProject: ProjectDocument | null;
   request: RequestDocument | null;
   response: SendRequestResult | null;
+  requestPreview: ResolvedRequestPreview | null;
+  checkResults: CheckResult[];
   cases: CaseDocument[];
   activeEnvironmentName: string;
   selectedEnvironment: EnvironmentDocument | null;
@@ -62,6 +64,7 @@ export function WorkspaceMainPanel(props: {
   isDirty: boolean;
   activeRequestTab: RequestTab;
   activeResponseTab: ResponseTab;
+  selectedExampleName: string | null;
   mainSplitRatio: number;
   onProjectChange: (project: ProjectDocument) => void;
   onDeleteProject: () => void;
@@ -78,6 +81,11 @@ export function WorkspaceMainPanel(props: {
   onCreateInterface: () => void;
   onRequestTabChange: (tab: RequestTab) => void;
   onResponseTabChange: (tab: ResponseTab) => void;
+  onSelectExample: (name: string | null) => void;
+  onCopyBody: () => void;
+  onCopyCurl: () => void;
+  onSaveExample: () => void;
+  onReplaceExample: () => void;
   onMainSplitRatioChange: (ratio: number) => void;
 }) {
   const splitRef = useRef<HTMLDivElement | null>(null);
@@ -175,7 +183,7 @@ export function WorkspaceMainPanel(props: {
           <div className="inspector-section">
             <h3 className="section-title">Shared Variables</h3>
             <KeyValueEditor
-              rows={Object.entries(project.runtime.vars).map(([name, value]) => ({ name, value, enabled: true }))}
+              rows={Object.entries(project.runtime.vars).map(([name, value]) => ({ name, value, enabled: true, kind: 'text' as const }))}
               onChange={rows =>
                 props.onProjectChange({
                   ...project,
@@ -312,8 +320,17 @@ export function WorkspaceMainPanel(props: {
         <div className="pane-surface">
           <ResponsePanel
             response={props.response}
+            requestPreview={props.requestPreview}
+            requestDocument={request}
+            checkResults={props.checkResults}
+            selectedExampleName={props.selectedExampleName}
             activeTab={props.activeResponseTab}
             onTabChange={props.onResponseTabChange}
+            onSelectExample={props.onSelectExample}
+            onCopyBody={props.onCopyBody}
+            onCopyCurl={props.onCopyCurl}
+            onSaveExample={props.onSaveExample}
+            onReplaceExample={props.onReplaceExample}
           />
         </div>
       </div>

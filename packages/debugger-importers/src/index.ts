@@ -40,7 +40,8 @@ function toRows(items: unknown, keyName = 'name', valueName = 'value') {
       name: String(item[keyName] || item.key || ''),
       value: String(item[valueName] || item.value || ''),
       enabled: item.disabled ? false : true,
-      description: String(item.description || item.desc || '')
+      description: String(item.description || item.desc || ''),
+      kind: 'text' as const
     }))
     .filter(item => item.name);
 }
@@ -153,19 +154,22 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
         name: String(param.name || ''),
         value: param.example != null ? String(param.example) : '',
         enabled: true,
-        description: String(param.description || '')
+        description: String(param.description || ''),
+        kind: 'text' as const
       }));
       const headers = parameters.filter(param => param.in === 'header').map(param => ({
         name: String(param.name || ''),
         value: param.example != null ? String(param.example) : '',
         enabled: true,
-        description: String(param.description || '')
+        description: String(param.description || ''),
+        kind: 'text' as const
       }));
       const pathParams = parameters.filter(param => param.in === 'path').map(param => ({
         name: String(param.name || ''),
         value: param.example != null ? String(param.example) : '',
         enabled: true,
-        description: String(param.description || '')
+        description: String(param.description || ''),
+        kind: 'text' as const
       }));
 
       let body: RequestDocument['body'] = {
@@ -187,7 +191,7 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
           };
         } else if (bodyParam?.in === 'formData') {
           body = {
-            mode: 'form',
+            mode: 'multipart',
             mimeType: 'multipart/form-data',
             text: '',
             fields: parameters
@@ -196,7 +200,8 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
                 name: String(param.name || ''),
                 value: '',
                 enabled: true,
-                description: String(param.description || '')
+                description: String(param.description || ''),
+                kind: param.type === 'file' ? 'file' : 'text'
               }))
           };
         }
@@ -381,10 +386,13 @@ function walkPostmanItems(
             }
           : body.mode === 'urlencoded' || body.mode === 'formdata'
             ? {
-                mode: 'form',
+                mode: body.mode === 'formdata' ? 'multipart' : 'form-urlencoded',
                 mimeType: body.mode === 'formdata' ? 'multipart/form-data' : 'application/x-www-form-urlencoded',
                 text: '',
-                fields: toRows(body[body.mode], 'key', 'value')
+                fields: toRows(body[body.mode], 'key', 'value').map(row => ({
+                  ...row,
+                  kind: body.mode === 'formdata' ? 'file' : 'text'
+                }))
               }
             : {
                 mode: 'none',

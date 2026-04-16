@@ -14,11 +14,13 @@ export const parameterRowSchema = z.object({
   name: z.string().default(''),
   value: z.string().default(''),
   enabled: z.boolean().default(true),
-  description: z.string().optional()
+  description: z.string().optional(),
+  kind: z.enum(['text', 'file']).default('text'),
+  filePath: z.string().optional()
 });
 export type ParameterRow = z.infer<typeof parameterRowSchema>;
 
-export const authTypeSchema = z.enum(['inherit', 'none', 'bearer', 'basic', 'apikey']);
+export const authTypeSchema = z.enum(['inherit', 'none', 'bearer', 'basic', 'apikey', 'profile']);
 export type AuthType = z.infer<typeof authTypeSchema>;
 
 export const authConfigSchema = z.object({
@@ -28,12 +30,19 @@ export const authConfigSchema = z.object({
   password: z.string().optional(),
   key: z.string().optional(),
   value: z.string().optional(),
-  addTo: z.enum(['header', 'query']).optional()
+  addTo: z.enum(['header', 'query']).optional(),
+  profileName: z.string().optional()
 });
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 
+export const runtimeSettingsSchema = z.object({
+  timeoutMs: z.number().int().positive().default(30000),
+  followRedirects: z.boolean().default(true)
+});
+export type RuntimeSettings = z.infer<typeof runtimeSettingsSchema>;
+
 export const requestBodySchema = z.object({
-  mode: z.enum(['none', 'json', 'text', 'form']).default('none'),
+  mode: z.enum(['none', 'json', 'text', 'form-urlencoded', 'multipart']).default('none'),
   mimeType: z.string().optional(),
   text: z.string().default(''),
   file: z.string().optional(),
@@ -98,6 +107,7 @@ export const requestDocumentSchema = z.object({
   pathParams: z.array(parameterRowSchema).default([]),
   body: requestBodySchema.default({ mode: 'none', text: '', fields: [] }),
   auth: authConfigSchema.default({ type: 'inherit' }),
+  runtime: runtimeSettingsSchema.default({ timeoutMs: 30000, followRedirects: true }),
   examples: z.array(responseExampleSchema).default([]),
   order: z.number().int().default(0)
 });
@@ -111,9 +121,28 @@ export const caseOverridesSchema = z.object({
   query: z.array(parameterRowSchema).optional(),
   pathParams: z.array(parameterRowSchema).optional(),
   body: requestBodySchema.optional(),
-  auth: authConfigSchema.optional()
+  auth: authConfigSchema.optional(),
+  runtime: runtimeSettingsSchema.partial().optional()
 });
 export type CaseOverrides = z.infer<typeof caseOverridesSchema>;
+
+export const caseCheckTypeSchema = z.enum([
+  'status-equals',
+  'header-includes',
+  'json-exists',
+  'json-equals'
+]);
+export type CaseCheckType = z.infer<typeof caseCheckTypeSchema>;
+
+export const caseCheckSchema = z.object({
+  id: z.string().min(1),
+  type: caseCheckTypeSchema,
+  label: z.string().default(''),
+  enabled: z.boolean().default(true),
+  path: z.string().default(''),
+  expected: z.string().default('')
+});
+export type CaseCheck = z.infer<typeof caseCheckSchema>;
 
 export const caseDocumentSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION).default(SCHEMA_VERSION),
@@ -122,7 +151,8 @@ export const caseDocumentSchema = z.object({
   extendsRequest: z.string().min(1),
   environment: z.string().optional(),
   notes: z.string().default(''),
-  overrides: caseOverridesSchema.default({})
+  overrides: caseOverridesSchema.default({}),
+  checks: z.array(caseCheckSchema).default([])
 });
 export type CaseDocument = z.infer<typeof caseDocumentSchema>;
 
@@ -262,7 +292,8 @@ export const sendRequestInputSchema = z.object({
   headers: z.array(parameterRowSchema).default([]),
   query: z.array(parameterRowSchema).default([]),
   body: requestBodySchema.default({ mode: 'none', text: '', fields: [] }),
-  timeoutMs: z.number().int().positive().optional()
+  timeoutMs: z.number().int().positive().optional(),
+  followRedirects: z.boolean().optional()
 });
 export type SendRequestInput = z.infer<typeof sendRequestInputSchema>;
 
@@ -285,6 +316,38 @@ export const sendRequestResultSchema = z.object({
 });
 export type SendRequestResult = z.infer<typeof sendRequestResultSchema>;
 
+export const resolvedRequestPreviewSchema = sendRequestInputSchema.extend({
+  name: z.string(),
+  environmentName: z.string().optional(),
+  authSource: z.string().default('none'),
+  requestPath: z.string().default('/')
+});
+export type ResolvedRequestPreview = z.infer<typeof resolvedRequestPreviewSchema>;
+
+export const checkResultSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  ok: z.boolean(),
+  message: z.string(),
+  expected: z.string().optional(),
+  actual: z.string().optional()
+});
+export type CheckResult = z.infer<typeof checkResultSchema>;
+
+export const runHistoryEntrySchema = z.object({
+  id: z.string().min(1),
+  workspaceRoot: z.string(),
+  requestId: z.string(),
+  requestName: z.string(),
+  caseId: z.string().optional(),
+  caseName: z.string().optional(),
+  environmentName: z.string().optional(),
+  request: resolvedRequestPreviewSchema,
+  response: sendRequestResultSchema,
+  checkResults: z.array(checkResultSchema).default([])
+});
+export type RunHistoryEntry = z.infer<typeof runHistoryEntrySchema>;
+
 export function slugify(input: string) {
   return input
     .trim()
@@ -300,7 +363,7 @@ export function createId(prefix: string) {
 }
 
 export function emptyParameterRow(): ParameterRow {
-  return { name: '', value: '', enabled: true };
+  return { name: '', value: '', enabled: true, kind: 'text' };
 }
 
 export function createEmptyRequest(name = 'New Request'): RequestDocument {
@@ -318,6 +381,7 @@ export function createEmptyRequest(name = 'New Request'): RequestDocument {
     pathParams: [],
     body: { mode: 'none', text: '', fields: [] },
     auth: { type: 'inherit' },
+    runtime: { timeoutMs: 30000, followRedirects: true },
     examples: [],
     order: 0
   });
@@ -330,7 +394,8 @@ export function createEmptyCase(requestId: string, name = 'Smoke'): CaseDocument
     name,
     extendsRequest: requestId,
     notes: '',
-    overrides: {}
+    overrides: {},
+    checks: []
   });
 }
 

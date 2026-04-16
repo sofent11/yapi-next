@@ -1,5 +1,9 @@
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
+use reqwest::{
+    header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE},
+    multipart::{Form, Part},
+    redirect::Policy,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -10,7 +14,7 @@ use std::{
 };
 use tauri::{
     menu::{Menu, MenuItemBuilder, SubmenuBuilder},
-    AppHandle, Emitter, Runtime,
+    AppHandle, Emitter, Manager, Runtime,
 };
 
 static WATCHERS: OnceLock<Mutex<HashMap<String, RecommendedWatcher>>> = OnceLock::new();
@@ -66,14 +70,17 @@ struct ImportAuth {
     value: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ParameterRow {
     name: String,
     value: String,
     enabled: bool,
+    #[serde(default = "default_parameter_kind")]
+    kind: String,
+    file_path: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RequestBody {
     mode: String,
@@ -91,15 +98,16 @@ struct SendRequestInput {
     query: Vec<ParameterRow>,
     body: RequestBody,
     timeout_ms: Option<u64>,
+    follow_redirects: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ResponseHeader {
     name: String,
     value: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SendRequestResult {
     ok: bool,
@@ -113,8 +121,83 @@ struct SendRequestResult {
     timestamp: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ResolvedRequestPreview {
+    name: String,
+    environment_name: Option<String>,
+    auth_source: String,
+    request_path: String,
+    method: String,
+    url: String,
+    headers: Vec<ParameterRow>,
+    query: Vec<ParameterRow>,
+    body: RequestBody,
+    timeout_ms: Option<u64>,
+    follow_redirects: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CheckResult {
+    id: String,
+    label: String,
+    ok: bool,
+    message: String,
+    expected: Option<String>,
+    actual: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RunHistoryEntry {
+    id: String,
+    workspace_root: String,
+    request_id: String,
+    request_name: String,
+    case_id: Option<String>,
+    case_name: Option<String>,
+    environment_name: Option<String>,
+    request: ResolvedRequestPreview,
+    response: SendRequestResult,
+    check_results: Vec<CheckResult>,
+}
+
+fn default_parameter_kind() -> String {
+    "text".into()
+}
+
 fn normalize_path(path: &str) -> String {
     path.replace('\\', "/")
+}
+
+fn history_file_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| error.to_string())?;
+    fs::create_dir_all(&cache_dir).map_err(|error| error.to_string())?;
+    Ok(cache_dir.join("request-history.json"))
+}
+
+fn load_history_entries<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<RunHistoryEntry>, String> {
+    let file_path = history_file_path(app)?;
+    if !file_path.exists() {
+        return Ok(Vec::new());
+    }
+    let content = fs::read_to_string(file_path).map_err(|error| error.to_string())?;
+    if content.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    serde_json::from_str(&content).map_err(|error| error.to_string())
+}
+
+fn save_history_entries<R: Runtime>(
+    app: &AppHandle<R>,
+    entries: &[RunHistoryEntry],
+) -> Result<(), String> {
+    let file_path = history_file_path(app)?;
+    let content = serde_json::to_string_pretty(entries).map_err(|error| error.to_string())?;
+    fs::write(file_path, content).map_err(|error| error.to_string())
 }
 
 fn is_workspace_text_file(path: &Path) -> bool {
@@ -386,6 +469,43 @@ fn menu_sync_state(app: AppHandle, recent_roots: Vec<String>, has_workspace: boo
     Ok(())
 }
 
+#[tauri::command]
+fn history_load(app: AppHandle, workspace_root: Option<String>) -> Result<Vec<RunHistoryEntry>, String> {
+    let entries = load_history_entries(&app)?;
+    if let Some(root) = workspace_root {
+        let normalized = normalize_path(&root);
+        return Ok(entries
+            .into_iter()
+            .filter(|entry| normalize_path(&entry.workspace_root) == normalized)
+            .collect());
+    }
+    Ok(entries)
+}
+
+#[tauri::command]
+fn history_append(app: AppHandle, entry: RunHistoryEntry) -> Result<(), String> {
+    let mut entries = load_history_entries(&app)?;
+    entries.insert(0, entry);
+    if entries.len() > 200 {
+        entries.truncate(200);
+    }
+    save_history_entries(&app, &entries)
+}
+
+#[tauri::command]
+fn history_clear(app: AppHandle, workspace_root: Option<String>) -> Result<(), String> {
+    if let Some(root) = workspace_root {
+        let normalized = normalize_path(&root);
+        let next_entries = load_history_entries(&app)?
+            .into_iter()
+            .filter(|entry| normalize_path(&entry.workspace_root) != normalized)
+            .collect::<Vec<_>>();
+        return save_history_entries(&app, &next_entries);
+    }
+
+    save_history_entries(&app, &[])
+}
+
 fn header_map(rows: &[ParameterRow], body: &RequestBody) -> Result<HeaderMap, String> {
     let mut headers = HeaderMap::new();
     for row in rows.iter().filter(|row| row.enabled && !row.name.trim().is_empty()) {
@@ -405,7 +525,7 @@ fn header_map(rows: &[ParameterRow], body: &RequestBody) -> Result<HeaderMap, St
             "json" => {
                 headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
             }
-            "form" => {
+            "form-urlencoded" => {
                 headers.insert(
                     CONTENT_TYPE,
                     HeaderValue::from_static("application/x-www-form-urlencoded"),
@@ -417,6 +537,34 @@ fn header_map(rows: &[ParameterRow], body: &RequestBody) -> Result<HeaderMap, St
     Ok(headers)
 }
 
+fn multipart_form(fields: &[ParameterRow]) -> Result<Form, String> {
+    let mut form = Form::new();
+    for row in fields
+        .iter()
+        .filter(|row| row.enabled && !row.name.trim().is_empty())
+    {
+        if row.kind == "file" {
+            let file_path = row
+                .file_path
+                .clone()
+                .or_else(|| (!row.value.trim().is_empty()).then(|| row.value.clone()))
+                .ok_or_else(|| format!("Multipart field {} is missing a file path", row.name))?;
+            let bytes = fs::read(&file_path).map_err(|error| error.to_string())?;
+            let file_name = PathBuf::from(&file_path)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("upload.bin")
+                .to_string();
+            let part = Part::bytes(bytes).file_name(file_name);
+            form = form.part(row.name.clone(), part);
+            continue;
+        }
+
+        form = form.text(row.name.clone(), row.value.clone());
+    }
+    Ok(form)
+}
+
 #[tauri::command]
 async fn request_send(input: SendRequestInput) -> Result<SendRequestResult, String> {
     let method = input
@@ -425,6 +573,11 @@ async fn request_send(input: SendRequestInput) -> Result<SendRequestResult, Stri
         .map_err(|error| error.to_string())?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(input.timeout_ms.unwrap_or(30_000)))
+        .redirect(if input.follow_redirects.unwrap_or(true) {
+            Policy::limited(10)
+        } else {
+            Policy::none()
+        })
         .build()
         .map_err(|error| error.to_string())?;
 
@@ -448,7 +601,7 @@ async fn request_send(input: SendRequestInput) -> Result<SendRequestResult, Stri
                 request = request.body(input.body.text.clone());
             }
         }
-        "form" => {
+        "form-urlencoded" => {
             let form: Vec<(String, String)> = input
                 .body
                 .fields
@@ -459,6 +612,10 @@ async fn request_send(input: SendRequestInput) -> Result<SendRequestResult, Stri
             if !form.is_empty() {
                 request = request.form(&form);
             }
+        }
+        "multipart" => {
+            let form = multipart_form(&input.body.fields)?;
+            request = request.multipart(form);
         }
         _ => {}
     }
@@ -544,6 +701,9 @@ pub fn run() {
             workspace_unwatch,
             import_read_file,
             import_fetch_url,
+            history_load,
+            history_append,
+            history_clear,
             request_send
         ])
         .run(tauri::generate_context!())

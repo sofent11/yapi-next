@@ -143,7 +143,6 @@ mark {
   font-weight: 700;
   letter-spacing: 0.02em;
 }
-}
 
 .workspace-context-title {
   font-size: 0.9rem;
@@ -937,6 +936,146 @@ mark {
   color: var(--red);
 }
 
+.request-preview-card,
+.check-card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  padding: 12px;
+}
+
+.request-preview-card {
+  margin: 12px;
+}
+
+.request-preview-head,
+.checks-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.request-preview-grid,
+.environment-layout {
+  display: grid;
+  gap: 12px;
+}
+
+.request-preview-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.environment-layout {
+  grid-template-columns: 260px minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+}
+
+.environment-sidebar,
+.environment-main {
+  min-height: 0;
+  overflow: auto;
+}
+
+.environment-sidebar {
+  padding: 16px;
+  border-right: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.environment-main {
+  padding: 16px;
+  display: grid;
+  gap: 16px;
+}
+
+.environment-list,
+.checks-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.environment-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.environment-item.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.environment-item span,
+.import-structure-item span,
+.check-result-row span:last-child {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.check-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 220px) auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.check-result-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.check-results-banner {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.kv-value-cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.import-structure-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.import-structure-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.toggle-field {
+  display: flex;
+  align-items: end;
+  min-height: 60px;
+}
+
 @media (max-width: 1000px) {
   .launchpad {
     grid-template-columns: 1fr;
@@ -953,5 +1092,9 @@ mark {
   }
   .tree-panel {
     display: none;
+  }
+  .environment-layout,
+  .request-preview-grid {
+    grid-template-columns: 1fr;
   }
 }
