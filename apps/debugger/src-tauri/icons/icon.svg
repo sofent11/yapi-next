@@ -1,0 +1,41 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="180" y1="120" x2="840" y2="900" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0A1830"/>
+      <stop offset="0.55" stop-color="#0D3F82"/>
+      <stop offset="1" stop-color="#0969DA"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="256" y1="168" x2="760" y2="840" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="wire" x1="330" y1="248" x2="654" y2="742" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F7FBFF"/>
+      <stop offset="1" stop-color="#C7E2FF"/>
+    </linearGradient>
+    <radialGradient id="focus" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 498) rotate(90) scale(120)">
+      <stop offset="0" stop-color="#FFD78A"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#bg)"/>
+  <rect x="92" y="92" width="840" height="840" rx="196" stroke="url(#glass)" stroke-width="20"/>
+
+  <path d="M320 254L512 470" stroke="url(#wire)" stroke-width="88" stroke-linecap="round"/>
+  <path d="M704 254L512 470" stroke="url(#wire)" stroke-width="88" stroke-linecap="round"/>
+  <path d="M512 470V750" stroke="url(#wire)" stroke-width="88" stroke-linecap="round"/>
+
+  <circle cx="320" cy="254" r="72" fill="#8FD0FF"/>
+  <circle cx="704" cy="254" r="72" fill="#7BB8FF"/>
+  <circle cx="512" cy="750" r="72" fill="#5AC8A8"/>
+  <circle cx="512" cy="470" r="96" fill="#F7FBFF"/>
+
+  <circle cx="512" cy="498" r="60" fill="url(#focus)"/>
+  <circle cx="512" cy="498" r="118" stroke="#F9B42D" stroke-opacity="0.34" stroke-width="24"/>
+
+  <path d="M238 504C238 417 309 346 396 346" stroke="#7EC2FF" stroke-opacity="0.4" stroke-width="28" stroke-linecap="round"/>
+  <path d="M786 504C786 417 715 346 628 346" stroke="#7EC2FF" stroke-opacity="0.4" stroke-width="28" stroke-linecap="round"/>
+
+  <circle cx="512" cy="498" r="18" fill="#0A1830"/>
+</svg>
