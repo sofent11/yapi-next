@@ -4,12 +4,14 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
 import { IconRefresh } from '@tabler/icons-react';
-import { resolveRequest } from '@yapi-debugger/core';
-import { createEmptyCase, type CollectionDocument, type CollectionRunReport, type RunHistoryEntry, slugify, type WorkspaceIndex } from '@yapi-debugger/schema';
+import { createEmptyCheck, resolveRequest } from '@yapi-debugger/core';
+import { createEmptyCase, createEmptyRequest, type CollectionDocument, type CollectionRunReport, type RunHistoryEntry, slugify, type WorkspaceIndex } from '@yapi-debugger/schema';
 import {
   chooseDirectory,
   chooseImportFile,
+  clearSession,
   deleteEntry,
+  inspectSession,
   listenMenuActions,
   syncMenuState,
   unwatchWorkspace,
@@ -20,6 +22,7 @@ import {
   createRequestInWorkspace,
   createWorkspace,
   buildImportPreviewSummary,
+  appendRunHistoryEntry,
   clearCollectionRunReports,
   clearRunHistory,
   collectionReportSeed,
@@ -42,12 +45,14 @@ import {
   renameRequestInWorkspace,
   rerunFailedStepKeys,
   runCollection,
+  runPreparedRequest,
   runResolvedRequest,
   saveCollectionRecord,
   saveRunHistory,
   saveEnvironment,
   saveProject,
-  saveRequestRecord
+  saveRequestRecord,
+  saveScratchRequestToWorkspace
 } from './lib/workspace';
 import { AppRail, type AppRailView } from './components/panels/AppRail';
 import { CollectionRunnerPanel } from './components/panels/CollectionRunnerPanel';
@@ -55,11 +60,14 @@ import { EnvironmentCenterPanel } from './components/panels/EnvironmentCenterPan
 import { HistoryPanel } from './components/panels/HistoryPanel';
 import { ImportPanel } from './components/panels/ImportPanel';
 import { InterfaceTreePanel } from './components/panels/InterfaceTreePanel';
+import { ScratchPadPanel } from './components/panels/ScratchPadPanel';
 import { WelcomePanel } from './components/panels/WelcomePanel';
 import { WorkspaceMainPanel } from './components/panels/WorkspaceMainPanel';
 import { Resizer } from './components/primitives/Resizer';
+import { createScratchSession, loadScratchSessions, normalizeScratchTitle, saveScratchSessions, type ScratchSession } from './lib/scratch';
 import {
   defaultWorkspaceUiState,
+  ensureWorkspaceEnvironment,
   type SelectedNode,
   type WorkspaceUiState,
   useWorkspaceStore
@@ -143,6 +151,33 @@ function caseSlugExists(record: WorkspaceIndex['requests'][number], name: string
   return record.cases.some(c => c.id !== ignoreId && c.name === name);
 }
 
+function updateScratchSession(
+  sessions: ScratchSession[],
+  sessionId: string,
+  updater: (session: ScratchSession) => ScratchSession
+) {
+  return sessions.map(session => (session.id === sessionId ? updater(session) : session));
+}
+
+function scratchSessionFromHistory(entry: RunHistoryEntry) {
+  const request = createEmptyRequest(entry.requestName || 'Scratch Request');
+  request.id = entry.requestId;
+  request.method = entry.request.method;
+  request.url = entry.request.url;
+  request.path = entry.request.requestPath || entry.request.url;
+  request.headers = entry.request.headers;
+  request.query = entry.request.query;
+  request.body = entry.request.body;
+  return createScratchSession({
+    title: `${entry.request.method} ${entry.request.requestPath || entry.request.url}`,
+    request,
+    response: entry.response,
+    requestError: null,
+    checkResults: entry.checkResults,
+    scriptLogs: entry.scriptLogs
+  });
+}
+
 export function App() {
   const store = useWorkspaceStore();
   const gridRef = useRef<HTMLDivElement>(null);
@@ -163,6 +198,12 @@ export function App() {
   const [collectionReports, setCollectionReports] = useState<CollectionRunReport[]>([]);
   const [selectedCollectionReportId, setSelectedCollectionReportId] = useState<string | null>(null);
   const [selectedCollectionStepKey, setSelectedCollectionStepKey] = useState<string | null>(null);
+  const [scratchSessions, setScratchSessions] = useState<ScratchSession[]>(() => loadScratchSessions());
+  const [selectedScratchId, setSelectedScratchId] = useState<string | null>(null);
+  const [scratchRequestTab, setScratchRequestTab] = useState<WorkspaceUiState['activeRequestTab']>('query');
+  const [scratchResponseTab, setScratchResponseTab] = useState<WorkspaceUiState['activeResponseTab']>('body');
+  const [scratchMainSplitRatio, setScratchMainSplitRatio] = useState(0.5);
+  const [scratchSessionSnapshot, setScratchSessionSnapshot] = useState<any | null>(null);
 
   const requestId = selectedRequestId(store.selectedNode);
   const caseId = selectedCaseId(store.selectedNode);
@@ -176,6 +217,10 @@ export function App() {
     if (!store.workspace || !selectedCollectionId) return null;
     return store.workspace.collections.find(item => item.document.id === selectedCollectionId) || null;
   }, [store.workspace, selectedCollectionId]);
+
+  const currentScratch = useMemo(() => {
+    return scratchSessions.find(session => session.id === selectedScratchId) || scratchSessions[0] || null;
+  }, [scratchSessions, selectedScratchId]);
 
   const categoryRequests = useMemo(() => {
     if (!store.workspace || !categoryPath) return [];
@@ -199,6 +244,20 @@ export function App() {
     }
   }, [store.workspace, store.draftRequest, store.draftCases, caseId, selectedEnvironment, requestId]);
 
+  const currentScratchPreview = useMemo(() => {
+    if (!store.workspace || !currentScratch) return null;
+    try {
+      return resolveRequest(
+        store.workspace.project,
+        currentScratch.request,
+        undefined,
+        selectedEnvironment || undefined
+      );
+    } catch (_error) {
+      return null;
+    }
+  }, [store.workspace, currentScratch, selectedEnvironment]);
+
   const importPreviewInfo = useMemo(() => {
     if (!store.workspace || !store.importPreview) return null;
     return buildImportPreviewSummary(store.workspace, store.importPreview);
@@ -211,6 +270,9 @@ export function App() {
     setSelectedCollectionId(workspace.collections[0]?.document.id || null);
     setDraftCollection(workspace.collections[0]?.document || null);
     setCollectionDataText(workspace.collections[0]?.dataText || '');
+    if (workspace.requests.length === 0) {
+      setActiveView('scratch');
+    }
     store.setWorkspace(workspace);
     store.selectNode(nextUi.lastSelectedNode);
   }
@@ -303,6 +365,7 @@ export function App() {
     onSuccess: async result => {
       if (!result || !store.workspace || !requestId) return;
       store.setResponse(result.response, result.checkResults, result.scriptLogs);
+      inspectSession(store.workspace.root, result.preview.url).then(setScratchSessionSnapshot).catch(() => setScratchSessionSnapshot(null));
       await saveRunHistory(
         store.workspace,
         requestId,
@@ -318,6 +381,65 @@ export function App() {
       const message = (error as any).message || String(error) || 'Unknown network error';
       store.setError(message);
       notifications.show({ color: 'red', message: `Request failed: ${message}` });
+    }
+  });
+
+  const scratchRunMutation = useMutation({
+    mutationFn: async () => {
+      if (!store.workspace || !currentScratch) return null;
+      const environment = ensureWorkspaceEnvironment(store.activeEnvironmentName, store.workspace);
+      return runPreparedRequest(store.workspace, {
+        request: currentScratch.request,
+        sessionId: store.workspace.root,
+        context: {
+          state: {
+            variables: {},
+            environment
+          }
+        }
+      });
+    },
+    onSuccess: async result => {
+      if (!result || !store.workspace || !currentScratch) return;
+      setScratchSessions(current =>
+        updateScratchSession(current, currentScratch.id, session => ({
+          ...session,
+          response: result.response,
+          requestError: null,
+          checkResults: result.checkResults,
+          scriptLogs: result.scriptLogs,
+          updatedAt: new Date().toISOString()
+        }))
+      );
+      await appendRunHistoryEntry(
+        store.workspace.root,
+        {
+          requestId: currentScratch.request.id,
+          requestName: currentScratch.request.name || currentScratch.title
+        },
+        result.preview,
+        result.response,
+        result.checkResults,
+        result.scriptLogs
+      );
+      loadRunHistory(store.workspace.root).then(setHistoryEntries);
+      inspectSession(store.workspace.root, result.preview.url).then(setScratchSessionSnapshot).catch(() => setScratchSessionSnapshot(null));
+    },
+    onError: error => {
+      const message = (error as any).message || String(error) || 'Unknown network error';
+      if (currentScratch) {
+        setScratchSessions(current =>
+          updateScratchSession(current, currentScratch.id, session => ({
+            ...session,
+            requestError: message,
+            response: null,
+            checkResults: [],
+            scriptLogs: [],
+            updatedAt: new Date().toISOString()
+          }))
+        );
+      }
+      notifications.show({ color: 'red', message: `Scratch request failed: ${message}` });
     }
   });
 
@@ -526,6 +648,27 @@ export function App() {
   }, [uiState, store.selectedNode, store.workspace?.root]);
 
   useEffect(() => {
+    saveScratchSessions(
+      scratchSessions.map(session => ({
+        ...session,
+        title: normalizeScratchTitle(session.request)
+      }))
+    );
+  }, [scratchSessions]);
+
+  useEffect(() => {
+    if (!scratchSessions.length) {
+      const fallback = createScratchSession();
+      setScratchSessions([fallback]);
+      setSelectedScratchId(fallback.id);
+      return;
+    }
+    if (!scratchSessions.some(session => session.id === selectedScratchId)) {
+      setSelectedScratchId(scratchSessions[0]?.id || null);
+    }
+  }, [scratchSessions, selectedScratchId]);
+
+  useEffect(() => {
     if (!store.workspace?.root) {
       setHistoryEntries([]);
       setSelectedHistoryId(null);
@@ -649,6 +792,177 @@ export function App() {
       authProfiles: []
     });
     reloadWorkspace();
+  }
+
+  function handleCreateScratch(seed?: Partial<ScratchSession>) {
+    const nextScratch = createScratchSession(seed);
+    setScratchSessions(current => [nextScratch, ...current].slice(0, 6));
+    setSelectedScratchId(nextScratch.id);
+    setActiveView('scratch');
+  }
+
+  function handleUpdateScratchRequest(request: ScratchSession['request']) {
+    if (!currentScratch) return;
+    setScratchSessions(current =>
+      updateScratchSession(current, currentScratch.id, session => ({
+        ...session,
+        request,
+        title: normalizeScratchTitle(request),
+        updatedAt: new Date().toISOString()
+      }))
+    );
+  }
+
+  function handleSetScratchResponseState(
+    updater: (session: ScratchSession) => ScratchSession
+  ) {
+    if (!currentScratch) return;
+    setScratchSessions(current => updateScratchSession(current, currentScratch.id, updater));
+  }
+
+  function handleCopyCurrentRequestToScratch() {
+    if (!store.draftRequest) return;
+    handleCreateScratch({
+      title: normalizeScratchTitle(store.draftRequest),
+      request: structuredClone(store.draftRequest)
+    });
+  }
+
+  async function handleSaveScratchToWorkspace() {
+    if (!store.workspace || !currentScratch) return;
+    const nextId = await saveScratchRequestToWorkspace(store.workspace, currentScratch.request, categoryPath);
+    notifications.show({ color: 'teal', message: 'Scratch request saved to workspace' });
+    await reloadWorkspace({ kind: 'request', requestId: nextId });
+    setActiveView('workspace');
+  }
+
+  function handleOpenHistoryInScratch(entry: RunHistoryEntry) {
+    handleCreateScratch(scratchSessionFromHistory(entry));
+  }
+
+  function handleOpenImportPreviewInScratch() {
+    const imported = store.importPreview?.requests[0];
+    if (!imported) {
+      notifications.show({ color: 'blue', message: 'Preview an import first to open it in Scratch' });
+      return;
+    }
+    handleCreateScratch({
+      title: normalizeScratchTitle(imported.request),
+      request: structuredClone(imported.request)
+    });
+  }
+
+  async function handleRefreshSession() {
+    if (!store.workspace) return;
+    const targetUrl = activeView === 'scratch' ? currentScratchPreview?.url : currentRequestPreview?.url;
+    try {
+      const snapshot = await inspectSession(store.workspace.root, targetUrl || undefined);
+      setScratchSessionSnapshot(snapshot);
+      notifications.show({ color: 'teal', message: 'Session snapshot refreshed' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: `Failed to inspect session: ${(error as Error).message}` });
+    }
+  }
+
+  async function handleClearSessionCookies() {
+    if (!store.workspace) return;
+    try {
+      await clearSession(store.workspace.root);
+      setScratchSessionSnapshot(null);
+      notifications.show({ color: 'teal', message: 'Workspace session cleared' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: `Failed to clear session: ${(error as Error).message}` });
+    }
+  }
+
+  async function handleCreateCheckFromResponse(input: {
+    type: 'status-equals' | 'header-equals' | 'header-includes' | 'json-exists' | 'json-equals';
+    label: string;
+    path?: string;
+    expected?: string;
+  }) {
+    if (!store.workspace || !store.draftRequest || !requestId) return;
+    const record = findRecord(store.workspace, requestId);
+    if (!record) return;
+    const check = {
+      ...createEmptyCheck(input.type),
+      label: input.label,
+      path: input.path || createEmptyCheck(input.type).path,
+      expected: input.expected || createEmptyCheck(input.type).expected
+    };
+
+    let targetCaseId = caseId;
+    let nextCases = record.cases;
+    if (!targetCaseId) {
+      const nextCase = createEmptyCase(record.request.id, `Response Check ${record.cases.length + 1}`);
+      nextCase.environment = store.activeEnvironmentName;
+      nextCase.checks = [check];
+      nextCases = [...record.cases, nextCase];
+      targetCaseId = nextCase.id;
+    } else {
+      nextCases = record.cases.map(item =>
+        item.id === targetCaseId
+          ? {
+              ...item,
+              checks: [...(item.checks || []), check]
+            }
+          : item
+      );
+    }
+
+    await saveRequestRecord(
+      store.workspace.root,
+      record.request,
+      nextCases,
+      record.resourceDirPath,
+      record.requestFilePath,
+      record.folderSegments
+    );
+    await reloadWorkspace({ kind: 'case', requestId: record.request.id, caseId: targetCaseId });
+    notifications.show({ color: 'teal', message: 'Check created from current response' });
+  }
+
+  async function handleCreateCaseFromCurrentResponse() {
+    if (!store.workspace) return;
+    if (activeView === 'scratch') {
+      notifications.show({ color: 'blue', message: 'Save the Scratch request to the workspace before creating a reusable case.' });
+      return;
+    }
+
+    if (!store.response || !store.draftRequest || !requestId || !currentRequestPreview) return;
+    const record = findRecord(store.workspace, requestId);
+    if (!record) return;
+    const nextCase = createEmptyCase(record.request.id, `${record.request.name} Replay ${record.cases.length + 1}`);
+    nextCase.environment = store.activeEnvironmentName;
+    nextCase.overrides = {
+      method: currentRequestPreview.method,
+      url: currentRequestPreview.url,
+      path: currentRequestPreview.requestPath,
+      headers: currentRequestPreview.headers,
+      query: currentRequestPreview.query,
+      body: currentRequestPreview.body,
+      runtime: {
+        timeoutMs: currentRequestPreview.timeoutMs,
+        followRedirects: currentRequestPreview.followRedirects
+      }
+    };
+    nextCase.checks = [
+      {
+        ...createEmptyCheck('status-equals'),
+        label: 'Status equals current response',
+        expected: String(store.response.status)
+      }
+    ];
+    await saveRequestRecord(
+      store.workspace.root,
+      record.request,
+      [...record.cases, nextCase],
+      record.resourceDirPath,
+      record.requestFilePath,
+      record.folderSegments
+    );
+    await reloadWorkspace({ kind: 'case', requestId: record.request.id, caseId: nextCase.id });
+    notifications.show({ color: 'teal', message: 'Case created from the current response' });
   }
 
   function handleSelectCollection(id: string | null) {
@@ -869,19 +1183,19 @@ export function App() {
 
   async function handleReplayHistory(entry: RunHistoryEntry) {
     if (!store.workspace) return;
+    const record = findRecord(store.workspace, entry.requestId);
+    if (!record) {
+      handleOpenHistoryInScratch(entry);
+      return;
+    }
     setActiveView('workspace');
     store.selectNode({ kind: 'request', requestId: entry.requestId });
-    
-    // Logic to apply history values to current draft
-    const record = findRecord(store.workspace, entry.requestId);
-    if (record) {
-      store.updateRequest(record.request);
-      if (entry.caseId) {
-        const matchedCase = record.cases.find(c => c.id === entry.caseId);
-        if (matchedCase) {
-          store.updateCaseList(record.cases);
-          store.selectNode({ kind: 'case', requestId: entry.requestId, caseId: entry.caseId });
-        }
+    store.updateRequest(record.request);
+    if (entry.caseId) {
+      const matchedCase = record.cases.find(c => c.id === entry.caseId);
+      if (matchedCase) {
+        store.updateCaseList(record.cases);
+        store.selectNode({ kind: 'case', requestId: entry.requestId, caseId: entry.caseId });
       }
     }
     store.setResponse(entry.response, entry.checkResults, entry.scriptLogs);
@@ -938,6 +1252,38 @@ export function App() {
   }
 
   async function handleSaveResponseAsExample(replaceExisting = false) {
+    if (activeView === 'scratch') {
+      if (!currentScratch || !currentScratch.response) return;
+      const nextName =
+        replaceExisting && currentScratch.selectedExampleName
+          ? currentScratch.selectedExampleName
+          : window.prompt('Enter example name', 'Scratch Response');
+      if (!nextName) return;
+      const nextExamples = replaceExisting
+        ? (currentScratch.request.examples || []).map(ex =>
+            ex.name === nextName
+              ? { ...ex, status: currentScratch.response!.status, text: currentScratch.response!.bodyText }
+              : ex
+          )
+        : [
+            ...(currentScratch.request.examples || []),
+            {
+              name: nextName,
+              status: currentScratch.response.status,
+              mimeType: 'application/json',
+              text: currentScratch.response.bodyText
+            }
+          ];
+      handleSetScratchResponseState(session => ({
+        ...session,
+        request: { ...session.request, examples: nextExamples },
+        selectedExampleName: nextName,
+        updatedAt: new Date().toISOString()
+      }));
+      notifications.show({ color: 'teal', message: 'Example saved to Scratch tab' });
+      return;
+    }
+
     if (!store.draftRequest || !store.response) return;
     const nextName = replaceExisting && selectedExampleName ? selectedExampleName : window.prompt('Enter example name', 'Success Response');
     if (!nextName) return;
@@ -986,6 +1332,19 @@ export function App() {
             </div>
 
             <div className="workspace-context-actions">
+              {activeView === 'scratch' ? (
+                <Select
+                  size="xs"
+                  className="compact-select"
+                  value={currentScratch?.id || null}
+                  data={scratchSessions.map(session => ({
+                    value: session.id,
+                    label: session.title
+                  }))}
+                  onChange={value => value && setSelectedScratchId(value)}
+                  style={{ width: 220 }}
+                />
+              ) : null}
               <Select
                 size="xs"
                 className="compact-select"
@@ -997,8 +1356,8 @@ export function App() {
                 onChange={value => value && store.setActiveEnvironment(value)}
                 style={{ width: 120 }}
               />
-              <Badge variant="dot" color={runMutation.isPending ? 'blue' : 'gray'} size="sm">
-                {runMutation.isPending ? 'Running' : 'Idle'}
+              <Badge variant="dot" color={runMutation.isPending || scratchRunMutation.isPending ? 'blue' : 'gray'} size="sm">
+                {runMutation.isPending || scratchRunMutation.isPending ? 'Running' : 'Idle'}
               </Badge>
               <ActionIcon variant="subtle" color="gray" onClick={() => openMutation.mutate(store.workspace!.root)}>
                 <IconRefresh size={16} />
@@ -1070,12 +1429,54 @@ export function App() {
               max={420}
             />
 
-            {activeView === 'history' ? (
+            {activeView === 'scratch' && currentScratch ? (
+              <ScratchPadPanel
+                workspace={store.workspace}
+                request={currentScratch.request}
+                response={currentScratch.response}
+                requestError={currentScratch.requestError}
+                requestPreview={currentScratchPreview}
+                checkResults={currentScratch.checkResults}
+                scriptLogs={currentScratch.scriptLogs}
+                sessionSnapshot={scratchSessionSnapshot}
+                selectedEnvironment={selectedEnvironment}
+                selectedExampleName={currentScratch.selectedExampleName}
+                activeRequestTab={scratchRequestTab}
+                activeResponseTab={scratchResponseTab}
+                mainSplitRatio={scratchMainSplitRatio}
+                isRunning={scratchRunMutation.isPending}
+                isDirty
+                onRequestChange={handleUpdateScratchRequest}
+                onRun={() => scratchRunMutation.mutate()}
+                onSaveToWorkspace={handleSaveScratchToWorkspace}
+                onNewScratch={() => handleCreateScratch()}
+                onRequestTabChange={setScratchRequestTab}
+                onResponseTabChange={setScratchResponseTab}
+                onSelectExample={name =>
+                  handleSetScratchResponseState(session => ({
+                    ...session,
+                    selectedExampleName: name
+                  }))
+                }
+                onSaveExample={() => handleSaveResponseAsExample(false)}
+                onReplaceExample={() => handleSaveResponseAsExample(true)}
+                onCopyBody={() => copyToClipboard(currentScratch.response?.bodyText || '', 'Body copied')}
+                onCopyCurl={() => copyToClipboard(currentScratchPreview ? curlForPreview(currentScratchPreview) : '', 'cURL copied')}
+                onRefreshSession={handleRefreshSession}
+                onClearSession={handleClearSessionCookies}
+                onCreateCaseFromResponse={handleCreateCaseFromCurrentResponse}
+                onCreateCheck={() =>
+                  notifications.show({ color: 'blue', message: 'Save the Scratch request to the workspace before creating reusable checks.' })
+                }
+                onMainSplitRatioChange={setScratchMainSplitRatio}
+              />
+            ) : activeView === 'history' ? (
               <HistoryPanel
                 entries={historyEntries}
                 selectedEntryId={selectedHistoryId}
                 onSelectEntry={setSelectedHistoryId}
                 onReplay={handleReplayHistory}
+                onOpenInScratch={handleOpenHistoryInScratch}
                 onDuplicateAsCase={handleDuplicateHistoryAsCase}
                 onClear={handleClearHistory}
               />
@@ -1132,6 +1533,7 @@ export function App() {
                 activeRequestTab={uiState.activeRequestTab}
                 activeResponseTab={uiState.activeResponseTab}
                 selectedExampleName={selectedExampleName}
+                sessionSnapshot={scratchSessionSnapshot}
                 mainSplitRatio={uiState.mainSplitRatio}
                 onProjectChange={project => store.updateProject(project)}
                 onDeleteProject={handleDeleteProject}
@@ -1146,6 +1548,7 @@ export function App() {
                 onSelectRequest={handleSelectRequest}
                 onOpenImport={() => setImportOpened(true)}
                 onCreateInterface={handleCreateInterface}
+                onCopyToScratch={handleCopyCurrentRequestToScratch}
                 onRequestTabChange={tab => updateUiState(current => ({ ...current, activeRequestTab: tab }))}
                 onResponseTabChange={tab => updateUiState(current => ({ ...current, activeResponseTab: tab }))}
                 onSelectExample={setSelectedExampleName}
@@ -1153,6 +1556,10 @@ export function App() {
                 onCopyCurl={() => copyToClipboard(currentRequestPreview ? curlForPreview(currentRequestPreview) : '', 'cURL copied')}
                 onSaveExample={() => handleSaveResponseAsExample(false)}
                 onReplaceExample={() => handleSaveResponseAsExample(true)}
+                onRefreshSession={handleRefreshSession}
+                onClearSession={handleClearSessionCookies}
+                onCreateCheck={handleCreateCheckFromResponse}
+                onCreateCaseFromResponse={handleCreateCaseFromCurrentResponse}
                 onMainSplitRatioChange={ratio =>
                   updateUiState(current => ({
                     ...current,
@@ -1179,6 +1586,7 @@ export function App() {
           onChooseFile={() => importFileMutation.mutate()}
           onPreviewUrl={() => importUrlMutation.mutate()}
           onConfirmImport={() => applyImportMutation.mutate()}
+          onOpenScratchFromImport={handleOpenImportPreviewInScratch}
         />
       </Drawer>
     </>

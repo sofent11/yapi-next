@@ -18,6 +18,9 @@ import {
   emptyParameterRow,
   environmentDocumentSchema,
   projectDocumentSchema,
+  resolvedAuthPreviewItemSchema,
+  resolvedFieldValueSchema,
+  resolvedRequestInsightSchema,
   resolvedRequestPreviewSchema,
   runtimeSettingsSchema,
   requestBodySchema,
@@ -32,6 +35,9 @@ import {
   type ProjectDocument,
   type RequestBody,
   type RequestDocument,
+  type ResolvedAuthPreviewItem,
+  type ResolvedFieldValue,
+  type ResolvedRequestInsight,
   type ResolvedRequestPreview,
   type ResponseExample,
   type ScriptLog,
@@ -71,6 +77,8 @@ export type ProjectSeed = {
 };
 
 export type ResolvedRequest = ResolvedRequestPreview;
+
+const VARIABLE_PATTERN = /\{\{\s*([^}]+?)\s*\}\}/g;
 
 export function parseYamlDocument<T>(content: string): T {
   return YAML.parse(content) as T;
@@ -500,6 +508,114 @@ export function applyProjectVariables(
   return interpolateString(input, variables);
 }
 
+function templateTokens(input: string) {
+  const output = new Set<string>();
+  if (!input.includes('{{')) return [] as string[];
+  input.replace(VARIABLE_PATTERN, (_match, token: string) => {
+    const normalized = token.trim();
+    if (normalized) output.add(normalized);
+    return '';
+  });
+  return [...output];
+}
+
+function describeVariableSource(
+  token: string,
+  project: ProjectDocument,
+  environment: EnvironmentDocument | undefined,
+  extraSources: Array<Record<string, unknown>> = []
+) {
+  const variables = mergeVariableSources(project, environment, extraSources);
+  for (let index = 0; index < variables.length; index += 1) {
+    const value = readPathValue(variables[index], token);
+    if (value === undefined) continue;
+    if (index < extraSources.length) {
+      return {
+        source: 'extra' as const,
+        sourceLabel: `runtime source ${index + 1}`,
+        value: String(value ?? '')
+      };
+    }
+    if (environment && index === extraSources.length) {
+      return {
+        source: 'environment' as const,
+        sourceLabel: `environment: ${environment.name}`,
+        value: String(value ?? '')
+      };
+    }
+    if (index === variables.length - 1) {
+      return {
+        source: 'builtin' as const,
+        sourceLabel: 'builtin: baseUrl',
+        value: String(value ?? '')
+      };
+    }
+    return {
+      source: 'project' as const,
+      sourceLabel: 'project runtime',
+      value: String(value ?? '')
+    };
+  }
+
+  return {
+    source: 'missing' as const,
+    sourceLabel: 'missing',
+    value: ''
+  };
+}
+
+function collectResolvedField(
+  input: {
+    location: ResolvedFieldValue['location'];
+    label: string;
+    rawValue: string;
+    resolvedValue: string;
+  },
+  project: ProjectDocument,
+  environment: EnvironmentDocument | undefined,
+  extraSources: Array<Record<string, unknown>>,
+  bucket: Map<
+    string,
+    {
+      token: string;
+      source: ResolvedRequestInsight['variables'][number]['source'];
+      sourceLabel: string;
+      value: string;
+      missing: boolean;
+      locations: Set<string>;
+    }
+  >
+) {
+  const tokens = templateTokens(input.rawValue);
+  tokens.forEach(token => {
+    const lookup = describeVariableSource(token, project, environment, extraSources);
+    const existing = bucket.get(token);
+    if (existing) {
+      existing.locations.add(`${input.location}:${input.label}`);
+      if (existing.source === 'missing' && lookup.source !== 'missing') {
+        existing.source = lookup.source;
+        existing.sourceLabel = lookup.sourceLabel;
+        existing.value = lookup.value;
+        existing.missing = false;
+      }
+      return;
+    }
+    bucket.set(token, {
+      token,
+      source: lookup.source,
+      sourceLabel: lookup.sourceLabel,
+      value: lookup.value,
+      missing: lookup.source === 'missing',
+      locations: new Set([`${input.location}:${input.label}`])
+    });
+  });
+
+  return resolvedFieldValueSchema.parse({
+    ...input,
+    tokens
+  });
+}
+
 function mergeRows(baseRows: ParameterRow[], overrideRows?: ParameterRow[]) {
   if (!overrideRows || overrideRows.length === 0) return baseRows;
   return cleanRows(overrideRows);
@@ -526,6 +642,49 @@ function mergeAuth(baseAuth: AuthConfig, overrideAuth?: AuthConfig, environment?
     auth: authConfigSchema.parse(profile.auth),
     authSource: `environment profile: ${profile.name}`
   };
+}
+
+function buildAuthPreview(
+  auth: AuthConfig,
+  project: ProjectDocument,
+  environment: EnvironmentDocument | undefined,
+  extraSources: Array<Record<string, unknown>>
+) {
+  const preview: ResolvedAuthPreviewItem[] = [];
+
+  if (auth.type === 'bearer' && auth.token) {
+    preview.push(
+      resolvedAuthPreviewItemSchema.parse({
+        target: 'header',
+        name: 'Authorization',
+        value: `Bearer ${applyProjectVariables(auth.token, project, environment, extraSources)}`
+      })
+    );
+  }
+
+  if (auth.type === 'basic' && auth.username) {
+    const username = applyProjectVariables(auth.username, project, environment, extraSources);
+    const password = applyProjectVariables(auth.password || '', project, environment, extraSources);
+    preview.push(
+      resolvedAuthPreviewItemSchema.parse({
+        target: 'header',
+        name: 'Authorization',
+        value: `Basic ${encodeBasicAuth(username, password)}`
+      })
+    );
+  }
+
+  if (auth.type === 'apikey' && auth.key) {
+    preview.push(
+      resolvedAuthPreviewItemSchema.parse({
+        target: auth.addTo || 'header',
+        name: auth.key,
+        value: applyProjectVariables(auth.value || '', project, environment, extraSources)
+      })
+    );
+  }
+
+  return preview;
 }
 
 function mergeRuntime(request: RequestDocument, caseDocument: CaseDocument | undefined) {
@@ -562,6 +721,227 @@ function encodeBasicAuth(username: string, password: string) {
       alphabet.charAt(fourthBlock);
   }
   return output;
+}
+
+export function inspectResolvedRequest(
+  project: ProjectDocument,
+  request: RequestDocument,
+  caseDocument: CaseDocument | undefined,
+  environment: EnvironmentDocument | undefined,
+  extraSources: Array<Record<string, unknown>> = []
+) {
+  const preview = resolveRequest(project, request, caseDocument, environment, extraSources);
+  const body = caseDocument?.overrides.body ?? request.body;
+  const authInput = caseDocument?.overrides.auth || request.auth;
+  const { auth, authSource } = mergeAuth(request.auth, caseDocument?.overrides.auth, environment);
+  const queryRows = caseDocument?.overrides.query ?? request.query;
+  const pathRows = caseDocument?.overrides.pathParams ?? request.pathParams;
+  const headerRows = mergeRows(
+    [...project.runtime.headers, ...(environment?.headers || []), ...request.headers],
+    caseDocument?.overrides.headers
+  );
+  const fields: ResolvedFieldValue[] = [];
+  const variables = new Map<
+    string,
+    {
+      token: string;
+      source: ResolvedRequestInsight['variables'][number]['source'];
+      sourceLabel: string;
+      value: string;
+      missing: boolean;
+      locations: Set<string>;
+    }
+  >();
+
+  fields.push(
+    collectResolvedField(
+      {
+        location: 'url',
+        label: 'Request URL',
+        rawValue: caseDocument?.overrides.url || request.url,
+        resolvedValue: preview.url
+      },
+      project,
+      environment,
+      extraSources,
+      variables
+    )
+  );
+  fields.push(
+    collectResolvedField(
+      {
+        location: 'path',
+        label: 'Request Path',
+        rawValue: caseDocument?.overrides.path || request.path || '',
+        resolvedValue: preview.requestPath
+      },
+      project,
+      environment,
+      extraSources,
+      variables
+    )
+  );
+
+  headerRows.forEach((row, index) => {
+    fields.push(
+      collectResolvedField(
+        {
+          location: 'header',
+          label: row.name || `Header ${index + 1}`,
+          rawValue: row.value || '',
+          resolvedValue:
+            preview.headers.find(item => item.name === row.name)?.value || preview.headers[index]?.value || ''
+        },
+        project,
+        environment,
+        extraSources,
+        variables
+      )
+    );
+  });
+
+  queryRows.forEach((row, index) => {
+    fields.push(
+      collectResolvedField(
+        {
+          location: 'query',
+          label: row.name || `Query ${index + 1}`,
+          rawValue: row.value || '',
+          resolvedValue: preview.query.find(item => item.name === row.name)?.value || preview.query[index]?.value || ''
+        },
+        project,
+        environment,
+        extraSources,
+        variables
+      )
+    );
+  });
+
+  pathRows.forEach((row, index) => {
+    fields.push(
+      collectResolvedField(
+        {
+          location: 'path',
+          label: row.name || `Path Variable ${index + 1}`,
+          rawValue: row.value || '',
+          resolvedValue: row.value ? applyProjectVariables(row.value, project, environment, extraSources) : ''
+        },
+        project,
+        environment,
+        extraSources,
+        variables
+      )
+    );
+  });
+
+  if (body.text) {
+    fields.push(
+      collectResolvedField(
+        {
+          location: 'body',
+          label: 'Body Text',
+          rawValue: body.text,
+          resolvedValue: preview.body.text
+        },
+        project,
+        environment,
+        extraSources,
+        variables
+      )
+    );
+  }
+
+  body.fields.forEach((row, index) => {
+    fields.push(
+      collectResolvedField(
+        {
+          location: 'body',
+          label: row.name || `Body Field ${index + 1}`,
+          rawValue: row.kind === 'file' ? row.filePath || row.value || '' : row.value || '',
+          resolvedValue:
+            preview.body.fields.find(field => field.name === row.name)?.filePath ||
+            preview.body.fields.find(field => field.name === row.name)?.value ||
+            ''
+        },
+        project,
+        environment,
+        extraSources,
+        variables
+      )
+    );
+  });
+
+  const authPreview = buildAuthPreview(auth, project, environment, extraSources);
+  authPreview.forEach(item => {
+    const rawValue =
+      authInput.type === 'bearer'
+        ? authInput.token || ''
+        : authInput.type === 'basic'
+          ? `${authInput.username || ''}:${authInput.password || ''}`
+          : authInput.type === 'apikey'
+            ? authInput.value || ''
+            : '';
+    fields.push(
+      collectResolvedField(
+        {
+          location: 'auth',
+          label: item.name,
+          rawValue,
+          resolvedValue: item.value
+        },
+        project,
+        environment,
+        extraSources,
+        variables
+      )
+    );
+  });
+
+  const warnings: ResolvedRequestInsight['warnings'] = [];
+  const missingVariables = [...variables.values()].filter(item => item.missing);
+  if (missingVariables.length > 0) {
+    warnings.push({
+      code: 'missing-variable',
+      level: 'warning',
+      message: `Unresolved variables: ${missingVariables.map(item => item.token).join(', ')}`
+    });
+  }
+  if (preview.url.includes('{{')) {
+    warnings.push({
+      code: 'url-template-leftover',
+      level: 'warning',
+      message: 'The resolved URL still contains unresolved template variables.'
+    });
+  }
+  if (authSource.startsWith('missing profile')) {
+    warnings.push({
+      code: 'missing-auth-profile',
+      level: 'warning',
+      message: `Auth profile "${authInput.profileName || 'unknown'}" was not found in the active environment.`
+    });
+  }
+  if (
+    (auth.type === 'bearer' && !auth.token) ||
+    (auth.type === 'basic' && !auth.username) ||
+    (auth.type === 'apikey' && !auth.key)
+  ) {
+    warnings.push({
+      code: 'incomplete-auth',
+      level: 'warning',
+      message: `The configured ${auth.type} auth is incomplete and will not be fully applied.`
+    });
+  }
+
+  return resolvedRequestInsightSchema.parse({
+    preview,
+    variables: [...variables.values()].map(item => ({
+      ...item,
+      locations: [...item.locations]
+    })),
+    fieldValues: fields,
+    warnings,
+    authPreview
+  });
 }
 
 export function resolveRequest(

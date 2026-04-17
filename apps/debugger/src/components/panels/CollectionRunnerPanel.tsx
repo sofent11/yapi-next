@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, Group, NumberInput, Select, Text, TextInput } from '@mantine/core';
 import type { CollectionDocument, CollectionRunReport, WorkspaceIndex } from '@yapi-debugger/schema';
 import { CodeEditor } from '../editors/CodeEditor';
@@ -38,8 +38,16 @@ export function CollectionRunnerPanel(props: {
   onSelectReport: (id: string | null) => void;
   onSelectReportStep: (stepKey: string | null) => void;
 }) {
+  const [reportFilter, setReportFilter] = useState('');
   const requestChoices = useMemo(() => requestOptions(props.workspace), [props.workspace]);
-  const selectedReport = props.reports.find(report => report.id === props.selectedReportId) || props.reports[0] || null;
+  const filteredReports = useMemo(() => {
+    const normalized = reportFilter.trim().toLowerCase();
+    if (!normalized) return props.reports;
+    return props.reports.filter(report =>
+      [report.collectionName, report.status, report.environmentName, report.finishedAt].join(' ').toLowerCase().includes(normalized)
+    );
+  }, [props.reports, reportFilter]);
+  const selectedReport = filteredReports.find(report => report.id === props.selectedReportId) || filteredReports[0] || null;
   const draftCollection = props.draftCollection;
   const selectedStep =
     selectedReport?.iterations
@@ -98,10 +106,17 @@ export function CollectionRunnerPanel(props: {
                 Clear
               </Button>
             </div>
+            <TextInput
+              mt="sm"
+              size="xs"
+              placeholder="Filter reports"
+              value={reportFilter}
+              onChange={event => setReportFilter(event.currentTarget.value)}
+            />
             <Select
               mt="sm"
               placeholder="Select report"
-              data={reportOptions(props.reports)}
+              data={reportOptions(filteredReports)}
               value={props.selectedReportId || selectedReport?.id || null}
               onChange={value => props.onSelectReport(value || null)}
             />
@@ -390,6 +405,20 @@ export function CollectionRunnerPanel(props: {
                   onChange={value => props.onSelectReportStep(value || null)}
                 />
               </div>
+
+              {selectedReport.failedSteps > 0 ? (
+                <div className="check-card" style={{ marginBottom: 12 }}>
+                  <Text fw={700}>Failure Summary</Text>
+                  <Text size="sm" c="dimmed">
+                    {selectedReport.iterations
+                      .flatMap(iteration => iteration.stepRuns)
+                      .filter(step => !step.ok && !step.skipped)
+                      .map(step => `${step.stepName}: ${step.error || step.checkResults.find(result => !result.ok)?.message || 'Failed checks'}`)
+                      .slice(0, 5)
+                      .join(' | ')}
+                  </Text>
+                </div>
+              ) : null}
 
               {selectedStep ? (
                 <div className="checks-list">

@@ -4,6 +4,7 @@ import {
   applyCollectionRules,
   buildCurlCommand,
   executeRequestScript,
+  inspectResolvedRequest,
   resolveRequest
 } from '../src/index';
 import {
@@ -122,4 +123,25 @@ test('case scripts survive creation defaults', () => {
   const nextCase = createEmptyCase('req_1');
   assert.equal(nextCase.scripts?.preRequest, '');
   assert.equal(nextCase.scripts?.postResponse, '');
+});
+
+test('inspectResolvedRequest explains variable sources and auth preview', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  project.runtime.vars.projectToken = 'project-token';
+  const environment = createDefaultEnvironment('shared');
+  environment.vars.userId = 'u_1';
+  const request = createEmptyRequest('Profile');
+  request.url = '{{baseUrl}}/users/{{userId}}';
+  request.headers = [{ name: 'X-Project', value: '{{projectToken}}', enabled: true, kind: 'text' }];
+  request.auth = { type: 'bearer', token: '{{projectToken}}' };
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment, [{ traceId: 'trace-1' }]);
+
+  assert.equal(insight.preview.url, 'https://api.example.com/users/u_1');
+  assert.equal(insight.authPreview[0]?.name, 'Authorization');
+  assert.match(insight.authPreview[0]?.value || '', /Bearer project-token/);
+  assert.equal(insight.variables.some(variable => variable.token === 'userId' && variable.source === 'environment'), true);
+  assert.equal(insight.variables.some(variable => variable.token === 'projectToken' && variable.source === 'project'), true);
+  assert.equal(insight.warnings.length, 0);
 });

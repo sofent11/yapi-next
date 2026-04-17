@@ -1,10 +1,11 @@
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use reqwest::{
-    cookie::Jar,
+    cookie::{CookieStore, Jar},
     header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE},
     multipart::{Form, Part},
     redirect::Policy,
     Client,
+    Url,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -132,6 +133,21 @@ struct SendRequestResult {
     headers: Vec<ResponseHeader>,
     body_text: String,
     timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SessionCookie {
+    name: String,
+    value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionSnapshot {
+    session_id: String,
+    url: Option<String>,
+    cookie_header: String,
+    cookies: Vec<SessionCookie>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -626,6 +642,63 @@ fn session_jar(session_id: &str) -> Result<Arc<Jar>, String> {
     Ok(jar)
 }
 
+fn parse_cookie_header(header: &str) -> Vec<SessionCookie> {
+    header
+        .split(';')
+        .filter_map(|part| {
+            let trimmed = part.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            let mut pieces = trimmed.splitn(2, '=');
+            let name = pieces.next()?.trim();
+            let value = pieces.next().unwrap_or_default().trim();
+            if name.is_empty() {
+                return None;
+            }
+            Some(SessionCookie {
+                name: name.to_string(),
+                value: value.to_string(),
+            })
+        })
+        .collect()
+}
+
+#[tauri::command]
+fn session_inspect(session_id: String, url: Option<String>) -> Result<SessionSnapshot, String> {
+    let normalized = normalize_path(&session_id);
+    let cookie_header = if let Some(raw_url) = url.as_ref().filter(|value| !value.trim().is_empty()) {
+        let parsed = Url::parse(raw_url).map_err(|error| error.to_string())?;
+        let jar = session_jar(&normalized)?;
+        jar.cookies(&parsed)
+            .and_then(|value| value.to_str().ok().map(|header| header.to_string()))
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    Ok(SessionSnapshot {
+        session_id: normalized,
+        url,
+        cookie_header: cookie_header.clone(),
+        cookies: parse_cookie_header(&cookie_header),
+    })
+}
+
+#[tauri::command]
+fn session_clear(session_id: String) -> Result<(), String> {
+    let normalized = normalize_path(&session_id);
+    session_jar_store()
+        .lock()
+        .map_err(|_| "session jar store poisoned".to_string())?
+        .remove(&normalized);
+    session_client_store()
+        .lock()
+        .map_err(|_| "session client store poisoned".to_string())?
+        .remove(&normalized);
+    Ok(())
+}
+
 fn header_map(rows: &[ParameterRow], body: &RequestBody) -> Result<HeaderMap, String> {
     let mut headers = HeaderMap::new();
     for row in rows.iter().filter(|row| row.enabled && !row.name.trim().is_empty()) {
@@ -840,6 +913,8 @@ pub fn run() {
             collection_report_load,
             collection_report_append,
             collection_report_clear,
+            session_inspect,
+            session_clear,
             request_send
         ])
         .run(tauri::generate_context!())

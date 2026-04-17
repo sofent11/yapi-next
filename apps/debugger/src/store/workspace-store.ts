@@ -22,7 +22,7 @@ export type SelectedNode =
   | { kind: 'case'; requestId: string; caseId: string };
 
 export type RequestTab = 'query' | 'headers' | 'body' | 'auth' | 'checks' | 'scripts' | 'settings' | 'preview';
-export type ResponseTab = 'body' | 'headers' | 'raw';
+export type ResponseTab = 'body' | 'headers' | 'json' | 'cookies' | 'compare' | 'raw';
 
 export type WorkspaceUiState = {
   treeWidth: number;

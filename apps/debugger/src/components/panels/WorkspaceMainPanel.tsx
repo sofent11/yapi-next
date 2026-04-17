@@ -15,6 +15,7 @@ import type {
   ResolvedRequestPreview,
   ScriptLog,
   SendRequestResult,
+  SessionSnapshot,
   WorkspaceIndex
 } from '@yapi-debugger/schema';
 import type { RequestTab, ResponseTab, SelectedNode } from '../../store/workspace-store';
@@ -68,8 +69,9 @@ export function WorkspaceMainPanel(props: {
   isRunning: boolean;
   isDirty: boolean;
   activeRequestTab: RequestTab;
-  activeResponseTab: ResponseTab;
+  activeResponseTab: ResponseTab | 'json' | 'cookies' | 'compare';
   selectedExampleName: string | null;
+  sessionSnapshot: SessionSnapshot | null;
   mainSplitRatio: number;
   onProjectChange: (project: ProjectDocument) => void;
   onDeleteProject: () => void;
@@ -84,13 +86,18 @@ export function WorkspaceMainPanel(props: {
   onSelectRequest: (requestId: string) => void;
   onOpenImport: () => void;
   onCreateInterface: () => void;
+  onCopyToScratch: () => void;
   onRequestTabChange: (tab: RequestTab) => void;
-  onResponseTabChange: (tab: ResponseTab) => void;
+  onResponseTabChange: (tab: ResponseTab | 'json' | 'cookies' | 'compare') => void;
   onSelectExample: (name: string | null) => void;
   onCopyBody: () => void;
   onCopyCurl: () => void;
   onSaveExample: () => void;
   onReplaceExample: () => void;
+  onRefreshSession: () => void;
+  onClearSession: () => void;
+  onCreateCheck: (input: any) => void;
+  onCreateCaseFromResponse: () => void;
   onMainSplitRatioChange: (ratio: number) => void;
 }) {
   const splitRef = useRef<HTMLDivElement | null>(null);
@@ -303,6 +310,9 @@ export function WorkspaceMainPanel(props: {
     <section className="workspace-main">
       {renderToolbar(
         <div style={{ display: 'flex', gap: 8 }}>
+          <Button size="xs" variant="default" onClick={props.onCopyToScratch}>
+            Copy To Scratch
+          </Button>
           <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={() => props.onAddCase()}>
             New Case
           </Button>
@@ -358,6 +368,7 @@ export function WorkspaceMainPanel(props: {
             requestDocument={request}
             checkResults={props.checkResults}
             scriptLogs={props.scriptLogs}
+            sessionSnapshot={props.sessionSnapshot}
             selectedExampleName={props.selectedExampleName}
             activeTab={props.activeResponseTab}
             onTabChange={props.onResponseTabChange}
@@ -366,6 +377,10 @@ export function WorkspaceMainPanel(props: {
             onCopyCurl={props.onCopyCurl}
             onSaveExample={props.onSaveExample}
             onReplaceExample={props.onReplaceExample}
+            onRefreshSession={props.onRefreshSession}
+            onClearSession={props.onClearSession}
+            onCreateCheck={props.onCreateCheck}
+            onCreateCaseFromResponse={props.onCreateCaseFromResponse}
           />
         </div>
       </div>

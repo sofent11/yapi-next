@@ -321,6 +321,8 @@ export const importWarningSchema = z.object({
   level: z.enum(['info', 'warning']).default('warning'),
   scope: z.enum(['project', 'request', 'case']).default('request'),
   requestName: z.string().optional(),
+  code: z.string().optional(),
+  status: z.enum(['compatible', 'degraded', 'unsupported']).default('degraded'),
   message: z.string().min(1)
 });
 export type ImportWarning = z.infer<typeof importWarningSchema>;
@@ -389,6 +391,20 @@ export const sendRequestResultSchema = z.object({
 });
 export type SendRequestResult = z.infer<typeof sendRequestResultSchema>;
 
+export const sessionCookieSchema = z.object({
+  name: z.string(),
+  value: z.string()
+});
+export type SessionCookie = z.infer<typeof sessionCookieSchema>;
+
+export const sessionSnapshotSchema = z.object({
+  sessionId: z.string(),
+  url: z.string().optional(),
+  cookieHeader: z.string().default(''),
+  cookies: z.array(sessionCookieSchema).default([])
+});
+export type SessionSnapshot = z.infer<typeof sessionSnapshotSchema>;
+
 export const resolvedRequestPreviewSchema = sendRequestInputSchema.extend({
   name: z.string(),
   environmentName: z.string().optional(),
@@ -396,6 +412,51 @@ export const resolvedRequestPreviewSchema = sendRequestInputSchema.extend({
   requestPath: z.string().default('/')
 });
 export type ResolvedRequestPreview = z.infer<typeof resolvedRequestPreviewSchema>;
+
+export const resolvedVariableSourceSchema = z.enum(['extra', 'environment', 'project', 'builtin', 'missing']);
+export type ResolvedVariableSource = z.infer<typeof resolvedVariableSourceSchema>;
+
+export const resolvedVariableSchema = z.object({
+  token: z.string().min(1),
+  source: resolvedVariableSourceSchema.default('missing'),
+  sourceLabel: z.string(),
+  value: z.string().default(''),
+  missing: z.boolean().default(false),
+  locations: z.array(z.string()).default([])
+});
+export type ResolvedVariable = z.infer<typeof resolvedVariableSchema>;
+
+export const resolvedFieldValueSchema = z.object({
+  location: z.enum(['url', 'path', 'header', 'query', 'body', 'auth']),
+  label: z.string(),
+  rawValue: z.string(),
+  resolvedValue: z.string(),
+  tokens: z.array(z.string()).default([])
+});
+export type ResolvedFieldValue = z.infer<typeof resolvedFieldValueSchema>;
+
+export const resolvedAuthPreviewItemSchema = z.object({
+  target: z.enum(['header', 'query']),
+  name: z.string(),
+  value: z.string()
+});
+export type ResolvedAuthPreviewItem = z.infer<typeof resolvedAuthPreviewItemSchema>;
+
+export const resolvedRequestWarningSchema = z.object({
+  code: z.string(),
+  level: z.enum(['info', 'warning']).default('warning'),
+  message: z.string()
+});
+export type ResolvedRequestWarning = z.infer<typeof resolvedRequestWarningSchema>;
+
+export const resolvedRequestInsightSchema = z.object({
+  preview: resolvedRequestPreviewSchema,
+  variables: z.array(resolvedVariableSchema).default([]),
+  fieldValues: z.array(resolvedFieldValueSchema).default([]),
+  warnings: z.array(resolvedRequestWarningSchema).default([]),
+  authPreview: z.array(resolvedAuthPreviewItemSchema).default([])
+});
+export type ResolvedRequestInsight = z.infer<typeof resolvedRequestInsightSchema>;
 
 export const checkResultSchema = z.object({
   id: z.string(),

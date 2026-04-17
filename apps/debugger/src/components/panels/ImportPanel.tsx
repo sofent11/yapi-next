@@ -15,6 +15,13 @@ export function ImportPanel(props: {
     environments: number;
     conflicts: number;
     warnings: number;
+    newRequests: number;
+    replaceableRequests: number;
+    degradedWarnings: number;
+    unsupportedWarnings: number;
+    exampleCount: number;
+    nextSteps: string[];
+    warningBreakdown: Array<{ label: string; count: number }>;
   } | null;
   warnings: Array<{ level: string; message: string }>;
   onImportUrlChange: (url: string) => void;
@@ -23,6 +30,7 @@ export function ImportPanel(props: {
   onChooseFile: () => void;
   onPreviewUrl: () => void;
   onConfirmImport: () => void;
+  onOpenScratchFromImport: () => void;
 }) {
   return (
     <div className="import-panel-shell">
@@ -133,6 +141,23 @@ export function ImportPanel(props: {
                 {props.importPreviewInfo.warnings}
               </strong>
             </div>
+            <div className="summary-tile">
+              <span>New</span>
+              <strong>{props.importPreviewInfo.newRequests}</strong>
+            </div>
+            <div className="summary-tile">
+              <span>Examples</span>
+              <strong>{props.importPreviewInfo.exampleCount}</strong>
+            </div>
+          </div>
+
+          <div className="import-preview-grid" style={{ marginTop: 12 }}>
+            {props.importPreviewInfo.warningBreakdown.map(item => (
+              <div key={item.label} className="summary-tile">
+                <span>{item.label}</span>
+                <strong>{item.count}</strong>
+              </div>
+            ))}
           </div>
 
           {props.warnings.length > 0 ? (
@@ -157,8 +182,27 @@ export function ImportPanel(props: {
             onChange={value => props.onImportStrategyChange(value as any)}
           />
 
+          {props.importPreviewInfo.nextSteps.length > 0 ? (
+            <div className="check-card" style={{ marginTop: 16 }}>
+              <Text fw={700}>Next Steps</Text>
+              <div className="checks-list">
+                {props.importPreviewInfo.nextSteps.map(step => (
+                  <div key={step} className="check-result-row">
+                    <div className="tree-row-copy">
+                      <strong>Recommendation</strong>
+                      <span>{step}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <Button mt="xl" size="md" color="teal" fullWidth onClick={props.onConfirmImport}>
             Apply to Project
+          </Button>
+          <Button mt="sm" size="md" variant="default" fullWidth onClick={props.onOpenScratchFromImport}>
+            Open First Imported Request In Scratch
           </Button>
         </div>
       )}

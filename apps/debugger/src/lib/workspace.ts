@@ -29,7 +29,9 @@ import {
   type EnvironmentDocument,
   type ImportAuth,
   type ImportResult,
+  type ImportWarning,
   type ProjectDocument,
+  type RequestDocument,
   type ResolvedRequestPreview,
   type RunHistoryEntry,
   type ScriptLog,
@@ -145,17 +147,45 @@ export type ImportPreviewSummary = {
   environments: number;
   conflicts: number;
   warnings: number;
+  newRequests: number;
+  replaceableRequests: number;
+  degradedWarnings: number;
+  unsupportedWarnings: number;
+  exampleCount: number;
+  nextSteps: string[];
+  warningBreakdown: Array<{
+    label: string;
+    count: number;
+  }>;
 };
+
+function warningsByStatus(warnings: ImportWarning[], status: ImportWarning['status']) {
+  return warnings.filter(item => item.status === status).length;
+}
 
 export function buildImportPreviewSummary(
   workspace: WorkspaceIndex,
   result: ImportResult
 ): ImportPreviewSummary {
   let conflicts = 0;
+  let exampleCount = 0;
   result.requests.forEach(imported => {
     const existing = workspace.requests.find(record => collectionConflictsWithRecord(record, imported));
     if (existing) conflicts += 1;
+    exampleCount += imported.request.examples.length;
   });
+  const newRequests = Math.max(result.requests.length - conflicts, 0);
+  const degradedWarnings = warningsByStatus(result.warnings || [], 'degraded');
+  const unsupportedWarnings = warningsByStatus(result.warnings || [], 'unsupported');
+  const nextSteps = [
+    conflicts > 0 ? `${conflicts} requests match existing names in the same folder. Review the conflict strategy before applying.` : '',
+    degradedWarnings > 0 ? `${degradedWarnings} imported items need manual follow-up before they behave like the source collection.` : '',
+    unsupportedWarnings > 0 ? `${unsupportedWarnings} scripts or features were preserved as text only and will not execute automatically.` : '',
+    result.warnings.some(item => item.code === 'auth-review')
+      ? 'Review Environment/Auth settings after import because the source spec declared security requirements.'
+      : '',
+    newRequests > 0 ? `${newRequests} requests can be opened in Scratch or edited immediately after import.` : ''
+  ].filter(Boolean);
 
   return {
     format: result.detectedFormat,
@@ -166,7 +196,18 @@ export function buildImportPreviewSummary(
     }, new Set<string>()).size,
     environments: result.environments.length,
     conflicts,
-    warnings: result.warnings?.length || 0
+    warnings: result.warnings?.length || 0,
+    newRequests,
+    replaceableRequests: conflicts,
+    degradedWarnings,
+    unsupportedWarnings,
+    exampleCount,
+    nextSteps,
+    warningBreakdown: [
+      { label: 'Needs review', count: degradedWarnings },
+      { label: 'Not supported', count: unsupportedWarnings },
+      { label: 'Examples kept', count: exampleCount }
+    ]
   };
 }
 
@@ -266,6 +307,30 @@ export async function createRequestInWorkspace(root: string, folderPath: string 
   ];
   await saveRequestRecord(root, request, [], undefined, undefined, folderSegments);
   return request.id;
+}
+
+export async function saveScratchRequestToWorkspace(
+  workspace: WorkspaceIndex,
+  request: RequestDocument,
+  folderPath: string | null,
+  cases: CaseDocument[] = []
+) {
+  const folderSegments = folderPath ? folderPath.split('/').filter(Boolean) : [];
+  const siblingNames = workspace.requests
+    .filter(record => record.folderSegments.join('/') === folderSegments.join('/'))
+    .map(record => record.request.name);
+  const nextRequest = structuredClone(request);
+  nextRequest.name = uniqueCopyName(nextRequest.name || 'Scratch Request', siblingNames);
+  if (!nextRequest.id || workspace.requests.some(record => record.request.id === nextRequest.id)) {
+    nextRequest.id = createId('req');
+  }
+  const nextCases = cases.map(caseItem => ({
+    ...structuredClone(caseItem),
+    id: createId('case'),
+    extendsRequest: nextRequest.id
+  }));
+  await saveRequestRecord(workspace.root, nextRequest, nextCases, undefined, undefined, folderSegments);
+  return nextRequest.id;
 }
 
 export async function createCaseForRequest(
@@ -493,16 +558,20 @@ export type RequestRunContext = {
   };
 };
 
-export async function runResolvedRequest(
+export type PreparedRequestRunInput = {
+  request: RequestDocument;
+  caseDocument?: CaseDocument;
+  sessionId?: string;
+  context?: RequestRunContext;
+};
+
+export async function runPreparedRequest(
   workspace: WorkspaceIndex,
-  requestId: string,
-  caseId?: string,
-  context: RequestRunContext = {}
+  input: PreparedRequestRunInput
 ) {
-  const record = workspace.requests.find(r => r.request.id === requestId);
-  if (!record) throw new Error('Request not found');
-  const caseDocument = record.cases.find(c => c.id === caseId);
-  const envName = caseDocument?.environment || context.state?.environment.name || workspace.project.defaultEnvironment;
+  const context = input.context || {};
+  const envName =
+    input.caseDocument?.environment || context.state?.environment.name || workspace.project.defaultEnvironment;
   const runtimeEnvironment = context.state?.environment || createRuntimeEnvironment(workspace, envName);
   const state = context.state || {
     variables: {},
@@ -511,23 +580,23 @@ export async function runResolvedRequest(
 
   const previewBeforeScripts = resolveRequest(
     workspace.project,
-    record.request,
-    caseDocument,
+    input.request,
+    input.caseDocument,
     state.environment,
     context.extraSources || []
   );
   const preScript = executeRequestScript({
     phase: 'pre-request',
-    script: caseDocument?.scripts?.preRequest || '',
+    script: input.caseDocument?.scripts?.preRequest || '',
     state,
     request: previewBeforeScripts
   });
   const preview = {
     ...preScript.request,
-    sessionId: workspace.root
+    sessionId: input.sessionId || workspace.root
   };
   const response = await sendRequest(preview);
-  const builtinChecks = caseDocument ? evaluateChecks(response, caseDocument.checks || []) : [];
+  const builtinChecks = input.caseDocument ? evaluateChecks(response, input.caseDocument.checks || []) : [];
   const collectionChecks = context.collectionRules
     ? applyCollectionRules({
         ...context.collectionRules,
@@ -536,7 +605,7 @@ export async function runResolvedRequest(
     : [];
   const postScript = executeRequestScript({
     phase: 'post-response',
-    script: caseDocument?.scripts?.postResponse || '',
+    script: input.caseDocument?.scripts?.postResponse || '',
     state: preScript.state,
     request: preview,
     response
@@ -549,6 +618,56 @@ export async function runResolvedRequest(
     scriptLogs: [...preScript.logs, ...postScript.logs],
     state: postScript.state
   };
+}
+
+export async function runResolvedRequest(
+  workspace: WorkspaceIndex,
+  requestId: string,
+  caseId?: string,
+  context: RequestRunContext = {}
+) {
+  const record = workspace.requests.find(r => r.request.id === requestId);
+  if (!record) throw new Error('Request not found');
+  const caseDocument = record.cases.find(c => c.id === caseId);
+  return runPreparedRequest(workspace, {
+    request: record.request,
+    caseDocument,
+    sessionId: workspace.root,
+    context
+  });
+}
+
+export async function appendRunHistoryEntry(
+  workspaceRoot: string,
+  meta: {
+    requestId: string;
+    requestName: string;
+    caseId?: string;
+    caseName?: string;
+  },
+  preview: ResolvedRequestPreview,
+  response: SendRequestResult,
+  checkResults: CheckResult[],
+  scriptLogs: ScriptLog[] = [],
+  sourceCollection?: { id: string; name: string; stepKey: string }
+) {
+  const entry: RunHistoryEntry = {
+    id: createId('run'),
+    workspaceRoot,
+    requestId: meta.requestId,
+    requestName: meta.requestName,
+    caseId: meta.caseId,
+    caseName: meta.caseName,
+    environmentName: preview.environmentName,
+    request: preview,
+    response,
+    checkResults,
+    scriptLogs,
+    sourceCollectionId: sourceCollection?.id,
+    sourceCollectionName: sourceCollection?.name,
+    sourceStepKey: sourceCollection?.stepKey
+  };
+  await appendHistory(entry);
 }
 
 export async function saveRunHistory(
@@ -564,23 +683,20 @@ export async function saveRunHistory(
   const record = workspace.requests.find(r => r.request.id === requestId);
   if (!record) return;
   const caseDoc = record.cases.find(c => c.id === caseId);
-  const entry: RunHistoryEntry = {
-    id: createId('run'),
-    workspaceRoot: workspace.root,
-    requestId,
-    requestName: record.request.name,
-    caseId,
-    caseName: caseDoc?.name,
-    environmentName: preview.environmentName,
-    request: preview,
+  return appendRunHistoryEntry(
+    workspace.root,
+    {
+      requestId,
+      requestName: record.request.name,
+      caseId,
+      caseName: caseDoc?.name
+    },
+    preview,
     response,
     checkResults,
     scriptLogs,
-    sourceCollectionId: sourceCollection?.id,
-    sourceCollectionName: sourceCollection?.name,
-    sourceStepKey: sourceCollection?.stepKey
-  };
-  await appendHistory(entry);
+    sourceCollection
+  );
 }
 
 export async function clearRunHistory(root: string) {

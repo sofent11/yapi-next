@@ -10,7 +10,7 @@ import {
   IconSettings,
   IconVariable
 } from '@tabler/icons-react';
-import { createEmptyCheck, resolveRequest } from '@yapi-debugger/core';
+import { createEmptyCheck, inspectResolvedRequest } from '@yapi-debugger/core';
 import type {
   AuthConfig,
   CaseCheck,
@@ -75,8 +75,10 @@ export function RequestPanel(props: {
   onAddCase: () => void;
   onRun: () => void;
   cases: CaseDocument[];
+  allowCases?: boolean;
 }) {
   const { request: requestDocument, selectedCase, selectedEnvironment, workspace } = props;
+  const allowCases = props.allowCases ?? true;
   const effectiveMethod = selectedCase?.overrides.method || requestDocument.method;
   const effectiveUrl = selectedCase?.overrides.url || requestDocument.url;
   const effectivePath = selectedCase?.overrides.path || requestDocument.path;
@@ -90,10 +92,11 @@ export function RequestPanel(props: {
     ...(selectedCase?.overrides.runtime || {})
   };
 
-  const resolvedPreview = useMemo(
-    () => resolveRequest(workspace.project, requestDocument, selectedCase || undefined, selectedEnvironment || undefined),
+  const resolvedInsight = useMemo(
+    () => inspectResolvedRequest(workspace.project, requestDocument, selectedCase || undefined, selectedEnvironment || undefined),
     [workspace.project, requestDocument, selectedCase, selectedEnvironment]
   );
+  const resolvedPreview = resolvedInsight.preview;
 
   function updateSelectedCase(updater: (current: CaseDocument) => CaseDocument) {
     if (!selectedCase) return;
@@ -194,6 +197,7 @@ export function RequestPanel(props: {
             leftSection={<IconPlus size={14} />} 
             onClick={() => props.onAddCase()}
             title="Create new case for this request"
+            disabled={!allowCases}
           >
             Case
           </Button>
@@ -209,8 +213,8 @@ export function RequestPanel(props: {
           <Tabs.Tab value="headers" leftSection={<IconListCheck size={14} />}>Headers</Tabs.Tab>
           <Tabs.Tab value="body" leftSection={<IconMessageCode size={14} />}>Body</Tabs.Tab>
           <Tabs.Tab value="auth" leftSection={<IconKey size={14} />}>Auth</Tabs.Tab>
-          <Tabs.Tab value="checks" leftSection={<IconListCheck size={14} />}>Checks</Tabs.Tab>
-          <Tabs.Tab value="scripts" leftSection={<IconSettings size={14} />}>Scripts</Tabs.Tab>
+          <Tabs.Tab value="checks" leftSection={<IconListCheck size={14} />} disabled={!allowCases}>Checks</Tabs.Tab>
+          <Tabs.Tab value="scripts" leftSection={<IconSettings size={14} />} disabled={!allowCases}>Scripts</Tabs.Tab>
           <Tabs.Tab value="settings" leftSection={<IconAdjustments size={14} />}>Settings</Tabs.Tab>
           <Tabs.Tab value="preview" leftSection={<IconPlayerPlay size={14} />}>Preview</Tabs.Tab>
         </Tabs.List>
@@ -265,6 +269,54 @@ export function RequestPanel(props: {
                   language={resolvedPreview.body.mode === 'json' ? 'json' : 'text'}
                   minHeight="140px"
                 />
+              </div>
+              {resolvedInsight.warnings.length > 0 ? (
+                <div className="request-preview-warnings">
+                  {resolvedInsight.warnings.map(warning => (
+                    <div key={warning.code} className="request-preview-warning">
+                      <strong>{warning.code}</strong>
+                      <span>{warning.message}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <div className="request-preview-grid request-preview-grid-secondary">
+                <div className="request-preview-section">
+                  <Text fw={700} size="sm">Resolved Variables</Text>
+                  {resolvedInsight.variables.length === 0 ? (
+                    <div className="empty-tab-state">No template variables were detected in this request.</div>
+                  ) : (
+                    <div className="variable-audit-list">
+                      {resolvedInsight.variables.map(variable => (
+                        <div key={variable.token} className="variable-audit-card">
+                          <div>
+                            <strong>{variable.token}</strong>
+                            <span>{variable.sourceLabel}</span>
+                          </div>
+                          <Badge color={variable.missing ? 'red' : variable.source === 'environment' ? 'teal' : 'gray'}>
+                            {variable.missing ? 'missing' : variable.value || 'empty'}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="request-preview-section">
+                  <Text fw={700} size="sm">Auth Preview</Text>
+                  {resolvedInsight.authPreview.length === 0 ? (
+                    <div className="empty-tab-state">No auth values will be injected for the current request.</div>
+                  ) : (
+                    <div className="checks-list">
+                      {resolvedInsight.authPreview.map(item => (
+                        <div key={`${item.target}:${item.name}`} className="check-card">
+                          <Text fw={700}>{item.name}</Text>
+                          <Text size="xs" c="dimmed">{item.target}</Text>
+                          <CodeEditor value={item.value} readOnly language="text" minHeight="72px" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </Tabs.Panel>
@@ -429,7 +481,9 @@ export function RequestPanel(props: {
           </Tabs.Panel>
 
           <Tabs.Panel value="checks">
-            {!selectedCase ? (
+            {!allowCases ? (
+              <div className="empty-tab-state">Scratch requests do not persist case assertions. Save to workspace first if you want reusable checks.</div>
+            ) : !selectedCase ? (
               <div className="empty-tab-state">Checks are case-scoped. Select or create a case to add smoke assertions.</div>
             ) : (
               <div className="checks-panel">
@@ -520,7 +574,9 @@ export function RequestPanel(props: {
           </Tabs.Panel>
 
           <Tabs.Panel value="scripts">
-            {!selectedCase ? (
+            {!allowCases ? (
+              <div className="empty-tab-state">Scratch requests keep scripts lightweight. Save to workspace first to attach reusable scripts to a case.</div>
+            ) : !selectedCase ? (
               <div className="empty-tab-state">Scripts are case-scoped. Select or create a case to add pre-request and post-response logic.</div>
             ) : (
               <div className="checks-list">

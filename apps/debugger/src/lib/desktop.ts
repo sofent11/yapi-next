@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
-import type { CollectionRunReport, SendRequestResult } from '@yapi-debugger/schema';
+import type { CollectionRunReport, SendRequestResult, SessionSnapshot } from '@yapi-debugger/schema';
 
 export type MenuAction =
   | { action: 'open-project' }
@@ -114,6 +114,14 @@ export async function appendCollectionReport(report: CollectionRunReport) {
 
 export async function clearCollectionReports(workspaceRoot?: string) {
   await invoke('collection_report_clear', { workspaceRoot });
+}
+
+export async function inspectSession(sessionId: string, url?: string): Promise<SessionSnapshot> {
+  return invoke('session_inspect', { sessionId, url });
+}
+
+export async function clearSession(sessionId: string) {
+  await invoke('session_clear', { sessionId });
 }
 
 export function listenMenuActions(handler: (action: MenuAction) => void) {

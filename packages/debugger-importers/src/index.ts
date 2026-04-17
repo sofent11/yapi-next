@@ -141,6 +141,11 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
   const requests: ImportedRequestRecord[] = [];
   const warnings: ImportWarning[] = [];
   const isSwagger2 = String(document.swagger || '').startsWith('2.');
+  const hasSecuritySchemes = Boolean(
+    document.securityDefinitions ||
+      document.components?.securitySchemes ||
+      (Array.isArray(document.security) && document.security.length > 0)
+  );
   const serverUrl =
     document.servers?.[0]?.url ||
     (document.host
@@ -152,6 +157,16 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
     HTTP_METHODS.forEach(methodKey => {
       const operation = (pathItem as any)?.[methodKey];
       if (!operation) return;
+      if (hasSecuritySchemes || (Array.isArray(operation.security) && operation.security.length > 0)) {
+        warnings.push({
+          level: 'info',
+          scope: 'request',
+          requestName: operation.summary || operation.operationId || pathKey,
+          code: 'auth-review',
+          status: 'degraded',
+          message: `${operation.summary || operation.operationId || pathKey}: security requirements were detected and should be reviewed in Environment/Auth settings after import.`
+        });
+      }
 
       const parameters = [...commonParameters, ...(Array.isArray(operation.parameters) ? operation.parameters : [])];
       const query = parameters.filter(param => param.in === 'query').map(param => ({
@@ -364,9 +379,24 @@ function extractPostmanScript(item: any, listen: 'prerequest' | 'test') {
 function collectScriptWarnings(requestName: string, script: string, warnings: ImportWarning[]) {
   if (!script.trim()) return;
   const unsupportedPatterns = [
-    { token: 'pm.sendRequest', message: 'pm.sendRequest is not supported yet and was preserved as script text only.' },
-    { token: 'pm.vault', message: 'pm.vault is not supported yet and was preserved as script text only.' },
-    { token: 'postman.', message: 'Legacy postman.* APIs may not execute correctly and were preserved as script text only.' }
+    {
+      token: 'pm.sendRequest',
+      code: 'postman-send-request',
+      status: 'unsupported' as const,
+      message: 'pm.sendRequest is not supported yet and was preserved as script text only.'
+    },
+    {
+      token: 'pm.vault',
+      code: 'postman-vault',
+      status: 'unsupported' as const,
+      message: 'pm.vault is not supported yet and was preserved as script text only.'
+    },
+    {
+      token: 'postman.',
+      code: 'postman-legacy-api',
+      status: 'degraded' as const,
+      message: 'Legacy postman.* APIs may not execute correctly and were preserved as script text only.'
+    }
   ];
 
   unsupportedPatterns.forEach(pattern => {
@@ -375,6 +405,8 @@ function collectScriptWarnings(requestName: string, script: string, warnings: Im
         level: 'warning',
         scope: 'case',
         requestName,
+        code: pattern.code,
+        status: pattern.status,
         message: `${requestName}: ${pattern.message}`
       });
     }

@@ -46,4 +46,40 @@ test('Postman import preserves scripts as case scripts and emits warnings for un
   assert.match(result.requests[0]?.cases[0]?.scripts?.postResponse || '', /pm\.test/);
   assert.equal(result.warnings.length, 1);
   assert.match(result.warnings[0]?.message || '', /pm\.sendRequest/);
+  assert.equal(result.warnings[0]?.status, 'unsupported');
+  assert.equal(result.warnings[0]?.code, 'postman-send-request');
+});
+
+test('OpenAPI import warns when security schemes need manual auth review', () => {
+  const openapi = JSON.stringify({
+    openapi: '3.0.0',
+    info: { title: 'Secured API', version: '1.0.0' },
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: 'http', scheme: 'bearer' }
+      }
+    },
+    paths: {
+      '/profile': {
+        get: {
+          summary: 'Get Profile',
+          security: [{ bearerAuth: [] }],
+          responses: {
+            200: {
+              description: 'ok',
+              content: {
+                'application/json': {
+                  example: { ok: true }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  const result = importSourceText(openapi);
+  assert.equal(result.detectedFormat, 'openapi3');
+  assert.equal(result.warnings.some(warning => warning.code === 'auth-review'), true);
 });
