@@ -1,11 +1,13 @@
 import { startTransition, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { ActionIcon, Badge, Drawer, Select, Text, TextInput } from '@mantine/core';
+import { Spotlight, spotlight, type SpotlightActionData } from '@mantine/spotlight';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
-import { IconRefresh } from '@tabler/icons-react';
+import { IconRefresh, IconSearch } from '@tabler/icons-react';
 import { createEmptyCheck, createNamedTemplateSource, inspectResolvedRequest } from '@yapi-debugger/core';
-import { createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex } from '@yapi-debugger/schema';
+import { createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
+import '@mantine/spotlight/styles.css';
 import {
   chooseDirectory,
   chooseImportFile,
@@ -285,6 +287,44 @@ export function App() {
   const [runtimeVariables, setRuntimeVariables] = useState<Record<string, string>>({});
   const [hostSessionSnapshots, setHostSessionSnapshots] = useState<Array<{ host: string; snapshot: SessionSnapshot }>>([]);
   const [gitInfo, setGitInfo] = useState<GitStatusPayload | null>(null);
+
+  const spotlightActions = useMemo(() => {
+    if (!store.workspace) return [];
+    const actions: SpotlightActionData[] = [];
+
+    const walk = (node: WorkspaceTreeNode) => {
+      if (node.kind === 'category') {
+        actions.push({
+          id: `spotlight-cat-${node.path}`,
+          label: node.name,
+          description: `Category: ${node.path}`,
+          onClick: () => {
+            setActiveView('workspace');
+            store.selectNode({ kind: 'category', path: node.path });
+          }
+        });
+      }
+
+      if (node.kind === 'request') {
+        actions.push({
+          id: `spotlight-req-${node.requestId}`,
+          label: node.name,
+          description: `${node.method} ${node.requestPath}`,
+          onClick: () => {
+            setActiveView('workspace');
+            store.selectNode({ kind: 'request', requestId: node.requestId });
+          }
+        });
+      }
+
+      if ('children' in node && node.children) {
+        node.children.forEach(walk);
+      }
+    };
+
+    store.workspace.tree.forEach(walk);
+    return actions;
+  }, [store.workspace]);
 
   const requestId = selectedRequestId(store.selectedNode);
   const caseId = selectedCaseId(store.selectedNode);
@@ -1326,6 +1366,38 @@ export function App() {
     addCaseMutation.mutate(actualId);
   }
 
+  async function handleMoveRequest(targetRequestId: string, targetCategoryPath: string | null) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
+    if (!record) return;
+    const nextFolderSegments = targetCategoryPath ? targetCategoryPath.split('/').filter(Boolean) : [];
+    
+    // Check if moving to the same folder
+    if (record.folderSegments.join('/') === nextFolderSegments.join('/')) return;
+
+    await saveRequestRecord(
+      store.workspace.root,
+      record.request,
+      record.cases,
+      record.resourceDirPath,
+      record.requestFilePath,
+      nextFolderSegments
+    );
+    reloadWorkspace(store.selectedNode);
+    notifications.show({ color: 'teal', message: `Moved ${record.request.name} to ${targetCategoryPath || 'Root'}` });
+  }
+
+  async function handleMoveCategory(sourcePath: string, targetParentPath: string | null) {
+    if (!store.workspace) return;
+    const segments = sourcePath.split('/').filter(Boolean);
+    const categoryName = segments.at(-1);
+    const nextPath = targetParentPath ? `${targetParentPath}/${categoryName}` : (categoryName || '');
+    
+    if (sourcePath === nextPath) return;
+
+    handleRenameCategory(sourcePath, nextPath);
+  }
+
   async function handleRenameCategory(path: string, nextPath: string) {
     if (!store.workspace) return;
     if (!nextPath || nextPath === path) return;
@@ -1780,6 +1852,8 @@ export function App() {
                     : [...current.expandedRequestIds, requestIdToToggle]
                 }))
               }
+              onMoveRequest={handleMoveRequest}
+              onMoveCategory={handleMoveCategory}
             />
 
             <Resizer
@@ -1986,6 +2060,16 @@ export function App() {
           onOpenScratchFromImport={handleOpenImportPreviewInScratch}
         />
       </Drawer>
+
+      <Spotlight
+        actions={spotlightActions}
+        nothingFound="Nothing found..."
+        highlightQuery
+        searchProps={{
+          leftSection: <IconSearch size={18} stroke={1.5} />,
+          placeholder: 'Search requests, categories...',
+        }}
+      />
     </>
   );
 }

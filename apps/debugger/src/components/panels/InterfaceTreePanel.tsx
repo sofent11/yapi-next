@@ -160,6 +160,8 @@ function renderNode(props: {
   onSelectRequest: (requestId: string) => void;
   onSelectCase: (requestId: string, caseId: string) => void;
   onContextMenu: (event: React.MouseEvent, node: WorkspaceTreeNode) => void;
+  onMoveRequest: (requestId: string, targetCategoryPath: string | null) => void;
+  onMoveCategory: (sourcePath: string, targetParentPath: string | null) => void;
 }) {
   const depth = props.depth || 0;
   const requestId = requestIdFromSelection(props.selectedNode);
@@ -168,10 +170,44 @@ function renderNode(props: {
   const isRenaming = props.renamingId === props.node.id;
   const gitMark = getNodeGitStatus(props.node, props.workspace, props.gitStatus);
 
+  const handleDragStart = (e: React.DragEvent) => {
+    if (props.node.kind === 'request') {
+      e.dataTransfer.setData('yapi/request-id', props.node.requestId);
+    } else if (props.node.kind === 'category') {
+      e.dataTransfer.setData('yapi/category-path', props.node.path);
+    }
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (props.node.kind === 'category' || props.node.kind === 'project') {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const requestId = e.dataTransfer.getData('yapi/request-id');
+    const categoryPath = e.dataTransfer.getData('yapi/category-path');
+    const targetPath = props.node.kind === 'category' ? props.node.path : null;
+
+    if (requestId) {
+      props.onMoveRequest(requestId, targetPath);
+    } else if (categoryPath && categoryPath !== targetPath) {
+      props.onMoveCategory(categoryPath, targetPath);
+    }
+  };
+
   if (props.node.kind === 'project') {
     const active = props.selectedNode.kind === 'project';
     return (
-      <div key={props.node.id} className="tree-branch">
+      <div 
+        key={props.node.id} 
+        className="tree-branch"
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
         <button
           type="button"
           className={rowClass(active, 'tree-row-project')}
@@ -200,7 +236,14 @@ function renderNode(props: {
     const node = props.node;
     const active = selectedCategory === node.path;
     return (
-      <div key={node.id} className="tree-branch">
+      <div 
+        key={node.id} 
+        className="tree-branch"
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
         <button
           type="button"
           className={rowClass(active, 'tree-row-category')}
@@ -241,7 +284,12 @@ function renderNode(props: {
     const active = requestId === node.requestId && !selectedCaseId;
     const expanded = props.expandedRequestIds.has(node.requestId);
     return (
-      <div key={node.id} className="tree-branch">
+      <div 
+        key={node.id} 
+        className="tree-branch"
+        draggable
+        onDragStart={handleDragStart}
+      >
         <div
           className={rowClass(active, 'tree-row-request')}
           style={{ paddingLeft: `${4 + depth * 12}px` }}
@@ -349,6 +397,8 @@ export function InterfaceTreePanel(props: {
   onCategoryDraftChange: (value: string) => void;
   onConfirmCreateCategory: () => void;
   onToggleRequest: (requestId: string) => void;
+  onMoveRequest: (requestId: string, targetCategoryPath: string | null) => void;
+  onMoveCategory: (sourcePath: string, targetParentPath: string | null) => void;
 }) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renamingValue, setRenamingValue] = useState('');
@@ -620,6 +670,8 @@ export function InterfaceTreePanel(props: {
               onSelectCategory: props.onSelectCategory,
               onSelectRequest: props.onSelectRequest,
               onSelectCase: props.onSelectCase,
+              onMoveRequest: props.onMoveRequest,
+              onMoveCategory: props.onMoveCategory,
               onContextMenu: (event, node) => {
                 event.preventDefault();
                 event.stopPropagation();
