@@ -97,6 +97,7 @@ export function ResponsePanel(props: {
   onClearSession: () => void;
   onCreateCheck: (input: GeneratedCheckInput) => void;
   onCreateCaseFromResponse: () => void;
+  onExtractValue?: (target: 'local' | 'runtime', input: { suggestedName: string; value: string }) => void;
 }) {
   const examples = props.requestDocument?.examples || [];
   const selectedExample = examples.find(item => item.name === props.selectedExampleName) || null;
@@ -298,6 +299,24 @@ export function ResponsePanel(props: {
                           >
                             Equals
                           </Button>
+                          {props.onExtractValue ? (
+                            <>
+                              <Button
+                                size="xs"
+                                variant="subtle"
+                                onClick={() => props.onExtractValue?.('runtime', { suggestedName: row.path.replace(/[^a-zA-Z0-9]+/g, '_'), value: row.value })}
+                              >
+                                Runtime Var
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="subtle"
+                                onClick={() => props.onExtractValue?.('local', { suggestedName: row.path.replace(/[^a-zA-Z0-9]+/g, '_'), value: row.value })}
+                              >
+                                Local Var
+                              </Button>
+                            </>
+                          ) : null}
                         </Group>
                       </div>
                     ))}
@@ -341,6 +360,24 @@ export function ResponsePanel(props: {
                         >
                           Includes
                         </Button>
+                        {props.onExtractValue ? (
+                          <>
+                            <Button
+                              size="xs"
+                              variant="subtle"
+                              onClick={() => props.onExtractValue?.('runtime', { suggestedName: header.name, value: header.value })}
+                            >
+                              Runtime Var
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="subtle"
+                              onClick={() => props.onExtractValue?.('local', { suggestedName: header.name, value: header.value })}
+                            >
+                              Local Var
+                            </Button>
+                          </>
+                        ) : null}
                       </Group>
                     </div>
                   ))}
@@ -364,6 +401,24 @@ export function ResponsePanel(props: {
                               <strong>{cookie.name}</strong>
                               <span>{cookie.value}</span>
                             </div>
+                            {props.onExtractValue ? (
+                              <Group gap={6}>
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  onClick={() => props.onExtractValue?.('runtime', { suggestedName: cookie.name, value: cookie.value })}
+                                >
+                                  Runtime Var
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  onClick={() => props.onExtractValue?.('local', { suggestedName: cookie.name, value: cookie.value })}
+                                >
+                                  Local Var
+                                </Button>
+                              </Group>
+                            ) : null}
                           </div>
                         ))}
                       </div>
@@ -381,6 +436,24 @@ export function ResponsePanel(props: {
                               <strong>{cookie.name}</strong>
                               <span>{cookie.value}</span>
                             </div>
+                            {props.onExtractValue ? (
+                              <Group gap={6}>
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  onClick={() => props.onExtractValue?.('runtime', { suggestedName: cookie.name, value: cookie.value })}
+                                >
+                                  Runtime Var
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  onClick={() => props.onExtractValue?.('local', { suggestedName: cookie.name, value: cookie.value })}
+                                >
+                                  Local Var
+                                </Button>
+                              </Group>
+                            ) : null}
                           </div>
                         ))}
                       </div>

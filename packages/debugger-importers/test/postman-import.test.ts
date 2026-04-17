@@ -44,10 +44,10 @@ test('Postman import preserves scripts as case scripts and emits warnings for un
   assert.equal(result.requests[0]?.cases.length, 1);
   assert.match(result.requests[0]?.cases[0]?.scripts?.preRequest || '', /pm\.variables\.set/);
   assert.match(result.requests[0]?.cases[0]?.scripts?.postResponse || '', /pm\.test/);
-  assert.equal(result.warnings.length, 1);
-  assert.match(result.warnings[0]?.message || '', /pm\.sendRequest/);
-  assert.equal(result.warnings[0]?.status, 'unsupported');
-  assert.equal(result.warnings[0]?.code, 'postman-send-request');
+  assert.equal(result.warnings.some(warning => warning.code === 'postman-script-kept'), true);
+  assert.equal(result.warnings.some(warning => warning.code === 'postman-send-request'), true);
+  assert.match(result.warnings.find(warning => warning.code === 'postman-send-request')?.message || '', /pm\.sendRequest/);
+  assert.equal(result.warnings.find(warning => warning.code === 'postman-send-request')?.status, 'unsupported');
 });
 
 test('OpenAPI import warns when security schemes need manual auth review', () => {
@@ -82,4 +82,8 @@ test('OpenAPI import warns when security schemes need manual auth review', () =>
   const result = importSourceText(openapi);
   assert.equal(result.detectedFormat, 'openapi3');
   assert.equal(result.warnings.some(warning => warning.code === 'auth-review'), true);
+  assert.equal(result.project.runtime.baseUrl, 'https://api.example.com');
+  assert.equal(result.environments[0]?.authProfiles.some(profile => profile.name === 'bearerAuth'), true);
+  assert.equal(result.requests[0]?.request.auth.type, 'profile');
+  assert.equal(result.requests[0]?.request.auth.profileName, 'bearerAuth');
 });

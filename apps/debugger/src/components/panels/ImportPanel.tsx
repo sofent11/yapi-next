@@ -19,7 +19,11 @@ export function ImportPanel(props: {
     replaceableRequests: number;
     degradedWarnings: number;
     unsupportedWarnings: number;
+    compatibleScriptWarnings: number;
     exampleCount: number;
+    runnableScore: number;
+    runnableRequests: number;
+    blockedRequests: number;
     nextSteps: string[];
     warningBreakdown: Array<{ label: string; count: number }>;
   } | null;
@@ -144,6 +148,20 @@ export function ImportPanel(props: {
             <div className="summary-tile">
               <span>New</span>
               <strong>{props.importPreviewInfo.newRequests}</strong>
+            </div>
+            <div className="summary-tile">
+              <span>Runnable</span>
+              <strong>{props.importPreviewInfo.runnableScore}%</strong>
+            </div>
+            <div className="summary-tile">
+              <span>Ready</span>
+              <strong>{props.importPreviewInfo.runnableRequests}</strong>
+            </div>
+            <div className="summary-tile">
+              <span>Blocked</span>
+              <strong style={{ color: props.importPreviewInfo.blockedRequests > 0 ? 'var(--orange)' : 'inherit' }}>
+                {props.importPreviewInfo.blockedRequests}
+              </strong>
             </div>
             <div className="summary-tile">
               <span>Examples</span>

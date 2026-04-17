@@ -2,15 +2,17 @@ import {
   applyCollectionRules,
   buildCurlCommand,
   buildWorkspaceIndex,
+  createNamedTemplateSource,
   createProjectSeed,
   evaluateChecks,
   executeRequestScript,
   materializeCollectionDocument,
-  materializeEnvironmentDocument,
+  materializeEnvironmentDocuments,
   materializeProjectDocument,
   materializeRequestDocuments,
   parseCollectionDataText,
-  resolveRequest
+  resolveRequest,
+  inspectResolvedRequest
 } from '@yapi-debugger/core';
 import {
   createDefaultEnvironment,
@@ -151,7 +153,11 @@ export type ImportPreviewSummary = {
   replaceableRequests: number;
   degradedWarnings: number;
   unsupportedWarnings: number;
+  compatibleScriptWarnings: number;
   exampleCount: number;
+  runnableScore: number;
+  runnableRequests: number;
+  blockedRequests: number;
   nextSteps: string[];
   warningBreakdown: Array<{
     label: string;
@@ -169,19 +175,39 @@ export function buildImportPreviewSummary(
 ): ImportPreviewSummary {
   let conflicts = 0;
   let exampleCount = 0;
+  let runnableRequests = 0;
+  let blockedRequests = 0;
   result.requests.forEach(imported => {
     const existing = workspace.requests.find(record => collectionConflictsWithRecord(record, imported));
     if (existing) conflicts += 1;
     exampleCount += imported.request.examples.length;
+    const authLooksConfigured =
+      imported.request.auth.type === 'inherit' ||
+      imported.request.auth.type === 'none' ||
+      imported.request.auth.type === 'profile' ||
+      (imported.request.auth.type === 'bearer' && Boolean(imported.request.auth.token || imported.request.auth.tokenFromVar)) ||
+      (imported.request.auth.type === 'basic' && Boolean(imported.request.auth.username || imported.request.auth.usernameFromVar)) ||
+      (imported.request.auth.type === 'apikey' && Boolean(imported.request.auth.key));
+    const baseUrlLooksConfigured = imported.request.url.includes('{{baseUrl}}')
+      ? Boolean(result.project.runtime.baseUrl && result.project.runtime.baseUrl !== 'https://api.example.com')
+      : true;
+    if (authLooksConfigured && baseUrlLooksConfigured) {
+      runnableRequests += 1;
+    } else {
+      blockedRequests += 1;
+    }
   });
   const newRequests = Math.max(result.requests.length - conflicts, 0);
   const degradedWarnings = warningsByStatus(result.warnings || [], 'degraded');
   const unsupportedWarnings = warningsByStatus(result.warnings || [], 'unsupported');
+  const compatibleScriptWarnings = warningsByStatus(result.warnings || [], 'compatible');
+  const runnableScore = result.requests.length === 0 ? 0 : Math.max(0, Math.round((runnableRequests / result.requests.length) * 100));
   const nextSteps = [
     conflicts > 0 ? `${conflicts} requests match existing names in the same folder. Review the conflict strategy before applying.` : '',
     degradedWarnings > 0 ? `${degradedWarnings} imported items need manual follow-up before they behave like the source collection.` : '',
     unsupportedWarnings > 0 ? `${unsupportedWarnings} scripts or features were preserved as text only and will not execute automatically.` : '',
-    result.warnings.some(item => item.code === 'auth-review')
+    blockedRequests > 0 ? `${blockedRequests} imported requests still need baseUrl or auth fixes before they can run cleanly.` : '',
+    result.warnings.some(item => item.code === 'auth-review' || item.code === 'oauth-review')
       ? 'Review Environment/Auth settings after import because the source spec declared security requirements.'
       : '',
     newRequests > 0 ? `${newRequests} requests can be opened in Scratch or edited immediately after import.` : ''
@@ -201,11 +227,16 @@ export function buildImportPreviewSummary(
     replaceableRequests: conflicts,
     degradedWarnings,
     unsupportedWarnings,
+    compatibleScriptWarnings,
     exampleCount,
+    runnableScore,
+    runnableRequests,
+    blockedRequests,
     nextSteps,
     warningBreakdown: [
       { label: 'Needs review', count: degradedWarnings },
       { label: 'Not supported', count: unsupportedWarnings },
+      { label: 'Scripts kept', count: compatibleScriptWarnings },
       { label: 'Examples kept', count: exampleCount }
     ]
   };
@@ -238,6 +269,67 @@ export async function importIntoWorkspace(
   await Promise.all(deleteTargets.map(record => deleteRequestInWorkspace(record)));
   const writes = materializeRequestDocuments(nextRecords, root);
   await Promise.all(writes.map(item => writeDocument(item.path, item.content)));
+
+  const nextProject: ProjectDocument = {
+    ...workspace.project,
+    runtime: {
+      ...workspace.project.runtime,
+      ...result.project.runtime,
+      baseUrl:
+        result.project.runtime.baseUrl && result.project.runtime.baseUrl !== 'https://api.example.com'
+          ? result.project.runtime.baseUrl
+          : workspace.project.runtime.baseUrl
+    }
+  };
+  await saveProject(root, nextProject);
+
+  for (const importedEnv of result.environments) {
+    const existing = workspace.environments.find(item => item.document.name === importedEnv.name)?.document;
+    const merged: EnvironmentDocument = existing
+      ? {
+          ...existing,
+          vars: {
+            ...(existing.vars || {}),
+            ...(importedEnv.vars || {})
+          },
+          sharedVars: {
+            ...(existing.sharedVars || existing.vars || {}),
+            ...(importedEnv.sharedVars || importedEnv.vars || {})
+          },
+          headers: mergeImportedHeaders(existing.headers || [], importedEnv.headers || []),
+          sharedHeaders: mergeImportedHeaders(existing.sharedHeaders || existing.headers || [], importedEnv.sharedHeaders || importedEnv.headers || []),
+          authProfiles: mergeImportedAuthProfiles(existing.authProfiles || [], importedEnv.authProfiles || [])
+        }
+      : importedEnv;
+    await saveEnvironment(root, merged);
+  }
+}
+
+function mergeImportedHeaders(baseHeaders: EnvironmentDocument['headers'], nextHeaders: EnvironmentDocument['headers']) {
+  const output = [...baseHeaders];
+  const names = new Map(output.map((header, index) => [header.name.trim().toLowerCase(), index]));
+  nextHeaders.forEach(header => {
+    const key = header.name.trim().toLowerCase();
+    const existing = names.get(key);
+    if (existing == null) {
+      names.set(key, output.length);
+      output.push(header);
+      return;
+    }
+    output[existing] = header;
+  });
+  return output;
+}
+
+function mergeImportedAuthProfiles(baseProfiles: EnvironmentDocument['authProfiles'], nextProfiles: EnvironmentDocument['authProfiles']) {
+  const output = [...baseProfiles];
+  const names = new Set(output.map(profile => profile.name));
+  nextProfiles.forEach(profile => {
+    if (names.has(profile.name)) return;
+    names.add(profile.name);
+    output.push(profile);
+  });
+  return output;
 }
 
 export async function createWorkspace(root: string, projectName: string) {
@@ -247,8 +339,13 @@ export async function createWorkspace(root: string, projectName: string) {
 }
 
 export async function saveEnvironment(root: string, environment: EnvironmentDocument) {
-  const file = materializeEnvironmentDocument(environment, root);
-  await writeDocument(file.path, file.content);
+  const writes = materializeEnvironmentDocuments(environment, root);
+  const activePaths = new Set(writes.map(item => item.path));
+  const staleLocalPath = environment.localFilePath && !activePaths.has(environment.localFilePath) ? environment.localFilePath : null;
+  await Promise.all(writes.map(item => writeDocument(item.path, item.content)));
+  if (staleLocalPath) {
+    await deleteEntry(staleLocalPath, false).catch(() => undefined);
+  }
 }
 
 export async function saveProject(root: string, project: ProjectDocument) {
@@ -572,18 +669,26 @@ export async function runPreparedRequest(
   const context = input.context || {};
   const envName =
     input.caseDocument?.environment || context.state?.environment.name || workspace.project.defaultEnvironment;
-  const runtimeEnvironment = context.state?.environment || createRuntimeEnvironment(workspace, envName);
+  const runtimeEnvironment =
+    context.state?.environment && context.state.environment.name === envName
+      ? context.state.environment
+      : createRuntimeEnvironment(workspace, envName);
   const state = context.state || {
     variables: {},
     environment: runtimeEnvironment
   };
+  state.environment = runtimeEnvironment;
+  const beforeSources = [
+    createNamedTemplateSource('runtime variables', state.variables, 'runtime'),
+    ...(context.extraSources || [])
+  ];
 
   const previewBeforeScripts = resolveRequest(
     workspace.project,
     input.request,
     input.caseDocument,
     state.environment,
-    context.extraSources || []
+    beforeSources
   );
   const preScript = executeRequestScript({
     phase: 'pre-request',
@@ -591,8 +696,22 @@ export async function runPreparedRequest(
     state,
     request: previewBeforeScripts
   });
+  const insight = inspectResolvedRequest(
+    workspace.project,
+    input.request,
+    input.caseDocument,
+    preScript.state.environment,
+    [
+      createNamedTemplateSource('runtime variables', preScript.state.variables, 'script'),
+      ...(context.extraSources || [])
+    ]
+  );
+  const blockingDiagnostics = insight.diagnostics.filter(item => item.blocking);
+  if (blockingDiagnostics.length > 0) {
+    throw new Error(blockingDiagnostics.map(item => item.message).join(' '));
+  }
   const preview = {
-    ...preScript.request,
+    ...insight.preview,
     sessionId: input.sessionId || workspace.root
   };
   const response = await sendRequest(preview);
@@ -767,9 +886,9 @@ export async function runCollection(
       try {
         const run = await runResolvedRequest(workspace, step.requestId, step.caseId, {
           extraSources: [
-            dataVars,
-            { steps: seeded },
-            runtimeState.variables
+            createNamedTemplateSource('collection vars', collection.vars, 'collection'),
+            createNamedTemplateSource(`data row ${index + 1}`, dataVars, 'data-row'),
+            createNamedTemplateSource('step outputs', { steps: seeded }, 'step-output')
           ],
           state: runtimeState,
           collectionRules: collection.rules,

@@ -25,6 +25,16 @@ type ImportContext = {
   warnings: ImportWarning[];
 };
 
+function authProfileVariableName(seed: string, suffix: string) {
+  const base = String(seed || 'auth')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .map((part, index) => (index === 0 ? part.toLowerCase() : `${part.charAt(0).toUpperCase()}${part.slice(1)}`))
+    .join('');
+  return `${base || 'auth'}${suffix}`;
+}
+
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'] as const;
 
 function parseStructuredText(content: string) {
@@ -151,6 +161,68 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
     (document.host
       ? [document.schemes?.[0] || 'http', '://', document.host, document.basePath || ''].join('')
       : '{{baseUrl}}');
+  if (serverUrl && serverUrl !== '{{baseUrl}}') {
+    project.runtime.baseUrl = serverUrl;
+  }
+
+  const securitySchemes = document.components?.securitySchemes || document.securityDefinitions || {};
+  const sharedEnvironment = environments[0];
+  Object.entries(securitySchemes).forEach(([schemeName, scheme]) => {
+    const source = scheme as Record<string, any>;
+    if (source.type === 'http' && String(source.scheme || '').toLowerCase() === 'bearer') {
+      const tokenVar = authProfileVariableName(schemeName, 'Token');
+      sharedEnvironment.vars[tokenVar] = sharedEnvironment.vars[tokenVar] || '';
+      sharedEnvironment.authProfiles.push({
+        name: String(schemeName),
+        auth: {
+          type: 'bearer',
+          tokenFromVar: tokenVar
+        }
+      });
+      return;
+    }
+
+    if (source.type === 'http' && String(source.scheme || '').toLowerCase() === 'basic') {
+      const usernameVar = authProfileVariableName(schemeName, 'Username');
+      const passwordVar = authProfileVariableName(schemeName, 'Password');
+      sharedEnvironment.vars[usernameVar] = sharedEnvironment.vars[usernameVar] || '';
+      sharedEnvironment.vars[passwordVar] = sharedEnvironment.vars[passwordVar] || '';
+      sharedEnvironment.authProfiles.push({
+        name: String(schemeName),
+        auth: {
+          type: 'basic',
+          usernameFromVar: usernameVar,
+          passwordFromVar: passwordVar
+        }
+      });
+      return;
+    }
+
+    if (source.type === 'apiKey') {
+      const valueVar = authProfileVariableName(schemeName, 'Value');
+      sharedEnvironment.vars[valueVar] = sharedEnvironment.vars[valueVar] || '';
+      sharedEnvironment.authProfiles.push({
+        name: String(schemeName),
+        auth: {
+          type: 'apikey',
+          key: String(source.name || 'X-API-Key'),
+          addTo: source.in === 'query' ? 'query' : 'header',
+          valueFromVar: valueVar
+        }
+      });
+      return;
+    }
+
+    if (source.type === 'oauth2' || source.type === 'openIdConnect') {
+      warnings.push({
+        level: 'warning',
+        scope: 'project',
+        code: 'oauth-review',
+        status: 'unsupported',
+        message: `${schemeName}: OAuth/OpenID Connect definitions were detected. They were preserved as warnings only and still need manual setup.`
+      });
+    }
+  });
 
   Object.entries(document.paths || {}).forEach(([pathKey, pathItem]) => {
     const commonParameters = Array.isArray((pathItem as any)?.parameters) ? (pathItem as any).parameters : [];
@@ -261,7 +333,7 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
         ...createEmptyRequest(operation.summary || operation.operationId || pathKey),
         name: operation.summary || operation.operationId || pathKey,
         method: methodLabel(methodKey),
-        url: normalizeUrl(serverUrl ? `${serverUrl}${pathKey}` : pathKey),
+        url: normalizeUrl(`{{baseUrl}}${pathKey}`),
         path: normalizePath(pathKey),
         description: operation.description || operation.summary || '',
         tags: Array.isArray(operation.tags) ? operation.tags : [],
@@ -272,6 +344,18 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
         auth: { type: 'inherit' as const },
         examples
       };
+
+      const securityName = Array.isArray(operation.security) && operation.security.length > 0
+        ? Object.keys(operation.security[0] || {})[0]
+        : Array.isArray(document.security) && document.security.length > 0
+          ? Object.keys(document.security[0] || {})[0]
+          : '';
+      if (securityName && sharedEnvironment.authProfiles.some(profile => profile.name === securityName)) {
+        request.auth = {
+          type: 'profile',
+          profileName: securityName
+        };
+      }
 
       pushRequest(
         { projectName: project.name, requests, environments, warnings },
@@ -378,6 +462,16 @@ function extractPostmanScript(item: any, listen: 'prerequest' | 'test') {
 
 function collectScriptWarnings(requestName: string, script: string, warnings: ImportWarning[]) {
   if (!script.trim()) return;
+  if (script.includes('pm.test(') || script.includes('pm.expect(')) {
+    warnings.push({
+      level: 'info',
+      scope: 'case',
+      requestName,
+      code: 'postman-script-kept',
+      status: 'compatible',
+      message: `${requestName}: Postman assertion/test script was preserved and may execute after import.`
+    });
+  }
   const unsupportedPatterns = [
     {
       token: 'pm.sendRequest',

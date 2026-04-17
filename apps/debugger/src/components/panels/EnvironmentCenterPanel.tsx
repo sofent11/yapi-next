@@ -11,6 +11,48 @@ function authTypeOptions() {
   ];
 }
 
+function toKeyValueRows(values: Record<string, string>) {
+  return Object.entries(values).map(([name, value]) => ({ name, value, enabled: true, kind: 'text' as const }));
+}
+
+function mergeHeaderRows(sharedHeaders: EnvironmentDocument['headers'], localHeaders: EnvironmentDocument['headers']) {
+  const output = [...sharedHeaders];
+  const names = new Map(output.map((row, index) => [row.name.trim().toLowerCase(), index]));
+  localHeaders.forEach(row => {
+    const key = row.name.trim().toLowerCase();
+    const existing = names.get(key);
+    if (existing == null) {
+      names.set(key, output.length);
+      output.push(row);
+      return;
+    }
+    output[existing] = row;
+  });
+  return output;
+}
+
+function rebuildEnvironment(environment: EnvironmentDocument, patch: Partial<EnvironmentDocument>) {
+  const sharedVars = patch.sharedVars ?? environment.sharedVars ?? environment.vars ?? {};
+  const localVars = patch.localVars ?? environment.localVars ?? {};
+  const sharedHeaders = patch.sharedHeaders ?? environment.sharedHeaders ?? environment.headers ?? [];
+  const localHeaders = patch.localHeaders ?? environment.localHeaders ?? [];
+  const hasLocalOverlay = Object.keys(localVars).length > 0 || localHeaders.length > 0 || Boolean(environment.localFilePath);
+  return {
+    ...environment,
+    ...patch,
+    sharedVars,
+    localVars,
+    sharedHeaders,
+    localHeaders,
+    vars: {
+      ...sharedVars,
+      ...localVars
+    },
+    headers: mergeHeaderRows(sharedHeaders, localHeaders),
+    overlayMode: hasLocalOverlay || environment.sharedFilePath ? 'overlay' : environment.overlayMode || 'standalone'
+  };
+}
+
 export function EnvironmentCenterPanel(props: {
   workspace: WorkspaceIndex;
   draftProject: ProjectDocument | null;
@@ -93,14 +135,32 @@ export function EnvironmentCenterPanel(props: {
           {selectedEnvironment ? (
             <>
               <div className="inspector-section">
-                <h3 className="section-title">Environment Variables</h3>
+                <h3 className="section-title">Shared Variables</h3>
                 <KeyValueEditor
-                  rows={Object.entries(selectedEnvironment.vars).map(([name, value]) => ({ name, value, enabled: true, kind: 'text' as const }))}
+                  rows={toKeyValueRows(selectedEnvironment.sharedVars || selectedEnvironment.vars || {})}
                   onChange={rows =>
-                    props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
-                      ...environment,
-                      vars: Object.fromEntries(rows.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]))
-                    }))
+                    props.onEnvironmentUpdate(selectedEnvironment.name, environment =>
+                      rebuildEnvironment(environment, {
+                        sharedVars: Object.fromEntries(rows.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]))
+                      })
+                    )
+                  }
+                />
+              </div>
+
+              <div className="inspector-section">
+                <h3 className="section-title">Local Secret Variables</h3>
+                <Text size="xs" c="dimmed" mb={8}>
+                  Saved into `{selectedEnvironment.name}.local.yaml` when present. These values stay out of Git by default.
+                </Text>
+                <KeyValueEditor
+                  rows={toKeyValueRows(selectedEnvironment.localVars || {})}
+                  onChange={rows =>
+                    props.onEnvironmentUpdate(selectedEnvironment.name, environment =>
+                      rebuildEnvironment(environment, {
+                        localVars: Object.fromEntries(rows.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]))
+                      })
+                    )
                   }
                 />
               </div>
@@ -108,12 +168,27 @@ export function EnvironmentCenterPanel(props: {
               <div className="inspector-section">
                 <h3 className="section-title">Shared Headers</h3>
                 <KeyValueEditor
-                  rows={selectedEnvironment.headers}
+                  rows={selectedEnvironment.sharedHeaders || selectedEnvironment.headers}
                   onChange={rows =>
-                    props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
-                      ...environment,
-                      headers: rows
-                    }))
+                    props.onEnvironmentUpdate(selectedEnvironment.name, environment =>
+                      rebuildEnvironment(environment, {
+                        sharedHeaders: rows
+                      })
+                    )
+                  }
+                />
+              </div>
+
+              <div className="inspector-section">
+                <h3 className="section-title">Local Secret Headers</h3>
+                <KeyValueEditor
+                  rows={selectedEnvironment.localHeaders || []}
+                  onChange={rows =>
+                    props.onEnvironmentUpdate(selectedEnvironment.name, environment =>
+                      rebuildEnvironment(environment, {
+                        localHeaders: rows
+                      })
+                    )
                   }
                 />
               </div>
@@ -175,20 +250,36 @@ export function EnvironmentCenterPanel(props: {
                             }
                           />
                           {profile.auth.type === 'bearer' ? (
-                            <TextInput
-                              label="Bearer Token"
-                              value={profile.auth.token || ''}
-                              onChange={event =>
-                                props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
-                                  ...environment,
-                                  authProfiles: environment.authProfiles.map(item =>
-                                    item.name === profile.name
-                                      ? { ...item, auth: { ...item.auth, token: event.currentTarget.value } }
-                                      : item
-                                  )
-                                }))
-                              }
-                            />
+                            <>
+                              <TextInput
+                                label="Bearer Token"
+                                value={profile.auth.token || ''}
+                                onChange={event =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, token: event.currentTarget.value } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <TextInput
+                                label="Token Variable"
+                                value={profile.auth.tokenFromVar || ''}
+                                onChange={event =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, tokenFromVar: event.currentTarget.value } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                            </>
                           ) : null}
                           {profile.auth.type === 'basic' ? (
                             <>
@@ -215,6 +306,34 @@ export function EnvironmentCenterPanel(props: {
                                     authProfiles: environment.authProfiles.map(item =>
                                       item.name === profile.name
                                         ? { ...item, auth: { ...item.auth, password: event.currentTarget.value } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <TextInput
+                                label="Username Variable"
+                                value={profile.auth.usernameFromVar || ''}
+                                onChange={event =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, usernameFromVar: event.currentTarget.value } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <TextInput
+                                label="Password Variable"
+                                value={profile.auth.passwordFromVar || ''}
+                                onChange={event =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, passwordFromVar: event.currentTarget.value } }
                                         : item
                                     )
                                   }))
@@ -247,6 +366,20 @@ export function EnvironmentCenterPanel(props: {
                                     authProfiles: environment.authProfiles.map(item =>
                                       item.name === profile.name
                                         ? { ...item, auth: { ...item.auth, value: event.currentTarget.value } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <TextInput
+                                label="Value Variable"
+                                value={profile.auth.valueFromVar || ''}
+                                onChange={event =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, valueFromVar: event.currentTarget.value } }
                                         : item
                                     )
                                   }))

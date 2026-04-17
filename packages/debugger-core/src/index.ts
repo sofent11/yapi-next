@@ -118,6 +118,63 @@ function parseEnvironmentFile(filePath: string, content: string): EnvironmentDoc
   return parsed;
 }
 
+function environmentStem(filePath: string) {
+  const fileName = filePath.split('/').pop() || '';
+  if (fileName.endsWith(LOCAL_ENV_SUFFIX)) {
+    return fileName.slice(0, -LOCAL_ENV_SUFFIX.length);
+  }
+  if (fileName.endsWith('.yaml')) {
+    return fileName.slice(0, -'.yaml'.length);
+  }
+  if (fileName.endsWith('.yml')) {
+    return fileName.slice(0, -'.yml'.length);
+  }
+  return fileName;
+}
+
+function mergeHeaderRowsByName(sharedRows: ParameterRow[], localRows: ParameterRow[]) {
+  const output = [...cleanRows(sharedRows)];
+  const indexByName = new Map(output.map((row, index) => [row.name.trim().toLowerCase(), index]));
+  cleanRows(localRows).forEach(row => {
+    const key = row.name.trim().toLowerCase();
+    const existingIndex = indexByName.get(key);
+    if (existingIndex == null) {
+      indexByName.set(key, output.length);
+      output.push(row);
+      return;
+    }
+    output[existingIndex] = row;
+  });
+  return output;
+}
+
+function mergeEnvironmentDocuments(
+  sharedDocument: EnvironmentDocument,
+  sharedFilePath: string,
+  localDocument?: EnvironmentDocument,
+  localFilePath?: string
+) {
+  const sharedVars = { ...(sharedDocument.vars || {}) };
+  const localVars = { ...(localDocument?.vars || {}) };
+  return environmentDocumentSchema.parse({
+    ...sharedDocument,
+    name: sharedDocument.name || localDocument?.name || environmentStem(sharedFilePath),
+    vars: {
+      ...sharedVars,
+      ...localVars
+    },
+    headers: mergeHeaderRowsByName(sharedDocument.headers || [], localDocument?.headers || []),
+    authProfiles: sharedDocument.authProfiles || [],
+    sharedVars,
+    sharedHeaders: cleanRows(sharedDocument.headers || []),
+    localVars,
+    localHeaders: cleanRows(localDocument?.headers || []),
+    sharedFilePath,
+    localFilePath,
+    overlayMode: localDocument ? 'overlay' : 'standalone'
+  });
+}
+
 function pathSegmentsBetween(root: string, target: string) {
   return target
     .replace(root, '')
@@ -146,6 +203,8 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
   const requestRecords: WorkspaceRequestRecord[] = [];
   const collectionRecords: WorkspaceCollectionRecord[] = [];
   const requestsByPath = new Map<string, WorkspaceRequestRecord>();
+  const sharedEnvironmentFiles = new Map<string, { filePath: string; document: EnvironmentDocument }>();
+  const localEnvironmentFiles = new Map<string, { filePath: string; document: EnvironmentDocument }>();
 
   const filePaths = Object.keys(input.fileContents).sort((a: string, b: string) => a.localeCompare(b, 'zh-CN'));
   for (const filePath of filePaths) {
@@ -189,10 +248,13 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
     }
 
     if (filePath.includes('/environments/') && filePath.endsWith('.yaml')) {
-      environmentRecords.push({
-        document: parseEnvironmentFile(filePath, content),
-        filePath
-      });
+      const document = parseEnvironmentFile(filePath, content);
+      const stem = environmentStem(filePath);
+      if (filePath.endsWith(LOCAL_ENV_SUFFIX)) {
+        localEnvironmentFiles.set(stem, { filePath, document });
+      } else {
+        sharedEnvironmentFiles.set(stem, { filePath, document });
+      }
       continue;
     }
 
@@ -207,6 +269,51 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
       });
     }
   }
+
+  const environmentKeys = new Set<string>([
+    ...sharedEnvironmentFiles.keys(),
+    ...localEnvironmentFiles.keys()
+  ]);
+
+  environmentKeys.forEach(key => {
+    const sharedFile = sharedEnvironmentFiles.get(key);
+    const localFile = localEnvironmentFiles.get(key);
+    if (sharedFile) {
+      environmentRecords.push({
+        document: mergeEnvironmentDocuments(
+          sharedFile.document,
+          sharedFile.filePath,
+          localFile?.document,
+          localFile?.filePath
+        ),
+        filePath: sharedFile.filePath,
+        localFilePath: localFile?.filePath
+      });
+      return;
+    }
+
+    if (localFile) {
+      const standalone = environmentDocumentSchema.parse({
+        ...localFile.document,
+        name: localFile.document.name || key,
+        vars: { ...(localFile.document.vars || {}) },
+        headers: cleanRows(localFile.document.headers || []),
+        authProfiles: localFile.document.authProfiles || [],
+        sharedVars: {},
+        sharedHeaders: [],
+        localVars: { ...(localFile.document.vars || {}) },
+        localHeaders: cleanRows(localFile.document.headers || []),
+        sharedFilePath: undefined,
+        localFilePath: localFile.filePath,
+        overlayMode: 'standalone'
+      });
+      environmentRecords.push({
+        document: standalone,
+        filePath: localFile.filePath,
+        localFilePath: localFile.filePath
+      });
+    }
+  });
 
   const projectNode: WorkspaceTreeNode = {
     id: 'project:root',
@@ -465,12 +572,62 @@ export function materializeCollectionDocument(
 }
 
 export function materializeEnvironmentDocument(environment: EnvironmentDocument, rootPath: string) {
-  const name = slugify(environment.name);
-  const suffix = environment.name === 'local' ? LOCAL_ENV_SUFFIX : '.yaml';
-  return {
-    path: `${rootPath ? `${rootPath}/` : ''}environments/${name}${suffix}`,
-    content: stringifyYamlDocument(environmentDocumentSchema.parse(environment))
-  };
+  return materializeEnvironmentDocuments(environment, rootPath)[0];
+}
+
+export function materializeEnvironmentDocuments(environment: EnvironmentDocument, rootPath: string) {
+  const overlayMode = environment.overlayMode || 'standalone';
+  const primaryName = slugify(environment.name);
+  const sharedDocument = environmentDocumentSchema.parse({
+    schemaVersion: environment.schemaVersion,
+    name: environment.name,
+    vars: environment.sharedVars ?? environment.vars,
+    headers: environment.sharedHeaders ?? environment.headers,
+    authProfiles: environment.authProfiles || []
+  });
+  const localDocument = environmentDocumentSchema.parse({
+    schemaVersion: environment.schemaVersion,
+    name: environment.name,
+    vars: environment.localVars ?? {},
+    headers: environment.localHeaders ?? [],
+    authProfiles: overlayMode === 'standalone' && !environment.sharedFilePath ? environment.authProfiles || [] : []
+  });
+  const writes: WorkspaceFileWrite[] = [];
+
+  const sharedPath =
+    environment.sharedFilePath ||
+    `${rootPath ? `${rootPath}/` : ''}environments/${primaryName}.yaml`;
+  const localPath =
+    environment.localFilePath ||
+    `${rootPath ? `${rootPath}/` : ''}environments/${primaryName}${LOCAL_ENV_SUFFIX}`;
+
+  if (overlayMode === 'overlay') {
+    writes.push({
+      path: sharedPath,
+      content: stringifyYamlDocument(sharedDocument)
+    });
+    const hasLocalOverlay =
+      Object.keys(localDocument.vars || {}).length > 0 || (localDocument.headers || []).length > 0;
+    if (hasLocalOverlay) {
+      writes.push({
+        path: localPath,
+        content: stringifyYamlDocument(localDocument)
+      });
+    }
+    return writes;
+  }
+
+  const standalonePath =
+    environment.localFilePath && !environment.sharedFilePath
+      ? environment.localFilePath
+      : `${rootPath ? `${rootPath}/` : ''}environments/${primaryName}${environment.name === 'local' ? LOCAL_ENV_SUFFIX : '.yaml'}`;
+  const standaloneDocument =
+    environment.localFilePath && !environment.sharedFilePath ? localDocument : sharedDocument;
+  writes.push({
+    path: standalonePath,
+    content: stringifyYamlDocument(standaloneDocument)
+  });
+  return writes;
 }
 
 export function materializeProjectDocument(project: ProjectDocument, rootPath: string) {
@@ -496,6 +653,28 @@ function mergeVariableSources(
     extraSources
   });
   return sources;
+}
+
+function extraSourceMeta(source: Record<string, unknown>) {
+  const meta = source.__debugSource;
+  if (!meta || typeof meta !== 'object') return null;
+  const label = typeof (meta as Record<string, unknown>).label === 'string' ? String((meta as Record<string, unknown>).label) : '';
+  const kind = typeof (meta as Record<string, unknown>).kind === 'string' ? String((meta as Record<string, unknown>).kind) : 'runtime';
+  return label ? { label, kind } : null;
+}
+
+export function createNamedTemplateSource(
+  label: string,
+  data: Record<string, unknown>,
+  kind: 'runtime' | 'collection' | 'data-row' | 'step-output' | 'script' = 'runtime'
+) {
+  return {
+    ...data,
+    __debugSource: {
+      label,
+      kind
+    }
+  };
 }
 
 export function applyProjectVariables(
@@ -530,16 +709,25 @@ function describeVariableSource(
     const value = readPathValue(variables[index], token);
     if (value === undefined) continue;
     if (index < extraSources.length) {
+      const meta = extraSourceMeta(extraSources[index]);
       return {
         source: 'extra' as const,
-        sourceLabel: `runtime source ${index + 1}`,
+        sourceLabel: meta?.label || `runtime source ${index + 1}`,
         value: String(value ?? '')
       };
     }
     if (environment && index === extraSources.length) {
+      const localVars = environment.localVars || {};
+      const sharedVars = environment.sharedVars || environment.vars || {};
+      const hasLocal = Object.prototype.hasOwnProperty.call(localVars, token.split('.')[0] || token);
+      const hasShared = Object.prototype.hasOwnProperty.call(sharedVars, token.split('.')[0] || token);
       return {
         source: 'environment' as const,
-        sourceLabel: `environment: ${environment.name}`,
+        sourceLabel: hasLocal
+          ? `environment local: ${environment.name}`
+          : hasShared
+            ? `environment shared: ${environment.name}`
+            : `environment: ${environment.name}`,
         value: String(value ?? '')
       };
     }
@@ -644,6 +832,28 @@ function mergeAuth(baseAuth: AuthConfig, overrideAuth?: AuthConfig, environment?
   };
 }
 
+function resolveAuthValue(
+  directValue: string | undefined,
+  variableRef: string | undefined,
+  project: ProjectDocument,
+  environment: EnvironmentDocument | undefined,
+  extraSources: Array<Record<string, unknown>>
+) {
+  if (variableRef?.trim()) {
+    const token = variableRef.trim();
+    const lookup = describeVariableSource(token, project, environment, extraSources);
+    return {
+      value: applyProjectVariables(`{{${token}}}`, project, environment, extraSources),
+      sourceLabel: lookup.source === 'missing' ? `missing variable: ${token}` : `variable: ${token} (${lookup.sourceLabel})`
+    };
+  }
+
+  return {
+    value: applyProjectVariables(directValue || '', project, environment, extraSources),
+    sourceLabel: directValue?.includes('{{') ? 'template expression' : 'inline value'
+  };
+}
+
 function buildAuthPreview(
   auth: AuthConfig,
   project: ProjectDocument,
@@ -652,34 +862,39 @@ function buildAuthPreview(
 ) {
   const preview: ResolvedAuthPreviewItem[] = [];
 
-  if (auth.type === 'bearer' && auth.token) {
+  if (auth.type === 'bearer' && (auth.token || auth.tokenFromVar)) {
+    const resolved = resolveAuthValue(auth.token, auth.tokenFromVar, project, environment, extraSources);
     preview.push(
       resolvedAuthPreviewItemSchema.parse({
         target: 'header',
         name: 'Authorization',
-        value: `Bearer ${applyProjectVariables(auth.token, project, environment, extraSources)}`
+        value: `Bearer ${resolved.value}`,
+        sourceLabel: resolved.sourceLabel
       })
     );
   }
 
-  if (auth.type === 'basic' && auth.username) {
-    const username = applyProjectVariables(auth.username, project, environment, extraSources);
-    const password = applyProjectVariables(auth.password || '', project, environment, extraSources);
+  if (auth.type === 'basic' && (auth.username || auth.usernameFromVar)) {
+    const username = resolveAuthValue(auth.username, auth.usernameFromVar, project, environment, extraSources);
+    const password = resolveAuthValue(auth.password || '', auth.passwordFromVar, project, environment, extraSources);
     preview.push(
       resolvedAuthPreviewItemSchema.parse({
         target: 'header',
         name: 'Authorization',
-        value: `Basic ${encodeBasicAuth(username, password)}`
+        value: `Basic ${encodeBasicAuth(username.value, password.value)}`,
+        sourceLabel: `${username.sourceLabel}; ${password.sourceLabel}`
       })
     );
   }
 
   if (auth.type === 'apikey' && auth.key) {
+    const resolved = resolveAuthValue(auth.value || '', auth.valueFromVar, project, environment, extraSources);
     preview.push(
       resolvedAuthPreviewItemSchema.parse({
         target: auth.addTo || 'header',
         name: auth.key,
-        value: applyProjectVariables(auth.value || '', project, environment, extraSources)
+        value: resolved.value,
+        sourceLabel: resolved.sourceLabel
       })
     );
   }
@@ -721,6 +936,111 @@ function encodeBasicAuth(username: string, password: string) {
       alphabet.charAt(fourthBlock);
   }
   return output;
+}
+
+function buildPreflightDiagnostics(
+  preview: ResolvedRequestPreview,
+  auth: AuthConfig,
+  authSource: string,
+  body: RequestBody,
+  variables: Map<
+    string,
+    {
+      token: string;
+      source: ResolvedRequestInsight['variables'][number]['source'];
+      sourceLabel: string;
+      value: string;
+      missing: boolean;
+      locations: Set<string>;
+    }
+  >
+) {
+  const diagnostics: ResolvedRequestInsight['diagnostics'] = [];
+  const missingVariables = [...variables.values()].filter(item => item.missing);
+  if (missingVariables.length > 0) {
+    diagnostics.push({
+      code: 'missing-variable',
+      level: 'error',
+      blocking: true,
+      message: `Missing variables: ${missingVariables.map(item => item.token).join(', ')}`,
+      field: 'variables'
+    });
+  }
+
+  if (!preview.url.trim()) {
+    diagnostics.push({
+      code: 'missing-url',
+      level: 'error',
+      blocking: true,
+      message: 'Request URL is empty after resolution.',
+      field: 'url'
+    });
+  } else if (!preview.url.includes('://')) {
+    diagnostics.push({
+      code: 'missing-base-url',
+      level: 'error',
+      blocking: true,
+      message: 'Resolved URL is missing protocol/baseUrl. Configure the environment baseUrl before sending.',
+      field: 'url'
+    });
+  }
+
+  if (authSource.startsWith('missing profile')) {
+    diagnostics.push({
+      code: 'missing-auth-profile',
+      level: 'error',
+      blocking: true,
+      message: authSource,
+      field: 'auth'
+    });
+  }
+
+  if (auth.type === 'bearer' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')) {
+    diagnostics.push({
+      code: 'incomplete-bearer-auth',
+      level: 'error',
+      blocking: true,
+      message: 'Bearer auth is selected but no Authorization header could be produced.',
+      field: 'auth'
+    });
+  }
+
+  if (auth.type === 'basic' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')) {
+    diagnostics.push({
+      code: 'incomplete-basic-auth',
+      level: 'error',
+      blocking: true,
+      message: 'Basic auth is selected but username/password are incomplete.',
+      field: 'auth'
+    });
+  }
+
+  if (auth.type === 'apikey' && (!auth.key || !preview.headers.concat(preview.query).some(item => item.enabled && item.name === auth.key))) {
+    diagnostics.push({
+      code: 'incomplete-api-key-auth',
+      level: 'error',
+      blocking: true,
+      message: 'API key auth is incomplete. Set both the key and its value source.',
+      field: 'auth'
+    });
+  }
+
+  if (body.mode === 'multipart') {
+    const missingFiles = (preview.body.fields || []).filter(
+      row => row.enabled && row.kind === 'file' && !String(row.filePath || row.value || '').trim()
+    );
+    if (missingFiles.length > 0) {
+      diagnostics.push({
+        code: 'missing-multipart-file',
+        level: 'error',
+        blocking: true,
+        message: `Multipart fields are missing file paths: ${missingFiles.map(item => item.name).join(', ')}`,
+        field: 'body'
+      });
+    }
+  }
+
+  return diagnostics;
 }
 
 export function inspectResolvedRequest(
@@ -875,11 +1195,15 @@ export function inspectResolvedRequest(
   authPreview.forEach(item => {
     const rawValue =
       authInput.type === 'bearer'
-        ? authInput.token || ''
+        ? authInput.tokenFromVar
+          ? `{{${authInput.tokenFromVar}}}`
+          : authInput.token || ''
         : authInput.type === 'basic'
-          ? `${authInput.username || ''}:${authInput.password || ''}`
+          ? `${authInput.usernameFromVar ? `{{${authInput.usernameFromVar}}}` : authInput.username || ''}:${authInput.passwordFromVar ? `{{${authInput.passwordFromVar}}}` : authInput.password || ''}`
           : authInput.type === 'apikey'
-            ? authInput.value || ''
+            ? authInput.valueFromVar
+              ? `{{${authInput.valueFromVar}}}`
+              : authInput.value || ''
             : '';
     fields.push(
       collectResolvedField(
@@ -921,8 +1245,8 @@ export function inspectResolvedRequest(
     });
   }
   if (
-    (auth.type === 'bearer' && !auth.token) ||
-    (auth.type === 'basic' && !auth.username) ||
+    (auth.type === 'bearer' && !auth.token && !auth.tokenFromVar) ||
+    (auth.type === 'basic' && !auth.username && !auth.usernameFromVar) ||
     (auth.type === 'apikey' && !auth.key)
   ) {
     warnings.push({
@@ -932,6 +1256,8 @@ export function inspectResolvedRequest(
     });
   }
 
+  const diagnostics = buildPreflightDiagnostics(preview, auth, authSource, body, variables);
+
   return resolvedRequestInsightSchema.parse({
     preview,
     variables: [...variables.values()].map(item => ({
@@ -940,6 +1266,7 @@ export function inspectResolvedRequest(
     })),
     fieldValues: fields,
     warnings,
+    diagnostics,
     authPreview
   });
 }
@@ -985,10 +1312,11 @@ export function resolveRequest(
 
   const authHeaders = [...headers];
   const authQuery = [...query];
-  if (auth.type === 'bearer' && auth.token) {
+  if (auth.type === 'bearer' && (auth.token || auth.tokenFromVar)) {
+    const resolved = resolveAuthValue(auth.token, auth.tokenFromVar, project, environment, extraSources);
     authHeaders.push({
       name: 'Authorization',
-      value: `Bearer ${applyProjectVariables(auth.token, project, environment, extraSources)}`,
+      value: `Bearer ${resolved.value}`,
       enabled: true,
       kind: 'text',
       filePath: undefined
@@ -996,9 +1324,10 @@ export function resolveRequest(
   }
   if (auth.type === 'apikey' && auth.key) {
     const target = auth.addTo || 'header';
+    const resolved = resolveAuthValue(auth.value || '', auth.valueFromVar, project, environment, extraSources);
     const row = {
       name: auth.key,
-      value: applyProjectVariables(auth.value || '', project, environment, extraSources),
+      value: resolved.value,
       enabled: true,
       kind: 'text' as const,
       filePath: undefined
@@ -1009,10 +1338,10 @@ export function resolveRequest(
       authHeaders.push(row);
     }
   }
-  if (auth.type === 'basic' && auth.username) {
-    const username = applyProjectVariables(auth.username, project, environment, extraSources);
-    const password = applyProjectVariables(auth.password || '', project, environment, extraSources);
-    const value = encodeBasicAuth(username, password);
+  if (auth.type === 'basic' && (auth.username || auth.usernameFromVar)) {
+    const username = resolveAuthValue(auth.username, auth.usernameFromVar, project, environment, extraSources);
+    const password = resolveAuthValue(auth.password || '', auth.passwordFromVar, project, environment, extraSources);
+    const value = encodeBasicAuth(username.value, password.value);
     authHeaders.push({
       name: 'Authorization',
       value: `Basic ${value}`,

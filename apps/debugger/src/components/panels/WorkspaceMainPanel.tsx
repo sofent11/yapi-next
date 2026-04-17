@@ -12,6 +12,7 @@ import type {
   EnvironmentDocument,
   ProjectDocument,
   RequestDocument,
+  ResolvedRequestInsight,
   ResolvedRequestPreview,
   ScriptLog,
   SendRequestResult,
@@ -60,6 +61,7 @@ export function WorkspaceMainPanel(props: {
   request: RequestDocument | null;
   response: SendRequestResult | null;
   requestError: string | null;
+  requestInsight: ResolvedRequestInsight | null;
   requestPreview: ResolvedRequestPreview | null;
   checkResults: CheckResult[];
   scriptLogs: ScriptLog[];
@@ -99,6 +101,8 @@ export function WorkspaceMainPanel(props: {
   onCreateCheck: (input: any) => void;
   onCreateCaseFromResponse: () => void;
   onMainSplitRatioChange: (ratio: number) => void;
+  onSaveAuthProfile?: (name: string, auth: any) => void;
+  onExtractValue?: (target: 'local' | 'runtime', input: { suggestedName: string; value: string }) => void;
 }) {
   const splitRef = useRef<HTMLDivElement | null>(null);
   const counts = useMemo(() => projectCounts(props.workspace), [props.workspace]);
@@ -341,6 +345,8 @@ export function WorkspaceMainPanel(props: {
             selectedEnvironment={props.selectedEnvironment}
             request={request!}
             selectedCase={selectedCase}
+            requestInsight={props.requestInsight}
+            sessionSnapshot={props.sessionSnapshot}
             activeTab={props.activeRequestTab}
             isRunning={props.isRunning}
             isDirty={props.isDirty}
@@ -350,6 +356,8 @@ export function WorkspaceMainPanel(props: {
             onCasesChange={props.onCasesChange}
             onAddCase={props.onAddCase}
             onRun={props.onRun}
+            onSaveAuthProfile={props.onSaveAuthProfile}
+            onCopyText={() => undefined}
           />
         </div>
 
@@ -381,6 +389,7 @@ export function WorkspaceMainPanel(props: {
             onClearSession={props.onClearSession}
             onCreateCheck={props.onCreateCheck}
             onCreateCaseFromResponse={props.onCreateCaseFromResponse}
+            onExtractValue={props.onExtractValue}
           />
         </div>
       </div>

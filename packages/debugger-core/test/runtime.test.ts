@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   applyCollectionRules,
+  buildWorkspaceIndex,
   buildCurlCommand,
   executeRequestScript,
   inspectResolvedRequest,
@@ -144,4 +145,42 @@ test('inspectResolvedRequest explains variable sources and auth preview', () => 
   assert.equal(insight.variables.some(variable => variable.token === 'userId' && variable.source === 'environment'), true);
   assert.equal(insight.variables.some(variable => variable.token === 'projectToken' && variable.source === 'project'), true);
   assert.equal(insight.warnings.length, 0);
+});
+
+test('buildWorkspaceIndex merges shared and local environment overlays', () => {
+  const index = buildWorkspaceIndex({
+    root: '/tmp/demo',
+    projectContent: `schemaVersion: 1\nname: Demo\ndefaultEnvironment: shared\nruntime:\n  baseUrl: https://api.example.com\n  vars: {}\n  headers: []\n`,
+    fileContents: {
+      '/tmp/demo/environments/dev.yaml': `schemaVersion: 1\nname: dev\nvars:\n  baseUrl: https://shared.example.com\n  region: shared\nheaders:\n  - name: X-Env\n    value: shared\n    enabled: true\n    kind: text\n`,
+      '/tmp/demo/environments/dev.local.yaml': `schemaVersion: 1\nname: dev\nvars:\n  token: secret\n  region: local\nheaders:\n  - name: X-Env\n    value: local\n    enabled: true\n    kind: text\n`
+    }
+  });
+
+  const environment = index.environments[0]?.document;
+  assert.equal(environment?.vars.region, 'local');
+  assert.equal(environment?.sharedVars?.region, 'shared');
+  assert.equal(environment?.localVars?.token, 'secret');
+  assert.equal(environment?.headers[0]?.value, 'local');
+  assert.equal(environment?.overlayMode, 'overlay');
+});
+
+test('inspectResolvedRequest emits blocking diagnostics for missing values', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = '';
+  const environment = createDefaultEnvironment('dev');
+  const request = createEmptyRequest('Upload');
+  request.url = '{{baseUrl}}/upload';
+  request.auth = { type: 'bearer', tokenFromVar: 'missingToken' };
+  request.body = {
+    mode: 'multipart',
+    mimeType: 'multipart/form-data',
+    text: '',
+    fields: [{ name: 'file', value: '', enabled: true, kind: 'file' }]
+  };
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
+  assert.equal(insight.diagnostics.some(item => item.code === 'missing-variable' && item.blocking), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'missing-base-url' && item.blocking), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'missing-multipart-file' && item.blocking), true);
 });

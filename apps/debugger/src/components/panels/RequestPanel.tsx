@@ -18,6 +18,8 @@ import type {
   EnvironmentDocument,
   RequestBody,
   RequestDocument,
+  ResolvedRequestInsight,
+  SessionSnapshot,
   WorkspaceIndex
 } from '@yapi-debugger/schema';
 import type { RequestTab } from '../../store/workspace-store';
@@ -76,6 +78,10 @@ export function RequestPanel(props: {
   onRun: () => void;
   cases: CaseDocument[];
   allowCases?: boolean;
+  requestInsight?: ResolvedRequestInsight | null;
+  sessionSnapshot?: SessionSnapshot | null;
+  onSaveAuthProfile?: (name: string, auth: AuthConfig) => void;
+  onCopyText?: (value: string, successMessage: string) => void;
 }) {
   const { request: requestDocument, selectedCase, selectedEnvironment, workspace } = props;
   const allowCases = props.allowCases ?? true;
@@ -93,8 +99,10 @@ export function RequestPanel(props: {
   };
 
   const resolvedInsight = useMemo(
-    () => inspectResolvedRequest(workspace.project, requestDocument, selectedCase || undefined, selectedEnvironment || undefined),
-    [workspace.project, requestDocument, selectedCase, selectedEnvironment]
+    () =>
+      props.requestInsight ||
+      inspectResolvedRequest(workspace.project, requestDocument, selectedCase || undefined, selectedEnvironment || undefined),
+    [props.requestInsight, workspace.project, requestDocument, selectedCase, selectedEnvironment]
   );
   const resolvedPreview = resolvedInsight.preview;
 
@@ -280,6 +288,16 @@ export function RequestPanel(props: {
                   ))}
                 </div>
               ) : null}
+              {resolvedInsight.diagnostics.length > 0 ? (
+                <div className="request-preview-warnings">
+                  {resolvedInsight.diagnostics.map(diagnostic => (
+                    <div key={diagnostic.code} className="request-preview-warning">
+                      <strong>{diagnostic.blocking ? 'blocking' : diagnostic.level}</strong>
+                      <span>{diagnostic.message}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               <div className="request-preview-grid request-preview-grid-secondary">
                 <div className="request-preview-section">
                   <Text fw={700} size="sm">Resolved Variables</Text>
@@ -310,12 +328,51 @@ export function RequestPanel(props: {
                       {resolvedInsight.authPreview.map(item => (
                         <div key={`${item.target}:${item.name}`} className="check-card">
                           <Text fw={700}>{item.name}</Text>
-                          <Text size="xs" c="dimmed">{item.target}</Text>
+                          <Text size="xs" c="dimmed">
+                            {item.target}{item.sourceLabel ? ` · ${item.sourceLabel}` : ''}
+                          </Text>
                           <CodeEditor value={item.value} readOnly language="text" minHeight="72px" />
                         </div>
                       ))}
                     </div>
                   )}
+                </div>
+                <div className="request-preview-section">
+                  <Text fw={700} size="sm">Session & Effective Headers</Text>
+                  <div className="checks-list">
+                    <div className="check-card">
+                      <Text fw={700}>Cookie Header</Text>
+                      <CodeEditor
+                        value={props.sessionSnapshot?.cookieHeader || ''}
+                        readOnly
+                        language="text"
+                        minHeight="72px"
+                      />
+                    </div>
+                    <div className="check-card">
+                      <Text fw={700}>Effective Headers</Text>
+                      <CodeEditor
+                        value={resolvedPreview.headers.filter(item => item.enabled).map(item => `${item.name}: ${item.value}`).join('\n')}
+                        readOnly
+                        language="text"
+                        minHeight="120px"
+                      />
+                    </div>
+                    {props.onCopyText ? (
+                      <Button
+                        size="xs"
+                        variant="default"
+                        onClick={() =>
+                          props.onCopyText?.(
+                            resolvedPreview.headers.filter(item => item.enabled).map(item => `${item.name}: ${item.value}`).join('\n'),
+                            'Effective headers copied'
+                          )
+                        }
+                      >
+                        Copy Effective Headers
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>
@@ -419,11 +476,19 @@ export function RequestPanel(props: {
                 onChange={value => updateAuth({ type: (value as AuthConfig['type']) || 'inherit' })}
               />
               {auth.type === 'bearer' ? (
-                <TextInput
-                  label="Bearer Token"
-                  value={auth.token || ''}
-                  onChange={event => updateAuth({ ...auth, token: event.currentTarget.value })}
-                />
+                <>
+                  <TextInput
+                    label="Bearer Token"
+                    value={auth.token || ''}
+                    onChange={event => updateAuth({ ...auth, token: event.currentTarget.value })}
+                  />
+                  <TextInput
+                    label="Token Variable"
+                    placeholder="authToken"
+                    value={auth.tokenFromVar || ''}
+                    onChange={event => updateAuth({ ...auth, tokenFromVar: event.currentTarget.value })}
+                  />
+                </>
               ) : null}
               {auth.type === 'basic' ? (
                 <>
@@ -433,9 +498,21 @@ export function RequestPanel(props: {
                     onChange={event => updateAuth({ ...auth, username: event.currentTarget.value })}
                   />
                   <TextInput
+                    label="Username Variable"
+                    placeholder="basicUsername"
+                    value={auth.usernameFromVar || ''}
+                    onChange={event => updateAuth({ ...auth, usernameFromVar: event.currentTarget.value })}
+                  />
+                  <TextInput
                     label="Password"
                     value={auth.password || ''}
                     onChange={event => updateAuth({ ...auth, password: event.currentTarget.value })}
+                  />
+                  <TextInput
+                    label="Password Variable"
+                    placeholder="basicPassword"
+                    value={auth.passwordFromVar || ''}
+                    onChange={event => updateAuth({ ...auth, passwordFromVar: event.currentTarget.value })}
                   />
                 </>
               ) : null}
@@ -450,6 +527,12 @@ export function RequestPanel(props: {
                     label="Value"
                     value={auth.value || ''}
                     onChange={event => updateAuth({ ...auth, value: event.currentTarget.value })}
+                  />
+                  <TextInput
+                    label="Value Variable"
+                    placeholder="apiKeyValue"
+                    value={auth.valueFromVar || ''}
+                    onChange={event => updateAuth({ ...auth, valueFromVar: event.currentTarget.value })}
                   />
                   <Select
                     label="Send To"
@@ -475,6 +558,22 @@ export function RequestPanel(props: {
                   <Text size="xs" c="dimmed">
                     Active environment profiles: {selectedEnvironment.authProfiles.map(item => item.name).join(', ')}
                   </Text>
+                </div>
+              ) : null}
+              {props.onSaveAuthProfile && auth.type !== 'inherit' && auth.type !== 'none' ? (
+                <div className="preview-note">
+                  <Button
+                    size="xs"
+                    variant="default"
+                    onClick={() => {
+                      const seed = auth.profileName || requestDocument.name || 'auth-profile';
+                      const name = window.prompt('Auth profile name', seed)?.trim();
+                      if (!name) return;
+                      props.onSaveAuthProfile?.(name, auth);
+                    }}
+                  >
+                    Save As Environment Profile
+                  </Button>
                 </div>
               ) : null}
             </div>

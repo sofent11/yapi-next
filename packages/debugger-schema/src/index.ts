@@ -27,10 +27,14 @@ export type AuthType = z.infer<typeof authTypeSchema>;
 export const authConfigSchema = z.object({
   type: authTypeSchema.default('inherit'),
   token: z.string().optional(),
+  tokenFromVar: z.string().optional(),
   username: z.string().optional(),
+  usernameFromVar: z.string().optional(),
   password: z.string().optional(),
+  passwordFromVar: z.string().optional(),
   key: z.string().optional(),
   value: z.string().optional(),
+  valueFromVar: z.string().optional(),
   addTo: z.enum(['header', 'query']).optional(),
   profileName: z.string().optional()
 });
@@ -90,7 +94,14 @@ export const environmentDocumentSchema = z.object({
   authProfiles: z.array(z.object({
     name: z.string(),
     auth: authConfigSchema
-  })).default([])
+  })).default([]),
+  sharedVars: z.record(z.string(), z.string()).optional(),
+  sharedHeaders: z.array(parameterRowSchema).optional(),
+  localVars: z.record(z.string(), z.string()).optional(),
+  localHeaders: z.array(parameterRowSchema).optional(),
+  sharedFilePath: z.string().optional(),
+  localFilePath: z.string().optional(),
+  overlayMode: z.enum(['standalone', 'overlay']).optional()
 });
 export type EnvironmentDocument = z.infer<typeof environmentDocumentSchema>;
 
@@ -229,7 +240,8 @@ export type WorkspaceRequestRecord = z.infer<typeof workspaceRequestRecordSchema
 
 export const workspaceEnvironmentRecordSchema = z.object({
   document: environmentDocumentSchema,
-  filePath: z.string()
+  filePath: z.string(),
+  localFilePath: z.string().optional()
 });
 export type WorkspaceEnvironmentRecord = z.infer<typeof workspaceEnvironmentRecordSchema>;
 
@@ -438,7 +450,8 @@ export type ResolvedFieldValue = z.infer<typeof resolvedFieldValueSchema>;
 export const resolvedAuthPreviewItemSchema = z.object({
   target: z.enum(['header', 'query']),
   name: z.string(),
-  value: z.string()
+  value: z.string(),
+  sourceLabel: z.string().optional()
 });
 export type ResolvedAuthPreviewItem = z.infer<typeof resolvedAuthPreviewItemSchema>;
 
@@ -449,11 +462,21 @@ export const resolvedRequestWarningSchema = z.object({
 });
 export type ResolvedRequestWarning = z.infer<typeof resolvedRequestWarningSchema>;
 
+export const resolvedRequestDiagnosticSchema = z.object({
+  code: z.string(),
+  level: z.enum(['info', 'warning', 'error']).default('warning'),
+  message: z.string(),
+  blocking: z.boolean().default(false),
+  field: z.string().optional()
+});
+export type ResolvedRequestDiagnostic = z.infer<typeof resolvedRequestDiagnosticSchema>;
+
 export const resolvedRequestInsightSchema = z.object({
   preview: resolvedRequestPreviewSchema,
   variables: z.array(resolvedVariableSchema).default([]),
   fieldValues: z.array(resolvedFieldValueSchema).default([]),
   warnings: z.array(resolvedRequestWarningSchema).default([]),
+  diagnostics: z.array(resolvedRequestDiagnosticSchema).default([]),
   authPreview: z.array(resolvedAuthPreviewItemSchema).default([])
 });
 export type ResolvedRequestInsight = z.infer<typeof resolvedRequestInsightSchema>;

@@ -4,8 +4,8 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
 import { IconRefresh } from '@tabler/icons-react';
-import { createEmptyCheck, resolveRequest } from '@yapi-debugger/core';
-import { createEmptyCase, createEmptyRequest, type CollectionDocument, type CollectionRunReport, type RunHistoryEntry, slugify, type WorkspaceIndex } from '@yapi-debugger/schema';
+import { createEmptyCheck, createNamedTemplateSource, inspectResolvedRequest } from '@yapi-debugger/core';
+import { createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type RunHistoryEntry, slugify, type WorkspaceIndex } from '@yapi-debugger/schema';
 import {
   chooseDirectory,
   chooseImportFile,
@@ -60,6 +60,7 @@ import { EnvironmentCenterPanel } from './components/panels/EnvironmentCenterPan
 import { HistoryPanel } from './components/panels/HistoryPanel';
 import { ImportPanel } from './components/panels/ImportPanel';
 import { InterfaceTreePanel } from './components/panels/InterfaceTreePanel';
+import { SessionCenterPanel } from './components/panels/SessionCenterPanel';
 import { ScratchPadPanel } from './components/panels/ScratchPadPanel';
 import { WelcomePanel } from './components/panels/WelcomePanel';
 import { WorkspaceMainPanel } from './components/panels/WorkspaceMainPanel';
@@ -151,6 +152,15 @@ function caseSlugExists(record: WorkspaceIndex['requests'][number], name: string
   return record.cases.some(c => c.id !== ignoreId && c.name === name);
 }
 
+function normalizeVariableName(seed: string) {
+  return String(seed || 'value')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .map((part, index) => (index === 0 ? part.toLowerCase() : `${part.charAt(0).toUpperCase()}${part.slice(1)}`))
+    .join('') || 'value';
+}
+
 function updateScratchSession(
   sessions: ScratchSession[],
   sessionId: string,
@@ -203,7 +213,8 @@ export function App() {
   const [scratchRequestTab, setScratchRequestTab] = useState<WorkspaceUiState['activeRequestTab']>('query');
   const [scratchResponseTab, setScratchResponseTab] = useState<WorkspaceUiState['activeResponseTab']>('body');
   const [scratchMainSplitRatio, setScratchMainSplitRatio] = useState(0.5);
-  const [scratchSessionSnapshot, setScratchSessionSnapshot] = useState<any | null>(null);
+  const [sessionSnapshot, setSessionSnapshot] = useState<any | null>(null);
+  const [runtimeVariables, setRuntimeVariables] = useState<Record<string, string>>({});
 
   const requestId = selectedRequestId(store.selectedNode);
   const caseId = selectedCaseId(store.selectedNode);
@@ -230,33 +241,49 @@ export function App() {
     });
   }, [store.workspace, categoryPath]);
 
-  const currentRequestPreview = useMemo(() => {
+  const namedRuntimeSource = useMemo(
+    () => createNamedTemplateSource('runtime variables', runtimeVariables, 'runtime'),
+    [runtimeVariables]
+  );
+
+  const currentRequestInsight = useMemo(() => {
     if (!store.workspace || !requestId || !store.draftRequest) return null;
     try {
-      return resolveRequest(
+      return inspectResolvedRequest(
         store.workspace.project,
         store.draftRequest,
         store.draftCases.find(item => item.id === caseId),
-        selectedEnvironment || undefined
+        selectedEnvironment || undefined,
+        [namedRuntimeSource]
       );
     } catch (_error) {
       return null;
     }
-  }, [store.workspace, store.draftRequest, store.draftCases, caseId, selectedEnvironment, requestId]);
+  }, [store.workspace, store.draftRequest, store.draftCases, caseId, selectedEnvironment, requestId, namedRuntimeSource]);
 
-  const currentScratchPreview = useMemo(() => {
+  const currentRequestPreview = currentRequestInsight?.preview || null;
+
+  const currentScratchInsight = useMemo(() => {
     if (!store.workspace || !currentScratch) return null;
     try {
-      return resolveRequest(
+      return inspectResolvedRequest(
         store.workspace.project,
         currentScratch.request,
         undefined,
-        selectedEnvironment || undefined
+        selectedEnvironment || undefined,
+        [namedRuntimeSource]
       );
     } catch (_error) {
       return null;
     }
-  }, [store.workspace, currentScratch, selectedEnvironment]);
+  }, [store.workspace, currentScratch, selectedEnvironment, namedRuntimeSource]);
+
+  const currentScratchPreview = currentScratchInsight?.preview || null;
+  const sessionTargetUrl =
+    (activeView === 'scratch' ? currentScratchPreview?.url : currentRequestPreview?.url) ||
+    currentRequestPreview?.url ||
+    currentScratchPreview?.url ||
+    null;
 
   const importPreviewInfo = useMemo(() => {
     if (!store.workspace || !store.importPreview) return null;
@@ -267,6 +294,8 @@ export function App() {
     const nextUi = loadWorkspaceUiState(workspace.root);
     setUiState(nextUi);
     setSelectedExampleName(null);
+    setRuntimeVariables({});
+    setSessionSnapshot(null);
     setSelectedCollectionId(workspace.collections[0]?.document.id || null);
     setDraftCollection(workspace.collections[0]?.document || null);
     setCollectionDataText(workspace.collections[0]?.dataText || '');
@@ -326,6 +355,7 @@ export function App() {
     mutationFn: async () => {
       if (!store.workspace) return;
       if (store.draftProject) await saveProject(store.workspace.root, store.draftProject);
+      await Promise.all(store.workspace.environments.map(item => saveEnvironment(store.workspace!.root, item.document)));
       if (store.draftRequest) {
         const record = findRecord(store.workspace, store.draftRequest.id);
         await saveRequestRecord(
@@ -360,12 +390,18 @@ export function App() {
   const runMutation = useMutation({
     mutationFn: async () => {
       if (!store.workspace || !requestId) return;
-      return runResolvedRequest(store.workspace, requestId, caseId || undefined);
+      return runResolvedRequest(store.workspace, requestId, caseId || undefined, {
+        state: {
+          variables: runtimeVariables,
+          environment: ensureWorkspaceEnvironment(store.activeEnvironmentName, store.workspace)
+        }
+      });
     },
     onSuccess: async result => {
       if (!result || !store.workspace || !requestId) return;
       store.setResponse(result.response, result.checkResults, result.scriptLogs);
-      inspectSession(store.workspace.root, result.preview.url).then(setScratchSessionSnapshot).catch(() => setScratchSessionSnapshot(null));
+      setRuntimeVariables({ ...result.state.variables });
+      inspectSession(store.workspace.root, result.preview.url).then(setSessionSnapshot).catch(() => setSessionSnapshot(null));
       await saveRunHistory(
         store.workspace,
         requestId,
@@ -393,7 +429,7 @@ export function App() {
         sessionId: store.workspace.root,
         context: {
           state: {
-            variables: {},
+            variables: runtimeVariables,
             environment
           }
         }
@@ -401,6 +437,7 @@ export function App() {
     },
     onSuccess: async result => {
       if (!result || !store.workspace || !currentScratch) return;
+      setRuntimeVariables({ ...result.state.variables });
       setScratchSessions(current =>
         updateScratchSession(current, currentScratch.id, session => ({
           ...session,
@@ -423,7 +460,7 @@ export function App() {
         result.scriptLogs
       );
       loadRunHistory(store.workspace.root).then(setHistoryEntries);
-      inspectSession(store.workspace.root, result.preview.url).then(setScratchSessionSnapshot).catch(() => setScratchSessionSnapshot(null));
+      inspectSession(store.workspace.root, result.preview.url).then(setSessionSnapshot).catch(() => setSessionSnapshot(null));
     },
     onError: error => {
       const message = (error as any).message || String(error) || 'Unknown network error';
@@ -672,6 +709,8 @@ export function App() {
     if (!store.workspace?.root) {
       setHistoryEntries([]);
       setSelectedHistoryId(null);
+      setRuntimeVariables({});
+      setSessionSnapshot(null);
       return;
     }
     loadRunHistory(store.workspace.root)
@@ -681,6 +720,16 @@ export function App() {
       })
       .catch(() => undefined);
   }, [store.workspace?.root]);
+
+  useEffect(() => {
+    if (!store.workspace?.root || !sessionTargetUrl) {
+      setSessionSnapshot(null);
+      return;
+    }
+    inspectSession(store.workspace.root, sessionTargetUrl)
+      .then(setSessionSnapshot)
+      .catch(() => setSessionSnapshot(null));
+  }, [store.workspace?.root, sessionTargetUrl]);
 
   useEffect(() => {
     if (!store.workspace?.root) {
@@ -854,10 +903,9 @@ export function App() {
 
   async function handleRefreshSession() {
     if (!store.workspace) return;
-    const targetUrl = activeView === 'scratch' ? currentScratchPreview?.url : currentRequestPreview?.url;
     try {
-      const snapshot = await inspectSession(store.workspace.root, targetUrl || undefined);
-      setScratchSessionSnapshot(snapshot);
+      const snapshot = await inspectSession(store.workspace.root, sessionTargetUrl || undefined);
+      setSessionSnapshot(snapshot);
       notifications.show({ color: 'teal', message: 'Session snapshot refreshed' });
     } catch (error) {
       notifications.show({ color: 'red', message: `Failed to inspect session: ${(error as Error).message}` });
@@ -868,11 +916,64 @@ export function App() {
     if (!store.workspace) return;
     try {
       await clearSession(store.workspace.root);
-      setScratchSessionSnapshot(null);
+      setSessionSnapshot(null);
       notifications.show({ color: 'teal', message: 'Workspace session cleared' });
     } catch (error) {
       notifications.show({ color: 'red', message: `Failed to clear session: ${(error as Error).message}` });
     }
+  }
+
+  function handleSaveAuthProfile(name: string, auth: AuthConfig) {
+    if (!selectedEnvironment) return;
+    store.updateEnvironment(selectedEnvironment.name, environment => ({
+      ...environment,
+      authProfiles: [
+        ...environment.authProfiles.filter(item => item.name !== name),
+        {
+          name,
+          auth
+        }
+      ]
+    }));
+    notifications.show({ color: 'teal', message: `Auth profile "${name}" saved` });
+  }
+
+  function handleExtractResponseValue(target: 'local' | 'runtime', input: { suggestedName: string; value: string }) {
+    const variableName = window.prompt('Variable name', normalizeVariableName(input.suggestedName))?.trim();
+    if (!variableName) return;
+    if (target === 'runtime') {
+      setRuntimeVariables(current => ({
+        ...current,
+        [variableName]: input.value
+      }));
+      notifications.show({ color: 'teal', message: `Runtime variable "${variableName}" updated` });
+      return;
+    }
+    if (!selectedEnvironment) {
+      notifications.show({ color: 'red', message: 'Select an environment before extracting to a local secret.' });
+      return;
+    }
+    store.updateEnvironment(selectedEnvironment.name, environment => {
+      const sharedVars = environment.sharedVars || environment.vars || {};
+      const sharedHeaders = environment.sharedHeaders || environment.headers || [];
+      const localVars = {
+        ...(environment.localVars || {}),
+        [variableName]: input.value
+      };
+      return {
+        ...environment,
+        sharedVars,
+        sharedHeaders,
+        localVars,
+        vars: {
+          ...sharedVars,
+          ...localVars
+        },
+        headers: [...sharedHeaders],
+        overlayMode: 'overlay'
+      };
+    });
+    notifications.show({ color: 'teal', message: `Local secret "${variableName}" saved to environment overlay` });
   }
 
   async function handleCreateCheckFromResponse(input: {
@@ -1435,10 +1536,11 @@ export function App() {
                 request={currentScratch.request}
                 response={currentScratch.response}
                 requestError={currentScratch.requestError}
+                requestInsight={currentScratchInsight}
                 requestPreview={currentScratchPreview}
                 checkResults={currentScratch.checkResults}
                 scriptLogs={currentScratch.scriptLogs}
-                sessionSnapshot={scratchSessionSnapshot}
+                sessionSnapshot={sessionSnapshot}
                 selectedEnvironment={selectedEnvironment}
                 selectedExampleName={currentScratch.selectedExampleName}
                 activeRequestTab={scratchRequestTab}
@@ -1468,6 +1570,8 @@ export function App() {
                 onCreateCheck={() =>
                   notifications.show({ color: 'blue', message: 'Save the Scratch request to the workspace before creating reusable checks.' })
                 }
+                onSaveAuthProfile={handleSaveAuthProfile}
+                onExtractValue={handleExtractResponseValue}
                 onMainSplitRatioChange={setScratchMainSplitRatio}
               />
             ) : activeView === 'history' ? (
@@ -1479,6 +1583,17 @@ export function App() {
                 onOpenInScratch={handleOpenHistoryInScratch}
                 onDuplicateAsCase={handleDuplicateHistoryAsCase}
                 onClear={handleClearHistory}
+              />
+            ) : activeView === 'sessions' ? (
+              <SessionCenterPanel
+                workspace={store.workspace}
+                activeEnvironmentName={store.activeEnvironmentName}
+                runtimeVariables={runtimeVariables}
+                sessionSnapshot={sessionSnapshot}
+                targetUrl={sessionTargetUrl}
+                onRefresh={handleRefreshSession}
+                onClearSession={handleClearSessionCookies}
+                onClearRuntimeVars={() => setRuntimeVariables({})}
               />
             ) : activeView === 'collections' ? (
               <CollectionRunnerPanel
@@ -1522,6 +1637,7 @@ export function App() {
                 request={store.draftRequest}
                 response={store.response}
                 requestError={store.requestError}
+                requestInsight={currentRequestInsight}
                 requestPreview={currentRequestPreview}
                 checkResults={store.checkResults}
                 scriptLogs={store.scriptLogs}
@@ -1533,7 +1649,7 @@ export function App() {
                 activeRequestTab={uiState.activeRequestTab}
                 activeResponseTab={uiState.activeResponseTab}
                 selectedExampleName={selectedExampleName}
-                sessionSnapshot={scratchSessionSnapshot}
+                sessionSnapshot={sessionSnapshot}
                 mainSplitRatio={uiState.mainSplitRatio}
                 onProjectChange={project => store.updateProject(project)}
                 onDeleteProject={handleDeleteProject}
@@ -1560,6 +1676,8 @@ export function App() {
                 onClearSession={handleClearSessionCookies}
                 onCreateCheck={handleCreateCheckFromResponse}
                 onCreateCaseFromResponse={handleCreateCaseFromCurrentResponse}
+                onSaveAuthProfile={handleSaveAuthProfile}
+                onExtractValue={handleExtractResponseValue}
                 onMainSplitRatioChange={ratio =>
                   updateUiState(current => ({
                     ...current,

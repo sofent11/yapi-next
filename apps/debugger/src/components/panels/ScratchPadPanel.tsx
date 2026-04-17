@@ -5,6 +5,7 @@ import type {
   CheckResult,
   EnvironmentDocument,
   RequestDocument,
+  ResolvedRequestInsight,
   ResolvedRequestPreview,
   ScriptLog,
   SendRequestResult,
@@ -21,6 +22,7 @@ export function ScratchPadPanel(props: {
   request: RequestDocument;
   response: SendRequestResult | null;
   requestError: string | null;
+  requestInsight: ResolvedRequestInsight | null;
   requestPreview: ResolvedRequestPreview | null;
   checkResults: CheckResult[];
   scriptLogs: ScriptLog[];
@@ -48,6 +50,8 @@ export function ScratchPadPanel(props: {
   onCreateCaseFromResponse: () => void;
   onCreateCheck: (input: any) => void;
   onMainSplitRatioChange: (ratio: number) => void;
+  onSaveAuthProfile?: (name: string, auth: any) => void;
+  onExtractValue?: (target: 'local' | 'runtime', input: { suggestedName: string; value: string }) => void;
 }) {
   const splitRef = useRef<HTMLDivElement | null>(null);
 
@@ -82,6 +86,8 @@ export function ScratchPadPanel(props: {
             selectedEnvironment={props.selectedEnvironment}
             request={props.request}
             selectedCase={null}
+            requestInsight={props.requestInsight}
+            sessionSnapshot={props.sessionSnapshot}
             activeTab={props.activeRequestTab}
             isRunning={props.isRunning}
             isDirty={props.isDirty}
@@ -92,6 +98,8 @@ export function ScratchPadPanel(props: {
             onCasesChange={() => undefined}
             onAddCase={() => undefined}
             onRun={props.onRun}
+            onSaveAuthProfile={props.onSaveAuthProfile}
+            onCopyText={() => undefined}
           />
         </div>
 
@@ -123,6 +131,7 @@ export function ScratchPadPanel(props: {
             onClearSession={props.onClearSession}
             onCreateCheck={props.onCreateCheck}
             onCreateCaseFromResponse={props.onCreateCaseFromResponse}
+            onExtractValue={props.onExtractValue}
           />
         </div>
       </div>
