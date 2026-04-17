@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Badge, Button, Checkbox, Group, NumberInput, Select, Tabs, Text, TextInput, Textarea } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { 
   IconAdjustments, 
   IconKey, 
@@ -23,6 +24,7 @@ import type {
   WorkspaceIndex
 } from '@yapi-debugger/schema';
 import type { RequestTab } from '../../store/workspace-store';
+import { parseCurlCommand } from '../../lib/curl';
 import { chooseRequestBodyFile } from '../../lib/desktop';
 import { CodeEditor } from '../editors/CodeEditor';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
@@ -165,6 +167,64 @@ export function RequestPanel(props: {
     updateBody({ ...body, fields: nextFields });
   }
 
+  function applyUrlChange(nextUrl: string) {
+    if (selectedCase) {
+      updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, url: nextUrl } }));
+      return;
+    }
+    props.onRequestChange({ ...requestDocument, url: nextUrl });
+  }
+
+  function applyPastedRequest(text: string) {
+    const parsed = parseCurlCommand(text);
+    if (!parsed) {
+      applyUrlChange(text);
+      return false;
+    }
+
+    if (selectedCase) {
+      updateSelectedCase(current => ({
+        ...current,
+        overrides: {
+          ...current.overrides,
+          method: parsed.method,
+          url: parsed.url,
+          path: parsed.path,
+          query: parsed.query,
+          headers: parsed.headers,
+          body: parsed.body,
+          auth: parsed.auth
+        }
+      }));
+      notifications.show({ color: 'teal', message: 'cURL imported into the current request' });
+      return true;
+    }
+
+    props.onRequestChange({
+      ...requestDocument,
+      method: parsed.method,
+      url: parsed.url,
+      path: parsed.path,
+      query: parsed.query,
+      headers: parsed.headers,
+      body: parsed.body,
+      auth: parsed.auth
+    });
+    notifications.show({ color: 'teal', message: 'cURL imported into the current request' });
+    return true;
+  }
+
+  async function handleUrlShortcutPaste() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) return;
+      applyPastedRequest(text);
+    } catch (_error) {
+      return;
+    }
+  }
+
   return (
     <div className="request-panel">
       <div className="request-header-compact">
@@ -189,12 +249,17 @@ export function RequestPanel(props: {
             className="url-input-ide"
             value={effectiveUrl}
             placeholder="Enter request URL"
-            onChange={event => {
-              const nextUrl = event.currentTarget.value;
-              if (selectedCase) {
-                updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, url: nextUrl } }));
-              } else {
-                props.onRequestChange({ ...requestDocument, url: nextUrl });
+            onChange={event => applyUrlChange(event.currentTarget.value)}
+            onPaste={event => {
+              const pastedText = event.clipboardData.getData('text');
+              if (!pastedText) return;
+              event.preventDefault();
+              applyPastedRequest(pastedText);
+            }}
+            onKeyDown={event => {
+              if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') {
+                event.preventDefault();
+                void handleUrlShortcutPaste();
               }
             }}
             variant="filled"

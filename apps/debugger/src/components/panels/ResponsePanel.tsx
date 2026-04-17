@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Badge, Button, Group, Select, Tabs, Text } from '@mantine/core';
 import { IconAlertCircle, IconBraces, IconCookie, IconGitCompare, IconPlayerPlay } from '@tabler/icons-react';
 import type {
@@ -99,6 +99,7 @@ export function ResponsePanel(props: {
   onCreateCaseFromResponse: () => void;
   onExtractValue?: (target: 'local' | 'runtime', input: { suggestedName: string; value: string }) => void;
 }) {
+  const [prettifyJson, setPrettifyJson] = useState(true);
   const examples = props.requestDocument?.examples || [];
   const selectedExample = examples.find(item => item.name === props.selectedExampleName) || null;
   const liveBody = props.response?.bodyText ?? '';
@@ -108,6 +109,11 @@ export function ResponsePanel(props: {
       ? [`Status: ${selectedExample.status || 'n/a'}`, `Content-Type: ${selectedExample.mimeType || 'unknown'}`].join('\n')
       : responseHeadersText(props.response);
   const parsedJson = useMemo(() => safeJson(displayBody), [displayBody]);
+  const prettyBody = useMemo(
+    () => (parsedJson == null ? displayBody : JSON.stringify(parsedJson, null, 2)),
+    [displayBody, parsedJson]
+  );
+  const bodyView = parsedJson != null && prettifyJson ? prettyBody : displayBody;
   const jsonRows = useMemo(() => flattenJsonPaths(parsedJson).slice(0, 80), [parsedJson]);
   const responseCookies = useMemo(() => parseSetCookies(props.response), [props.response]);
   const sessionCookies = props.sessionSnapshot?.cookies || [];
@@ -143,6 +149,16 @@ export function ResponsePanel(props: {
             ]}
             onChange={value => props.onSelectExample(value === '__live__' ? null : value || null)}
           />
+          {parsedJson != null ? (
+            <Button
+              size="xs"
+              variant={prettifyJson ? 'filled' : 'default'}
+              color={prettifyJson ? 'indigo' : 'gray'}
+              onClick={() => setPrettifyJson(current => !current)}
+            >
+              {prettifyJson ? 'Prettified' : 'Prettify'}
+            </Button>
+          ) : null}
           <Button size="xs" variant="default" onClick={props.onCopyBody} disabled={!displayBody}>Copy</Button>
           <Button size="xs" variant="default" onClick={props.onCopyCurl} disabled={!props.requestPreview}>cURL</Button>
           <Button size="xs" variant="default" onClick={props.onSaveExample} disabled={!props.response}>Save</Button>
@@ -258,7 +274,7 @@ export function ResponsePanel(props: {
           ) : (
             <>
               <Tabs.Panel value="body">
-                <CodeEditor value={displayBody} readOnly language={responseBodyLanguage(displayBody)} minHeight="400px" />
+                <CodeEditor value={bodyView} readOnly language={responseBodyLanguage(bodyView)} minHeight="400px" />
               </Tabs.Panel>
               <Tabs.Panel value="json">
                 {parsedJson == null ? (
