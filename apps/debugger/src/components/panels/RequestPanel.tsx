@@ -48,6 +48,7 @@ function authTypeOptions() {
     { value: 'bearer', label: 'bearer' },
     { value: 'basic', label: 'basic' },
     { value: 'apikey', label: 'api key' },
+    { value: 'oauth2', label: 'oauth2 client credentials' },
     { value: 'profile', label: 'environment profile' }
   ];
 }
@@ -83,6 +84,7 @@ export function RequestPanel(props: {
   requestInsight?: ResolvedRequestInsight | null;
   sessionSnapshot?: SessionSnapshot | null;
   onSaveAuthProfile?: (name: string, auth: AuthConfig) => void;
+  onRefreshRequestAuth?: () => void;
   onCopyText?: (value: string, successMessage: string) => void;
 }) {
   const { request: requestDocument, selectedCase, selectedEnvironment, workspace } = props;
@@ -402,21 +404,51 @@ export function RequestPanel(props: {
                 </div>
                 <div className="request-preview-section">
                   <Text fw={700} size="sm">Auth Preview</Text>
-                  {resolvedInsight.authPreview.length === 0 ? (
-                    <div className="empty-tab-state">No auth values will be injected for the current request.</div>
-                  ) : (
-                    <div className="checks-list">
-                      {resolvedInsight.authPreview.map(item => (
-                        <div key={`${item.target}:${item.name}`} className="check-card">
-                          <Text fw={700}>{item.name}</Text>
-                          <Text size="xs" c="dimmed">
-                            {item.target}{item.sourceLabel ? ` · ${item.sourceLabel}` : ''}
-                          </Text>
-                          <CodeEditor value={item.value} readOnly language="text" minHeight="72px" />
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <div className="checks-list">
+                    {resolvedPreview.authState ? (
+                      <div className="check-card">
+                        <Text fw={700}>Auth Runtime</Text>
+                        <Text size="xs" c="dimmed">
+                          {resolvedPreview.authState.type}
+                          {resolvedPreview.authState.profileName ? ` · ${resolvedPreview.authState.profileName}` : ''}
+                          {resolvedPreview.authState.source ? ` · ${resolvedPreview.authState.source}` : ''}
+                        </Text>
+                        <Text size="sm">
+                          Injected: {resolvedPreview.authState.tokenInjected ? 'yes' : 'no'} · Cache: {resolvedPreview.authState.cacheStatus}
+                        </Text>
+                        {resolvedPreview.authState.expiresAt ? (
+                          <Text size="xs" c="dimmed">Expires at {resolvedPreview.authState.expiresAt}</Text>
+                        ) : null}
+                        {resolvedPreview.authState.notes.length > 0 ? (
+                          <Text size="xs" c="dimmed">{resolvedPreview.authState.notes.join(' ')}</Text>
+                        ) : null}
+                        {resolvedPreview.authState.missing.length > 0 ? (
+                          <Text size="xs" c="red">Missing: {resolvedPreview.authState.missing.join(', ')}</Text>
+                        ) : null}
+                        {props.onRefreshRequestAuth && resolvedPreview.authState.type === 'oauth2' ? (
+                          <Button size="xs" variant="default" onClick={props.onRefreshRequestAuth}>
+                            Refresh OAuth Token
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {resolvedInsight.authPreview.length === 0 ? (
+                      <div className="empty-tab-state">No auth values will be injected for the current request.</div>
+                    ) : (
+                      <div className="checks-list">
+                        {resolvedInsight.authPreview.map(item => (
+                          <div key={`${item.target}:${item.name}`} className="check-card">
+                            <Text fw={700}>{item.name}</Text>
+                            <Text size="xs" c="dimmed">
+                              {item.target}{item.sourceLabel ? ` · ${item.sourceLabel}` : ''}
+                            </Text>
+                            {item.detail ? <Text size="xs" c="dimmed">{item.detail}</Text> : null}
+                            <CodeEditor value={item.value} readOnly language="text" minHeight="72px" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="request-preview-section">
                   <Text fw={700} size="sm">Session & Effective Headers</Text>
@@ -624,6 +656,86 @@ export function RequestPanel(props: {
                     ]}
                     onChange={value => updateAuth({ ...auth, addTo: (value as AuthConfig['addTo']) || 'header' })}
                   />
+                </>
+              ) : null}
+              {auth.type === 'oauth2' ? (
+                <>
+                  <Select
+                    label="OAuth Flow"
+                    value={auth.oauthFlow || 'client_credentials'}
+                    data={[{ value: 'client_credentials', label: 'client_credentials' }]}
+                    onChange={value => updateAuth({ ...auth, oauthFlow: (value as AuthConfig['oauthFlow']) || 'client_credentials' })}
+                  />
+                  <TextInput
+                    label="Token URL"
+                    placeholder="https://auth.example.com/oauth/token"
+                    value={auth.tokenUrl || ''}
+                    onChange={event => updateAuth({ ...auth, tokenUrl: event.currentTarget.value })}
+                  />
+                  <TextInput
+                    label="Client ID"
+                    value={auth.clientId || ''}
+                    onChange={event => updateAuth({ ...auth, clientId: event.currentTarget.value })}
+                  />
+                  <TextInput
+                    label="Client ID Variable"
+                    placeholder="oauthClientId"
+                    value={auth.clientIdFromVar || ''}
+                    onChange={event => updateAuth({ ...auth, clientIdFromVar: event.currentTarget.value })}
+                  />
+                  <TextInput
+                    label="Client Secret"
+                    value={auth.clientSecret || ''}
+                    onChange={event => updateAuth({ ...auth, clientSecret: event.currentTarget.value })}
+                  />
+                  <TextInput
+                    label="Client Secret Variable"
+                    placeholder="oauthClientSecret"
+                    value={auth.clientSecretFromVar || ''}
+                    onChange={event => updateAuth({ ...auth, clientSecretFromVar: event.currentTarget.value })}
+                  />
+                  <TextInput
+                    label="Scope"
+                    placeholder="read:users write:orders"
+                    value={auth.scope || ''}
+                    onChange={event => updateAuth({ ...auth, scope: event.currentTarget.value })}
+                  />
+                  <Select
+                    label="Token Placement"
+                    value={auth.tokenPlacement || 'header'}
+                    data={[
+                      { value: 'header', label: 'Header' },
+                      { value: 'query', label: 'Query' }
+                    ]}
+                    onChange={value => updateAuth({ ...auth, tokenPlacement: (value as AuthConfig['tokenPlacement']) || 'header' })}
+                  />
+                  <TextInput
+                    label="Token Name"
+                    placeholder={auth.tokenPlacement === 'query' ? 'access_token' : 'Authorization'}
+                    value={auth.tokenName || ''}
+                    onChange={event => updateAuth({ ...auth, tokenName: event.currentTarget.value })}
+                  />
+                  <TextInput
+                    label="Token Prefix"
+                    placeholder="Bearer"
+                    value={auth.tokenPrefix || ''}
+                    onChange={event => updateAuth({ ...auth, tokenPrefix: event.currentTarget.value })}
+                  />
+                  {resolvedPreview.authState?.type === 'oauth2' ? (
+                    <div className="preview-note">
+                      <Text size="xs" c="dimmed">
+                        Cache {resolvedPreview.authState.cacheStatus}
+                        {resolvedPreview.authState.expiresAt ? ` · expires ${resolvedPreview.authState.expiresAt}` : ''}
+                      </Text>
+                    </div>
+                  ) : null}
+                  {props.onRefreshRequestAuth ? (
+                    <div className="preview-note">
+                      <Button size="xs" variant="default" onClick={props.onRefreshRequestAuth}>
+                        Refresh OAuth Token
+                      </Button>
+                    </div>
+                  ) : null}
                 </>
               ) : null}
               {auth.type === 'profile' ? (

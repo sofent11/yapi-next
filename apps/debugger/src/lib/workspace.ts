@@ -6,15 +6,18 @@ import {
   createProjectSeed,
   evaluateChecks,
   executeRequestScript,
+  interpolateString,
   materializeCollectionDocument,
   materializeEnvironmentDocuments,
   materializeProjectDocument,
   materializeRequestDocuments,
+  mergeTemplateSources,
   parseCollectionDataText,
   resolveRequest,
   inspectResolvedRequest
 } from '@yapi-debugger/core';
 import {
+  authConfigSchema,
   createDefaultEnvironment,
   createEmptyCase,
   createEmptyCollection,
@@ -29,6 +32,7 @@ import {
   type CollectionRunReport,
   type CollectionStepRun,
   type EnvironmentDocument,
+  type AuthConfig,
   type ImportAuth,
   type ImportResult,
   type ImportWarning,
@@ -74,6 +78,262 @@ function scanPayloadToIndex(payload: WorkspaceScanPayload) {
 function createRuntimeEnvironment(workspace: WorkspaceIndex, name: string) {
   const source = workspace.environments.find(item => item.document.name === name)?.document;
   return structuredClone(source || createDefaultEnvironment(name));
+}
+
+function resolveEffectiveAuth(
+  request: RequestDocument,
+  caseDocument?: CaseDocument,
+  environment?: EnvironmentDocument
+) {
+  const overrideAuth = caseDocument?.overrides.auth;
+  const next =
+    !overrideAuth || overrideAuth.type === 'inherit'
+      ? authConfigSchema.parse(request.auth)
+      : authConfigSchema.parse(overrideAuth);
+  if (next.type !== 'profile') {
+    return {
+      auth: next,
+      authSource: next.type === 'inherit' ? 'inherit' : next.type,
+      profileName: undefined as string | undefined,
+      authComesFromCase: Boolean(overrideAuth && overrideAuth.type !== 'inherit')
+    };
+  }
+
+  const profile = environment?.authProfiles.find(item => item.name === next.profileName);
+  if (!profile) {
+    return {
+      auth: authConfigSchema.parse({ type: 'none' }),
+      authSource: `missing profile: ${next.profileName || 'unknown'}`,
+      profileName: next.profileName,
+      authComesFromCase: Boolean(overrideAuth && overrideAuth.type !== 'inherit')
+    };
+  }
+
+  return {
+    auth: authConfigSchema.parse(profile.auth),
+    authSource: `environment profile: ${profile.name}`,
+    profileName: profile.name,
+    authComesFromCase: Boolean(overrideAuth && overrideAuth.type !== 'inherit')
+  };
+}
+
+function resolveRuntimeValue(
+  project: ProjectDocument,
+  environment: EnvironmentDocument | undefined,
+  extraSources: Array<Record<string, unknown>>,
+  directValue?: string,
+  variableRef?: string
+) {
+  const sources = mergeTemplateSources({
+    project,
+    environment,
+    extraSources
+  });
+  if (variableRef?.trim()) {
+    return interpolateString(`{{${variableRef.trim()}}}`, sources);
+  }
+  return interpolateString(directValue || '', sources);
+}
+
+function oauthCacheStatus(auth: AuthConfig) {
+  if (!auth.accessToken) return 'none' as const;
+  if (!auth.expiresAt) return 'fresh' as const;
+  const expiresAt = Date.parse(auth.expiresAt);
+  if (Number.isNaN(expiresAt)) return 'fresh' as const;
+  return expiresAt > Date.now() ? 'fresh' as const : 'expired' as const;
+}
+
+function oauthTarget(auth: AuthConfig) {
+  const target = auth.tokenPlacement || 'header';
+  return {
+    target,
+    name: auth.tokenName || (target === 'query' ? 'access_token' : 'Authorization')
+  };
+}
+
+function withResolvedOauthAuth(
+  request: RequestDocument,
+  caseDocument: CaseDocument | undefined,
+  auth: AuthConfig,
+  authComesFromCase: boolean
+) {
+  if (authComesFromCase && caseDocument) {
+    return {
+      request,
+      caseDocument: {
+        ...caseDocument,
+        overrides: {
+          ...caseDocument.overrides,
+          auth
+        }
+      }
+    };
+  }
+
+  return {
+    request: {
+      ...request,
+      auth
+    },
+    caseDocument
+  };
+}
+
+function applyOauthTokenToPreview(preview: ResolvedRequestPreview, auth: AuthConfig, source: string, profileName?: string) {
+  if (!auth.accessToken) return preview;
+  const target = oauthTarget(auth);
+  const tokenPrefix = auth.tokenType || auth.tokenPrefix || 'Bearer';
+  const row = {
+    name: target.name,
+    value: target.target === 'header' ? `${tokenPrefix} ${auth.accessToken}` : auth.accessToken,
+    enabled: true,
+    kind: 'text' as const,
+    filePath: undefined
+  };
+
+  return {
+    ...preview,
+    headers:
+      target.target === 'header'
+        ? [...preview.headers.filter(item => item.name !== target.name), row]
+        : preview.headers,
+    query:
+      target.target === 'query'
+        ? [...preview.query.filter(item => item.name !== target.name), row]
+        : preview.query,
+    authState: {
+      type: 'oauth2' as const,
+      source,
+      profileName,
+      tokenInjected: true,
+      cacheStatus: oauthCacheStatus(auth),
+      expiresAt: auth.expiresAt,
+      resolvedTokenUrl: preview.authState?.resolvedTokenUrl,
+      missing: [],
+      notes: profileName
+        ? [`Using refreshed OAuth token from profile "${profileName}".`]
+        : ['Using refreshed OAuth token for this request.']
+    }
+  };
+}
+
+async function refreshOauthClientCredentials(input: {
+  workspace: WorkspaceIndex;
+  project: ProjectDocument;
+  request: RequestDocument;
+  caseDocument?: CaseDocument;
+  environment: EnvironmentDocument;
+  extraSources?: Array<Record<string, unknown>>;
+  forceRefresh?: boolean;
+  sessionId?: string;
+}) {
+  const extraSources = input.extraSources || [];
+  const effective = resolveEffectiveAuth(input.request, input.caseDocument, input.environment);
+  const auth = effective.auth;
+  if (auth.type !== 'oauth2') {
+    return {
+      environment: input.environment,
+      auth,
+      profileName: effective.profileName,
+      authSource: effective.authSource,
+      authComesFromCase: effective.authComesFromCase,
+      refreshed: false
+    };
+  }
+
+  const cacheStatus = oauthCacheStatus(auth);
+  if (!input.forceRefresh && cacheStatus === 'fresh' && auth.accessToken) {
+    return {
+      environment: input.environment,
+      auth,
+      profileName: effective.profileName,
+      authSource: effective.authSource,
+      authComesFromCase: effective.authComesFromCase,
+      refreshed: false
+    };
+  }
+
+  const tokenUrl = resolveRuntimeValue(input.project, input.environment, extraSources, auth.tokenUrl);
+  const clientId = resolveRuntimeValue(input.project, input.environment, extraSources, auth.clientId, auth.clientIdFromVar);
+  const clientSecret = resolveRuntimeValue(input.project, input.environment, extraSources, auth.clientSecret, auth.clientSecretFromVar);
+  const scope = resolveRuntimeValue(input.project, input.environment, extraSources, auth.scope);
+
+  if (!tokenUrl.trim()) {
+    throw new Error('OAuth2 token URL is required before sending this request.');
+  }
+  if (!clientId.trim()) {
+    throw new Error(`OAuth2 client ID is missing${auth.clientIdFromVar ? ` (${auth.clientIdFromVar})` : ''}.`);
+  }
+  if (!clientSecret.trim()) {
+    throw new Error(`OAuth2 client secret is missing${auth.clientSecretFromVar ? ` (${auth.clientSecretFromVar})` : ''}.`);
+  }
+
+  const tokenResponse = await sendRequest({
+    method: 'POST',
+    url: tokenUrl,
+    headers: [
+      { name: 'Accept', value: 'application/json', enabled: true, kind: 'text' },
+      { name: 'Content-Type', value: 'application/x-www-form-urlencoded', enabled: true, kind: 'text' }
+    ],
+    query: [],
+    body: {
+      mode: 'form-urlencoded',
+      mimeType: 'application/x-www-form-urlencoded',
+      text: '',
+      fields: [
+        { name: 'grant_type', value: auth.oauthFlow || 'client_credentials', enabled: true, kind: 'text' },
+        { name: 'client_id', value: clientId, enabled: true, kind: 'text' },
+        { name: 'client_secret', value: clientSecret, enabled: true, kind: 'text' },
+        ...(scope.trim() ? [{ name: 'scope', value: scope, enabled: true, kind: 'text' as const }] : [])
+      ]
+    },
+    sessionId: input.sessionId || input.workspace.root,
+    followRedirects: true
+  });
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(tokenResponse.bodyText) as Record<string, unknown>;
+  } catch (_error) {
+    throw new Error('OAuth2 token endpoint returned a non-JSON response.');
+  }
+
+  const accessToken = String(payload.access_token || '');
+  if (!accessToken.trim()) {
+    throw new Error('OAuth2 token endpoint response is missing "access_token".');
+  }
+
+  const expiresIn = Number(payload.expires_in || 0);
+  const tokenType = String(payload.token_type || auth.tokenType || auth.tokenPrefix || 'Bearer');
+  const nextAuth = authConfigSchema.parse({
+    ...auth,
+    accessToken,
+    tokenType,
+    expiresAt: Number.isFinite(expiresIn) && expiresIn > 0
+      ? new Date(Date.now() + expiresIn * 1000).toISOString()
+      : auth.expiresAt
+  });
+
+  const nextEnvironment = structuredClone(input.environment);
+  if (effective.profileName) {
+    nextEnvironment.authProfiles = nextEnvironment.authProfiles.map(item =>
+      item.name === effective.profileName
+        ? {
+            ...item,
+            auth: nextAuth
+          }
+        : item
+    );
+  }
+
+  return {
+    environment: nextEnvironment,
+    auth: nextAuth,
+    profileName: effective.profileName,
+    authSource: effective.authSource,
+    authComesFromCase: effective.authComesFromCase,
+    refreshed: true
+  };
 }
 
 function collectionConflictsWithRecord(
@@ -679,15 +939,15 @@ export async function runPreparedRequest(
   const context = input.context || {};
   const envName =
     input.caseDocument?.environment || context.state?.environment.name || workspace.project.defaultEnvironment;
-  const runtimeEnvironment =
+  const initialEnvironment =
     context.state?.environment && context.state.environment.name === envName
       ? context.state.environment
       : createRuntimeEnvironment(workspace, envName);
   const state = context.state || {
     variables: {},
-    environment: runtimeEnvironment
+    environment: initialEnvironment
   };
-  state.environment = runtimeEnvironment;
+  state.environment = initialEnvironment;
   const beforeSources = [
     createNamedTemplateSource('runtime variables', state.variables, 'runtime'),
     ...(context.extraSources || [])
@@ -700,28 +960,62 @@ export async function runPreparedRequest(
     state.environment,
     beforeSources
   );
-  const preScript = executeRequestScript({
+  const preScript = await executeRequestScript({
     phase: 'pre-request',
     script: input.caseDocument?.scripts?.preRequest || '',
     state,
-    request: previewBeforeScripts
+    request: previewBeforeScripts,
+    sendRequest: request =>
+      sendRequest({
+        ...request,
+        sessionId: input.sessionId || workspace.root
+      })
   });
+  const runtimeSources = [
+    createNamedTemplateSource('runtime variables', preScript.state.variables, 'script'),
+    ...(context.extraSources || [])
+  ];
+  let nextRequest = input.request;
+  let nextCaseDocument = input.caseDocument;
+  let runtimeEnvironment = preScript.state.environment || initialEnvironment;
+
+  const oauthRuntime = await refreshOauthClientCredentials({
+    workspace,
+    project: workspace.project,
+    request: nextRequest,
+    caseDocument: nextCaseDocument,
+    environment: runtimeEnvironment,
+    extraSources: runtimeSources,
+    sessionId: input.sessionId || workspace.root
+  });
+  runtimeEnvironment = oauthRuntime.environment;
+  preScript.state.environment = runtimeEnvironment;
+  if (oauthRuntime.refreshed && oauthRuntime.auth.type === 'oauth2' && !oauthRuntime.profileName) {
+    const withResolvedAuth = withResolvedOauthAuth(
+      nextRequest,
+      nextCaseDocument,
+      oauthRuntime.auth,
+      oauthRuntime.authComesFromCase
+    );
+    nextRequest = withResolvedAuth.request;
+    nextCaseDocument = withResolvedAuth.caseDocument;
+  }
+
   const insight = inspectResolvedRequest(
     workspace.project,
-    input.request,
-    input.caseDocument,
-    preScript.state.environment,
-    [
-      createNamedTemplateSource('runtime variables', preScript.state.variables, 'script'),
-      ...(context.extraSources || [])
-    ]
+    nextRequest,
+    nextCaseDocument,
+    runtimeEnvironment,
+    runtimeSources
   );
   const blockingDiagnostics = insight.diagnostics.filter(item => item.blocking);
   if (blockingDiagnostics.length > 0) {
     throw new Error(blockingDiagnostics.map(item => item.message).join(' '));
   }
-  const preview = {
-    ...insight.preview,
+  const preview: ResolvedRequestPreview = {
+    ...(oauthRuntime.refreshed && oauthRuntime.auth.type === 'oauth2'
+      ? applyOauthTokenToPreview(insight.preview, oauthRuntime.auth, oauthRuntime.authSource, oauthRuntime.profileName)
+      : insight.preview),
     sessionId: input.sessionId || workspace.root
   };
   const response = await sendRequest(preview);
@@ -732,7 +1026,7 @@ export async function runPreparedRequest(
         response
       })
     : [];
-  const postScript = executeRequestScript({
+  const postScript = await executeRequestScript({
     phase: 'post-response',
     script: input.caseDocument?.scripts?.postResponse || '',
     state: preScript.state,
@@ -764,6 +1058,55 @@ export async function runResolvedRequest(
     sessionId: workspace.root,
     context
   });
+}
+
+export async function refreshResolvedRequestAuth(
+  workspace: WorkspaceIndex,
+  requestId: string,
+  caseId: string | undefined,
+  input: {
+    environmentName?: string;
+    runtimeVariables?: Record<string, string>;
+    extraSources?: Array<Record<string, unknown>>;
+    forceRefresh?: boolean;
+  } = {}
+) {
+  const record = workspace.requests.find(item => item.request.id === requestId);
+  if (!record) throw new Error('Request not found');
+  const caseDocument = record.cases.find(item => item.id === caseId);
+  const envName = caseDocument?.environment || input.environmentName || workspace.project.defaultEnvironment;
+  const environment = createRuntimeEnvironment(workspace, envName);
+  const extraSources = [
+    createNamedTemplateSource('runtime variables', input.runtimeVariables || {}, 'runtime'),
+    ...(input.extraSources || [])
+  ];
+  const refreshed = await refreshOauthClientCredentials({
+    workspace,
+    project: workspace.project,
+    request: record.request,
+    caseDocument,
+    environment,
+    extraSources,
+    forceRefresh: input.forceRefresh,
+    sessionId: workspace.root
+  });
+  if (refreshed.auth.type !== 'oauth2') {
+    throw new Error('The current request does not use OAuth2 client credentials.');
+  }
+  const withResolvedAuth = refreshed.profileName
+    ? { request: record.request, caseDocument }
+    : withResolvedOauthAuth(record.request, caseDocument, refreshed.auth, refreshed.authComesFromCase);
+  const insight = inspectResolvedRequest(
+    workspace.project,
+    withResolvedAuth.request,
+    withResolvedAuth.caseDocument,
+    refreshed.environment,
+    extraSources
+  );
+  return {
+    environment: refreshed.environment,
+    preview: applyOauthTokenToPreview(insight.preview, refreshed.auth, refreshed.authSource, refreshed.profileName)
+  };
 }
 
 export async function appendRunHistoryEntry(

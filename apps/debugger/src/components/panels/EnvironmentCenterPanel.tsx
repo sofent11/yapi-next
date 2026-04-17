@@ -7,7 +7,8 @@ function authTypeOptions() {
     { value: 'none', label: 'none' },
     { value: 'bearer', label: 'bearer' },
     { value: 'basic', label: 'basic' },
-    { value: 'apikey', label: 'api key' }
+    { value: 'apikey', label: 'api key' },
+    { value: 'oauth2', label: 'oauth2 client credentials' }
   ];
 }
 
@@ -402,6 +403,165 @@ export function EnvironmentCenterPanel(props: {
                                     )
                                   }))
                                 }
+                              />
+                            </>
+                          ) : null}
+                          {profile.auth.type === 'oauth2' ? (
+                            <>
+                              <Select
+                                label="OAuth Flow"
+                                value={profile.auth.oauthFlow || 'client_credentials'}
+                                data={[{ value: 'client_credentials', label: 'client_credentials' }]}
+                                onChange={value =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, oauthFlow: (value as AuthConfig['oauthFlow']) || 'client_credentials' } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <TextInput
+                                label="Token URL"
+                                value={profile.auth.tokenUrl || ''}
+                                onChange={event =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, tokenUrl: event.currentTarget.value } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <TextInput
+                                label="Client ID"
+                                value={profile.auth.clientId || ''}
+                                onChange={event =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, clientId: event.currentTarget.value } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <TextInput
+                                label="Client ID Variable"
+                                value={profile.auth.clientIdFromVar || ''}
+                                onChange={event =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, clientIdFromVar: event.currentTarget.value } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <TextInput
+                                label="Client Secret"
+                                value={profile.auth.clientSecret || ''}
+                                onChange={event =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, clientSecret: event.currentTarget.value } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <TextInput
+                                label="Client Secret Variable"
+                                value={profile.auth.clientSecretFromVar || ''}
+                                onChange={event =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, clientSecretFromVar: event.currentTarget.value } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <TextInput
+                                label="Scope"
+                                value={profile.auth.scope || ''}
+                                onChange={event =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, scope: event.currentTarget.value } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <Select
+                                label="Token Placement"
+                                value={profile.auth.tokenPlacement || 'header'}
+                                data={[
+                                  { value: 'header', label: 'Header' },
+                                  { value: 'query', label: 'Query' }
+                                ]}
+                                onChange={value =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, tokenPlacement: (value as AuthConfig['tokenPlacement']) || 'header' } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <TextInput
+                                label="Token Name"
+                                value={profile.auth.tokenName || ''}
+                                onChange={event =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, tokenName: event.currentTarget.value } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <TextInput
+                                label="Token Prefix"
+                                value={profile.auth.tokenPrefix || ''}
+                                onChange={event =>
+                                  props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                    ...environment,
+                                    authProfiles: environment.authProfiles.map(item =>
+                                      item.name === profile.name
+                                        ? { ...item, auth: { ...item.auth, tokenPrefix: event.currentTarget.value } }
+                                        : item
+                                    )
+                                  }))
+                                }
+                              />
+                              <TextInput
+                                label="Cached Token"
+                                value={profile.auth.accessToken || ''}
+                                readOnly
+                              />
+                              <TextInput
+                                label="Cache Expires At"
+                                value={profile.auth.expiresAt || ''}
+                                readOnly
                               />
                             </>
                           ) : null}

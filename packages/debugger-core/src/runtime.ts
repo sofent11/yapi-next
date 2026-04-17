@@ -5,6 +5,7 @@ import {
   resolvedRequestPreviewSchema,
   responseHeaderSchema,
   scriptLogSchema,
+  sendRequestInputSchema,
   sendRequestResultSchema,
   type CaseCheck,
   type CheckResult,
@@ -23,6 +24,21 @@ type Primitive = string | number | boolean | null | undefined;
 export type ScriptExecutionState = {
   variables: Record<string, string>;
   environment: EnvironmentDocument | undefined;
+};
+
+type ScriptSendRequestInput = {
+  method: string;
+  url: string;
+  headers: ParameterRow[];
+  query: ParameterRow[];
+  body: {
+    mode: 'none' | 'json' | 'text' | 'form-urlencoded' | 'multipart';
+    mimeType?: string;
+    text: string;
+    fields: ParameterRow[];
+  };
+  timeoutMs?: number;
+  followRedirects?: boolean;
 };
 
 function normalizePathSegments(path: string) {
@@ -149,6 +165,96 @@ function createScriptLog(phase: ScriptLog['phase'], level: ScriptLog['level'], m
   return scriptLogSchema.parse({ phase, level, message });
 }
 
+function createScriptResponse(response: SendRequestResult) {
+  const responseHeaders = buildResponseHeaderMap(response);
+  const responseBody = safeJsonParse(response.bodyText);
+  return {
+    code: response.status,
+    status: response.status,
+    text: () => response.bodyText,
+    json: () => responseBody,
+    headers: {
+      get: (key: string) => responseHeaders.get(key.toLowerCase()) || ''
+    }
+  };
+}
+
+function normalizeScriptRows(
+  rows: unknown,
+  keyName: 'key' | 'name',
+  valueName: 'value'
+): ParameterRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map(row => {
+      const source = row as Record<string, unknown>;
+      return {
+        name: String(source[keyName] || ''),
+        value: String(source[valueName] || ''),
+        enabled: source.disabled === true ? false : true,
+        kind: source.type === 'file' ? 'file' : 'text',
+        filePath: typeof source.src === 'string' ? source.src : typeof source.filePath === 'string' ? source.filePath : undefined
+      } satisfies ParameterRow;
+    })
+    .filter(row => row.name.trim());
+}
+
+function normalizeScriptRequestInput(input: unknown, fallback: ResolvedRequestPreview): ScriptSendRequestInput {
+  if (typeof input === 'string') {
+    return sendRequestInputSchema.parse({
+      method: 'GET',
+      url: input,
+      headers: [],
+      query: [],
+      body: { mode: 'none', text: '', fields: [] }
+    });
+  }
+
+  const source = (input || {}) as Record<string, unknown>;
+  const headerRows = normalizeScriptRows(source.header, 'key', 'value');
+  const bodySource = (source.body || {}) as Record<string, unknown>;
+  const bodyMode = String(bodySource.mode || 'none');
+  const contentType = headerRows.find(row => row.name.toLowerCase() === 'content-type')?.value || '';
+  const normalizedBody =
+    bodyMode === 'raw'
+      ? {
+          mode: contentType.includes('json') ? 'json' : 'text',
+          mimeType: contentType || (String(bodySource.raw || '').trim().startsWith('{') ? 'application/json' : 'text/plain'),
+          text: String(bodySource.raw || ''),
+          fields: []
+        }
+      : bodyMode === 'urlencoded'
+        ? {
+            mode: 'form-urlencoded' as const,
+            mimeType: 'application/x-www-form-urlencoded',
+            text: '',
+            fields: normalizeScriptRows(bodySource.urlencoded, 'key', 'value')
+          }
+        : bodyMode === 'formdata'
+          ? {
+              mode: 'multipart' as const,
+              mimeType: 'multipart/form-data',
+              text: '',
+              fields: normalizeScriptRows(bodySource.formdata, 'key', 'value')
+            }
+          : {
+              mode: 'none' as const,
+              mimeType: undefined,
+              text: '',
+              fields: []
+            };
+
+  return sendRequestInputSchema.parse({
+    method: String(source.method || fallback.method || 'GET'),
+    url: String(source.url || fallback.url || ''),
+    headers: headerRows,
+    query: normalizeScriptRows(source.query, 'key', 'value'),
+    body: normalizedBody,
+    timeoutMs: typeof source.timeoutMs === 'number' ? source.timeoutMs : undefined,
+    followRedirects: typeof source.followRedirects === 'boolean' ? source.followRedirects : undefined
+  });
+}
+
 function buildExpect(actual: unknown) {
   const chain = {
     equal(expected: unknown) {
@@ -206,6 +312,8 @@ function createPmApi(input: {
   response?: SendRequestResult;
   logs: ScriptLog[];
   testResults: CheckResult[];
+  sendRequest?: (request: ScriptSendRequestInput) => Promise<SendRequestResult>;
+  pendingRequests: Array<Promise<SendRequestResult>>;
 }) {
   const responseBody = safeJsonParse(input.response?.bodyText || '');
   const responseHeaders = buildResponseHeaderMap(sendRequestResultSchema.parse(input.response || {
@@ -248,6 +356,29 @@ function createPmApi(input: {
         input.state.environment.vars[key] = value == null ? '' : String(value);
       }
     },
+    sendRequest: (requestInput: unknown, callback?: (error: Error | null, response?: ReturnType<typeof createScriptResponse>) => void) => {
+      if (input.phase !== 'pre-request') {
+        throw new Error('pm.sendRequest lite is only available during pre-request scripts.');
+      }
+      if (!input.sendRequest) {
+        throw new Error('pm.sendRequest lite is unavailable in this runtime.');
+      }
+      if (input.pendingRequests.length > 0) {
+        throw new Error('pm.sendRequest lite supports a single top-level request per script.');
+      }
+      const request = normalizeScriptRequestInput(requestInput, input.request);
+      const task = input.sendRequest(request)
+        .then(response => {
+          callback?.(null, createScriptResponse(response));
+          return response;
+        })
+        .catch(error => {
+          callback?.(error as Error);
+          throw error;
+        });
+      input.pendingRequests.push(task);
+      return task.then(response => createScriptResponse(response));
+    },
     request: input.request,
     response: input.response
       ? {
@@ -273,12 +404,13 @@ function createPmApi(input: {
   };
 }
 
-export function executeRequestScript(input: {
+export async function executeRequestScript(input: {
   phase: ScriptLog['phase'];
   script: string;
   state: ScriptExecutionState;
   request: ResolvedRequestPreview;
   response?: SendRequestResult;
+  sendRequest?: (request: ScriptSendRequestInput) => Promise<SendRequestResult>;
 }) {
   const logs: ScriptLog[] = [];
   const testResults: CheckResult[] = [];
@@ -287,13 +419,17 @@ export function executeRequestScript(input: {
     return { request: input.request, state: input.state, logs, testResults };
   }
 
+  const pendingRequests: Array<Promise<SendRequestResult>> = [];
+
   const pm = createPmApi({
     phase: input.phase,
     state: input.state,
     request: input.request,
     response: input.response,
     logs,
-    testResults
+    testResults,
+    sendRequest: input.sendRequest,
+    pendingRequests
   });
   const scriptConsole = {
     log: (...args: unknown[]) => {
@@ -305,8 +441,11 @@ export function executeRequestScript(input: {
   };
 
   try {
-    const runner = new Function('pm', 'console', normalizedScript);
-    runner(pm, scriptConsole);
+    const runner = new Function('pm', 'console', `return (async () => {\n${normalizedScript}\n})();`);
+    await runner(pm, scriptConsole);
+    if (pendingRequests.length > 0) {
+      await Promise.all(pendingRequests);
+    }
     return {
       request: resolvedRequestPreviewSchema.parse(input.request),
       state: input.state,

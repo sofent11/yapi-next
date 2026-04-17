@@ -190,6 +190,13 @@ export function ResponsePanel(props: {
 
       {props.response ? (
         <div className="response-quick-actions">
+          {props.requestPreview?.authState ? (
+            <Text size="xs" c="dimmed">
+              Auth {props.requestPreview.authState.type}
+              {props.requestPreview.authState.profileName ? ` · ${props.requestPreview.authState.profileName}` : ''}
+              {` · injected ${props.requestPreview.authState.tokenInjected ? 'yes' : 'no'} · cache ${props.requestPreview.authState.cacheStatus}`}
+            </Text>
+          ) : null}
           <Button
             size="xs"
             variant="light"

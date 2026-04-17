@@ -107,6 +107,7 @@ export function WorkspaceMainPanel(props: {
   onCreateCaseFromResponse: () => void;
   onMainSplitRatioChange: (ratio: number) => void;
   onSaveAuthProfile?: (name: string, auth: any) => void;
+  onRefreshRequestAuth?: () => void;
   onExtractValue?: (target: 'local' | 'runtime', input: { suggestedName: string; value: string }) => void;
   onRefreshGitStatus?: () => void;
   onCopySuggestedCommitMessage?: () => void;
@@ -438,6 +439,7 @@ export function WorkspaceMainPanel(props: {
             onAddCase={props.onAddCase}
             onRun={props.onRun}
             onSaveAuthProfile={props.onSaveAuthProfile}
+            onRefreshRequestAuth={props.onRefreshRequestAuth}
             onCopyText={() => undefined}
           />
         </div>

@@ -38,7 +38,7 @@ test('resolveRequest interpolates step and data variables with correct priority'
   assert.equal(resolved.url, 'https://api.example.com/orders/u_1?region=runtime-region&sku=sku-123');
 });
 
-test('executeRequestScript records logs and generated script assertions', () => {
+test('executeRequestScript records logs and generated script assertions', async () => {
   const project = createDefaultProject('Demo');
   const environment = createDefaultEnvironment('shared');
   const request = createEmptyRequest('Ping');
@@ -50,7 +50,7 @@ test('executeRequestScript records logs and generated script assertions', () => 
     environment
   };
 
-  const pre = executeRequestScript({
+  const pre = await executeRequestScript({
     phase: 'pre-request',
     script: 'pm.variables.set("token", "abc"); console.log("hello pre");',
     state,
@@ -59,7 +59,7 @@ test('executeRequestScript records logs and generated script assertions', () => 
   assert.equal(pre.state.variables.token, 'abc');
   assert.equal(pre.logs[0]?.message, 'hello pre');
 
-  const post = executeRequestScript({
+  const post = await executeRequestScript({
     phase: 'post-response',
     script: 'pm.test("status ok", () => pm.expect(pm.response?.code).to.equal(200));',
     state: pre.state,
@@ -78,6 +78,46 @@ test('executeRequestScript records logs and generated script assertions', () => 
   });
 
   assert.equal(post.testResults[0]?.ok, true);
+});
+
+test('executeRequestScript supports pm.sendRequest lite during pre-request', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Tokenized');
+  request.url = 'https://api.example.com/data';
+  const preview = resolveRequest(project, request, undefined, environment);
+
+  const result = await executeRequestScript({
+    phase: 'pre-request',
+    script: `
+      pm.sendRequest(
+        { method: 'POST', url: 'https://auth.example.com/token' },
+        (err, res) => {
+          if (err) throw err;
+          pm.environment.set('token', res.json().access_token);
+        }
+      );
+    `,
+    state: {
+      variables: {},
+      environment
+    },
+    request: preview,
+    sendRequest: async () => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      url: 'https://auth.example.com/token',
+      durationMs: 10,
+      sizeBytes: 24,
+      headers: [{ name: 'content-type', value: 'application/json' }],
+      bodyText: '{"access_token":"tok_123"}',
+      timestamp: new Date().toISOString()
+    })
+  });
+
+  assert.equal(result.state.environment?.vars.token, 'tok_123');
+  assert.equal(result.testResults.length, 0);
 });
 
 test('buildCurlCommand emits a runnable curl string', () => {
@@ -148,6 +188,40 @@ test('inspectResolvedRequest explains variable sources and auth preview', () => 
   assert.equal(insight.variables.some(variable => variable.token === 'userId' && variable.source === 'environment'), true);
   assert.equal(insight.variables.some(variable => variable.token === 'projectToken' && variable.source === 'project'), true);
   assert.equal(insight.warnings.length, 0);
+});
+
+test('inspectResolvedRequest surfaces cached oauth2 auth state from environment profile', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  const environment = createDefaultEnvironment('shared');
+  environment.authProfiles.push({
+    name: 'oauthProfile',
+    auth: {
+      type: 'oauth2',
+      oauthFlow: 'client_credentials',
+      tokenUrl: 'https://auth.example.com/oauth/token',
+      clientIdFromVar: 'oauthClientId',
+      clientSecretFromVar: 'oauthClientSecret',
+      accessToken: 'cached-token',
+      tokenType: 'Bearer',
+      expiresAt: new Date(Date.now() + 60_000).toISOString()
+    }
+  });
+  environment.vars.oauthClientId = 'client-id';
+  environment.vars.oauthClientSecret = 'client-secret';
+
+  const request = createEmptyRequest('Protected');
+  request.url = '{{baseUrl}}/protected';
+  request.auth = {
+    type: 'profile',
+    profileName: 'oauthProfile'
+  };
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
+  assert.equal(insight.preview.authState?.type, 'oauth2');
+  assert.equal(insight.preview.authState?.cacheStatus, 'fresh');
+  assert.equal(insight.preview.authState?.tokenInjected, true);
+  assert.equal(insight.preview.headers.some(header => header.name === 'Authorization' && header.value.includes('cached-token')), true);
 });
 
 test('buildWorkspaceIndex merges shared and local environment overlays', () => {

@@ -7,7 +7,7 @@ import { useMutation } from '@tanstack/react-query';
 import { IconRefresh, IconSearch } from '@tabler/icons-react';
 import { createEmptyCheck, createNamedTemplateSource, inspectResolvedRequest } from '@yapi-debugger/core';
 import { save as saveFile } from '@tauri-apps/plugin-dialog';
-import { createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type ImportWarning, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
+import { createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type EnvironmentDocument, type ImportWarning, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
 import '@mantine/spotlight/styles.css';
 import {
   chooseDirectory,
@@ -53,6 +53,7 @@ import {
   renameCaseInWorkspace,
   renameCategoryInWorkspace,
   renameRequestInWorkspace,
+  refreshResolvedRequestAuth,
   rerunFailedStepKeys,
   runCollection,
   runPreparedRequest,
@@ -312,6 +313,7 @@ export function App() {
   const [scratchMainSplitRatio, setScratchMainSplitRatio] = useState(0.5);
   const [sessionSnapshot, setSessionSnapshot] = useState<SessionSnapshot | null>(null);
   const [runtimeVariables, setRuntimeVariables] = useState<Record<string, string>>({});
+  const [runtimeEnvironments, setRuntimeEnvironments] = useState<Record<string, EnvironmentDocument>>({});
   const [hostSessionSnapshots, setHostSessionSnapshots] = useState<Array<{ host: string; snapshot: SessionSnapshot }>>([]);
   const [gitInfo, setGitInfo] = useState<GitStatusPayload | null>(null);
   const [lastImportSession, setLastImportSession] = useState<ImportRepairSession | null>(null);
@@ -361,6 +363,31 @@ export function App() {
   const selectedEnvironment = store.workspace?.environments.find(
     item => item.document.name === store.activeEnvironmentName
   )?.document || null;
+  const selectedRuntimeEnvironment = useMemo(() => {
+    if (!store.workspace) return null;
+    return runtimeEnvironments[store.activeEnvironmentName] || ensureWorkspaceEnvironment(store.activeEnvironmentName, store.workspace);
+  }, [runtimeEnvironments, store.activeEnvironmentName, store.workspace]);
+
+  useEffect(() => {
+    setRuntimeEnvironments(current => {
+      if (!store.workspace) return {};
+      const next: Record<string, EnvironmentDocument> = {};
+      Object.entries(current).forEach(([name, environment]) => {
+        if (store.workspace?.environments.some(item => item.document.name === name)) {
+          next[name] = environment;
+        }
+      });
+      return next;
+    });
+  }, [store.workspace]);
+
+  function cacheRuntimeEnvironment(environment: EnvironmentDocument | undefined) {
+    if (!environment) return;
+    setRuntimeEnvironments(current => ({
+      ...current,
+      [environment.name]: structuredClone(environment)
+    }));
+  }
 
   const importedRecords = useMemo(() => {
     if (!store.workspace || !lastImportSession) return [];
@@ -411,13 +438,13 @@ export function App() {
         store.workspace.project,
         store.draftRequest,
         store.draftCases.find(item => item.id === caseId),
-        selectedEnvironment || undefined,
+        selectedRuntimeEnvironment || undefined,
         [namedRuntimeSource]
       );
     } catch (_error) {
       return null;
     }
-  }, [store.workspace, store.draftRequest, store.draftCases, caseId, selectedEnvironment, requestId, namedRuntimeSource]);
+  }, [store.workspace, store.draftRequest, store.draftCases, caseId, selectedRuntimeEnvironment, requestId, namedRuntimeSource]);
 
   const currentRequestPreview = currentRequestInsight?.preview || null;
 
@@ -428,13 +455,13 @@ export function App() {
         store.workspace.project,
         currentScratch.request,
         undefined,
-        selectedEnvironment || undefined,
+        selectedRuntimeEnvironment || undefined,
         [namedRuntimeSource]
       );
     } catch (_error) {
       return null;
     }
-  }, [store.workspace, currentScratch, selectedEnvironment, namedRuntimeSource]);
+  }, [store.workspace, currentScratch, selectedRuntimeEnvironment, namedRuntimeSource]);
 
   const currentScratchPreview = currentScratchInsight?.preview || null;
   const sessionTargetUrl =
@@ -578,7 +605,7 @@ export function App() {
       return runResolvedRequest(store.workspace, requestId, caseId || undefined, {
         state: {
           variables: runtimeVariables,
-          environment: ensureWorkspaceEnvironment(store.activeEnvironmentName, store.workspace)
+          environment: structuredClone(selectedRuntimeEnvironment || ensureWorkspaceEnvironment(store.activeEnvironmentName, store.workspace))
         }
       });
     },
@@ -586,6 +613,7 @@ export function App() {
       if (!result || !store.workspace || !requestId) return;
       store.setResponse(result.response, result.checkResults, result.scriptLogs);
       setRuntimeVariables({ ...result.state.variables });
+      cacheRuntimeEnvironment(result.state.environment);
       inspectSession(store.workspace.root, result.preview.url).then(setSessionSnapshot).catch(() => setSessionSnapshot(null));
       await saveRunHistory(
         store.workspace,
@@ -615,7 +643,7 @@ export function App() {
         context: {
           state: {
             variables: runtimeVariables,
-            environment
+            environment: structuredClone(selectedRuntimeEnvironment || environment)
           }
         }
       });
@@ -623,6 +651,7 @@ export function App() {
     onSuccess: async result => {
       if (!result || !store.workspace || !currentScratch) return;
       setRuntimeVariables({ ...result.state.variables });
+      cacheRuntimeEnvironment(result.state.environment);
       setScratchSessions(current =>
         updateScratchSession(current, currentScratch.id, session => ({
           ...session,
@@ -1143,6 +1172,21 @@ export function App() {
       notifications.show({ color: 'teal', message: 'Session snapshot refreshed' });
     } catch (error) {
       notifications.show({ color: 'red', message: `Failed to inspect session: ${(error as Error).message}` });
+    }
+  }
+
+  async function handleRefreshRequestAuth(forceRefresh = true) {
+    if (!store.workspace || !requestId) return;
+    try {
+      const refreshed = await refreshResolvedRequestAuth(store.workspace, requestId, caseId || undefined, {
+        environmentName: store.activeEnvironmentName,
+        runtimeVariables,
+        forceRefresh
+      });
+      cacheRuntimeEnvironment(refreshed.environment);
+      notifications.show({ color: 'teal', message: 'OAuth token refreshed for the active request' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: `Failed to refresh auth: ${(error as Error).message}` });
     }
   }
 
@@ -2105,7 +2149,7 @@ export function App() {
                 checkResults={currentScratch.checkResults}
                 scriptLogs={currentScratch.scriptLogs}
                 sessionSnapshot={sessionSnapshot}
-                selectedEnvironment={selectedEnvironment}
+                selectedEnvironment={selectedRuntimeEnvironment}
                 selectedExampleName={currentScratch.selectedExampleName}
                 activeRequestTab={scratchRequestTab}
                 activeResponseTab={scratchResponseTab}
@@ -2254,7 +2298,7 @@ export function App() {
                 scriptLogs={store.scriptLogs}
                 cases={store.draftCases}
                 activeEnvironmentName={store.activeEnvironmentName}
-                selectedEnvironment={selectedEnvironment}
+                selectedEnvironment={selectedRuntimeEnvironment}
                 isRunning={runMutation.isPending}
                 isDirty={store.isDirty}
                 activeRequestTab={uiState.activeRequestTab}
@@ -2290,6 +2334,7 @@ export function App() {
                 onCreateCheck={handleCreateCheckFromResponse}
                 onCreateCaseFromResponse={handleCreateCaseFromCurrentResponse}
                 onSaveAuthProfile={handleSaveAuthProfile}
+                onRefreshRequestAuth={handleRefreshRequestAuth}
                 onExtractValue={handleExtractResponseValue}
                 onRefreshGitStatus={handleRefreshGitStatus}
                 onCopySuggestedCommitMessage={() =>

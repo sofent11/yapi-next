@@ -47,7 +47,7 @@ test('Postman import preserves scripts as case scripts and emits warnings for un
   assert.equal(result.warnings.some(warning => warning.code === 'postman-script-kept'), true);
   assert.equal(result.warnings.some(warning => warning.code === 'postman-send-request'), true);
   assert.match(result.warnings.find(warning => warning.code === 'postman-send-request')?.message || '', /pm\.sendRequest/);
-  assert.equal(result.warnings.find(warning => warning.code === 'postman-send-request')?.status, 'unsupported');
+  assert.equal(result.warnings.find(warning => warning.code === 'postman-send-request')?.status, 'degraded');
 });
 
 test('OpenAPI import warns when security schemes need manual auth review', () => {
@@ -86,4 +86,56 @@ test('OpenAPI import warns when security schemes need manual auth review', () =>
   assert.equal(result.environments[0]?.authProfiles.some(profile => profile.name === 'bearerAuth'), true);
   assert.equal(result.requests[0]?.request.auth.type, 'profile');
   assert.equal(result.requests[0]?.request.auth.profileName, 'bearerAuth');
+});
+
+test('OpenAPI import maps oauth2 client credentials to an editable auth profile', () => {
+  const openapi = JSON.stringify({
+    openapi: '3.0.0',
+    info: { title: 'OAuth API', version: '1.0.0' },
+    components: {
+      securitySchemes: {
+        machineAuth: {
+          type: 'oauth2',
+          flows: {
+            clientCredentials: {
+              tokenUrl: 'https://auth.example.com/oauth/token',
+              scopes: {
+                'orders.read': 'Read orders'
+              }
+            }
+          }
+        }
+      }
+    },
+    security: [{ machineAuth: ['orders.read'] }],
+    paths: {
+      '/orders': {
+        get: {
+          summary: 'List Orders',
+          responses: {
+            200: {
+              description: 'ok',
+              content: {
+                'application/json': {
+                  example: { items: [] }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  const result = importSourceText(openapi);
+  const profile = result.environments[0]?.authProfiles.find(item => item.name === 'machineAuth');
+
+  assert.equal(profile?.auth.type, 'oauth2');
+  assert.equal(profile?.auth.oauthFlow, 'client_credentials');
+  assert.equal(profile?.auth.tokenUrl, 'https://auth.example.com/oauth/token');
+  assert.equal(profile?.auth.clientIdFromVar, 'machineauthClientId');
+  assert.equal(profile?.auth.clientSecretFromVar, 'machineauthClientSecret');
+  assert.equal(profile?.auth.scope, 'orders.read');
+  assert.equal(result.warnings.some(warning => warning.code === 'oauth-client-credentials-mapped'), true);
+  assert.equal(result.requests[0]?.request.auth.profileName, 'machineAuth');
 });

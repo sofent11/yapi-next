@@ -85,7 +85,7 @@ const UNSUPPORTED_SCRIPT_PATTERNS = [
     token: 'pm.sendRequest',
     code: 'script-unsupported-send-request',
     level: 'warning' as const,
-    message: 'pm.sendRequest is not supported by the local debugger runtime yet.'
+    message: 'pm.sendRequest is only supported in lite pre-request mode. Complex or post-response usage still needs review.'
   },
   {
     token: 'pm.vault',
@@ -835,7 +835,8 @@ function mergeAuth(baseAuth: AuthConfig, overrideAuth?: AuthConfig, environment?
   if (next.type !== 'profile') {
     return {
       auth: next,
-      authSource: next.type === 'inherit' ? 'inherit' : next.type
+      authSource: next.type === 'inherit' ? 'inherit' : next.type,
+      profileName: undefined as string | undefined
     };
   }
 
@@ -843,13 +844,15 @@ function mergeAuth(baseAuth: AuthConfig, overrideAuth?: AuthConfig, environment?
   if (!profile) {
     return {
       auth: authConfigSchema.parse({ type: 'none' }),
-      authSource: `missing profile: ${next.profileName || 'unknown'}`
+      authSource: `missing profile: ${next.profileName || 'unknown'}`,
+      profileName: next.profileName
     };
   }
 
   return {
     auth: authConfigSchema.parse(profile.auth),
-    authSource: `environment profile: ${profile.name}`
+    authSource: `environment profile: ${profile.name}`,
+    profileName: profile.name
   };
 }
 
@@ -875,8 +878,78 @@ function resolveAuthValue(
   };
 }
 
+function resolveOauthAccessTokenTarget(auth: AuthConfig) {
+  const target = auth.tokenPlacement || 'header';
+  const name = auth.tokenName || (target === 'query' ? 'access_token' : 'Authorization');
+  return { target, name };
+}
+
+function oauthCacheStatus(auth: AuthConfig) {
+  if (!auth.accessToken) {
+    return 'none' as const;
+  }
+  if (!auth.expiresAt) {
+    return 'fresh' as const;
+  }
+  const expiresAt = Date.parse(auth.expiresAt);
+  if (Number.isNaN(expiresAt)) {
+    return 'fresh' as const;
+  }
+  return expiresAt > Date.now() ? 'fresh' as const : 'expired' as const;
+}
+
+function buildResolvedAuthState(
+  auth: AuthConfig,
+  authSource: string,
+  profileName: string | undefined,
+  project: ProjectDocument,
+  environment: EnvironmentDocument | undefined,
+  extraSources: Array<Record<string, unknown>>
+) {
+  const state = {
+    type: auth.type,
+    source: authSource,
+    profileName,
+    tokenInjected: false,
+    cacheStatus: 'none' as 'none' | 'fresh' | 'expired' | 'pending',
+    expiresAt: auth.expiresAt,
+    resolvedTokenUrl: undefined as string | undefined,
+    missing: [] as string[],
+    notes: [] as string[]
+  };
+
+  if (auth.type !== 'oauth2') {
+    return state;
+  }
+
+  const tokenUrl = applyProjectVariables(auth.tokenUrl || '', project, environment, extraSources);
+  const clientId = resolveAuthValue(auth.clientId || '', auth.clientIdFromVar, project, environment, extraSources).value;
+  const clientSecret = resolveAuthValue(auth.clientSecret || '', auth.clientSecretFromVar, project, environment, extraSources).value;
+  const cacheStatus = oauthCacheStatus(auth);
+
+  state.cacheStatus = cacheStatus;
+  state.resolvedTokenUrl = tokenUrl || undefined;
+  if (!tokenUrl.trim()) state.missing.push('tokenUrl');
+  if (!clientId.trim()) state.missing.push(auth.clientIdFromVar?.trim() || 'clientId');
+  if (!clientSecret.trim()) state.missing.push(auth.clientSecretFromVar?.trim() || 'clientSecret');
+
+  if (cacheStatus === 'fresh' && auth.accessToken) {
+    state.tokenInjected = true;
+    state.notes.push(profileName ? `Using cached OAuth token from profile "${profileName}".` : 'Using cached OAuth token.');
+  } else if (cacheStatus === 'expired') {
+    state.notes.push('Cached OAuth token has expired and will refresh on send.');
+  } else if (state.missing.length === 0) {
+    state.cacheStatus = 'pending';
+    state.notes.push('OAuth token will be fetched automatically on send.');
+  }
+
+  return state;
+}
+
 function buildAuthPreview(
   auth: AuthConfig,
+  authSource: string,
+  profileName: string | undefined,
   project: ProjectDocument,
   environment: EnvironmentDocument | undefined,
   extraSources: Array<Record<string, unknown>>
@@ -890,7 +963,8 @@ function buildAuthPreview(
         target: 'header',
         name: 'Authorization',
         value: `Bearer ${resolved.value}`,
-        sourceLabel: resolved.sourceLabel
+        sourceLabel: resolved.sourceLabel,
+        status: 'ready'
       })
     );
   }
@@ -903,7 +977,8 @@ function buildAuthPreview(
         target: 'header',
         name: 'Authorization',
         value: `Basic ${encodeBasicAuth(username.value, password.value)}`,
-        sourceLabel: `${username.sourceLabel}; ${password.sourceLabel}`
+        sourceLabel: `${username.sourceLabel}; ${password.sourceLabel}`,
+        status: 'ready'
       })
     );
   }
@@ -915,9 +990,39 @@ function buildAuthPreview(
         target: auth.addTo || 'header',
         name: auth.key,
         value: resolved.value,
-        sourceLabel: resolved.sourceLabel
+        sourceLabel: resolved.sourceLabel,
+        status: 'ready'
       })
     );
+  }
+
+  if (auth.type === 'oauth2') {
+    const authState = buildResolvedAuthState(auth, authSource, profileName, project, environment, extraSources);
+    const target = resolveOauthAccessTokenTarget(auth);
+    if (authState.cacheStatus === 'fresh' && auth.accessToken) {
+      const tokenPrefix = auth.tokenType || auth.tokenPrefix || 'Bearer';
+      preview.push(
+        resolvedAuthPreviewItemSchema.parse({
+          target: target.target,
+          name: target.name,
+          value: target.target === 'header' ? `${tokenPrefix} ${auth.accessToken}` : auth.accessToken,
+          sourceLabel: profileName ? `environment profile: ${profileName}` : authSource,
+          status: 'cached',
+          detail: auth.expiresAt ? `expires ${auth.expiresAt}` : 'cached token'
+        })
+      );
+    } else {
+      preview.push(
+        resolvedAuthPreviewItemSchema.parse({
+          target: target.target,
+          name: target.name,
+          value: '',
+          sourceLabel: profileName ? `environment profile: ${profileName}` : authSource,
+          status: authState.cacheStatus === 'expired' ? 'expired' : 'missing',
+          detail: authState.notes[0] || 'OAuth token is not cached yet.'
+        })
+      );
+    }
   }
 
   return preview;
@@ -1046,6 +1151,28 @@ function buildPreflightDiagnostics(
     });
   }
 
+  if (auth.type === 'oauth2') {
+    const authState = preview.authState;
+    if (authState?.missing.length) {
+      diagnostics.push({
+        code: 'incomplete-oauth2-auth',
+        level: 'error',
+        blocking: true,
+        message: `OAuth2 client credentials setup is incomplete: ${authState.missing.join(', ')}`,
+        field: 'auth'
+      });
+    }
+    if (!authState?.resolvedTokenUrl && !auth.tokenUrl) {
+      diagnostics.push({
+        code: 'missing-oauth-token-url',
+        level: 'error',
+        blocking: true,
+        message: 'OAuth2 auth is selected but no token URL could be resolved.',
+        field: 'auth'
+      });
+    }
+  }
+
   if (body.mode === 'multipart') {
     const missingFiles = (preview.body.fields || []).filter(
       row => row.enabled && row.kind === 'file' && !String(row.filePath || row.value || '').trim()
@@ -1075,7 +1202,7 @@ export function inspectResolvedRequest(
   const body = caseDocument?.overrides.body ?? request.body;
   const authInput = caseDocument?.overrides.auth || request.auth;
   const scriptSource = [caseDocument?.scripts?.preRequest || '', caseDocument?.scripts?.postResponse || ''].join('\n').trim();
-  const { auth, authSource } = mergeAuth(request.auth, caseDocument?.overrides.auth, environment);
+  const { auth, authSource, profileName } = mergeAuth(request.auth, caseDocument?.overrides.auth, environment);
   const queryRows = caseDocument?.overrides.query ?? request.query;
   const pathRows = caseDocument?.overrides.pathParams ?? request.pathParams;
   const headerRows = mergeRows(
@@ -1213,7 +1340,8 @@ export function inspectResolvedRequest(
     );
   });
 
-  const authPreview = buildAuthPreview(auth, project, environment, extraSources);
+  const authPreview = buildAuthPreview(auth, authSource, profileName, project, environment, extraSources);
+  const authState = buildResolvedAuthState(auth, authSource, profileName, project, environment, extraSources);
   authPreview.forEach(item => {
     const rawValue =
       authInput.type === 'bearer'
@@ -1222,10 +1350,17 @@ export function inspectResolvedRequest(
           : authInput.token || ''
         : authInput.type === 'basic'
           ? `${authInput.usernameFromVar ? `{{${authInput.usernameFromVar}}}` : authInput.username || ''}:${authInput.passwordFromVar ? `{{${authInput.passwordFromVar}}}` : authInput.password || ''}`
-          : authInput.type === 'apikey'
-            ? authInput.valueFromVar
-              ? `{{${authInput.valueFromVar}}}`
-              : authInput.value || ''
+            : authInput.type === 'apikey'
+              ? authInput.valueFromVar
+                ? `{{${authInput.valueFromVar}}}`
+                : authInput.value || ''
+            : authInput.type === 'oauth2'
+              ? [
+                  authInput.tokenUrl || '',
+                  authInput.clientIdFromVar ? `{{${authInput.clientIdFromVar}}}` : authInput.clientId || '',
+                  authInput.clientSecretFromVar ? `{{${authInput.clientSecretFromVar}}}` : authInput.clientSecret || '',
+                  authInput.scope || ''
+                ].filter(Boolean).join(' | ')
             : '';
     fields.push(
       collectResolvedField(
@@ -1296,7 +1431,10 @@ export function inspectResolvedRequest(
   });
 
   return resolvedRequestInsightSchema.parse({
-    preview,
+    preview: {
+      ...preview,
+      authState
+    },
     variables: [...variables.values()].map(item => ({
       ...item,
       locations: [...item.locations]
@@ -1316,7 +1454,7 @@ export function resolveRequest(
   extraSources: Array<Record<string, unknown>> = []
 ): ResolvedRequest {
   const body = caseDocument?.overrides.body ?? request.body;
-  const { auth, authSource } = mergeAuth(request.auth, caseDocument?.overrides.auth, environment);
+  const { auth, authSource, profileName } = mergeAuth(request.auth, caseDocument?.overrides.auth, environment);
   const runtime = mergeRuntime(request, caseDocument);
   const rawUrl = caseDocument?.overrides.url || request.url;
   const url = applyProjectVariables(rawUrl, project, environment, extraSources);
@@ -1387,6 +1525,25 @@ export function resolveRequest(
       filePath: undefined
     });
   }
+  if (auth.type === 'oauth2') {
+    const cacheStatus = oauthCacheStatus(auth);
+    if (cacheStatus === 'fresh' && auth.accessToken) {
+      const target = resolveOauthAccessTokenTarget(auth);
+      const tokenPrefix = auth.tokenType || auth.tokenPrefix || 'Bearer';
+      const row = {
+        name: target.name,
+        value: target.target === 'header' ? `${tokenPrefix} ${auth.accessToken}` : auth.accessToken,
+        enabled: true,
+        kind: 'text' as const,
+        filePath: undefined
+      };
+      if (target.target === 'query') {
+        authQuery.push(row);
+      } else {
+        authHeaders.push(row);
+      }
+    }
+  }
 
   const mergedVariables = mergeVariableSources(project, environment, extraSources);
   let candidateUrl = url;
@@ -1406,7 +1563,8 @@ export function resolveRequest(
     query: authQuery,
     body: mergedBody,
     timeoutMs: runtime.timeoutMs,
-    followRedirects: runtime.followRedirects
+    followRedirects: runtime.followRedirects,
+    authState: buildResolvedAuthState(auth, authSource, profileName, project, environment, extraSources)
   }), extraSources);
 }
 
@@ -1723,5 +1881,7 @@ export {
   applyCollectionRules,
   buildCurlCommand,
   evaluateChecks,
-  executeRequestScript
+  executeRequestScript,
+  interpolateString,
+  mergeTemplateSources
 };

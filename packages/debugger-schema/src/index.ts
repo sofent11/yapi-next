@@ -21,7 +21,7 @@ export const parameterRowSchema = z.object({
 });
 export type ParameterRow = z.infer<typeof parameterRowSchema>;
 
-export const authTypeSchema = z.enum(['inherit', 'none', 'bearer', 'basic', 'apikey', 'profile']);
+export const authTypeSchema = z.enum(['inherit', 'none', 'bearer', 'basic', 'apikey', 'profile', 'oauth2']);
 export type AuthType = z.infer<typeof authTypeSchema>;
 
 export const authConfigSchema = z.object({
@@ -36,7 +36,20 @@ export const authConfigSchema = z.object({
   value: z.string().optional(),
   valueFromVar: z.string().optional(),
   addTo: z.enum(['header', 'query']).optional(),
-  profileName: z.string().optional()
+  profileName: z.string().optional(),
+  oauthFlow: z.enum(['client_credentials']).optional(),
+  tokenUrl: z.string().optional(),
+  clientId: z.string().optional(),
+  clientIdFromVar: z.string().optional(),
+  clientSecret: z.string().optional(),
+  clientSecretFromVar: z.string().optional(),
+  scope: z.string().optional(),
+  tokenPlacement: z.enum(['header', 'query']).optional(),
+  tokenName: z.string().optional(),
+  tokenPrefix: z.string().optional(),
+  tokenType: z.string().optional(),
+  accessToken: z.string().optional(),
+  expiresAt: z.string().optional()
 });
 export type AuthConfig = z.infer<typeof authConfigSchema>;
 
@@ -421,7 +434,18 @@ export const resolvedRequestPreviewSchema = sendRequestInputSchema.extend({
   name: z.string(),
   environmentName: z.string().optional(),
   authSource: z.string().default('none'),
-  requestPath: z.string().default('/')
+  requestPath: z.string().default('/'),
+  authState: z.object({
+    type: authTypeSchema.default('none'),
+    source: z.string().default('none'),
+    profileName: z.string().optional(),
+    tokenInjected: z.boolean().default(false),
+    cacheStatus: z.enum(['none', 'fresh', 'expired', 'pending']).default('none'),
+    expiresAt: z.string().optional(),
+    resolvedTokenUrl: z.string().optional(),
+    missing: z.array(z.string()).default([]),
+    notes: z.array(z.string()).default([])
+  }).optional()
 });
 export type ResolvedRequestPreview = z.infer<typeof resolvedRequestPreviewSchema>;
 
@@ -451,7 +475,9 @@ export const resolvedAuthPreviewItemSchema = z.object({
   target: z.enum(['header', 'query']),
   name: z.string(),
   value: z.string(),
-  sourceLabel: z.string().optional()
+  sourceLabel: z.string().optional(),
+  status: z.enum(['ready', 'cached', 'missing', 'expired']).optional(),
+  detail: z.string().optional()
 });
 export type ResolvedAuthPreviewItem = z.infer<typeof resolvedAuthPreviewItemSchema>;
 

@@ -214,12 +214,42 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
     }
 
     if (source.type === 'oauth2' || source.type === 'openIdConnect') {
+      const clientCredentials = source.type === 'oauth2' ? source.flows?.clientCredentials : null;
+      if (clientCredentials?.tokenUrl) {
+        const clientIdVar = authProfileVariableName(schemeName, 'ClientId');
+        const clientSecretVar = authProfileVariableName(schemeName, 'ClientSecret');
+        sharedEnvironment.vars[clientIdVar] = sharedEnvironment.vars[clientIdVar] || '';
+        sharedEnvironment.vars[clientSecretVar] = sharedEnvironment.vars[clientSecretVar] || '';
+        sharedEnvironment.authProfiles.push({
+          name: String(schemeName),
+          auth: {
+            type: 'oauth2',
+            oauthFlow: 'client_credentials',
+            tokenUrl: String(clientCredentials.tokenUrl),
+            clientIdFromVar: clientIdVar,
+            clientSecretFromVar: clientSecretVar,
+            scope: Object.keys(clientCredentials.scopes || {}).join(' '),
+            tokenPlacement: 'header',
+            tokenName: 'Authorization',
+            tokenPrefix: 'Bearer'
+          }
+        });
+        warnings.push({
+          level: 'info',
+          scope: 'project',
+          code: 'oauth-client-credentials-mapped',
+          status: 'compatible',
+          message: `${schemeName}: OAuth2 client credentials was mapped to an editable environment auth profile.`
+        });
+        return;
+      }
+
       warnings.push({
         level: 'warning',
         scope: 'project',
         code: 'oauth-review',
         status: 'unsupported',
-        message: `${schemeName}: OAuth/OpenID Connect definitions were detected. They were preserved as warnings only and still need manual setup.`
+        message: `${schemeName}: OAuth/OpenID Connect definitions were detected, but only OAuth2 client credentials is supported automatically right now.`
       });
     }
   });
@@ -476,8 +506,8 @@ function collectScriptWarnings(requestName: string, script: string, warnings: Im
     {
       token: 'pm.sendRequest',
       code: 'postman-send-request',
-      status: 'unsupported' as const,
-      message: 'pm.sendRequest is not supported yet and was preserved as script text only.'
+      status: 'degraded' as const,
+      message: 'pm.sendRequest is supported in lite pre-request mode for common token-fetch flows, but complex usage still needs review.'
     },
     {
       token: 'pm.vault',
