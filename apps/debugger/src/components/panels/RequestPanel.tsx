@@ -72,6 +72,7 @@ export function RequestPanel(props: {
   onTabChange: (tab: RequestTab) => void;
   onRequestChange: (request: RequestDocument) => void;
   onCasesChange: (cases: CaseDocument[]) => void;
+  onAddCase: () => void;
   onRun: () => void;
   cases: CaseDocument[];
 }) {
@@ -187,6 +188,15 @@ export function RequestPanel(props: {
             }}
             variant="filled"
           />
+          <Button 
+            size="sm" 
+            variant="default" 
+            leftSection={<IconPlus size={14} />} 
+            onClick={() => props.onAddCase()}
+            title="Create new case for this request"
+          >
+            Case
+          </Button>
           <Button size="sm" leftSection={<IconPlayerPlay size={14} />} loading={props.isRunning} onClick={props.onRun}>
             Send
           </Button>

@@ -363,10 +363,14 @@ export function App() {
   const addCaseMutation = useMutation({
     mutationFn: (targetReqId: string) => {
       if (!store.workspace) throw new Error('No workspace');
-      return createCaseForRequest(store.workspace.root, store.workspace, targetReqId);
+      return createCaseForRequest(store.workspace.root, targetReqId);
     },
     onSuccess: ({ requestId: reqId, caseId: nextCaseId }) => {
       reloadWorkspace({ kind: 'case', requestId: reqId, caseId: nextCaseId });
+      notifications.show({ color: 'teal', message: 'New test case created' });
+    },
+    onError: error => {
+      notifications.show({ color: 'red', message: `Failed to create case: ${(error as Error).message}` });
     }
   });
 
@@ -726,18 +730,19 @@ export function App() {
     addRequestMutation.mutate(targetCategoryPath ?? categoryPath ?? null);
   }
 
-  async function handleAddCase(targetRequestId?: string) {
-    const nextRequestId = targetRequestId || requestId;
-    if (!nextRequestId) {
+  async function handleAddCase(targetRequestId?: string | ReactMouseEvent) {
+    // If called directly from onClick, the first arg is an event object. Ignore it.
+    const actualId = typeof targetRequestId === 'string' ? targetRequestId : requestId;
+    
+    if (!actualId) {
       notifications.show({ color: 'red', message: 'Please select a request first' });
       return;
     }
-    addCaseMutation.mutate(nextRequestId);
+    addCaseMutation.mutate(actualId);
   }
 
-  async function handleRenameCategory(path: string) {
+  async function handleRenameCategory(path: string, nextPath: string) {
     if (!store.workspace) return;
-    const nextPath = window.prompt('Enter new category path', path)?.trim();
     if (!nextPath || nextPath === path) return;
     if (isSameOrChildPath(nextPath, path)) {
       notifications.show({ color: 'red', message: 'Cannot rename category into its own sub-category' });
@@ -765,11 +770,10 @@ export function App() {
     notifications.show({ color: 'teal', message: 'Category deleted' });
   }
 
-  async function handleRenameRequest(targetRequestId: string) {
+  async function handleRenameRequest(targetRequestId: string, nextName: string) {
     if (!store.workspace) return;
     const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
     if (!record) return;
-    const nextName = window.prompt('Enter new request name', record.request.name)?.trim();
     if (!nextName || nextName === record.request.name) return;
     if (requestSlugExists(store.workspace, nextName, record.request.id, record.folderSegments.join('/'))) {
       notifications.show({ color: 'red', message: 'Another request with the same name already exists in this folder' });
@@ -793,12 +797,11 @@ export function App() {
     notifications.show({ color: 'teal', message: 'Request deleted' });
   }
 
-  async function handleRenameCase(targetRequestId: string, targetCaseId: string) {
+  async function handleRenameCase(targetRequestId: string, targetCaseId: string, nextName: string) {
     if (!store.workspace) return;
     const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
     const caseItem = record?.cases.find(item => item.id === targetCaseId);
     if (!record || !caseItem) return;
-    const nextName = window.prompt('Enter new case name', caseItem.name)?.trim();
     if (!nextName || nextName === caseItem.name) return;
     if (caseSlugExists(record, nextName, caseItem.id)) {
       notifications.show({ color: 'red', message: 'Another case with the same name already exists for this request' });

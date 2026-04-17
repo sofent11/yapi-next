@@ -268,10 +268,25 @@ export async function createRequestInWorkspace(root: string, folderPath: string 
   return request.id;
 }
 
-export async function createCaseForRequest(root: string, workspace: WorkspaceIndex, requestId: string) {
-  const record = workspace.requests.find(r => r.request.id === requestId);
-  if (!record) throw new Error('Request not found');
-  const nextCase = createEmptyCase(requestId, `Case ${record.cases.length + 1}`);
+export async function createCaseForRequest(
+  root: string,
+  requestId: string
+) {
+  // Always perform a fresh scan to avoid stale index issues
+  const workspace = await openWorkspace(root);
+
+  let record = workspace.requests.find(r => r.request.id === requestId);
+
+  // Fallback: If not found by ID, maybe it's a freshly created request that had its ID changed or is being tracked by path
+  if (!record) {
+    record = workspace.requests.find(r => r.request.name === requestId || r.request.path === requestId);
+  }
+
+  if (!record) {
+    throw new Error(`Request "${requestId}" not found in workspace index`);
+  }
+
+  const nextCase = createEmptyCase(record.request.id, `Case ${record.cases.length + 1}`);
   await saveRequestRecord(
     root,
     record.request,
@@ -280,8 +295,9 @@ export async function createCaseForRequest(root: string, workspace: WorkspaceInd
     record.requestFilePath,
     record.folderSegments
   );
-  return { requestId, caseId: nextCase.id };
+  return { requestId: record.request.id, caseId: nextCase.id };
 }
+
 
 export async function createCollectionInWorkspace(
   root: string,

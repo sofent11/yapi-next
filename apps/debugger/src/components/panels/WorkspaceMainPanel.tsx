@@ -303,7 +303,7 @@ export function WorkspaceMainPanel(props: {
     <section className="workspace-main">
       {renderToolbar(
         <div style={{ display: 'flex', gap: 8 }}>
-          <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={props.onAddCase}>
+          <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={() => props.onAddCase()}>
             New Case
           </Button>
           <Button
@@ -338,6 +338,7 @@ export function WorkspaceMainPanel(props: {
             onTabChange={props.onRequestTabChange}
             onRequestChange={props.onRequestChange}
             onCasesChange={props.onCasesChange}
+            onAddCase={props.onAddCase}
             onRun={props.onRun}
           />
         </div>

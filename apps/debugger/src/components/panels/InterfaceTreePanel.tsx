@@ -6,7 +6,9 @@ import {
   IconFolderPlus,
   IconPlus,
   IconSearch,
-  IconUpload
+  IconUpload,
+  IconCheck,
+  IconX
 } from '@tabler/icons-react';
 import type { WorkspaceIndex, WorkspaceTreeNode } from '@yapi-debugger/schema';
 import type { SelectedNode } from '../../store/workspace-store';
@@ -84,11 +86,34 @@ function highlightText(value: string, normalized: string) {
   );
 }
 
-function contextLabel(selectedNode: SelectedNode) {
-  if (selectedNode.kind === 'project') return 'Project Actions';
-  if (selectedNode.kind === 'category') return 'Category Actions';
-  if (selectedNode.kind === 'request') return 'Request Actions';
-  return 'Case Actions';
+function InlineRenameInput(props: {
+  value: string;
+  onChange: (value: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="tree-rename-shell" onClick={e => e.stopPropagation()}>
+      <input
+        className="tree-rename-input"
+        value={props.value}
+        onChange={e => props.onChange(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            props.onConfirm();
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            props.onCancel();
+          }
+        }}
+        onBlur={props.onConfirm}
+        autoFocus
+        onFocus={e => e.target.select()}
+      />
+    </div>
+  );
 }
 
 function renderNode(props: {
@@ -97,6 +122,11 @@ function renderNode(props: {
   normalized: string;
   selectedNode: SelectedNode;
   expandedRequestIds: Set<string>;
+  renamingId: string | null;
+  renamingValue: string;
+  setRenamingValue: (val: string) => void;
+  onConfirmRename: () => void;
+  onCancelRename: () => void;
   onToggleRequest: (requestId: string) => void;
   onSelectProject: () => void;
   onSelectCategory: (path: string) => void;
@@ -108,6 +138,7 @@ function renderNode(props: {
   const requestId = requestIdFromSelection(props.selectedNode);
   const selectedCaseId = caseIdFromSelection(props.selectedNode);
   const selectedCategory = categoryPathFromSelection(props.selectedNode);
+  const isRenaming = props.renamingId === props.node.id;
 
   if (props.node.kind === 'project') {
     const active = props.selectedNode.kind === 'project';
@@ -150,7 +181,16 @@ function renderNode(props: {
         >
           <IconChevronRight size={14} style={{ opacity: 0.5 }} />
           <span className="tree-row-copy">
-            <strong>{highlightText(node.name, props.normalized)}</strong>
+            {isRenaming ? (
+              <InlineRenameInput
+                value={props.renamingValue}
+                onChange={props.setRenamingValue}
+                onConfirm={props.onConfirmRename}
+                onCancel={props.onCancelRename}
+              />
+            ) : (
+              <strong>{highlightText(node.name, props.normalized)}</strong>
+            )}
           </span>
         </button>
         <div className="tree-children">
@@ -190,7 +230,16 @@ function renderNode(props: {
           <button type="button" className="tree-row-main" onClick={() => props.onSelectRequest(node.requestId)}>
             <span className={`tree-method-pill method-${node.method.toLowerCase()}`}>{node.method}</span>
             <span className="tree-row-copy">
-              <strong>{highlightText(node.name, props.normalized)}</strong>
+              {isRenaming ? (
+                <InlineRenameInput
+                  value={props.renamingValue}
+                  onChange={props.setRenamingValue}
+                  onConfirm={props.onConfirmRename}
+                  onCancel={props.onCancelRename}
+                />
+              ) : (
+                <strong>{highlightText(node.name, props.normalized)}</strong>
+              )}
             </span>
             {node.caseCount > 0 && <span className="tree-count-badge">{node.caseCount}</span>}
           </button>
@@ -223,7 +272,16 @@ function renderNode(props: {
     >
       <span className="tree-case-dot" />
       <span className="tree-row-copy">
-        <strong>{highlightText(node.name, props.normalized)}</strong>
+        {isRenaming ? (
+          <InlineRenameInput
+            value={props.renamingValue}
+            onChange={props.setRenamingValue}
+            onConfirm={props.onConfirmRename}
+            onCancel={props.onCancelRename}
+          />
+        ) : (
+          <strong>{highlightText(node.name, props.normalized)}</strong>
+        )}
       </span>
     </button>
   );
@@ -246,12 +304,12 @@ export function InterfaceTreePanel(props: {
   onOpenImport: () => void;
   onCreateInterface: (categoryPath?: string | null) => void;
   onAddCase: (requestId?: string) => void;
-  onRenameCategory: (path: string) => void;
+  onRenameCategory: (path: string, nextName: string) => void;
   onDeleteCategory: (path: string) => void;
-  onRenameRequest: (requestId: string) => void;
+  onRenameRequest: (requestId: string, nextName: string) => void;
   onDuplicateRequest: (requestId: string) => void;
   onDeleteRequest: (requestId: string) => void;
-  onRenameCase: (requestId: string, caseId: string) => void;
+  onRenameCase: (requestId: string, caseId: string, nextName: string) => void;
   onDuplicateCase: (requestId: string, caseId: string) => void;
   onDeleteCase: (requestId: string, caseId: string) => void;
   onToggleCategoryDraft: () => void;
@@ -259,6 +317,11 @@ export function InterfaceTreePanel(props: {
   onConfirmCreateCategory: () => void;
   onToggleRequest: (requestId: string) => void;
 }) {
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renamingValue, setRenamingValue] = useState('');
+  const [renamingOriginalValue, setRenamingOriginalValue] = useState('');
+  const [renamingTarget, setRenamingTarget] = useState<WorkspaceTreeNode | null>(null);
+  
   const [contextMenu, setContextMenu] = useState<
     | { x: number; y: number; target: { kind: 'blank' } }
     | { x: number; y: number; target: { kind: 'node'; node: WorkspaceTreeNode } }
@@ -285,6 +348,19 @@ export function InterfaceTreePanel(props: {
     return () => window.removeEventListener('debugger://focus-search', focusSearch as EventListener);
   }, []);
 
+  const handleConfirmRename = () => {
+    if (!renamingId || !renamingTarget) return;
+
+    const nextName = renamingValue.trim();
+    if (nextName && nextName !== renamingOriginalValue) {
+      if (renamingTarget.kind === 'category') props.onRenameCategory(renamingTarget.path, nextName);
+      if (renamingTarget.kind === 'request') props.onRenameRequest(renamingTarget.requestId, nextName);
+      if (renamingTarget.kind === 'case') props.onRenameCase(renamingTarget.requestId, renamingTarget.caseId, nextName);
+    }
+    setRenamingId(null);
+    setRenamingTarget(null);
+  };
+
   const contextMenuItems: ResourceContextMenuItem[] = useMemo(() => {
     if (!contextMenu) return [];
     const target = contextMenu.target.kind === 'blank' ? null : contextMenu.target.node;
@@ -304,6 +380,13 @@ export function InterfaceTreePanel(props: {
       ];
     }
 
+    const startRenaming = () => {
+      setRenamingId(target.id);
+      setRenamingTarget(target);
+      setRenamingValue(target.name);
+      setRenamingOriginalValue(target.name);
+    };
+
     if (target.kind === 'category') {
       return [
         {
@@ -317,7 +400,7 @@ export function InterfaceTreePanel(props: {
         {
           key: 'rename-category',
           label: 'Rename Category',
-          onClick: () => props.onRenameCategory(target.path)
+          onClick: startRenaming
         },
         {
           key: 'delete-category',
@@ -341,7 +424,7 @@ export function InterfaceTreePanel(props: {
         {
           key: 'rename-request',
           label: 'Rename Request',
-          onClick: () => props.onRenameRequest(target.requestId)
+          onClick: startRenaming
         },
         {
           key: 'duplicate-request',
@@ -362,7 +445,7 @@ export function InterfaceTreePanel(props: {
         {
           key: 'rename-case',
           label: 'Rename Case',
-          onClick: () => props.onRenameCase(target.requestId, target.caseId)
+          onClick: startRenaming
         },
         {
           key: 'duplicate-case',
@@ -489,6 +572,14 @@ export function InterfaceTreePanel(props: {
               normalized,
               selectedNode: props.selectedNode,
               expandedRequestIds,
+              renamingId,
+              renamingValue,
+              setRenamingValue,
+              onConfirmRename: handleConfirmRename,
+              onCancelRename: () => {
+                setRenamingId(null);
+                setRenamingTarget(null);
+              },
               onToggleRequest: props.onToggleRequest,
               onSelectProject: props.onSelectProject,
               onSelectCategory: props.onSelectCategory,
