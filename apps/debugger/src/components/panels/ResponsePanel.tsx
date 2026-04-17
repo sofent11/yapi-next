@@ -1,24 +1,22 @@
 import { Badge, Button, Group, Select, Tabs, Text } from '@mantine/core';
+import { IconPlayerPlay, IconAlertCircle } from '@tabler/icons-react';
 import type { CheckResult, RequestDocument, ResolvedRequestPreview, SendRequestResult } from '@yapi-debugger/schema';
 import type { ResponseTab } from '../../store/workspace-store';
 import { CodeEditor } from '../editors/CodeEditor';
 
 function responseHeadersText(res: SendRequestResult | null) {
-  return (res?.headers || []).map(item => `${item.name}: ${item.value}`).join('\n');
+  if (!res) return '';
+  return res.headers.map(h => `${h.name}: ${h.value}`).join('\n');
 }
 
-function responseBodyLanguage(value: string) {
-  if (!value) return 'text';
-  try {
-    JSON.parse(value);
-    return 'json';
-  } catch (_err) {
-    return 'text';
-  }
+function responseBodyLanguage(body: string) {
+  if (body.trim().startsWith('{') || body.trim().startsWith('[')) return 'json';
+  return 'text';
 }
 
 export function ResponsePanel(props: {
   response: SendRequestResult | null;
+  requestError: string | null;
   requestPreview: ResolvedRequestPreview | null;
   requestDocument: RequestDocument | null;
   checkResults: CheckResult[];
@@ -48,29 +46,32 @@ export function ResponsePanel(props: {
           </Text>
           {props.response ? (
             <div className="response-metrics">
-              <Badge color={props.response.ok ? 'green' : 'red'} variant="dot" size="sm">
-                {props.response.status}
+              <Badge color={props.response.ok ? 'green' : 'red'} variant="light" size="sm">
+                {props.response.status} {props.response.statusText}
               </Badge>
-              <Text size="xs" fw={500}>{props.response.durationMs} ms</Text>
-              <Text size="xs" fw={500}>{props.response.sizeBytes} B</Text>
+              <Text size="xs" fw={600} c="dimmed">{props.response.durationMs}ms</Text>
+              <Text size="xs" fw={600} c="dimmed">{props.response.sizeBytes}B</Text>
             </div>
+          ) : props.requestError ? (
+            <Badge color="red" variant="filled" size="xs">ERROR</Badge>
           ) : null}
         </div>
-        <Group gap="xs">
+        <Group gap="xs" style={{ flexShrink: 0 }}>
           <Select
             size="xs"
+            className="response-example-select"
             placeholder="Live Response"
-            value={props.selectedExampleName}
+            value={props.selectedExampleName || '__live__'}
             data={[
               { value: '__live__', label: 'Live Response' },
               ...examples.map(example => ({ value: example.name, label: example.name }))
             ]}
             onChange={value => props.onSelectExample(value === '__live__' ? null : value || null)}
           />
-          <Button size="xs" variant="default" onClick={props.onCopyBody} disabled={!displayBody}>Copy Body</Button>
-          <Button size="xs" variant="default" onClick={props.onCopyCurl} disabled={!props.requestPreview}>Copy cURL</Button>
-          <Button size="xs" variant="default" onClick={props.onSaveExample} disabled={!props.response}>Save As Example</Button>
-          <Button size="xs" onClick={props.onReplaceExample} disabled={!props.response || !selectedExample}>Replace Example</Button>
+          <Button size="xs" variant="default" onClick={props.onCopyBody} disabled={!displayBody}>Copy</Button>
+          <Button size="xs" variant="default" onClick={props.onCopyCurl} disabled={!props.requestPreview}>cURL</Button>
+          <Button size="xs" variant="default" onClick={props.onSaveExample} disabled={!props.response}>Save</Button>
+          <Button size="xs" variant="filled" color="indigo" onClick={props.onReplaceExample} disabled={!props.response || !selectedExample}>Update</Button>
         </Group>
       </div>
 
@@ -96,9 +97,44 @@ export function ResponsePanel(props: {
         </Tabs.List>
 
         <div className="response-tab-content">
-          {!props.response && !selectedExample ? (
-            <div className="empty-response-state">
-              <Text size="sm" c="dimmed">Send a request or select a saved example to inspect the response.</Text>
+          {props.requestError ? (
+            <div className="error-response-state" style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              height: '400px',
+              color: 'var(--red)',
+              gap: 16,
+              padding: 24,
+              textAlign: 'center'
+            }}>
+              <IconAlertCircle size={48} stroke={1.5} />
+              <div>
+                <Text fw={700} size="md">Request Failed</Text>
+                <Text size="sm" mt={4} style={{ maxWidth: 400, wordBreak: 'break-word', fontFamily: 'var(--font-mono)' }}>
+                  {props.requestError}
+                </Text>
+              </div>
+              <Text size="xs" c="dimmed" style={{ maxWidth: 300 }}>
+                This could be due to network issues, an invalid URL, or a server-side error. Check the console or your connection and try again.
+              </Text>
+            </div>
+          ) : !props.response && !selectedExample ? (
+            <div className="empty-response-state" style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              height: '400px',
+              color: 'var(--muted)',
+              gap: 12
+            }}>
+              <IconPlayerPlay size={48} stroke={1.5} opacity={0.2} />
+              <Text size="sm" fw={500}>Ready to Send</Text>
+              <Text size="xs" style={{ maxWidth: 240, textAlign: 'center' }}>
+                Hit the Send button to execute the request or select a saved example to inspect.
+              </Text>
             </div>
           ) : (
             <>

@@ -24,6 +24,7 @@ import {
   type RequestDocument,
   type ResolvedRequestPreview,
   type RunHistoryEntry,
+  type SendRequestResult,
   type WorkspaceIndex
 } from '@yapi-debugger/schema';
 import { importSourceText } from '@yapi-debugger/importers';
@@ -59,52 +60,76 @@ export async function openWorkspace(root: string) {
   return scanPayloadToIndex(payload);
 }
 
-function requestKey(record: { request: RequestDocument; folderSegments: string[] }) {
-  const folderPath = record.folderSegments.join('/');
-  const methodPathKey = `${record.request.method}:${record.request.path || record.request.url || record.request.name}`;
-  const folderNameKey = `${folderPath}:${slugify(record.request.name)}`;
-  return { folderPath, methodPathKey, folderNameKey };
+export type ImportPreviewSummary = {
+  format: string;
+  endpoints: number;
+  folders: number;
+  environments: number;
+  conflicts: number;
+};
+
+export function buildImportPreviewSummary(
+  workspace: WorkspaceIndex,
+  result: ImportResult
+): ImportPreviewSummary {
+  let conflicts = 0;
+  result.requests.forEach(imported => {
+    const existing = workspace.requests.find(record =>
+      conflictsWithRecord(record, imported)
+    );
+    if (existing) conflicts += 1;
+  });
+
+  return {
+    format: result.detectedFormat,
+    endpoints: result.requests.length,
+    folders: result.requests.reduce((set, req) => {
+      set.add(req.folderSegments.join('/'));
+      return set;
+    }, new Set<string>()).size,
+    environments: result.environments.length,
+    conflicts
+  };
 }
 
 function conflictsWithRecord(
-  left: { request: RequestDocument; folderSegments: string[] },
-  right: { request: RequestDocument; folderSegments: string[] }
+  existing: WorkspaceIndex['requests'][number],
+  imported: ImportResult['requests'][number]
 ) {
-  const leftKey = requestKey(left);
-  const rightKey = requestKey(right);
-  return leftKey.methodPathKey === rightKey.methodPathKey || leftKey.folderNameKey === rightKey.folderNameKey;
+  return (
+    existing.request.name === imported.request.name &&
+    existing.folderSegments.join('/') === imported.folderSegments.join('/')
+  );
 }
 
-function ensureUniqueRequestName(
-  request: RequestDocument,
-  folderSegments: string[],
-  existingRecords: Array<{ request: RequestDocument; folderSegments: string[] }>
+export async function importIntoWorkspace(
+  workspace: WorkspaceIndex,
+  result: ImportResult,
+  strategy: 'append' | 'replace'
 ) {
-  const siblingNames = existingRecords
-    .filter(record => record.folderSegments.join('/') === folderSegments.join('/'))
-    .map(record => record.request.name);
-  const nextName = uniqueCopyName(request.name, siblingNames);
-  return nextName === request.name ? request : { ...request, name: nextName };
+  const root = workspace.root;
+  const nextRecords: ImportResult['requests'] = [];
+  const deleteTargets: WorkspaceIndex['requests'][number][] = [];
+
+  for (const imported of result.requests) {
+    const target = workspace.requests.find(record => conflictsWithRecord(record, imported));
+    if (!target) {
+      nextRecords.push(imported);
+      continue;
+    }
+
+    if (strategy === 'replace') {
+      deleteTargets.push(target);
+      nextRecords.push(imported);
+    } else {
+      nextRecords.push(imported);
+    }
+  }
+
+  await Promise.all(deleteTargets.map(record => deleteRequestInWorkspace(record)));
+  const writes = materializeRequestDocuments(nextRecords, root);
+  await Promise.all(writes.map(item => writeDocument(item.path, item.content)));
 }
-
-export type ImportConflictStrategy = 'append' | 'replace';
-
-export type ImportApplySummary = {
-  added: number;
-  updated: number;
-  skipped: number;
-  failed: number;
-};
-
-export type ImportPreviewSummary = {
-  source: ImportResult;
-  conflicts: Array<{
-    importedRequestId: string;
-    importedName: string;
-    targetName: string;
-    folderPath: string;
-  }>;
-};
 
 export async function createWorkspace(root: string, projectName: string) {
   const seed = createProjectSeed({ projectName, includeSampleRequest: true });
@@ -126,11 +151,11 @@ export async function saveProject(root: string, project: ProjectDocument) {
 
 export async function saveRequestRecord(
   root: string,
-  folderSegments: string[],
   request: RequestDocument,
   cases: CaseDocument[],
   previousResourceDirPath?: string,
-  previousRequestFilePath?: string
+  previousRequestFilePath?: string,
+  folderSegments: string[] = []
 ) {
   if (previousResourceDirPath) {
     await deleteEntry(previousResourceDirPath, true).catch(() => undefined);
@@ -143,28 +168,39 @@ export async function saveRequestRecord(
   await Promise.all(writes.map(item => writeDocument(item.path, item.content)));
 }
 
-export async function createRequestInWorkspace(root: string, folderSegments: string[]) {
+export async function createRequestInWorkspace(root: string, folderPath: string | null) {
+  const folderSegments = folderPath ? folderPath.split('/').filter(Boolean) : [];
   const request = createEmptyRequest('New Request');
   request.headers = [
     {
       ...emptyParameterRow(),
       name: 'Accept',
-      value: 'application/json'
+      value: 'application/json',
+      enabled: true,
+      kind: 'text'
     }
   ];
-  await saveRequestRecord(root, folderSegments, request, []);
+  await saveRequestRecord(root, request, [], undefined, undefined, folderSegments);
   return request.id;
 }
 
 export async function createCaseForRequest(
   root: string,
-  folderSegments: string[],
-  request: RequestDocument,
-  cases: CaseDocument[]
+  workspace: WorkspaceIndex,
+  requestId: string
 ) {
-  const nextCase = createEmptyCase(request.id, `Case ${cases.length + 1}`);
-  await saveRequestRecord(root, folderSegments, request, [...cases, nextCase]);
-  return nextCase.id;
+  const record = workspace.requests.find(r => r.request.id === requestId);
+  if (!record) throw new Error('Request not found');
+  const nextCase = createEmptyCase(requestId, `Case ${record.cases.length + 1}`);
+  await saveRequestRecord(
+    root,
+    record.request,
+    [...record.cases, nextCase],
+    record.resourceDirPath,
+    record.requestFilePath,
+    record.folderSegments
+  );
+  return { requestId, caseId: nextCase.id };
 }
 
 function uniqueCopyName(baseName: string, existingNames: string[]) {
@@ -187,14 +223,14 @@ export async function renameRequestInWorkspace(
 ) {
   await saveRequestRecord(
     root,
-    record.folderSegments,
     {
       ...record.request,
       name: nextName
     },
     record.cases,
     record.resourceDirPath,
-    record.requestFilePath
+    record.requestFilePath,
+    record.folderSegments
   );
 }
 
@@ -205,7 +241,7 @@ export async function duplicateRequestInWorkspace(
 ) {
   const nextRequest = structuredClone(record.request);
   nextRequest.id = createId('req');
-  nextRequest.name = uniqueCopyName(`${record.request.name} 副本`, siblingNames);
+  nextRequest.name = uniqueCopyName(`${record.request.name} Copy`, siblingNames);
 
   const nextCases = record.cases.map(caseItem => {
     const nextCase = structuredClone(caseItem);
@@ -214,15 +250,48 @@ export async function duplicateRequestInWorkspace(
     return nextCase;
   });
 
-  await saveRequestRecord(root, record.folderSegments, nextRequest, nextCases);
+  await saveRequestRecord(root, nextRequest, nextCases, undefined, undefined, record.folderSegments);
   return nextRequest.id;
 }
 
 export async function deleteRequestInWorkspace(record: WorkspaceIndex['requests'][number]) {
-  await Promise.all([
-    deleteEntry(record.resourceDirPath, true).catch(() => undefined),
-    deleteEntry(record.requestFilePath, false).catch(() => undefined)
-  ]);
+  if (record.resourceDirPath) {
+    await deleteEntry(record.resourceDirPath, true);
+  }
+  if (record.requestFilePath) {
+    await deleteEntry(record.requestFilePath, false);
+  }
+}
+
+export async function renameCategoryInWorkspace(
+  root: string,
+  workspace: WorkspaceIndex,
+  oldPath: string,
+  nextPath: string
+) {
+  const affected = workspace.requests.filter(r => r.folderSegments.join('/').startsWith(oldPath));
+  const newSegments = nextPath.split('/').filter(Boolean);
+  const oldSegmentsCount = oldPath.split('/').filter(Boolean).length;
+
+  for (const record of affected) {
+    const relativeSegments = record.folderSegments.slice(oldSegmentsCount);
+    const targetSegments = [...newSegments, ...relativeSegments];
+    await saveRequestRecord(
+      root,
+      record.request,
+      record.cases,
+      record.resourceDirPath,
+      record.requestFilePath,
+      targetSegments
+    );
+  }
+}
+
+export async function deleteCategoryInWorkspace(workspace: WorkspaceIndex, path: string) {
+  const affected = workspace.requests.filter(r => r.folderSegments.join('/').startsWith(path));
+  for (const record of affected) {
+    await deleteRequestInWorkspace(record);
+  }
 }
 
 export async function renameCaseInWorkspace(
@@ -231,20 +300,14 @@ export async function renameCaseInWorkspace(
   caseId: string,
   nextName: string
 ) {
+  const nextCases = record.cases.map(c => (c.id === caseId ? { ...c, name: nextName } : c));
   await saveRequestRecord(
     root,
-    record.folderSegments,
     record.request,
-    record.cases.map(caseItem =>
-      caseItem.id === caseId
-        ? {
-            ...caseItem,
-            name: nextName
-          }
-        : caseItem
-    ),
+    nextCases,
     record.resourceDirPath,
-    record.requestFilePath
+    record.requestFilePath,
+    record.folderSegments
   );
 }
 
@@ -253,25 +316,18 @@ export async function duplicateCaseInWorkspace(
   record: WorkspaceIndex['requests'][number],
   caseId: string
 ) {
-  const sourceCase = record.cases.find(caseItem => caseItem.id === caseId);
-  if (!sourceCase) {
-    throw new Error('用例不存在');
-  }
-
+  const sourceCase = record.cases.find(c => c.id === caseId);
+  if (!sourceCase) throw new Error('Case not found');
   const nextCase = structuredClone(sourceCase);
   nextCase.id = createId('case');
-  nextCase.name = uniqueCopyName(
-    `${sourceCase.name} 副本`,
-    record.cases.map(caseItem => caseItem.name)
-  );
-
+  nextCase.name = uniqueCopyName(`${sourceCase.name} Copy`, record.cases.map(c => c.name));
   await saveRequestRecord(
     root,
-    record.folderSegments,
     record.request,
     [...record.cases, nextCase],
     record.resourceDirPath,
-    record.requestFilePath
+    record.requestFilePath,
+    record.folderSegments
   );
   return nextCase.id;
 }
@@ -281,167 +337,15 @@ export async function deleteCaseInWorkspace(
   record: WorkspaceIndex['requests'][number],
   caseId: string
 ) {
+  const nextCases = record.cases.filter(c => c.id !== caseId);
   await saveRequestRecord(
     root,
-    record.folderSegments,
     record.request,
-    record.cases.filter(caseItem => caseItem.id !== caseId),
+    nextCases,
     record.resourceDirPath,
-    record.requestFilePath
+    record.requestFilePath,
+    record.folderSegments
   );
-}
-
-export async function renameCategoryInWorkspace(
-  root: string,
-  workspace: WorkspaceIndex,
-  currentPath: string,
-  nextPath: string
-) {
-  const currentSegments = currentPath.split('/').filter(Boolean);
-  const nextSegments = nextPath.split('/').filter(Boolean);
-  const targets = workspace.requests.filter(record => {
-    const path = record.folderSegments.join('/');
-    return path === currentPath || path.startsWith(`${currentPath}/`);
-  });
-
-  await Promise.all(
-    targets.map(record =>
-      saveRequestRecord(
-        root,
-        [...nextSegments, ...record.folderSegments.slice(currentSegments.length)],
-        record.request,
-        record.cases,
-        record.resourceDirPath,
-        record.requestFilePath
-      )
-    )
-  );
-}
-
-export async function deleteCategoryInWorkspace(workspace: WorkspaceIndex, currentPath: string) {
-  const targets = workspace.requests.filter(record => {
-    const path = record.folderSegments.join('/');
-    return path === currentPath || path.startsWith(`${currentPath}/`);
-  });
-
-  await Promise.all(targets.map(record => deleteRequestInWorkspace(record)));
-}
-
-export function buildImportPreviewSummary(workspace: WorkspaceIndex, preview: ImportResult): ImportPreviewSummary {
-  const conflicts = preview.requests.flatMap(imported => {
-    const target = workspace.requests.find(record => conflictsWithRecord(record, imported));
-    return target
-      ? [
-          {
-            importedRequestId: imported.request.id,
-            importedName: imported.request.name,
-            targetName: target.request.name,
-            folderPath: imported.folderSegments.join('/')
-          }
-        ]
-      : [];
-  });
-
-  return {
-    source: preview,
-    conflicts
-  };
-}
-
-export async function importIntoWorkspace(
-  root: string,
-  source: ImportSourcePayload,
-  workspace: WorkspaceIndex,
-  strategy: ImportConflictStrategy = 'append'
-) {
-  const result = importSourceText(source.content);
-  const summary: ImportApplySummary = {
-    added: 0,
-    updated: 0,
-    skipped: 0,
-    failed: 0
-  };
-
-  const nextProject = {
-    ...workspace.project,
-    runtime: {
-      ...workspace.project.runtime,
-      baseUrl: result.project.runtime.baseUrl || workspace.project.runtime.baseUrl
-    }
-  };
-  const projectFile = materializeProjectDocument(nextProject, root);
-  await writeDocument(projectFile.path, projectFile.content);
-
-  const nextEnvironments = new Map<string, EnvironmentDocument>();
-  workspace.environments.forEach(item => {
-    nextEnvironments.set(item.document.name, item.document);
-  });
-  result.environments.forEach(environment => {
-    const current = nextEnvironments.get(environment.name);
-    nextEnvironments.set(
-      environment.name,
-      current
-        ? {
-            ...current,
-            vars: strategy === 'replace' ? environment.vars : { ...current.vars, ...environment.vars },
-            headers: strategy === 'replace' ? environment.headers : [...current.headers, ...environment.headers],
-            authProfiles:
-              strategy === 'replace'
-                ? environment.authProfiles
-                : [...current.authProfiles, ...environment.authProfiles.filter(profile => !current.authProfiles.some(item => item.name === profile.name))]
-          }
-        : environment
-    );
-  });
-  if (!nextEnvironments.has('shared')) {
-    nextEnvironments.set('shared', createDefaultEnvironment('shared'));
-  }
-
-  await Promise.all(
-    [...nextEnvironments.values()].map(environment => {
-      const file = materializeEnvironmentDocument(environment, root);
-      return writeDocument(file.path, file.content);
-    })
-  );
-
-  const incomingRecords = result.requests.map(record => ({
-    ...record,
-    request: {
-      ...record.request,
-      name: record.request.name.trim() || 'Imported Request'
-    }
-  }));
-  const nextRecords: typeof incomingRecords = [];
-  const deleteTargets: WorkspaceIndex['requests'] = [];
-  for (const imported of incomingRecords) {
-    const target = workspace.requests.find(record => conflictsWithRecord(record, imported));
-    if (!target) {
-      summary.added += 1;
-      nextRecords.push({
-        ...imported,
-        request: ensureUniqueRequestName(imported.request, imported.folderSegments, [...workspace.requests, ...nextRecords])
-      });
-      continue;
-    }
-
-    if (strategy === 'replace') {
-      summary.updated += 1;
-      deleteTargets.push(target);
-      nextRecords.push(imported);
-      continue;
-    }
-
-    summary.added += 1;
-    nextRecords.push({
-      ...imported,
-      request: ensureUniqueRequestName(imported.request, imported.folderSegments, [...workspace.requests, ...nextRecords])
-    });
-  }
-
-  await Promise.all(deleteTargets.map(record => deleteRequestInWorkspace(record)));
-  const writes = materializeRequestDocuments(nextRecords, root);
-  await Promise.all(writes.map(item => writeDocument(item.path, item.content)));
-  return { result, summary };
 }
 
 export async function importFromFile(path: string) {
@@ -461,35 +365,16 @@ export async function importFromUrl(url: string, auth: ImportAuth) {
   };
 }
 
-function resolveRunContext(workspace: WorkspaceIndex, requestId: string, caseId?: string) {
-  const record = workspace.requests.find((item: WorkspaceIndex['requests'][number]) => item.request.id === requestId);
-  if (!record) {
-    throw new Error('请求不存在');
-  }
-  const caseDocument = record.cases.find((item: CaseDocument) => item.id === caseId);
-  const environmentName = caseDocument?.environment || workspace.project.defaultEnvironment;
-  const environment = workspace.environments.find(
-    (item: WorkspaceIndex['environments'][number]) => item.document.name === environmentName
-  )?.document;
-  const preview = resolveRequest(workspace.project, record.request, caseDocument, environment);
-  return { record, caseDocument, preview };
-}
-
 export async function runResolvedRequest(workspace: WorkspaceIndex, requestId: string, caseId?: string) {
-  const { record, caseDocument, preview } = resolveRunContext(workspace, requestId, caseId);
+  const record = workspace.requests.find(r => r.request.id === requestId);
+  if (!record) throw new Error('Request not found');
+  const caseDocument = record.cases.find(c => c.id === caseId);
+  const envName = caseDocument?.environment || workspace.project.defaultEnvironment;
+  const env = workspace.environments.find(e => e.document.name === envName)?.document;
+  const preview = resolveRequest(workspace.project, record.request, caseDocument, env);
   const response = await sendRequest(preview);
   const checkResults = caseDocument ? evaluateChecks(response, caseDocument.checks || []) : [];
-  return {
-    preview,
-    response,
-    checkResults,
-    caseDocument,
-    record
-  };
-}
-
-export function previewResolvedRequest(workspace: WorkspaceIndex, requestId: string, caseId?: string): ResolvedRequestPreview {
-  return resolveRunContext(workspace, requestId, caseId).preview;
+  return { preview, response, checkResults };
 }
 
 export async function saveRunHistory(
@@ -497,20 +382,19 @@ export async function saveRunHistory(
   requestId: string,
   caseId: string | undefined,
   preview: ResolvedRequestPreview,
-  response: Awaited<ReturnType<typeof sendRequest>>,
+  response: SendRequestResult,
   checkResults: CheckResult[]
 ) {
-  const record = workspace.requests.find(item => item.request.id === requestId);
-  const caseDocument = record?.cases.find(item => item.id === caseId);
+  const record = workspace.requests.find(r => r.request.id === requestId);
   if (!record) return;
-
+  const caseDoc = record.cases.find(c => c.id === caseId);
   const entry: RunHistoryEntry = {
     id: createId('run'),
     workspaceRoot: workspace.root,
     requestId,
     requestName: record.request.name,
     caseId,
-    caseName: caseDocument?.name,
+    caseName: caseDoc?.name,
     environmentName: preview.environmentName,
     request: preview,
     response,
@@ -519,44 +403,10 @@ export async function saveRunHistory(
   await appendHistory(entry);
 }
 
-export async function loadRunHistory(workspaceRoot?: string) {
-  return loadHistory(workspaceRoot);
+export async function clearRunHistory(root: string) {
+  await clearHistory(root);
 }
 
-export async function clearRunHistory(workspaceRoot?: string) {
-  return clearHistory(workspaceRoot);
-}
-
-export function createImportAuth(mode: ImportAuth['mode'] = 'none'): ImportAuth {
-  return {
-    mode,
-    token: '',
-    key: '',
-    value: ''
-  };
-}
-
-export function emptyImportResult(): ImportResult {
-  return {
-    detectedFormat: 'unknown',
-    summary: {
-      requests: 0,
-      folders: 0,
-      environments: 0
-    },
-    project: {
-      schemaVersion: 1,
-      name: 'Untitled',
-      defaultEnvironment: 'shared',
-      labels: [],
-      runtime: {
-        baseUrl: 'https://api.example.com',
-        vars: {},
-        headers: [],
-        description: ''
-      }
-    },
-    environments: [],
-    requests: []
-  };
+export async function loadRunHistory(root: string): Promise<RunHistoryEntry[]> {
+  return loadHistory(root);
 }

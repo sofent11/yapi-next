@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActionIcon, Button, ScrollArea, Text, TextInput } from '@mantine/core';
+import { ActionIcon, Badge, Button, ScrollArea, Text, TextInput } from '@mantine/core';
 import {
   IconChevronDown,
   IconChevronRight,
@@ -85,10 +85,10 @@ function highlightText(value: string, normalized: string) {
 }
 
 function contextLabel(selectedNode: SelectedNode) {
-  if (selectedNode.kind === 'project') return '项目操作';
-  if (selectedNode.kind === 'category') return '分类操作';
-  if (selectedNode.kind === 'request') return '接口操作';
-  return '用例上下文';
+  if (selectedNode.kind === 'project') return 'Project Actions';
+  if (selectedNode.kind === 'category') return 'Category Actions';
+  if (selectedNode.kind === 'request') return 'Request Actions';
+  return 'Case Actions';
 }
 
 function renderNode(props: {
@@ -293,12 +293,12 @@ export function InterfaceTreePanel(props: {
       return [
         {
           key: 'new-cat',
-          label: '添加分类',
+          label: 'Add Category',
           onClick: props.onToggleCategoryDraft
         },
         {
           key: 'new-interface',
-          label: '添加接口',
+          label: 'Add Request',
           onClick: () => props.onCreateInterface(null)
         }
       ];
@@ -308,7 +308,7 @@ export function InterfaceTreePanel(props: {
       return [
         {
           key: 'new-interface',
-          label: '添加接口',
+          label: 'Add Request',
           onClick: () => {
             props.onSelectCategory(target.path);
             props.onCreateInterface(target.path);
@@ -316,12 +316,12 @@ export function InterfaceTreePanel(props: {
         },
         {
           key: 'rename-category',
-          label: '重命名分类',
+          label: 'Rename Category',
           onClick: () => props.onRenameCategory(target.path)
         },
         {
           key: 'delete-category',
-          label: '删除分类',
+          label: 'Delete Category',
           danger: true,
           onClick: () => props.onDeleteCategory(target.path)
         }
@@ -332,7 +332,7 @@ export function InterfaceTreePanel(props: {
       return [
         {
           key: 'new-case',
-          label: '添加用例',
+          label: 'Add Case',
           onClick: () => {
             props.onSelectRequest(target.requestId);
             props.onAddCase(target.requestId);
@@ -340,17 +340,17 @@ export function InterfaceTreePanel(props: {
         },
         {
           key: 'rename-request',
-          label: '重命名接口',
+          label: 'Rename Request',
           onClick: () => props.onRenameRequest(target.requestId)
         },
         {
           key: 'duplicate-request',
-          label: '复制接口',
+          label: 'Duplicate Request',
           onClick: () => props.onDuplicateRequest(target.requestId)
         },
         {
           key: 'delete-request',
-          label: '删除接口',
+          label: 'Delete Request',
           danger: true,
           onClick: () => props.onDeleteRequest(target.requestId)
         }
@@ -361,17 +361,17 @@ export function InterfaceTreePanel(props: {
       return [
         {
           key: 'rename-case',
-          label: '重命名用例',
+          label: 'Rename Case',
           onClick: () => props.onRenameCase(target.requestId, target.caseId)
         },
         {
           key: 'duplicate-case',
-          label: '复制用例',
+          label: 'Duplicate Case',
           onClick: () => props.onDuplicateCase(target.requestId, target.caseId)
         },
         {
           key: 'delete-case',
-          label: '删除用例',
+          label: 'Delete Case',
           danger: true,
           onClick: () => props.onDeleteCase(target.requestId, target.caseId)
         }
@@ -398,40 +398,13 @@ export function InterfaceTreePanel(props: {
           <p className="tree-caption">Workspace Explorer</p>
           <h2 className="tree-title">{props.workspace.project.name}</h2>
         </div>
-        <Text c="dimmed" size="xs">
-          项目 / 分类 / 接口 / 用例
-        </Text>
-      </div>
-
-      <TextInput
-        ref={searchRef}
-        value={props.searchText}
-        leftSection={<IconSearch size={14} />}
-        placeholder="搜索接口、路径、用例"
-        size="xs"
-        onChange={event => props.onSearchChange(event.currentTarget.value)}
-      />
-
-      <div className="tree-contextbar">
-        <div className="tree-context-copy">
-          <span className="tree-context-label">{contextLabel(props.selectedNode)}</span>
-          <strong>
-            {props.selectedNode.kind === 'project'
-              ? '当前项目'
-              : props.selectedNode.kind === 'category'
-                ? props.selectedNode.path
-                : props.selectedNode.kind === 'request'
-                  ? '当前接口'
-                  : '当前用例'}
-          </strong>
-        </div>
-        <div className="tree-context-actions">
+        <div className="tree-panel-actions">
           {props.selectedNode.kind === 'project' ? (
             <>
-              <ActionIcon variant="subtle" color="dark" onClick={props.onOpenImport} aria-label="导入到项目">
+              <ActionIcon variant="subtle" color="dark" onClick={props.onOpenImport} aria-label="Import to project">
                 <IconUpload size={16} />
               </ActionIcon>
-              <ActionIcon variant="subtle" color="dark" onClick={props.onToggleCategoryDraft} aria-label="新建分类">
+              <ActionIcon variant="subtle" color="dark" onClick={props.onToggleCategoryDraft} aria-label="New category">
                 <IconFolderPlus size={16} />
               </ActionIcon>
             </>
@@ -442,7 +415,7 @@ export function InterfaceTreePanel(props: {
               variant="subtle"
               color="dark"
               onClick={() => props.onCreateInterface(selectedCategoryNodePath)}
-              aria-label="新建接口"
+              aria-label="New request"
             >
               <IconPlus size={16} />
             </ActionIcon>
@@ -453,7 +426,7 @@ export function InterfaceTreePanel(props: {
               variant="subtle"
               color="dark"
               onClick={() => props.onAddCase(requestIdFromSelection(props.selectedNode) || undefined)}
-              aria-label="新建用例"
+              aria-label="New case"
             >
               <IconPlus size={16} />
             </ActionIcon>
@@ -461,19 +434,15 @@ export function InterfaceTreePanel(props: {
         </div>
       </div>
 
-      {props.creatingCategory ? (
-        <div className="category-draft-shell">
-          <input
-            className="category-draft-input"
-            value={props.categoryDraft}
-            placeholder="输入分类路径"
-            onChange={event => props.onCategoryDraftChange(event.currentTarget.value)}
-          />
-          <Button size="xs" color="dark" onClick={props.onConfirmCreateCategory}>
-            添加
-          </Button>
-        </div>
-      ) : null}
+      <div className="tree-panel-search">
+        <TextInput
+          size="xs"
+          placeholder="Search requests, paths, cases..."
+          leftSection={<IconSearch size={14} />}
+          value={props.searchText}
+          onChange={event => props.onSearchChange(event.currentTarget.value)}
+        />
+      </div>
 
       <ScrollArea className="tree-scroll" offsetScrollbars="y" scrollbarSize={8}>
         <div
@@ -485,6 +454,35 @@ export function InterfaceTreePanel(props: {
             setContextMenu({ x: event.clientX, y: event.clientY, target: { kind: 'blank' } });
           }}
         >
+          <div className="tree-section-header">
+            <Text size="xs" fw={700} c="dimmed" style={{ textTransform: 'uppercase' }}>
+              Structure
+            </Text>
+            <Badge variant="light" size="xs" color="gray">
+              {props.selectedNode.kind.toUpperCase()}
+            </Badge>
+          </div>
+
+          {props.creatingCategory ? (
+            <div className="tree-draft-row" style={{ padding: '4px 12px', display: 'flex', gap: 8 }}>
+              <TextInput
+                size="xs"
+                style={{ flex: 1 }}
+                placeholder="Category path"
+                value={props.categoryDraft}
+                onChange={event => props.onCategoryDraftChange(event.currentTarget.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') props.onConfirmCreateCategory();
+                  if (event.key === 'Escape') props.onToggleCategoryDraft();
+                }}
+                autoFocus
+              />
+              <Button size="xs" color="dark" onClick={props.onConfirmCreateCategory}>
+                Add
+              </Button>
+            </div>
+          ) : null}
+
           {filteredRoot ? (
             renderNode({
               node: filteredRoot,
@@ -503,10 +501,10 @@ export function InterfaceTreePanel(props: {
               }
             })
           ) : (
-            <div className="tree-empty-state">
-              <Text fw={600}>没有匹配结果</Text>
+            <div className="tree-empty-state" style={{ padding: '20px', textAlign: 'center' }}>
+              <Text fw={600} size="sm">No matches found</Text>
               <Text c="dimmed" size="xs">
-                试试接口名、Method、路径或用例名。
+                Try searching by name, method, or path.
               </Text>
             </div>
           )}
@@ -514,8 +512,8 @@ export function InterfaceTreePanel(props: {
       </ScrollArea>
 
       <div className="tree-panel-footer">
-        <span>{rootNode ? requestCount(rootNode) : 0} 个接口</span>
-        <span>{rootNode ? caseCount(rootNode) : 0} 个用例</span>
+        <span>{rootNode ? requestCount(rootNode) : 0} requests</span>
+        <span>{rootNode ? caseCount(rootNode) : 0} cases</span>
       </div>
 
       <ResourceContextMenu

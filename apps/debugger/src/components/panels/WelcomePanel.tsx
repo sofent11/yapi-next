@@ -1,80 +1,84 @@
-import { Button, Stack, Text, TextInput } from '@mantine/core';
-import { IconArrowRight, IconFolderOpen } from '@tabler/icons-react';
+import { Button, Text, TextInput } from '@mantine/core';
+import { IconFolderOpen, IconPlus, IconHistory } from '@tabler/icons-react';
 
 export function WelcomePanel(props: {
-  recentRoots: string[];
   projectName: string;
-  setProjectName: (value: string) => void;
+  recentRoots: string[];
+  onProjectNameChange: (name: string) => void;
   onOpenDirectory: () => void;
-  onCreateProject: () => void;
-  onOpenRecent: (root: string) => void;
+  onCreateWorkspace: () => void;
+  onSelectRecent: (root: string) => void;
 }) {
   return (
     <div className="welcome-shell">
       <div className="launchpad">
-        <aside className="launchpad-sidebar">
-          <p className="section-kicker">Native API Workbench</p>
-          <h1 className="launchpad-title">本地优先的 API 调试桌面工作台</h1>
-          <Text c="dimmed" size="sm">
-            工作区就是目录。项目、分类、接口、用例都落成文本文件，适合通过 Git 共享和协作。
-          </Text>
-          <div className="launchpad-facts">
-            <span>Open Workspace</span>
-            <span>Create Workspace</span>
-            <span>Import Into Project</span>
-          </div>
-        </aside>
+        <div className="launchpad-sidebar">
+          <h1 className="launchpad-title">YAPI Next</h1>
+          <p className="section-description" style={{ fontSize: '0.9rem', lineHeight: 1.6 }}>
+            Local-first API development workspace.
+            <br /><br />
+            Everything is stored as plain text files, perfect for Git collaboration.
+          </p>
+        </div>
 
         <div className="launchpad-main">
-          <section className="launchpad-section">
-            <div className="launchpad-section-head">
-              <div>
-                <p className="section-kicker">Workspace</p>
-                <h2 className="section-title">打开或创建</h2>
+          <div className="launchpad-section">
+            <h2 className="section-title">Open or Create</h2>
+            <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
+              <TextInput
+                size="sm"
+                label="New Project Name"
+                placeholder="My Awesome API"
+                value={props.projectName}
+                onChange={event => props.onProjectNameChange(event.currentTarget.value)}
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <Button
+                  variant="outline"
+                  leftSection={<IconFolderOpen size={16} />}
+                  onClick={props.onOpenDirectory}
+                >
+                  Open Workspace
+                </Button>
+                <Button
+                  variant="filled"
+                  leftSection={<IconPlus size={16} />}
+                  onClick={props.onCreateWorkspace}
+                  disabled={!props.projectName.trim()}
+                >
+                  Create Workspace
+                </Button>
               </div>
             </div>
+          </div>
 
-            <TextInput
-              label="新项目名称"
-              size="xs"
-              value={props.projectName}
-              placeholder="Payments Debugger"
-              onChange={event => props.setProjectName(event.currentTarget.value)}
-            />
-
-            <div className="launchpad-actions">
-              <Button size="xs" color="dark" rightSection={<IconArrowRight size={14} />} onClick={props.onOpenDirectory}>
-                打开 Workspace
-              </Button>
-              <Button size="xs" variant="default" color="dark" leftSection={<IconFolderOpen size={14} />} onClick={props.onCreateProject}>
-                新建 Workspace
-              </Button>
-            </div>
-          </section>
-
-          <section className="launchpad-section">
-            <div className="launchpad-section-head">
-              <div>
-                <p className="section-kicker">Recent</p>
-                <h2 className="section-title">最近工作区</h2>
-              </div>
-            </div>
-
-            <Stack gap="xs">
+          <div className="launchpad-section">
+            <h2 className="section-title">Recent Workspaces</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 12 }}>
               {props.recentRoots.length > 0 ? (
                 props.recentRoots.map(root => (
-                  <Button key={root} variant="default" justify="space-between" onClick={() => props.onOpenRecent(root)}>
-                    <span className="recent-root-label">{root}</span>
-                    <IconArrowRight size={14} />
-                  </Button>
+                  <button
+                    key={root}
+                    className="category-row"
+                    onClick={() => props.onSelectRecent(root)}
+                    style={{ padding: '8px 12px' }}
+                  >
+                    <IconHistory size={14} style={{ color: 'var(--muted)' }} />
+                    <Text size="sm" className="recent-root-label">
+                      {root.split('/').at(-1)}
+                    </Text>
+                    <Text size="xs" c="dimmed" style={{ flex: 1, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {root}
+                    </Text>
+                  </button>
                 ))
               ) : (
-                <Text c="dimmed" size="sm">
-                  还没有最近项目。先打开一个已有目录，或创建一个新的 workspace。
+                <Text size="sm" c="dimmed" style={{ padding: '12px', textAlign: 'center', border: '1px dashed var(--line)', borderRadius: 4 }}>
+                  No recent projects. Open an existing directory or create a new workspace to get started.
                 </Text>
               )}
-            </Stack>
-          </section>
+            </div>
+          </div>
         </div>
       </div>
     </div>

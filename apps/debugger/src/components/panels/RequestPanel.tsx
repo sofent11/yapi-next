@@ -1,6 +1,15 @@
 import { useMemo } from 'react';
 import { Badge, Button, Checkbox, Group, NumberInput, Select, Tabs, Text, TextInput, Textarea } from '@mantine/core';
-import { IconDeviceFloppy, IconPlayerPlay, IconPlus } from '@tabler/icons-react';
+import { 
+  IconAdjustments, 
+  IconKey, 
+  IconListCheck, 
+  IconMessageCode, 
+  IconPlayerPlay, 
+  IconPlus, 
+  IconSettings,
+  IconVariable
+} from '@tabler/icons-react';
 import { createEmptyCheck, resolveRequest } from '@yapi-debugger/core';
 import type {
   AuthConfig,
@@ -60,7 +69,6 @@ export function RequestPanel(props: {
   onRequestChange: (request: RequestDocument) => void;
   onCasesChange: (cases: CaseDocument[]) => void;
   onRun: () => void;
-  onSave: () => void;
   cases: CaseDocument[];
 }) {
   const { request: requestDocument, selectedCase, selectedEnvironment, workspace } = props;
@@ -178,74 +186,74 @@ export function RequestPanel(props: {
           <Button size="sm" leftSection={<IconPlayerPlay size={14} />} loading={props.isRunning} onClick={props.onRun}>
             Send
           </Button>
-          <Button size="sm" variant="default" leftSection={<IconDeviceFloppy size={14} />} onClick={props.onSave}>
-            Save
-          </Button>
-        </div>
-      </div>
-
-      <div className="request-preview-card">
-        <div className="request-preview-head">
-          <div>
-            <Text size="xs" fw={700} c="dimmed">Resolved Request</Text>
-            <Text size="xs" c="dimmed">
-              {resolvedPreview.method} {resolvedPreview.url}
-            </Text>
-          </div>
-          <Group gap="xs">
-            <Badge variant="light" color="indigo">{resolvedPreview.authSource}</Badge>
-            <Badge variant="light" color="gray">{resolvedPreview.timeoutMs} ms</Badge>
-            <Badge variant="light" color={resolvedPreview.followRedirects ? 'green' : 'orange'}>
-              {resolvedPreview.followRedirects ? 'follow redirects' : 'no redirects'}
-            </Badge>
-          </Group>
-        </div>
-        <div className="request-preview-grid">
-          <CodeEditor
-            value={JSON.stringify(
-              {
-                headers: resolvedPreview.headers.filter(item => item.enabled),
-                query: resolvedPreview.query.filter(item => item.enabled)
-              },
-              null,
-              2
-            )}
-            readOnly
-            language="json"
-            minHeight="140px"
-          />
-          <CodeEditor
-            value={
-              resolvedPreview.body.mode === 'json'
-                ? resolvedPreview.body.text
-                : JSON.stringify(
-                    {
-                      mode: resolvedPreview.body.mode,
-                      fields: resolvedPreview.body.fields,
-                      text: resolvedPreview.body.text
-                    },
-                    null,
-                    2
-                  )
-            }
-            readOnly
-            language={resolvedPreview.body.mode === 'json' ? 'json' : 'text'}
-            minHeight="140px"
-          />
         </div>
       </div>
 
       <Tabs value={props.activeTab} onChange={value => props.onTabChange(value as RequestTab)} className="request-tabs-ide">
         <Tabs.List>
-          <Tabs.Tab value="query">Params</Tabs.Tab>
-          <Tabs.Tab value="headers">Headers</Tabs.Tab>
-          <Tabs.Tab value="body">Body</Tabs.Tab>
-          <Tabs.Tab value="auth">Auth</Tabs.Tab>
-          <Tabs.Tab value="checks">Checks</Tabs.Tab>
-          <Tabs.Tab value="settings">Settings</Tabs.Tab>
+          <Tabs.Tab value="query" leftSection={<IconVariable size={14} />}>Params</Tabs.Tab>
+          <Tabs.Tab value="headers" leftSection={<IconListCheck size={14} />}>Headers</Tabs.Tab>
+          <Tabs.Tab value="body" leftSection={<IconMessageCode size={14} />}>Body</Tabs.Tab>
+          <Tabs.Tab value="auth" leftSection={<IconKey size={14} />}>Auth</Tabs.Tab>
+          <Tabs.Tab value="checks" leftSection={<IconListCheck size={14} />}>Checks</Tabs.Tab>
+          <Tabs.Tab value="settings" leftSection={<IconAdjustments size={14} />}>Settings</Tabs.Tab>
+          <Tabs.Tab value="preview" leftSection={<IconPlayerPlay size={14} />}>Preview</Tabs.Tab>
         </Tabs.List>
 
         <div className="request-tab-content">
+          <Tabs.Panel value="preview">
+            <div className="request-preview-card-embedded">
+              <div className="request-preview-head">
+                <div>
+                  <Text size="xs" fw={700} c="dimmed">Resolved Request</Text>
+                  <Text size="xs" c="dimmed">
+                    {resolvedPreview.method} {resolvedPreview.url}
+                  </Text>
+                </div>
+                <Group gap="xs">
+                  <Badge variant="light" color="indigo">{resolvedPreview.authSource}</Badge>
+                  <Badge variant="light" color="gray">{resolvedPreview.timeoutMs} ms</Badge>
+                  <Badge variant="light" color={resolvedPreview.followRedirects ? 'green' : 'orange'}>
+                    {resolvedPreview.followRedirects ? 'follow redirects' : 'no redirects'}
+                  </Badge>
+                </Group>
+              </div>
+              <div className="request-preview-grid">
+                <CodeEditor
+                  value={JSON.stringify(
+                    {
+                      headers: resolvedPreview.headers.filter(item => item.enabled),
+                      query: resolvedPreview.query.filter(item => item.enabled)
+                    },
+                    null,
+                    2
+                  )}
+                  readOnly
+                  language="json"
+                  minHeight="140px"
+                />
+                <CodeEditor
+                  value={
+                    resolvedPreview.body.mode === 'json'
+                      ? resolvedPreview.body.text
+                      : JSON.stringify(
+                          {
+                            mode: resolvedPreview.body.mode,
+                            fields: resolvedPreview.body.fields,
+                            text: resolvedPreview.body.text
+                          },
+                          null,
+                          2
+                        )
+                  }
+                  readOnly
+                  language={resolvedPreview.body.mode === 'json' ? 'json' : 'text'}
+                  minHeight="140px"
+                />
+              </div>
+            </div>
+          </Tabs.Panel>
+
           <Tabs.Panel value="query">
             <div className="inspector-section">
               <h4 className="compact-section-title">Query Parameters</h4>

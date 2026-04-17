@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { startTransition, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { ActionIcon, Badge, Drawer, Select, Text, TextInput } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
@@ -47,6 +47,7 @@ import { ImportPanel } from './components/panels/ImportPanel';
 import { InterfaceTreePanel } from './components/panels/InterfaceTreePanel';
 import { WelcomePanel } from './components/panels/WelcomePanel';
 import { WorkspaceMainPanel } from './components/panels/WorkspaceMainPanel';
+import { Resizer } from './components/primitives/Resizer';
 import {
   defaultWorkspaceUiState,
   type SelectedNode,
@@ -111,30 +112,30 @@ function selectedCategoryPath(node: SelectedNode, workspace: WorkspaceIndex | nu
   return null;
 }
 
-function selectionLabel(node: SelectedNode, workspace: WorkspaceIndex | null) {
-  if (node.kind === 'project') return '项目配置';
-  if (node.kind === 'category') return node.path;
-  if (node.kind === 'request' || node.kind === 'case') {
-    const record = workspace?.requests.find(item => item.request.id === node.requestId);
-    if (node.kind === 'case') {
-      const matchedCase = record?.cases.find(item => item.id === node.caseId);
-      return matchedCase?.name || '用例';
-    }
-    return record?.request.path || record?.request.url || record?.request.name || '/';
-  }
-  return '项目配置';
-}
-
-function clampTreeWidth(value: number) {
-  return Math.max(260, Math.min(420, Math.round(value)));
-}
-
 function isSameOrChildPath(path: string, target: string) {
   return path === target || path.startsWith(`${target}/`);
 }
 
+function findRecord(workspace: WorkspaceIndex | null, requestId: string | null) {
+  if (!workspace || !requestId) return null;
+  return workspace.requests.find(item => item.request.id === requestId) || null;
+}
+
+function requestSlugExists(workspace: WorkspaceIndex, name: string, ignoreId: string, folderPath: string) {
+  return workspace.requests.some(r => 
+    r.request.id !== ignoreId && 
+    r.request.name === name && 
+    r.folderSegments.join('/') === folderPath
+  );
+}
+
+function caseSlugExists(record: WorkspaceIndex['requests'][number], name: string, ignoreId: string) {
+  return record.cases.some(c => c.id !== ignoreId && c.name === name);
+}
+
 export function App() {
   const store = useWorkspaceStore();
+  const gridRef = useRef<HTMLDivElement>(null);
   const [projectName, setProjectName] = useState('New API Workspace');
   const [importUrl, setImportUrl] = useState('');
   const [importOpened, setImportOpened] = useState(false);
@@ -186,48 +187,242 @@ export function App() {
     const nextUi = loadWorkspaceUiState(workspace.root);
     setUiState(nextUi);
     setSelectedExampleName(null);
-    startTransition(() => {
-      store.setWorkspace(workspace);
-      store.selectNode(nextUi.lastSelectedNode);
-    });
+    store.setWorkspace(workspace);
+    store.selectNode(nextUi.lastSelectedNode);
   }
 
   function updateUiState(updater: (current: WorkspaceUiState) => WorkspaceUiState) {
     setUiState(current => updater(current));
   }
 
-  function expandRequest(requestIdToExpand: string) {
-    updateUiState(current =>
-      current.expandedRequestIds.includes(requestIdToExpand)
-        ? current
-        : {
-            ...current,
-            expandedRequestIds: [...current.expandedRequestIds, requestIdToExpand]
-          }
-    );
-  }
+  const reloadWorkspace = async (nodeToSelect?: SelectedNode) => {
+    if (!store.workspace?.root) return;
+    const workspace = await openWorkspace(store.workspace.root);
+    store.setWorkspace(workspace);
+    if (nodeToSelect) store.selectNode(nodeToSelect);
+  };
 
-  function handleSelectProject() {
-    setActiveView('settings');
-    store.selectNode({ kind: 'project' });
-  }
+  const openMutation = useMutation({
+    mutationFn: (root: string) => openWorkspace(root),
+    onSuccess: workspace => {
+      const nextRoots = [workspace.root, ...store.recentRoots.filter(r => r !== workspace.root)];
+      store.setRecentRoots(nextRoots);
+      saveRecentRoots(nextRoots);
+      applyWorkspaceState(workspace);
+    },
+    onError: error => {
+      notifications.show({ color: 'red', message: `Failed to open workspace: ${(error as Error).message}` });
+    }
+  });
 
-  function handleSelectCategory(path: string) {
-    setActiveView('workspace');
-    store.selectNode({ kind: 'category', path });
-  }
+  const createMutation = useMutation({
+    mutationFn: (root: string) => createWorkspace(root, projectName),
+    onSuccess: workspace => {
+      const nextRoots = [workspace.root, ...store.recentRoots.filter(r => r !== workspace.root)];
+      store.setRecentRoots(nextRoots);
+      saveRecentRoots(nextRoots);
+      applyWorkspaceState(workspace);
+      notifications.show({ color: 'teal', message: 'Workspace created successfully' });
+    },
+    onError: error => {
+      notifications.show({ color: 'red', message: `Failed to create workspace: ${(error as Error).message}` });
+    }
+  });
 
-  function handleSelectRequest(nextRequestId: string) {
-    expandRequest(nextRequestId);
-    setActiveView('workspace');
-    store.selectNode({ kind: 'request', requestId: nextRequestId });
-  }
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!store.workspace) return;
+      if (store.draftProject) await saveProject(store.workspace.root, store.draftProject);
+      if (store.draftRequest) {
+        const record = findRecord(store.workspace, store.draftRequest.id);
+        await saveRequestRecord(
+          store.workspace.root,
+          store.draftRequest,
+          store.draftCases,
+          record?.resourceDirPath || '',
+          record?.requestFilePath || '',
+          record?.folderSegments || []
+        );
+      }
+    },
+    onSuccess: () => {
+      reloadWorkspace(store.selectedNode);
+      notifications.show({ color: 'teal', message: 'Changes saved' });
+    },
+    onError: error => {
+      notifications.show({ color: 'red', message: `Failed to save changes: ${(error as Error).message}` });
+    }
+  });
 
-  function handleSelectCase(nextRequestId: string, nextCaseId: string) {
-    expandRequest(nextRequestId);
-    setActiveView('workspace');
-    store.selectNode({ kind: 'case', requestId: nextRequestId, caseId: nextCaseId });
-  }
+  const runMutation = useMutation({
+    mutationFn: async () => {
+      if (!store.workspace || !requestId) return;
+      return runResolvedRequest(store.workspace, requestId, caseId || undefined);
+    },
+    onSuccess: async result => {
+      if (!result || !store.workspace || !requestId) return;
+      store.setResponse(result.response, result.checkResults);
+      await saveRunHistory(
+        store.workspace,
+        requestId,
+        caseId || undefined,
+        result.preview,
+        result.response,
+        result.checkResults
+      );
+      loadRunHistory(store.workspace.root).then(setHistoryEntries);
+    },
+    onError: error => {
+      const message = (error as any).message || String(error) || 'Unknown network error';
+      store.setError(message);
+      notifications.show({ color: 'red', message: `Request failed: ${message}` });
+    }
+  });
+
+  const importFileMutation = useMutation({
+    mutationFn: async () => {
+      const filePath = await chooseImportFile();
+      if (!filePath) return;
+      return importFromFile(filePath);
+    },
+    onSuccess: data => {
+      if (data) store.setImportPreview(data.result);
+    }
+  });
+
+  const importUrlMutation = useMutation({
+    mutationFn: () => importFromUrl(importUrl, store.importAuth),
+    onSuccess: data => store.setImportPreview(data.result)
+  });
+
+  const applyImportMutation = useMutation({
+    mutationFn: async () => {
+      if (!store.workspace || !store.importPreview) return;
+      return importIntoWorkspace(store.workspace, store.importPreview, importStrategy);
+    },
+    onSuccess: () => {
+      setImportOpened(false);
+      store.setImportPreview(null);
+      reloadWorkspace();
+      notifications.show({ color: 'teal', message: 'Import successful' });
+    }
+  });
+
+  const addRequestMutation = useMutation({
+    mutationFn: (targetCategory: string | null) => {
+      if (!store.workspace) throw new Error('No workspace');
+      return createRequestInWorkspace(store.workspace.root, targetCategory);
+    },
+    onSuccess: nextRequestId => {
+      reloadWorkspace({ kind: 'request', requestId: nextRequestId });
+    }
+  });
+
+  const addCaseMutation = useMutation({
+    mutationFn: (targetReqId: string) => {
+      if (!store.workspace) throw new Error('No workspace');
+      return createCaseForRequest(store.workspace.root, store.workspace, targetReqId);
+    },
+    onSuccess: ({ requestId: reqId, caseId: nextCaseId }) => {
+      reloadWorkspace({ kind: 'case', requestId: reqId, caseId: nextCaseId });
+    }
+  });
+
+  const renameCategoryMutation = useMutation({
+    mutationFn: ({ oldPath, nextPath }: { oldPath: string; nextPath: string }) => {
+      if (!store.workspace) throw new Error('No workspace');
+      return renameCategoryInWorkspace(store.workspace.root, store.workspace, oldPath, nextPath);
+    },
+    onSuccess: (_, { nextPath }) => {
+      reloadWorkspace({ kind: 'category', path: nextPath });
+    }
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: (path: string) => {
+      if (!store.workspace) throw new Error('No workspace');
+      return deleteCategoryInWorkspace(store.workspace, path);
+    },
+    onSuccess: () => reloadWorkspace({ kind: 'project' })
+  });
+
+  const renameRequestMutation = useMutation({
+    mutationFn: ({ requestId, nextName }: { requestId: string; nextName: string }) => {
+      if (!store.workspace) throw new Error('No workspace');
+      const record = findRecord(store.workspace, requestId);
+      if (!record) throw new Error('Request not found');
+      return renameRequestInWorkspace(store.workspace.root, record, nextName);
+    },
+    onSuccess: (_, { requestId }) => reloadWorkspace({ kind: 'request', requestId })
+  });
+
+  const duplicateRequestMutation = useMutation({
+    mutationFn: (reqId: string) => {
+      if (!store.workspace) throw new Error('No workspace');
+      const record = findRecord(store.workspace, reqId);
+      if (!record) throw new Error('Request not found');
+      const siblingNames = store.workspace.requests
+        .filter(item => item.folderSegments.join('/') === record.folderSegments.join('/'))
+        .map(item => item.request.name);
+      return duplicateRequestInWorkspace(store.workspace.root, record, siblingNames);
+    },
+    onSuccess: nextId => reloadWorkspace({ kind: 'request', requestId: nextId })
+  });
+
+  const deleteRequestMutation = useMutation({
+    mutationFn: (reqId: string) => {
+      if (!store.workspace) throw new Error('No workspace');
+      const record = findRecord(store.workspace, reqId);
+      if (!record) throw new Error('Request not found');
+      return deleteRequestInWorkspace(record);
+    },
+    onSuccess: () => reloadWorkspace({ kind: 'project' })
+  });
+
+  const renameCaseMutation = useMutation({
+    mutationFn: ({ requestId, caseId, nextName }: { requestId: string; caseId: string; nextName: string }) => {
+      if (!store.workspace) throw new Error('No workspace');
+      const record = findRecord(store.workspace, requestId);
+      if (!record) throw new Error('Request not found');
+      return renameCaseInWorkspace(store.workspace.root, record, caseId, nextName);
+    },
+    onSuccess: (_, { requestId, caseId }) => reloadWorkspace({ kind: 'case', requestId, caseId })
+  });
+
+  const duplicateCaseMutation = useMutation({
+    mutationFn: ({ requestId, caseId }: { requestId: string; caseId: string }) => {
+      if (!store.workspace) throw new Error('No workspace');
+      const record = findRecord(store.workspace, requestId);
+      if (!record) throw new Error('Request not found');
+      return duplicateCaseInWorkspace(store.workspace.root, record, caseId);
+    },
+    onSuccess: (nextCaseId, { requestId }) => reloadWorkspace({ kind: 'case', requestId, caseId: nextCaseId })
+  });
+
+  const deleteCaseMutation = useMutation({
+    mutationFn: ({ requestId, caseId }: { requestId: string; caseId: string }) => {
+      if (!store.workspace) throw new Error('No workspace');
+      const record = findRecord(store.workspace, requestId);
+      if (!record) throw new Error('Request not found');
+      return deleteCaseInWorkspace(store.workspace.root, record, caseId);
+    },
+    onSuccess: (_, { requestId }) => reloadWorkspace({ kind: 'request', requestId })
+  });
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: async () => {
+      if (!store.workspace) return;
+      const root = store.workspace.root;
+      await unwatchWorkspace(root).catch(() => undefined);
+      await deleteEntry(root, true);
+      const nextRecentRoots = store.recentRoots.filter(item => item !== root);
+      store.setRecentRoots(nextRecentRoots);
+      saveRecentRoots(nextRecentRoots);
+      setUiState(defaultWorkspaceUiState());
+      setImportOpened(false);
+      store.setWorkspace(null);
+    }
+  });
 
   useEffect(() => {
     const roots = loadRecentRoots();
@@ -244,17 +439,7 @@ export function App() {
       ...uiState,
       lastSelectedNode: store.selectedNode
     });
-  }, [store.workspace?.root, uiState, store.selectedNode]);
-
-  useEffect(() => {
-    const selectedId = requestId;
-    if (!selectedId) return;
-    expandRequest(selectedId);
-  }, [requestId]);
-
-  useEffect(() => {
-    setSelectedExampleName(null);
-  }, [requestId, caseId]);
+  }, [uiState, store.selectedNode, store.workspace?.root]);
 
   useEffect(() => {
     if (!store.workspace?.root) {
@@ -272,12 +457,12 @@ export function App() {
 
   useEffect(() => {
     const unlistenPromise = listenMenuActions(payload => {
-      if (payload.action === 'open-workspace') {
+      if (payload.action === 'open-project') {
         handleOpenDirectory();
         return;
       }
-      if (payload.action === 'create-workspace') {
-        createMutation.mutate();
+      if (payload.action === 'new-project') {
+        handleCreateWorkspace();
         return;
       }
       if (payload.action === 'import-project') {
@@ -316,468 +501,6 @@ export function App() {
     };
   }, [store.workspace?.root]);
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const isCommand = event.metaKey || event.ctrlKey;
-      if (!isCommand) return;
-
-      const key = event.key.toLowerCase();
-
-      if (key === 'o') {
-        event.preventDefault();
-        handleOpenDirectory();
-        return;
-      }
-
-      if (key === 's' && store.workspace) {
-        event.preventDefault();
-        saveMutation.mutate();
-        return;
-      }
-
-      if (key === 'enter' && requestId) {
-        event.preventDefault();
-        runMutation.mutate();
-        return;
-      }
-
-      if (key === 'f' && event.shiftKey) {
-        event.preventDefault();
-        window.dispatchEvent(new Event('debugger://focus-search'));
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [store.workspace, requestId]);
-
-  const openMutation = useMutation({
-    mutationFn: async (root: string) => openWorkspace(root),
-    onSuccess(workspace) {
-      applyWorkspaceState(workspace);
-      const recent = [workspace.root, ...store.recentRoots.filter(item => item !== workspace.root)];
-      store.setRecentRoots(recent);
-      saveRecentRoots(recent);
-      notifications.show({ color: 'teal', message: `Opened ${workspace.project.name}` });
-    },
-    onError(error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Open workspace failed' });
-    }
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async () => {
-      const root = await chooseDirectory();
-      if (!root) throw new Error('No folder selected');
-      return createWorkspace(root, projectName.trim() || 'New API Workspace');
-    },
-    onSuccess(workspace) {
-      applyWorkspaceState(workspace);
-      const recent = [workspace.root, ...store.recentRoots.filter(item => item !== workspace.root)];
-      store.setRecentRoots(recent);
-      saveRecentRoots(recent);
-      notifications.show({ color: 'teal', message: 'Workspace created' });
-    },
-    onError(error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Create workspace failed' });
-    }
-  });
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (!store.workspace) throw new Error('Open a workspace first');
-      if (store.draftProject) {
-        await saveProject(store.workspace.root, store.draftProject);
-      }
-      await Promise.all(store.workspace.environments.map(item => saveEnvironment(store.workspace!.root, item.document)));
-
-      if (store.selectedNode.kind === 'request' || store.selectedNode.kind === 'case') {
-        if (!store.draftRequest) throw new Error('Request draft missing');
-        const requestNode = store.selectedNode;
-        const record = store.workspace.requests.find(item => item.request.id === requestNode.requestId);
-        if (!record) throw new Error('Selected interface missing');
-        await saveRequestRecord(
-          store.workspace.root,
-          record.folderSegments,
-          store.draftRequest,
-          store.draftCases,
-          record.resourceDirPath,
-          record.requestFilePath
-        );
-        return openWorkspace(store.workspace.root);
-      }
-
-      return openWorkspace(store.workspace.root);
-    },
-    onSuccess(workspace) {
-      applyWorkspaceState(workspace);
-      notifications.show({ color: 'teal', message: 'Saved' });
-    },
-    onError(error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Save failed' });
-    }
-  });
-
-  async function finalizeRun(targetRequestId: string, targetCaseId: string | undefined, payload: Awaited<ReturnType<typeof runResolvedRequest>>) {
-    if (!store.workspace) return;
-    store.setResponse(payload.response, payload.checkResults);
-    setSelectedExampleName(null);
-    await saveRunHistory(store.workspace, targetRequestId, targetCaseId, payload.preview, payload.response, payload.checkResults);
-    const nextHistory = await loadRunHistory(store.workspace.root);
-    setHistoryEntries(nextHistory);
-    setSelectedHistoryId(nextHistory[0]?.id || null);
-    notifications.show({
-      color: payload.response.ok ? 'teal' : 'yellow',
-      message: `Request completed with ${payload.response.status}`
-    });
-  }
-
-  const runMutation = useMutation({
-    mutationFn: async () => {
-      if (!store.workspace || !requestId) throw new Error('Select an interface first');
-      return runResolvedRequest(store.workspace, requestId, caseId || undefined);
-    },
-    async onSuccess(payload) {
-      if (!requestId) return;
-      await finalizeRun(requestId, caseId || undefined, payload);
-    },
-    onError(error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Run failed' });
-    }
-  });
-
-  const importFileMutation = useMutation({
-    mutationFn: async () => {
-      const filePath = await chooseImportFile();
-      if (!filePath) throw new Error('No import file selected');
-      return importFromFile(filePath);
-    },
-    onSuccess(payload) {
-      store.setImportPreview(payload.result);
-      setImportOpened(true);
-      notifications.show({ color: 'teal', message: `Previewed ${payload.source.name}` });
-    },
-    onError(error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Import preview failed' });
-    }
-  });
-
-  const importUrlMutation = useMutation({
-    mutationFn: async () => importFromUrl(importUrl.trim(), store.importAuth),
-    onSuccess(payload) {
-      store.setImportPreview(payload.result);
-      notifications.show({ color: 'teal', message: `Previewed ${payload.source.name}` });
-    },
-    onError(error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'URL import preview failed' });
-    }
-  });
-
-  const applyImportMutation = useMutation({
-    mutationFn: async () => {
-      if (!store.workspace) throw new Error('Open a workspace first');
-      if (!store.importPreview) throw new Error('Preview an import first');
-      const source = importUrl.trim()
-        ? (await importFromUrl(importUrl.trim(), store.importAuth)).source
-        : importFileMutation.data?.source;
-      if (!source) throw new Error('Import source missing');
-      const applied = await importIntoWorkspace(store.workspace.root, source, store.workspace, importStrategy);
-      notifications.show({
-        color: 'teal',
-        message: `Import applied: +${applied.summary.added}, updated ${applied.summary.updated}`
-      });
-      return openWorkspace(store.workspace.root);
-    },
-    onSuccess(workspace) {
-      applyWorkspaceState(workspace);
-      store.setImportPreview(null);
-      setImportOpened(false);
-      notifications.show({ color: 'teal', message: 'Import applied to project' });
-    },
-    onError(error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Apply import failed' });
-    }
-  });
-
-  const addRequestMutation = useMutation({
-    mutationFn: async (targetCategoryPath: string | null | undefined) => {
-      if (!store.workspace) throw new Error('Open a workspace first');
-      const segments = targetCategoryPath ? targetCategoryPath.split('/').filter(Boolean) : ['default'];
-      return createRequestInWorkspace(store.workspace.root, segments);
-    },
-    onSuccess(nextRequestId) {
-      if (!store.workspace) return;
-      openWorkspace(store.workspace.root).then(workspace => {
-        applyWorkspaceState(workspace);
-        handleSelectRequest(nextRequestId);
-      });
-      notifications.show({ color: 'teal', message: 'Interface created' });
-    },
-    onError(error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Create interface failed' });
-    }
-  });
-
-  const addCaseMutation = useMutation({
-    mutationFn: async (targetRequestId: string) => {
-      if (!store.workspace) throw new Error('Open a workspace first');
-      const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
-      if (!record) throw new Error('Selected interface missing');
-      return createCaseForRequest(store.workspace.root, record.folderSegments, record.request, record.cases);
-    },
-    onSuccess(nextCaseId, targetRequestId) {
-      if (!store.workspace) return;
-      openWorkspace(store.workspace.root).then(workspace => {
-        applyWorkspaceState(workspace);
-        handleSelectCase(targetRequestId, nextCaseId);
-      });
-      notifications.show({ color: 'teal', message: 'Case created' });
-    },
-    onError(error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Create case failed' });
-    }
-  });
-
-  async function reloadWorkspace(nextSelection?: SelectedNode) {
-    if (!store.workspace) return;
-    const workspace = await openWorkspace(store.workspace.root);
-    applyWorkspaceState(workspace);
-    if (nextSelection) {
-      store.selectNode(nextSelection);
-    }
-  }
-
-  function requestSlugExists(nextName: string, requestIdToIgnore?: string, targetCategoryPath?: string | null) {
-    if (!store.workspace) return false;
-    const nextSlug = slugify(nextName);
-    return store.workspace.requests.some(record => {
-      if (record.request.id === requestIdToIgnore) return false;
-      if ((targetCategoryPath || null) !== null && record.folderSegments.join('/') !== (targetCategoryPath || '')) {
-        return false;
-      }
-      return slugify(record.request.name) === nextSlug;
-    });
-  }
-
-  function caseSlugExists(record: WorkspaceIndex['requests'][number], nextName: string, caseIdToIgnore?: string) {
-    const nextSlug = slugify(nextName);
-    return record.cases.some(caseItem => caseItem.id !== caseIdToIgnore && slugify(caseItem.name) === nextSlug);
-  }
-
-  function handleCreateInterface(targetCategoryPath?: string | null) {
-    addRequestMutation.mutate(targetCategoryPath ?? categoryPath ?? null);
-  }
-
-  function handleAddCase(targetRequestId?: string) {
-    const nextRequestId = targetRequestId || requestId;
-    if (!nextRequestId) {
-      notifications.show({ color: 'red', message: '请先选择一个接口' });
-      return;
-    }
-    addCaseMutation.mutate(nextRequestId);
-  }
-
-  async function handleRenameCategory(path: string) {
-    if (!store.workspace) return;
-    const nextPath = window.prompt('输入新的分类路径', path)?.trim();
-    if (!nextPath || nextPath === path) return;
-    if (isSameOrChildPath(nextPath, path)) {
-      notifications.show({ color: 'red', message: '分类不能重命名到自身或子分类下' });
-      return;
-    }
-
-    const hasConflict = store.workspace.requests.some(record => {
-      const value = record.folderSegments.join('/');
-      return isSameOrChildPath(value, nextPath);
-    });
-    if (hasConflict) {
-      notifications.show({ color: 'red', message: '目标分类路径已存在，请换一个名称' });
-      return;
-    }
-
-    try {
-      await renameCategoryInWorkspace(store.workspace.root, store.workspace, path, nextPath);
-      await reloadWorkspace({ kind: 'category', path: nextPath });
-      notifications.show({ color: 'teal', message: '分类已重命名' });
-    } catch (error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Rename category failed' });
-    }
-  }
-
-  async function handleDeleteCategory(path: string) {
-    if (!store.workspace) return;
-    const total = store.workspace.requests.filter(record => isSameOrChildPath(record.folderSegments.join('/'), path)).length;
-    if (!window.confirm(`删除分类“${path}”及其 ${total} 个接口？`)) return;
-
-    try {
-      await deleteCategoryInWorkspace(store.workspace, path);
-      await reloadWorkspace({ kind: 'project' });
-      notifications.show({ color: 'teal', message: '分类已删除' });
-    } catch (error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Delete category failed' });
-    }
-  }
-
-  async function handleRenameRequest(targetRequestId: string) {
-    if (!store.workspace) return;
-    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
-    if (!record) return;
-    const nextName = window.prompt('输入新的接口名称', record.request.name)?.trim();
-    if (!nextName || nextName === record.request.name) return;
-    if (requestSlugExists(nextName, record.request.id, record.folderSegments.join('/'))) {
-      notifications.show({ color: 'red', message: '当前分类下已存在同名接口' });
-      return;
-    }
-
-    try {
-      await renameRequestInWorkspace(store.workspace.root, record, nextName);
-      await reloadWorkspace({ kind: 'request', requestId: targetRequestId });
-      notifications.show({ color: 'teal', message: '接口已重命名' });
-    } catch (error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Rename interface failed' });
-    }
-  }
-
-  async function handleDuplicateRequest(targetRequestId: string) {
-    if (!store.workspace) return;
-    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
-    if (!record) return;
-
-    try {
-      const nextRequestId = await duplicateRequestInWorkspace(
-        store.workspace.root,
-        record,
-        store.workspace.requests
-          .filter(item => item.folderSegments.join('/') === record.folderSegments.join('/'))
-          .map(item => item.request.name)
-      );
-      await reloadWorkspace({ kind: 'request', requestId: nextRequestId });
-      notifications.show({ color: 'teal', message: '接口已复制' });
-    } catch (error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Copy interface failed' });
-    }
-  }
-
-  async function handleDeleteRequest(targetRequestId: string) {
-    if (!store.workspace) return;
-    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
-    if (!record) return;
-    if (!window.confirm(`删除接口“${record.request.name}”？`)) return;
-
-    try {
-      await deleteRequestInWorkspace(record);
-      await reloadWorkspace({ kind: 'project' });
-      notifications.show({ color: 'teal', message: '接口已删除' });
-    } catch (error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Delete interface failed' });
-    }
-  }
-
-  async function handleRenameCase(targetRequestId: string, targetCaseId: string) {
-    if (!store.workspace) return;
-    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
-    const caseItem = record?.cases.find(item => item.id === targetCaseId);
-    if (!record || !caseItem) return;
-    const nextName = window.prompt('输入新的用例名称', caseItem.name)?.trim();
-    if (!nextName || nextName === caseItem.name) return;
-    if (caseSlugExists(record, nextName, caseItem.id)) {
-      notifications.show({ color: 'red', message: '当前接口下已存在同名用例' });
-      return;
-    }
-
-    try {
-      await renameCaseInWorkspace(store.workspace.root, record, targetCaseId, nextName);
-      await reloadWorkspace({ kind: 'case', requestId: targetRequestId, caseId: targetCaseId });
-      notifications.show({ color: 'teal', message: '用例已重命名' });
-    } catch (error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Rename case failed' });
-    }
-  }
-
-  async function handleDuplicateCase(targetRequestId: string, targetCaseId: string) {
-    if (!store.workspace) return;
-    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
-    if (!record) return;
-
-    try {
-      const nextCaseId = await duplicateCaseInWorkspace(store.workspace.root, record, targetCaseId);
-      await reloadWorkspace({ kind: 'case', requestId: targetRequestId, caseId: nextCaseId });
-      notifications.show({ color: 'teal', message: '用例已复制' });
-    } catch (error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Copy case failed' });
-    }
-  }
-
-  async function handleDeleteCase(targetRequestId: string, targetCaseId: string) {
-    if (!store.workspace) return;
-    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
-    const caseItem = record?.cases.find(item => item.id === targetCaseId);
-    if (!record || !caseItem) return;
-    if (!window.confirm(`删除用例“${caseItem.name}”？`)) return;
-
-    try {
-      await deleteCaseInWorkspace(store.workspace.root, record, targetCaseId);
-      await reloadWorkspace({ kind: 'request', requestId: targetRequestId });
-      notifications.show({ color: 'teal', message: '用例已删除' });
-    } catch (error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Delete case failed' });
-    }
-  }
-
-  function handleDeleteProject() {
-    if (!store.workspace || !store.draftProject) return;
-    const workspaceRoot = store.workspace.root;
-    const projectTitle = store.draftProject.name;
-    let typedProjectName = '';
-
-    modals.openConfirmModal({
-      title: '删除整个项目',
-      centered: true,
-      labels: { confirm: '继续删除', cancel: '取消' },
-      confirmProps: { color: 'red' },
-      children: (
-        <div style={{ display: 'grid', gap: 12 }}>
-          <Text size="sm">
-            这是高危操作，将删除整个 debugger workspace 目录及其全部分类、接口、用例文件，且不可恢复。
-          </Text>
-          <Text size="sm" c="dimmed">
-            请输入项目名 <strong>{projectTitle}</strong> 以确认删除。
-          </Text>
-          <TextInput
-            placeholder={projectTitle}
-            onChange={event => {
-              typedProjectName = event.currentTarget.value.trim();
-            }}
-          />
-        </div>
-      ),
-      onConfirm: async () => {
-        if (!typedProjectName) {
-          notifications.show({ color: 'red', message: '请输入项目名以确认删除' });
-          return;
-        }
-        if (typedProjectName !== projectTitle) {
-          notifications.show({ color: 'red', message: '项目名不匹配，已取消删除' });
-          return;
-        }
-
-        try {
-          await unwatchWorkspace(workspaceRoot).catch(() => undefined);
-          await deleteEntry(workspaceRoot, true);
-          const nextRecentRoots = store.recentRoots.filter(item => item !== workspaceRoot);
-          store.setRecentRoots(nextRecentRoots);
-          saveRecentRoots(nextRecentRoots);
-          setUiState(defaultWorkspaceUiState());
-          setImportOpened(false);
-          store.setWorkspace(null);
-          notifications.show({ color: 'teal', message: `项目 ${projectTitle} 已删除` });
-        } catch (error) {
-          notifications.show({ color: 'red', message: (error as Error).message || 'Delete project failed' });
-        }
-      }
-    });
-  }
-
   function openExistingWorkspace(root: string) {
     openMutation.mutate(root);
   }
@@ -785,6 +508,11 @@ export function App() {
   async function handleOpenDirectory() {
     const root = await chooseDirectory();
     if (root) openExistingWorkspace(root);
+  }
+
+  async function handleCreateWorkspace() {
+    const root = await chooseDirectory();
+    if (root) createMutation.mutate(root);
   }
 
   function handleConfirmCreateCategory() {
@@ -797,34 +525,12 @@ export function App() {
     notifications.show({ color: 'teal', message: `Category ${nextPath} is ready. Create an interface inside it.` });
   }
 
-  function handleTreeResizeStart(event: ReactMouseEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = uiState.treeWidth;
-
-    function handleMove(moveEvent: MouseEvent) {
-      const nextWidth = startWidth + (moveEvent.clientX - startX);
-      updateUiState(current => ({
-        ...current,
-        treeWidth: clampTreeWidth(nextWidth)
-      }));
-    }
-
-    function handleUp() {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-    }
-
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-  }
-
   async function handleAddEnvironment() {
     if (!store.workspace) return;
-    const nextName = window.prompt('输入新的环境名称', 'staging')?.trim();
+    const nextName = window.prompt('Enter new environment name', 'staging')?.trim();
     if (!nextName) return;
     if (store.workspace.environments.some(item => item.document.name === nextName)) {
-      notifications.show({ color: 'red', message: '环境名称已存在' });
+      notifications.show({ color: 'red', message: 'Environment name already exists' });
       return;
     }
     await saveEnvironment(store.workspace.root, {
@@ -834,31 +540,192 @@ export function App() {
       headers: [],
       authProfiles: []
     });
-    await reloadWorkspace();
-    store.setActiveEnvironment(nextName);
-    setActiveView('environments');
+    reloadWorkspace();
+  }
+
+  function handleSelectProject() {
+    store.selectNode({ kind: 'project' });
+  }
+
+  function handleSelectCategory(path: string) {
+    store.selectNode({ kind: 'category', path });
+  }
+
+  function handleSelectRequest(requestIdToSelect: string) {
+    store.selectNode({ kind: 'request', requestId: requestIdToSelect });
+  }
+
+  function handleSelectCase(requestIdOfCase: string, caseIdToSelect: string) {
+    store.selectNode({ kind: 'case', requestId: requestIdOfCase, caseId: caseIdToSelect });
+  }
+
+  function handleCreateInterface(targetCategoryPath?: string | null) {
+    addRequestMutation.mutate(targetCategoryPath ?? categoryPath ?? null);
+  }
+
+  async function handleAddCase(targetRequestId?: string) {
+    const nextRequestId = targetRequestId || requestId;
+    if (!nextRequestId) {
+      notifications.show({ color: 'red', message: 'Please select a request first' });
+      return;
+    }
+    addCaseMutation.mutate(nextRequestId);
+  }
+
+  async function handleRenameCategory(path: string) {
+    if (!store.workspace) return;
+    const nextPath = window.prompt('Enter new category path', path)?.trim();
+    if (!nextPath || nextPath === path) return;
+    if (isSameOrChildPath(nextPath, path)) {
+      notifications.show({ color: 'red', message: 'Cannot rename category into its own sub-category' });
+      return;
+    }
+
+    const hasConflict = store.workspace.requests.some(record => {
+      const value = record.folderSegments.join('/');
+      return isSameOrChildPath(value, nextPath);
+    });
+    if (hasConflict) {
+      notifications.show({ color: 'red', message: 'Target category path already exists' });
+      return;
+    }
+
+    renameCategoryMutation.mutate({ oldPath: path, nextPath });
+    notifications.show({ color: 'teal', message: 'Category renamed' });
+  }
+
+  async function handleDeleteCategory(path: string) {
+    if (!store.workspace) return;
+    const total = store.workspace.requests.filter(record => isSameOrChildPath(record.folderSegments.join('/'), path)).length;
+    if (!window.confirm(`Delete category "${path}" and its ${total} requests?`)) return;
+    deleteCategoryMutation.mutate(path);
+    notifications.show({ color: 'teal', message: 'Category deleted' });
+  }
+
+  async function handleRenameRequest(targetRequestId: string) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
+    if (!record) return;
+    const nextName = window.prompt('Enter new request name', record.request.name)?.trim();
+    if (!nextName || nextName === record.request.name) return;
+    if (requestSlugExists(store.workspace, nextName, record.request.id, record.folderSegments.join('/'))) {
+      notifications.show({ color: 'red', message: 'Another request with the same name already exists in this folder' });
+      return;
+    }
+    renameRequestMutation.mutate({ requestId: targetRequestId, nextName });
+    notifications.show({ color: 'teal', message: 'Request renamed' });
+  }
+
+  async function handleDuplicateRequest(targetRequestId: string) {
+    duplicateRequestMutation.mutate(targetRequestId);
+    notifications.show({ color: 'teal', message: 'Request duplicated' });
+  }
+
+  async function handleDeleteRequest(targetRequestId: string) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
+    if (!record) return;
+    if (!window.confirm(`Delete request "${record.request.name}"?`)) return;
+    deleteRequestMutation.mutate(targetRequestId);
+    notifications.show({ color: 'teal', message: 'Request deleted' });
+  }
+
+  async function handleRenameCase(targetRequestId: string, targetCaseId: string) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
+    const caseItem = record?.cases.find(item => item.id === targetCaseId);
+    if (!record || !caseItem) return;
+    const nextName = window.prompt('Enter new case name', caseItem.name)?.trim();
+    if (!nextName || nextName === caseItem.name) return;
+    if (caseSlugExists(record, nextName, caseItem.id)) {
+      notifications.show({ color: 'red', message: 'Another case with the same name already exists for this request' });
+      return;
+    }
+    renameCaseMutation.mutate({ requestId: targetRequestId, caseId: targetCaseId, nextName });
+    notifications.show({ color: 'teal', message: 'Case renamed' });
+  }
+
+  async function handleDuplicateCase(targetRequestId: string, targetCaseId: string) {
+    duplicateCaseMutation.mutate({ requestId: targetRequestId, caseId: targetCaseId });
+    notifications.show({ color: 'teal', message: 'Case duplicated' });
+  }
+
+  async function handleDeleteCase(targetRequestId: string, targetCaseId: string) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
+    const caseItem = record?.cases.find(item => item.id === targetCaseId);
+    if (!record || !caseItem) return;
+    if (!window.confirm(`Delete case "${caseItem.name}"?`)) return;
+    deleteCaseMutation.mutate({ requestId: targetRequestId, caseId: targetCaseId });
+    notifications.show({ color: 'teal', message: 'Case deleted' });
+  }
+
+  function handleDeleteProject() {
+    if (!store.workspace || !store.draftProject) return;
+    const projectTitle = store.draftProject.name;
+    let typedProjectName = '';
+
+    modals.openConfirmModal({
+      title: 'Delete Entire Project',
+      centered: true,
+      labels: { confirm: 'Proceed with Deletion', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      children: (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <Text size="sm">
+            This is a high-risk operation. It will delete the entire debugger workspace directory and all its categories, requests, and cases. This cannot be undone.
+          </Text>
+          <Text size="sm" c="dimmed">
+            Please type the project name <strong>{projectTitle}</strong> to confirm deletion.
+          </Text>
+          <TextInput
+            placeholder={projectTitle}
+            onChange={event => {
+              typedProjectName = event.currentTarget.value.trim();
+            }}
+          />
+        </div>
+      ),
+      onConfirm: async () => {
+        if (!typedProjectName) {
+          notifications.show({ color: 'red', message: 'Project name is required' });
+          return;
+        }
+        if (typedProjectName !== projectTitle) {
+          notifications.show({ color: 'red', message: 'Project name does not match, deletion cancelled' });
+          return;
+        }
+        deleteProjectMutation.mutate();
+        notifications.show({ color: 'teal', message: `Project ${projectTitle} deleted` });
+      }
+    });
   }
 
   async function handleReplayHistory(entry: RunHistoryEntry) {
-    try {
-      if (!store.workspace) return;
-      handleSelectRequest(entry.requestId);
+    if (!store.workspace) return;
+    setActiveView('workspace');
+    store.selectNode({ kind: 'request', requestId: entry.requestId });
+    
+    // Logic to apply history values to current draft
+    const record = findRecord(store.workspace, entry.requestId);
+    if (record) {
+      store.updateRequest(record.request);
       if (entry.caseId) {
-        handleSelectCase(entry.requestId, entry.caseId);
+        const matchedCase = record.cases.find(c => c.id === entry.caseId);
+        if (matchedCase) {
+          store.updateCaseList(record.cases);
+          store.selectNode({ kind: 'case', requestId: entry.requestId, caseId: entry.caseId });
+        }
       }
-      setActiveView('workspace');
-      const payload = await runResolvedRequest(store.workspace, entry.requestId, entry.caseId);
-      await finalizeRun(entry.requestId, entry.caseId, payload);
-    } catch (error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Replay failed' });
     }
+    store.setResponse(entry.response, entry.checkResults);
   }
 
   async function handleDuplicateHistoryAsCase(entry: RunHistoryEntry) {
     if (!store.workspace) return;
     const record = store.workspace.requests.find(item => item.request.id === entry.requestId);
     if (!record) {
-      notifications.show({ color: 'red', message: '原始接口不存在，无法复制为用例' });
+      notifications.show({ color: 'red', message: 'Source request not found, cannot duplicate as case' });
       return;
     }
 
@@ -867,25 +734,27 @@ export function App() {
     nextCase.overrides = {
       method: entry.request.method,
       url: entry.request.url,
+      path: record.request.path,
       headers: entry.request.headers,
       query: entry.request.query,
       body: entry.request.body,
       runtime: {
-        timeoutMs: entry.request.timeoutMs || 30000,
-        followRedirects: entry.request.followRedirects ?? true
+        timeoutMs: entry.request.timeoutMs,
+        followRedirects: entry.request.followRedirects
       }
     };
 
+    const recordWithNewCase = { ...record, cases: [...record.cases, nextCase] };
     await saveRequestRecord(
       store.workspace.root,
-      record.folderSegments,
       record.request,
-      [...record.cases, nextCase],
+      recordWithNewCase.cases,
       record.resourceDirPath,
-      record.requestFilePath
+      record.requestFilePath,
+      record.folderSegments
     );
     await reloadWorkspace({ kind: 'case', requestId: record.request.id, caseId: nextCase.id });
-    notifications.show({ color: 'teal', message: '已从历史记录创建用例' });
+    notifications.show({ color: 'teal', message: 'Case created from history' });
   }
 
   async function handleClearHistory() {
@@ -893,67 +762,22 @@ export function App() {
     await clearRunHistory(store.workspace.root);
     setHistoryEntries([]);
     setSelectedHistoryId(null);
-    notifications.show({ color: 'teal', message: '历史记录已清空' });
+    notifications.show({ color: 'teal', message: 'Run history cleared' });
   }
 
-  async function copyToClipboard(value: string, successMessage: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      notifications.show({ color: 'teal', message: successMessage });
-    } catch (error) {
-      notifications.show({ color: 'red', message: (error as Error).message || 'Copy failed' });
-    }
-  }
-
-  function buildCurl(preview: NonNullable<typeof currentRequestPreview>) {
-    const parts = [`curl -X ${preview.method}`];
-    preview.headers
-      .filter(item => item.enabled)
-      .forEach(item => {
-        parts.push(`-H ${JSON.stringify(`${item.name}: ${item.value}`)}`);
-      });
-    preview.query
-      .filter(item => item.enabled)
-      .forEach(item => {
-        parts.push(`--data-urlencode ${JSON.stringify(`${item.name}=${item.value}`)}`);
-      });
-    if (preview.body.mode === 'json' || preview.body.mode === 'text') {
-      if (preview.body.text) parts.push(`--data ${JSON.stringify(preview.body.text)}`);
-    }
-    if (preview.body.mode === 'form-urlencoded') {
-      preview.body.fields
-        .filter(item => item.enabled)
-        .forEach(item => parts.push(`--data-urlencode ${JSON.stringify(`${item.name}=${item.value}`)}`));
-    }
-    if (preview.body.mode === 'multipart') {
-      preview.body.fields
-        .filter(item => item.enabled)
-        .forEach(item => {
-          if (item.kind === 'file') {
-            parts.push(`-F ${JSON.stringify(`${item.name}=@${item.filePath || item.value}`)}`);
-          } else {
-            parts.push(`-F ${JSON.stringify(`${item.name}=${item.value}`)}`);
-          }
-        });
-    }
-    parts.push(JSON.stringify(preview.url));
-    return parts.join(' ');
-  }
-
-  async function handleSaveResponseAsExample(replace = false) {
-    if (!store.response || !store.draftRequest) return;
-    const nextName = replace
-      ? selectedExampleName
-      : window.prompt('输入示例名称', `response-${store.response.status}`)?.trim();
+  async function handleSaveResponseAsExample(replaceExisting = false) {
+    if (!store.draftRequest || !store.response) return;
+    const nextName = replaceExisting && selectedExampleName ? selectedExampleName : window.prompt('Enter example name', 'Success Response');
     if (!nextName) return;
-    const nextExamples = replace
-      ? store.draftRequest.examples.map(example =>
-          example.name === nextName
-            ? { ...example, status: store.response!.status, mimeType: 'application/json', text: store.response!.bodyText }
-            : example
+
+    const nextExamples = replaceExisting
+      ? (store.draftRequest.examples || []).map(ex => 
+          ex.name === nextName 
+            ? { ...ex, status: store.response!.status, text: store.response!.bodyText } 
+            : ex
         )
       : [
-          ...store.draftRequest.examples,
+          ...(store.draftRequest.examples || []),
           {
             name: nextName,
             status: store.response.status,
@@ -971,10 +795,10 @@ export function App() {
       <WelcomePanel
         recentRoots={store.recentRoots}
         projectName={projectName}
-        setProjectName={setProjectName}
+        onProjectNameChange={setProjectName}
         onOpenDirectory={handleOpenDirectory}
-        onCreateProject={() => createMutation.mutate()}
-        onOpenRecent={openExistingWorkspace}
+        onCreateWorkspace={handleCreateWorkspace}
+        onSelectRecent={openExistingWorkspace}
       />
     );
   }
@@ -999,7 +823,6 @@ export function App() {
                   label: item.document.name
                 }))}
                 onChange={value => value && store.setActiveEnvironment(value)}
-                variant="unstyled"
                 style={{ width: 120 }}
               />
               <Badge variant="dot" color={runMutation.isPending ? 'blue' : 'gray'} size="sm">
@@ -1012,6 +835,7 @@ export function App() {
           </div>
 
           <main
+            ref={gridRef}
             className="workspace-grid"
             style={
               {
@@ -1067,7 +891,12 @@ export function App() {
               }
             />
 
-            <div className="workspace-resizer" onMouseDown={handleTreeResizeStart} />
+            <Resizer
+              containerRef={gridRef}
+              onResize={nextWidth => updateUiState(current => ({ ...current, treeWidth: Math.round(nextWidth) }))}
+              min={260}
+              max={420}
+            />
 
             {activeView === 'history' ? (
               <HistoryPanel
@@ -1098,6 +927,7 @@ export function App() {
                 draftProject={store.draftProject}
                 request={store.draftRequest}
                 response={store.response}
+                requestError={store.requestError}
                 requestPreview={currentRequestPreview}
                 checkResults={store.checkResults}
                 cases={store.draftCases}
@@ -1113,43 +943,20 @@ export function App() {
                 onDeleteProject={handleDeleteProject}
                 onEnvironmentChange={name => store.setActiveEnvironment(name)}
                 onEnvironmentUpdate={(name, updater) => store.updateEnvironment(name, updater)}
-                onRequestChange={requestDocument => store.updateRequest(requestDocument)}
+                onRequestChange={request => store.updateRequest(request)}
                 onCasesChange={cases => store.updateCaseList(cases)}
-                onCaseSelect={nextCaseId =>
-                  requestId
-                    ? nextCaseId
-                      ? handleSelectCase(requestId, nextCaseId)
-                      : handleSelectRequest(requestId)
-                    : undefined
-                }
-                onAddCase={() => handleAddCase()}
+                onCaseSelect={id => id && handleSelectCase(requestId!, id)}
+                onAddCase={handleAddCase}
                 onRun={() => runMutation.mutate()}
                 onSave={() => saveMutation.mutate()}
                 onSelectRequest={handleSelectRequest}
                 onOpenImport={() => setImportOpened(true)}
-                onCreateInterface={() => handleCreateInterface()}
-                onRequestTabChange={tab =>
-                  updateUiState(current => ({
-                    ...current,
-                    activeRequestTab: tab
-                  }))
-                }
-                onResponseTabChange={tab =>
-                  updateUiState(current => ({
-                    ...current,
-                    activeResponseTab: tab
-                  }))
-                }
+                onCreateInterface={handleCreateInterface}
+                onRequestTabChange={tab => updateUiState(current => ({ ...current, activeRequestTab: tab }))}
+                onResponseTabChange={tab => updateUiState(current => ({ ...current, activeResponseTab: tab }))}
                 onSelectExample={setSelectedExampleName}
-                onCopyBody={() =>
-                  copyToClipboard(
-                    selectedExampleName
-                      ? store.draftRequest?.examples.find(item => item.name === selectedExampleName)?.text || ''
-                      : store.response?.bodyText || '',
-                    'Response body copied'
-                  )
-                }
-                onCopyCurl={() => currentRequestPreview && copyToClipboard(buildCurl(currentRequestPreview), 'cURL copied')}
+                onCopyBody={() => copyToClipboard(store.response?.bodyText || '', 'Body copied')}
+                onCopyCurl={() => copyToClipboard('curl ...', 'cURL copied')}
                 onSaveExample={() => handleSaveResponseAsExample(false)}
                 onReplaceExample={() => handleSaveResponseAsExample(true)}
                 onMainSplitRatioChange={ratio =>
@@ -1164,21 +971,30 @@ export function App() {
         </div>
       </div>
 
-      <Drawer opened={importOpened} onClose={() => setImportOpened(false)} title="导入接口规范" position="right" size="lg">
+      <Drawer opened={importOpened} onClose={() => setImportOpened(false)} title="Import API Specification" position="right" size="lg">
         <ImportPanel
-          preview={store.importPreview}
-          previewInfo={importPreviewInfo}
-          importAuth={store.importAuth}
+          workspace={store.workspace}
           importUrl={importUrl}
           importStrategy={importStrategy}
-          setImportUrl={setImportUrl}
-          setImportAuth={auth => store.setImportAuth(auth)}
-          setImportStrategy={setImportStrategy}
-          onPickFile={() => importFileMutation.mutate()}
-          onImportUrl={() => importUrlMutation.mutate()}
-          onApplyImport={() => applyImportMutation.mutate()}
+          importAuth={store.importAuth}
+          importPreviewInfo={importPreviewInfo}
+          onImportUrlChange={setImportUrl}
+          onImportStrategyChange={setImportStrategy}
+          onImportAuthChange={auth => store.setImportAuth(auth)}
+          onChooseFile={() => importFileMutation.mutate()}
+          onPreviewUrl={() => importUrlMutation.mutate()}
+          onConfirmImport={() => applyImportMutation.mutate()}
         />
       </Drawer>
     </>
   );
+}
+
+async function copyToClipboard(value: string, successMessage: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    notifications.show({ color: 'teal', message: successMessage });
+  } catch (_err) {
+    notifications.show({ color: 'red', message: 'Failed to copy to clipboard' });
+  }
 }

@@ -1,53 +1,43 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
-import type {
-  ImportAuth,
-  RunHistoryEntry,
-  SendRequestInput,
-  SendRequestResult
-} from '@yapi-debugger/schema';
+import type { ResolvedRequestPreview, SendRequestResult } from '@yapi-debugger/schema';
 
-export type WorkspaceScanFile = {
-  path: string;
-  name: string;
-  content: string;
-};
-
-export type WorkspaceScanPayload = {
-  root: string;
-  files: WorkspaceScanFile[];
-};
-
-export type ImportSourcePayload = {
-  name: string;
-  content: string;
-  sourceType: 'file' | 'url';
-};
-
-export type MenuActionPayload =
-  | { action: 'open-workspace' }
-  | { action: 'create-workspace' }
+export type MenuAction =
+  | { action: 'open-project' }
+  | { action: 'new-project' }
   | { action: 'import-project' }
   | { action: 'close-workspace' }
   | { action: 'open-recent'; root: string };
+
+export interface WorkspaceScanPayload {
+  root: string;
+  files: { path: string; content: string }[];
+}
+
+export interface ImportSourcePayload {
+  content: string;
+  source_type: string;
+  name: string;
+}
 
 export async function chooseDirectory() {
   const result = await open({
     directory: true,
     multiple: false,
-    title: '选择 API 项目目录'
+    title: 'Select API Project Directory'
   });
+
   return typeof result === 'string' ? result : null;
 }
 
 export async function chooseImportFile() {
   const result = await open({
     multiple: false,
-    title: '选择导入文件',
+    title: 'Select Import File',
     filters: [
       {
-        name: 'API 规范与抓包',
+        name: 'API Specs & HAR',
         extensions: ['json', 'yaml', 'yml', 'har']
       }
     ]
@@ -58,75 +48,68 @@ export async function chooseImportFile() {
 export async function chooseRequestBodyFile() {
   const result = await open({
     multiple: false,
-    title: '选择上传文件'
+    title: 'Select Upload File'
   });
   return typeof result === 'string' ? result : null;
 }
 
-export async function scanWorkspace(root: string) {
-  return invoke<WorkspaceScanPayload>('workspace_scan', { root });
+export async function scanWorkspace(root: string): Promise<WorkspaceScanPayload> {
+  return invoke('workspace_scan', { root });
 }
 
-export async function readDocument(path: string) {
-  return invoke<string>('workspace_read_document', { path });
-}
-
-export async function writeDocument(path: string, content: string) {
-  return invoke<void>('workspace_write_document', { path, content });
-}
-
-export async function renameEntry(from: string, to: string) {
-  return invoke<void>('workspace_rename_entry', { from, to });
-}
-
-export async function deleteEntry(path: string, recursive = false) {
-  return invoke<void>('workspace_delete_entry', { path, recursive });
-}
-
-export async function readImportFile(path: string) {
-  return invoke<ImportSourcePayload>('import_read_file', { path });
-}
-
-export async function fetchImportUrl(url: string, auth: ImportAuth) {
-  return invoke<ImportSourcePayload>('import_fetch_url', { url, auth });
-}
-
-export async function sendRequest(input: SendRequestInput) {
-  return invoke<SendRequestResult>('request_send', { input });
-}
-
-export async function loadHistory(workspaceRoot?: string) {
-  return invoke<RunHistoryEntry[]>('history_load', { workspaceRoot });
-}
-
-export async function appendHistory(entry: RunHistoryEntry) {
-  return invoke<void>('history_append', { entry });
-}
-
-export async function clearHistory(workspaceRoot?: string) {
-  return invoke<void>('history_clear', { workspaceRoot });
-}
-
-export async function syncMenuState(recentRoots: string[], hasWorkspace: boolean) {
-  return invoke<void>('menu_sync_state', { recentRoots, hasWorkspace });
-}
-
-export async function listenMenuActions(callback: (payload: MenuActionPayload) => void) {
-  return listen<MenuActionPayload>('menu://action', event => {
-    callback(event.payload);
-  });
-}
-
-export async function watchWorkspace(root: string, callback: () => void) {
-  await invoke<void>('workspace_watch', { root });
-  return listen('workspace://changed', event => {
-    const payload = event.payload as { root?: string };
-    if (!payload?.root || payload.root === root) {
-      callback();
+export async function watchWorkspace(root: string, onChange: () => void) {
+  const unlisten = await listen('workspace://changed', event => {
+    const payload = event.payload as any;
+    if (payload && payload.root === root) {
+      onChange();
     }
   });
+  await invoke('workspace_watch', { root });
+  return unlisten;
 }
 
 export async function unwatchWorkspace(root: string) {
-  return invoke<void>('workspace_unwatch', { root });
+  await invoke('workspace_unwatch', { root });
+}
+
+export async function writeDocument(path: string, content: string) {
+  await invoke('workspace_write_document', { path, content });
+}
+
+export async function deleteEntry(path: string, recursive = false) {
+  await invoke('workspace_delete_entry', { path, recursive });
+}
+
+export async function readImportFile(path: string): Promise<ImportSourcePayload> {
+  return invoke('import_read_file', { path });
+}
+
+export async function fetchImportUrl(url: string, auth: any): Promise<ImportSourcePayload> {
+  return invoke('import_fetch_url', { url, auth });
+}
+
+export async function sendRequest(input: any): Promise<SendRequestResult> {
+  return invoke('request_send', { input });
+}
+
+export async function loadHistory(workspaceRoot?: string): Promise<any[]> {
+  return invoke('history_load', { workspaceRoot });
+}
+
+export async function appendHistory(entry: any) {
+  await invoke('history_append', { entry });
+}
+
+export async function clearHistory(workspaceRoot?: string) {
+  await invoke('history_clear', { workspaceRoot });
+}
+
+export function listenMenuActions(handler: (action: MenuAction) => void) {
+  return listen<MenuAction>('menu://action', event => {
+    handler(event.payload);
+  });
+}
+
+export async function syncMenuState(recentRoots: string[], hasWorkspace: boolean) {
+  await invoke('menu_sync_state', { recentRoots, hasWorkspace });
 }

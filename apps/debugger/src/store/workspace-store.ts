@@ -20,7 +20,7 @@ export type SelectedNode =
   | { kind: 'request'; requestId: string }
   | { kind: 'case'; requestId: string; caseId: string };
 
-export type RequestTab = 'query' | 'headers' | 'body' | 'auth' | 'checks' | 'settings';
+export type RequestTab = 'query' | 'headers' | 'body' | 'auth' | 'checks' | 'settings' | 'preview';
 export type ResponseTab = 'body' | 'headers' | 'raw';
 
 export type WorkspaceUiState = {
@@ -52,6 +52,7 @@ type WorkspaceStore = {
   importAuth: ImportAuth;
   response: SendRequestResult | null;
   checkResults: CheckResult[];
+  requestError: string | null;
   draftProject: ProjectDocument | null;
   draftRequest: RequestDocument | null;
   draftCases: CaseDocument[];
@@ -69,6 +70,7 @@ type WorkspaceStore = {
   updateEnvironment: (name: string, updater: (environment: EnvironmentDocument) => EnvironmentDocument) => void;
   addDraftCase: () => void;
   setResponse: (response: SendRequestResult | null, checkResults?: CheckResult[]) => void;
+  setError: (error: string | null) => void;
   setSearchText: (text: string) => void;
 };
 
@@ -160,6 +162,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   importAuth: defaultImportAuth(),
   response: null,
   checkResults: [],
+  requestError: null,
   draftProject: null,
   draftRequest: null,
   draftCases: [],
@@ -185,6 +188,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       isDirty: false,
       response: null,
       checkResults: [],
+      requestError: null,
       searchText: ''
     });
   },
@@ -202,7 +206,8 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       draftCases: draft.draftCases,
       isDirty: false,
       response: null,
-      checkResults: []
+      checkResults: [],
+      requestError: null
     });
   },
   setActiveEnvironment(name) {
@@ -251,7 +256,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     });
   },
   setResponse(response, checkResults = []) {
-    set({ response, checkResults });
+    set({ response, checkResults, requestError: null });
+  },
+  setError(error) {
+    set({ requestError: error, response: null, checkResults: [] });
   },
   setSearchText(text) {
     set({ searchText: text });

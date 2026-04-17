@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react';
 import { Badge, Button, Select, Text, TextInput } from '@mantine/core';
 import {
   IconAlertTriangle,
+  IconApi,
   IconDeviceFloppy,
   IconPlus
 } from '@tabler/icons-react';
@@ -17,6 +18,7 @@ import type {
 } from '@yapi-debugger/schema';
 import type { RequestTab, ResponseTab, SelectedNode } from '../../store/workspace-store';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
+import { Resizer } from '../primitives/Resizer';
 import { RequestPanel } from './RequestPanel';
 import { ResponsePanel } from './ResponsePanel';
 
@@ -55,6 +57,7 @@ export function WorkspaceMainPanel(props: {
   draftProject: ProjectDocument | null;
   request: RequestDocument | null;
   response: SendRequestResult | null;
+  requestError: string | null;
   requestPreview: ResolvedRequestPreview | null;
   checkResults: CheckResult[];
   cases: CaseDocument[];
@@ -95,26 +98,6 @@ export function WorkspaceMainPanel(props: {
   const selectedCase = props.cases.find(item => item.id === caseId) || null;
   const breadcrumbs = projectBreadcrumbs(props.workspace.project, props.selectedNode, request);
 
-  function startMainSplitResize(event: React.MouseEvent<HTMLDivElement>) {
-    const container = splitRef.current;
-    if (!container) return;
-    event.preventDefault();
-    const bounds = container.getBoundingClientRect();
-
-    function handleMove(moveEvent: MouseEvent) {
-      const nextRatio = (moveEvent.clientX - bounds.left) / bounds.width;
-      props.onMainSplitRatioChange(Math.max(0.3, Math.min(0.7, nextRatio)));
-    }
-
-    function handleUp() {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-    }
-
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-  }
-
   function renderToolbar(actions?: React.ReactNode) {
     return (
       <div className="panel-toolbar">
@@ -132,7 +115,6 @@ export function WorkspaceMainPanel(props: {
             value={props.activeEnvironmentName}
             data={props.workspace.environments.map(item => ({ value: item.document.name, label: item.document.name }))}
             onChange={value => value && props.onEnvironmentChange(value)}
-            variant="unstyled"
             style={{ width: 120 }}
           />
           {actions}
@@ -206,26 +188,20 @@ export function WorkspaceMainPanel(props: {
               <strong>{counts.requests}</strong>
             </div>
             <div className="summary-tile">
-              <span>Cases</span>
+              <span>Test Cases</span>
               <strong>{counts.cases}</strong>
             </div>
           </div>
 
-          <div className="inspector-section danger-section">
+          <div className="inspector-section danger-section" style={{ marginTop: 40 }}>
             <div className="danger-section-copy">
-              <h3 className="section-title">Danger Zone</h3>
-              <Text c="dimmed" size="sm">
-                删除整个项目会移除当前 workspace 目录下的所有调试数据，包括分类、接口和用例。这是不可恢复操作。
+              <Text fw={700} c="red">Danger Zone</Text>
+              <Text size="xs" c="dimmed">
+                Deleting the project will remove all debug data from the current workspace directory, including categories, requests, and cases. This is irreversible.
               </Text>
             </div>
-            <Button
-              size="xs"
-              color="red"
-              variant="light"
-              leftSection={<IconAlertTriangle size={14} />}
-              onClick={props.onDeleteProject}
-            >
-              删除整个项目
+            <Button color="red" variant="light" leftSection={<IconAlertTriangle size={14} />} onClick={props.onDeleteProject}>
+              Delete Project
             </Button>
           </div>
         </div>
@@ -237,32 +213,40 @@ export function WorkspaceMainPanel(props: {
     return (
       <section className="workspace-main">
         {renderToolbar(
-          <Button size="xs" leftSection={<IconPlus size={14} />} onClick={props.onCreateInterface}>
-            New Interface
+          <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={props.onCreateInterface}>
+            New Request
           </Button>
         )}
 
         <div className="category-workbench">
           <div className="category-header">
-            <h3 className="section-title">{categoryLabel(props.selectedNode.path)}</h3>
-            <Text c="dimmed" size="xs">Overview of all endpoints in this category.</Text>
+            <Text size="xs" fw={700} c="dimmed" style={{ textTransform: 'uppercase' }}>Category</Text>
+            <h1 className="section-title">{categoryLabel(props.selectedNode.path)}</h1>
           </div>
 
           <div className="category-table">
-            {props.categoryRequests.map(record => (
-              <div
-                key={record.request.id}
-                className="category-row"
-                onClick={() => props.onSelectRequest(record.request.id)}
-              >
-                <span className={`tree-method-pill method-${record.request.method.toLowerCase()}`}>{record.request.method}</span>
-                <div className="tree-row-copy">
-                  <strong>{record.request.name}</strong>
-                  <span>{record.request.path || record.request.url || '/'}</span>
-                </div>
-                <span className="category-row-meta">{record.cases.length} cases</span>
+            {props.categoryRequests.length > 0 ? (
+              props.categoryRequests.map(record => (
+                <button
+                  key={record.request.id}
+                  className="category-row"
+                  onClick={() => props.onSelectRequest(record.request.id)}
+                >
+                  <span className={`tree-method-pill method-${record.request.method.toLowerCase()}`}>
+                    {record.request.method}
+                  </span>
+                  <div className="tree-row-copy">
+                    <strong>{record.request.name}</strong>
+                    <span className="category-row-meta">{record.request.path || record.request.url}</span>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <div style={{ padding: 40, textAlign: 'center' }}>
+                <Text size="sm" c="dimmed">No requests in this category.</Text>
+                <Button variant="subtle" size="xs" mt="md" onClick={props.onCreateInterface}>Create your first request</Button>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </section>
@@ -271,12 +255,43 @@ export function WorkspaceMainPanel(props: {
 
   if (!request) {
     return (
-      <section className="workspace-main">
-        <div className="empty-response-state" style={{ height: '100vh' }}>
-          <div>
-            <Text fw={600} ta="center">Select an endpoint to start debugging</Text>
-            <Text c="dimmed" size="xs" ta="center">Endpoints and cases will be edited in this workbench.</Text>
+      <section className="workspace-main" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {renderToolbar()}
+        <div style={{ 
+          flex: 1, 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          color: 'var(--muted)',
+          gap: 20
+        }}>
+          <div style={{ 
+            width: 80, 
+            height: 80, 
+            borderRadius: '50%', 
+            background: 'var(--accent-soft)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            color: 'var(--accent)'
+          }}>
+            <IconApi size={40} stroke={1.5} />
           </div>
+          <div style={{ textAlign: 'center' }}>
+            <h2 className="section-title" style={{ fontSize: '1.2rem', marginBottom: 8 }}>Select an API</h2>
+            <Text size="sm" style={{ maxWidth: 320 }}>
+              Choose a request from the sidebar to start debugging, or create a new one to begin.
+            </Text>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            leftSection={<IconPlus size={16} />}
+            onClick={props.onCreateInterface}
+          >
+            Create New Request
+          </Button>
         </div>
       </section>
     );
@@ -285,23 +300,34 @@ export function WorkspaceMainPanel(props: {
   return (
     <section className="workspace-main">
       {renderToolbar(
-        <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={props.onAddCase}>
-          New Case
-        </Button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={props.onAddCase}>
+            New Case
+          </Button>
+          <Button
+            size="xs"
+            variant="filled"
+            leftSection={<IconDeviceFloppy size={14} />}
+            onClick={props.onSave}
+            disabled={!props.isDirty}
+          >
+            Save
+          </Button>
+        </div>
       )}
 
       <div
         ref={splitRef}
         className="workbench-split"
         style={{
-          gridTemplateColumns: `minmax(0, ${props.mainSplitRatio}fr) 1px minmax(320px, ${1 - props.mainSplitRatio}fr)`
+          gridTemplateColumns: `minmax(0, ${props.mainSplitRatio}fr) auto minmax(320px, ${1 - props.mainSplitRatio}fr)`
         }}
       >
         <div className="pane-surface">
           <RequestPanel
             workspace={props.workspace}
             selectedEnvironment={props.selectedEnvironment}
-            request={request}
+            request={request!}
             selectedCase={selectedCase}
             activeTab={props.activeRequestTab}
             isRunning={props.isRunning}
@@ -311,15 +337,20 @@ export function WorkspaceMainPanel(props: {
             onRequestChange={props.onRequestChange}
             onCasesChange={props.onCasesChange}
             onRun={props.onRun}
-            onSave={props.onSave}
           />
         </div>
 
-        <div className="pane-resizer" onMouseDown={startMainSplitResize} />
+        <Resizer
+          containerRef={splitRef}
+          onResizeRatio={props.onMainSplitRatioChange}
+          minRatio={0.3}
+          maxRatio={0.7}
+        />
 
         <div className="pane-surface">
           <ResponsePanel
             response={props.response}
+            requestError={props.requestError}
             requestPreview={props.requestPreview}
             requestDocument={request}
             checkResults={props.checkResults}

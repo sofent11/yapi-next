@@ -16,9 +16,15 @@
   --accent: #0969da;
   --accent-soft: #f0f7ff;
   --green: #1a7f37;
+  --green-soft: #dafbe1;
   --blue: #0969da;
+  --blue-soft: #ddf4ff;
   --orange: #9a6700;
+  --orange-soft: #fff8c5;
   --red: #cf222e;
+  --red-soft: #ffebe9;
+  --purple: #8250df;
+  --purple-soft: #f5f0ff;
   --shadow-sm: 0 1px 0 rgba(31, 35, 40, 0.04);
   --shadow-md: 0 3px 6px rgba(140, 149, 159, 0.15);
 }
@@ -206,19 +212,21 @@ mark {
   overflow: hidden;
 }
 
-.workspace-resizer,
-.pane-resizer {
+.resizer-handle {
   position: relative;
-  min-height: 0;
-  cursor: col-resize;
   background: var(--line);
-  transition: background 0.2s;
+  transition: background 0.2s, width 0.2s, height 0.2s;
   z-index: 10;
-  width: 1px;
+  flex-shrink: 0;
 }
 
-.workspace-resizer::before,
-.pane-resizer::before {
+.resizer-handle.vertical {
+  width: 1px;
+  height: 100%;
+  cursor: col-resize;
+}
+
+.resizer-handle.vertical::before {
   content: "";
   position: absolute;
   top: 0;
@@ -228,11 +236,39 @@ mark {
   background: transparent;
 }
 
-.workspace-resizer:hover,
-.pane-resizer:hover {
+.resizer-handle.horizontal {
+  height: 1px;
+  width: 100%;
+  cursor: row-resize;
+}
+
+.resizer-handle.horizontal::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -4px;
+  bottom: -4px;
+  background: transparent;
+}
+
+.resizer-handle:hover,
+.resizer-handle.is-dragging {
   background: var(--accent);
+}
+
+.resizer-handle.vertical:hover,
+.resizer-handle.vertical.is-dragging {
   width: 2px;
-  margin-left: -1px;
+  margin-left: -0.5px;
+  margin-right: -0.5px;
+}
+
+.resizer-handle.horizontal:hover,
+.resizer-handle.horizontal.is-dragging {
+  height: 2px;
+  margin-top: -0.5px;
+  margin-bottom: -0.5px;
 }
 
 .app-rail {
@@ -414,11 +450,12 @@ mark {
   text-transform: uppercase;
 }
 
-.method-get { background: #dafbe1; color: #1a7f37; }
-.method-post { background: #fff8c5; color: #9a6700; }
-.method-put { background: #ddf4ff; color: #0969da; }
-.method-delete { background: #ffebe9; color: #cf222e; }
-.method-patch { background: #f5f0ff; color: #8250df; }
+.method-get { background: var(--green-soft); color: var(--green); }
+.method-post { background: var(--orange-soft); color: var(--orange); }
+.method-put { background: var(--blue-soft); color: var(--blue); }
+.method-patch { background: var(--purple-soft); color: var(--purple); }
+.method-delete { background: var(--red-soft); color: var(--red); }
+.method-head, .method-options { background: var(--surface-muted); color: var(--muted-strong); }
 
 .tree-expand-button {
   display: flex;
@@ -485,6 +522,19 @@ mark {
   color: var(--muted-strong);
 }
 
+.tree-panel-search {
+  padding: 8px 12px;
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.tree-panel-search .mantine-Input-input {
+  background: var(--surface);
+  border-color: var(--line);
+  height: 28px;
+  min-height: 28px;
+}
+
 .tree-panel-footer {
   padding: 6px 12px;
   border-top: 1px solid var(--line);
@@ -503,28 +553,34 @@ mark {
 }
 
 .panel-toolbar {
-  height: 40px;
-  min-height: 40px;
+  height: 48px;
+  min-height: 48px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0 16px;
   border-bottom: 1px solid var(--line);
-  background: var(--surface-muted);
+  background: var(--surface);
+  gap: 12px;
 }
 
 .breadcrumb-list {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
 }
 
 .breadcrumb-chip {
-  font-size: 0.7rem;
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--muted-strong);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
 }
 
 .breadcrumb-chip::after {
@@ -540,7 +596,8 @@ mark {
 .panel-toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .request-panel,
@@ -624,12 +681,15 @@ mark {
 }
 
 .response-header-ide {
-  height: 40px;
+  height: 48px;
+  min-height: 48px;
   padding: 0 16px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   border-bottom: 1px solid var(--line);
   background: var(--surface-muted);
+  gap: 16px;
 }
 
 .response-status-group {
@@ -650,16 +710,15 @@ mark {
   color: var(--muted-strong);
 }
 
-.empty-response-state,
-.empty-body-msg,
-.empty-tab-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100px;
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-style: italic;
+.response-example-select {
+  width: 140px;
+}
+
+@media (max-width: 1280px) {
+  .response-header-ide .mantine-Button-root {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
 }
 
 .workbench-split {
@@ -797,10 +856,34 @@ mark {
   margin-top: 4px;
 }
 
+@media (max-width: 1024px) {
+  .app-rail {
+    padding: 8px 0;
+  }
+  
+  .app-rail-brand {
+    width: 32px;
+    height: 32px;
+    margin-bottom: 8px;
+  }
+
+  .workspace-context-path {
+    max-width: 30vw;
+  }
+}
+
 @media (max-width: 800px) {
-  .danger-section {
-    flex-direction: column;
-    align-items: flex-start;
+  .tree-panel-footer {
+    display: none;
+  }
+  
+  .request-tabs-ide .mantine-Tabs-tab {
+    padding: 6px 8px;
+    font-size: 0.75rem;
+  }
+
+  .workspace-context-copy {
+    gap: 8px;
   }
 }
 
@@ -936,16 +1019,13 @@ mark {
   color: var(--red);
 }
 
-.request-preview-card,
+.request-preview-card-embedded,
 .check-card {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface-raised);
-  padding: 12px;
-}
-
-.request-preview-card {
-  margin: 12px;
+  padding: 16px;
+  margin: 16px;
 }
 
 .request-preview-head,
@@ -965,6 +1045,62 @@ mark {
 .request-preview-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 12px;
+}
+
+.request-header-compact {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.method-url-group {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.method-select-ide {
+  width: 100px;
+}
+
+.method-select-ide .mantine-Select-input {
+  border: none !important;
+  border-right: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--surface-muted) !important;
+}
+
+.url-input-ide {
+  flex: 1;
+}
+
+.url-input-ide .mantine-Input-input {
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.method-url-group .mantine-Button-root {
+  border-radius: 0 !important;
+  border-left: 1px solid var(--line) !important;
+}
+
+.request-tabs-ide .mantine-Tabs-list {
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.request-tabs-ide .mantine-Tabs-tab {
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
 }
 
 .environment-layout {
