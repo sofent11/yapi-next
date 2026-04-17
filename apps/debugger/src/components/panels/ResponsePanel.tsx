@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Badge, Button, Group, Select, Tabs, Text } from '@mantine/core';
+import { Badge, Button, Group, Menu, Select, Tabs, Text } from '@mantine/core';
 import { IconAlertCircle, IconBraces, IconCookie, IconGitCompare, IconPlayerPlay } from '@tabler/icons-react';
 import type {
   CheckResult,
@@ -93,6 +93,7 @@ export function ResponsePanel(props: {
   onCopyCurl: () => void;
   onSaveExample: () => void;
   onReplaceExample: () => void;
+  onSaveAs?: (action: 'example' | 'replace-example' | 'case' | 'status-check') => void;
   onRefreshSession: () => void;
   onClearSession: () => void;
   onCreateCheck: (input: GeneratedCheckInput) => void;
@@ -161,6 +162,27 @@ export function ResponsePanel(props: {
           ) : null}
           <Button size="xs" variant="default" onClick={props.onCopyBody} disabled={!displayBody}>Copy</Button>
           <Button size="xs" variant="default" onClick={props.onCopyCurl} disabled={!props.requestPreview}>cURL</Button>
+          <Menu withinPortal position="bottom-end">
+            <Menu.Target>
+              <Button size="xs" variant="default" disabled={!props.response && !selectedExample}>
+                Save As
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item onClick={() => props.onSaveAs?.('example')} disabled={!props.response}>
+                Save Live Response As Example
+              </Menu.Item>
+              <Menu.Item onClick={() => props.onSaveAs?.('replace-example')} disabled={!props.response || !selectedExample}>
+                Replace Selected Example
+              </Menu.Item>
+              <Menu.Item onClick={() => props.onSaveAs?.('case')} disabled={!props.response}>
+                Create Reusable Case
+              </Menu.Item>
+              <Menu.Item onClick={() => props.onSaveAs?.('status-check')} disabled={!props.response}>
+                Create Status Check
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
           <Button size="xs" variant="default" onClick={props.onSaveExample} disabled={!props.response}>Save</Button>
           <Button size="xs" variant="filled" color="indigo" onClick={props.onReplaceExample} disabled={!props.response || !selectedExample}>Update</Button>
         </Group>

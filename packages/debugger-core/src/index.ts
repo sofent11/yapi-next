@@ -30,6 +30,7 @@ import {
   type CaseCheck,
   type CaseDocument,
   type CollectionDocument,
+  type CollectionRunReport,
   type EnvironmentDocument,
   type ParameterRow,
   type ProjectDocument,
@@ -79,6 +80,26 @@ export type ProjectSeed = {
 export type ResolvedRequest = ResolvedRequestPreview;
 
 const VARIABLE_PATTERN = /\{\{\s*([^}]+?)\s*\}\}/g;
+const UNSUPPORTED_SCRIPT_PATTERNS = [
+  {
+    token: 'pm.sendRequest',
+    code: 'script-unsupported-send-request',
+    level: 'warning' as const,
+    message: 'pm.sendRequest is not supported by the local debugger runtime yet.'
+  },
+  {
+    token: 'pm.vault',
+    code: 'script-unsupported-vault',
+    level: 'warning' as const,
+    message: 'pm.vault is not supported by the local debugger runtime yet.'
+  },
+  {
+    token: 'postman.',
+    code: 'script-legacy-postman-api',
+    level: 'warning' as const,
+    message: 'Legacy postman.* APIs may not execute correctly in the local debugger runtime.'
+  }
+];
 
 export function parseYamlDocument<T>(content: string): T {
   return YAML.parse(content) as T;
@@ -1053,6 +1074,7 @@ export function inspectResolvedRequest(
   const preview = resolveRequest(project, request, caseDocument, environment, extraSources);
   const body = caseDocument?.overrides.body ?? request.body;
   const authInput = caseDocument?.overrides.auth || request.auth;
+  const scriptSource = [caseDocument?.scripts?.preRequest || '', caseDocument?.scripts?.postResponse || ''].join('\n').trim();
   const { auth, authSource } = mergeAuth(request.auth, caseDocument?.overrides.auth, environment);
   const queryRows = caseDocument?.overrides.query ?? request.query;
   const pathRows = caseDocument?.overrides.pathParams ?? request.pathParams;
@@ -1257,6 +1279,21 @@ export function inspectResolvedRequest(
   }
 
   const diagnostics = buildPreflightDiagnostics(preview, auth, authSource, body, variables);
+  const scriptSignals = inspectScriptSource(scriptSource);
+  scriptSignals.forEach(signal => {
+    warnings.push({
+      code: signal.code,
+      level: signal.level === 'error' ? 'warning' : signal.level,
+      message: signal.message
+    });
+    diagnostics.push({
+      code: signal.code,
+      level: signal.level,
+      blocking: false,
+      message: signal.message,
+      field: 'scripts'
+    });
+  });
 
   return resolvedRequestInsightSchema.parse({
     preview,
@@ -1416,23 +1453,270 @@ export function buildFileContentMap(entries: FileEntry[]) {
   return output;
 }
 
-export function parseCollectionDataText(text: string) {
-  const trimmed = text.trim();
-  if (!trimmed) return [] as Array<Record<string, unknown>>;
-  const parsed = trimmed.startsWith('[') || trimmed.startsWith('{')
-    ? JSON.parse(trimmed)
-    : parseYamlDocument<unknown>(trimmed);
+function parseCsvDataText(text: string) {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentCell = '';
+  let inQuotes = false;
 
-  if (!Array.isArray(parsed)) {
-    throw new Error('Collection data file must contain a JSON/YAML array of objects');
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const nextChar = text[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentCell += '"';
+        index += 1;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (!inQuotes && char === ',') {
+      currentRow.push(currentCell.trim());
+      currentCell = '';
+      continue;
+    }
+
+    if (!inQuotes && (char === '\n' || char === '\r')) {
+      if (char === '\r' && nextChar === '\n') {
+        index += 1;
+      }
+      currentRow.push(currentCell.trim());
+      currentCell = '';
+      if (currentRow.some(cell => cell.length > 0)) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+      continue;
+    }
+
+    currentCell += char;
   }
 
-  return parsed.map((row, index) => {
+  if (currentCell.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentCell.trim());
+    if (currentRow.some(cell => cell.length > 0)) {
+      rows.push(currentRow);
+    }
+  }
+
+  if (rows.length < 2) {
+    throw new Error('Collection CSV data must include a header row and at least one data row');
+  }
+
+  const headers = rows[0].map((header, index) => header || `column_${index + 1}`);
+  return rows.slice(1).map((row, index) => {
+    const output: Record<string, unknown> = {};
+    headers.forEach((header, columnIndex) => {
+      output[header] = row[columnIndex] ?? '';
+    });
+    if (Object.keys(output).length === 0) {
+      throw new Error(`Collection data row ${index + 2} is empty`);
+    }
+    return output;
+  });
+}
+
+export function inspectCollectionDataText(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return {
+      format: 'empty' as const,
+      rows: [] as Array<Record<string, unknown>>,
+      columns: [] as string[]
+    };
+  }
+
+  let format: 'json' | 'yaml' | 'csv' = 'json';
+  let parsed: unknown;
+  try {
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      parsed = JSON.parse(trimmed);
+      format = 'json';
+    } else {
+      parsed = parseYamlDocument<unknown>(trimmed);
+      format = 'yaml';
+    }
+  } catch (_error) {
+    parsed = parseCsvDataText(trimmed);
+    format = 'csv';
+  }
+
+  if (!Array.isArray(parsed)) {
+    if (trimmed.includes(',') || trimmed.includes('\n')) {
+      parsed = parseCsvDataText(trimmed);
+      format = 'csv';
+    } else {
+      throw new Error('Collection data file must contain a JSON/YAML array of objects or a CSV table');
+    }
+  }
+
+  const parsedRows = parsed as unknown[];
+  const rows = parsedRows.map((row: unknown, index: number) => {
     if (!row || typeof row !== 'object' || Array.isArray(row)) {
       throw new Error(`Collection data row ${index + 1} must be an object`);
     }
     return row as Record<string, unknown>;
   });
+
+  const columns = [...rows.reduce((set: Set<string>, row: Record<string, unknown>) => {
+    Object.keys(row).forEach(key => set.add(key));
+    return set;
+  }, new Set<string>())];
+
+  return { format, rows, columns };
+}
+
+export function parseCollectionDataText(text: string) {
+  return inspectCollectionDataText(text).rows;
+}
+
+function inspectScriptSource(script: string) {
+  const trimmed = script.trim();
+  if (!trimmed) return [] as Array<{ code: string; level: 'warning' | 'error'; message: string }>;
+
+  const signals: Array<{ code: string; level: 'warning' | 'error'; message: string }> = UNSUPPORTED_SCRIPT_PATTERNS
+    .filter(pattern => trimmed.includes(pattern.token))
+    .map(pattern => ({
+    code: pattern.code,
+    level: pattern.level,
+    message: pattern.message
+  }));
+
+  try {
+    // Validate syntax early so the UI can warn before the user sends the request.
+    // eslint-disable-next-line no-new-func
+    new Function('pm', 'console', trimmed);
+  } catch (error) {
+    signals.push({
+      code: 'script-parse-error',
+      level: 'error',
+      message: `Script parsing failed: ${(error as Error).message || 'Unknown parser error'}`
+    });
+  }
+
+  return signals;
+}
+
+function escapeHtml(input: string) {
+  return input
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+export function renderCollectionRunReportHtml(report: CollectionRunReport) {
+  const failureRows = report.iterations
+    .flatMap(iteration =>
+      iteration.stepRuns
+        .filter(step => !step.ok || step.skipped)
+        .map(step => ({
+          iteration: iteration.dataLabel || `Iteration ${iteration.index + 1}`,
+          step: step.stepName,
+          status: step.skipped ? 'SKIPPED' : 'FAILED',
+          detail: step.error || step.checkResults.find(check => !check.ok)?.message || 'No detail available'
+        }))
+    )
+    .slice(0, 50);
+
+  const iterationSections = report.iterations
+    .map(iteration => {
+      const stepRows = iteration.stepRuns
+        .map(step => {
+          const summary = step.error || step.checkResults.find(check => !check.ok)?.message || `${step.checkResults.length} checks`;
+          return `
+            <tr>
+              <td>${escapeHtml(step.stepName)}</td>
+              <td>${escapeHtml(step.stepKey)}</td>
+              <td>${escapeHtml(step.skipped ? 'SKIPPED' : step.ok ? 'PASS' : 'FAIL')}</td>
+              <td>${escapeHtml(summary)}</td>
+            </tr>
+          `;
+        })
+        .join('');
+
+      return `
+        <section class="iteration">
+          <h2>${escapeHtml(iteration.dataLabel || `Iteration ${iteration.index + 1}`)}</h2>
+          <table>
+            <thead>
+              <tr><th>Step</th><th>Key</th><th>Status</th><th>Summary</th></tr>
+            </thead>
+            <tbody>${stepRows}</tbody>
+          </table>
+        </section>
+      `;
+    })
+    .join('');
+
+  const failureList = failureRows.length
+    ? `
+      <section class="summary">
+        <h2>Failure Summary</h2>
+        <table>
+          <thead>
+            <tr><th>Iteration</th><th>Step</th><th>Status</th><th>Detail</th></tr>
+          </thead>
+          <tbody>
+            ${failureRows
+              .map(
+                row => `
+                  <tr>
+                    <td>${escapeHtml(row.iteration)}</td>
+                    <td>${escapeHtml(row.step)}</td>
+                    <td>${escapeHtml(row.status)}</td>
+                    <td>${escapeHtml(row.detail)}</td>
+                  </tr>
+                `
+              )
+              .join('')}
+          </tbody>
+        </table>
+      </section>
+    `
+    : '';
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(report.collectionName)} report</title>
+    <style>
+      :root { color-scheme: light; font-family: "Segoe UI", "PingFang SC", sans-serif; }
+      body { margin: 0; padding: 32px; background: #f6f8fb; color: #16212b; }
+      h1, h2 { margin: 0 0 12px; }
+      h1 { font-size: 28px; }
+      h2 { font-size: 18px; margin-top: 28px; }
+      .hero, .summary, .iteration { background: #ffffff; border: 1px solid #d7dde6; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+      .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 16px; }
+      .meta div { background: #f1f5f9; border-radius: 10px; padding: 12px; }
+      .meta span { display: block; font-size: 12px; color: #52606d; margin-bottom: 6px; }
+      .meta strong { font-size: 18px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e6ebf2; vertical-align: top; }
+      th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #5b6772; }
+      td { font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <section class="hero">
+      <h1>${escapeHtml(report.collectionName)}</h1>
+      <p>Environment: ${escapeHtml(report.environmentName || 'shared')} · Status: ${escapeHtml(report.status)}</p>
+      <div class="meta">
+        <div><span>Iterations</span><strong>${report.iterationCount}</strong></div>
+        <div><span>Passed Steps</span><strong>${report.passedSteps}</strong></div>
+        <div><span>Failed Steps</span><strong>${report.failedSteps}</strong></div>
+        <div><span>Skipped Steps</span><strong>${report.skippedSteps}</strong></div>
+      </div>
+    </section>
+    ${failureList}
+    ${iterationSections}
+  </body>
+</html>`;
 }
 
 export {

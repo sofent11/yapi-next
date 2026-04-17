@@ -1,7 +1,7 @@
 import { ActionIcon, Stack, Tooltip } from '@mantine/core';
-import { IconApi, IconFolders, IconHistory, IconPencilBolt, IconPlugConnected, IconSettings, IconCookie } from '@tabler/icons-react';
+import { IconApi, IconFolders, IconHistory, IconLifebuoy, IconPencilBolt, IconPlugConnected, IconSettings, IconCookie } from '@tabler/icons-react';
 
-export type AppRailView = 'scratch' | 'workspace' | 'collections' | 'history' | 'environments' | 'sessions' | 'settings';
+export type AppRailView = 'scratch' | 'workspace' | 'repair' | 'collections' | 'history' | 'environments' | 'sessions' | 'settings';
 
 function railVariant(active: boolean) {
   return active ? 'filled' : 'subtle';
@@ -29,6 +29,12 @@ export function AppRail(props: {
         <Tooltip label="Requests" position="right" withArrow>
           <ActionIcon variant={railVariant(props.activeView === 'workspace')} size="lg" radius="md" onClick={() => props.onChangeView('workspace')}>
             <IconApi size={20} />
+          </ActionIcon>
+        </Tooltip>
+
+        <Tooltip label="Repair Center" position="right" withArrow>
+          <ActionIcon variant={railVariant(props.activeView === 'repair')} size="lg" radius="md" onClick={() => props.onChangeView('repair')}>
+            <IconLifebuoy size={20} />
           </ActionIcon>
         </Tooltip>
 

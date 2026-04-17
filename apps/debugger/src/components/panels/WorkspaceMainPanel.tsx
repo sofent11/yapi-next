@@ -100,6 +100,7 @@ export function WorkspaceMainPanel(props: {
   onCopyCurl: () => void;
   onSaveExample: () => void;
   onReplaceExample: () => void;
+  onSaveAs?: (action: 'example' | 'replace-example' | 'case' | 'status-check') => void;
   onRefreshSession: () => void;
   onClearSession: () => void;
   onCreateCheck: (input: any) => void;
@@ -465,6 +466,7 @@ export function WorkspaceMainPanel(props: {
             onCopyCurl={props.onCopyCurl}
             onSaveExample={props.onSaveExample}
             onReplaceExample={props.onReplaceExample}
+            onSaveAs={props.onSaveAs}
             onRefreshSession={props.onRefreshSession}
             onClearSession={props.onClearSession}
             onCreateCheck={props.onCreateCheck}

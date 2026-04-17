@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, Group, NumberInput, Select, Text, TextInput } from '@mantine/core';
+import { inspectCollectionDataText } from '@yapi-debugger/core';
 import type { CollectionDocument, CollectionRunReport, WorkspaceIndex } from '@yapi-debugger/schema';
 import { CodeEditor } from '../editors/CodeEditor';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
@@ -42,6 +43,14 @@ function flattenJsonLeaves(input: unknown, prefix = '$', rows: Array<{ path: str
   return rows;
 }
 
+function compareSummary(left: string, right: string) {
+  if (!left && !right) return 'No content to compare yet.';
+  if (left === right) return 'The latest step output matches the baseline example.';
+  const leftLines = left.split('\n');
+  const rightLines = right.split('\n');
+  return `The step output differs from baseline. Live lines: ${leftLines.length}, baseline lines: ${rightLines.length}.`;
+}
+
 function stepSelectionValue(iterationIndex: number, stepKey: string) {
   return `${iterationIndex}:${stepKey}`;
 }
@@ -66,9 +75,34 @@ export function CollectionRunnerPanel(props: {
   onSelectReport: (id: string | null) => void;
   onSelectReportStep: (stepKey: string | null) => void;
   onExtractValue?: (target: 'local' | 'runtime' | 'collection', input: { suggestedName: string; value: string }) => void;
+  onExportReport?: (format: 'json' | 'html') => void;
 }) {
   const [reportFilter, setReportFilter] = useState('');
   const requestChoices = useMemo(() => requestOptions(props.workspace), [props.workspace]);
+  const dataInspection = useMemo(() => {
+    if (!props.collectionDataText.trim()) {
+      return {
+        format: 'empty',
+        rows: [] as Array<Record<string, unknown>>,
+        columns: [] as string[],
+        error: null as string | null
+      };
+    }
+    try {
+      const inspection = inspectCollectionDataText(props.collectionDataText);
+      return {
+        ...inspection,
+        error: null as string | null
+      };
+    } catch (error) {
+      return {
+        format: 'invalid',
+        rows: [] as Array<Record<string, unknown>>,
+        columns: [] as string[],
+        error: (error as Error).message
+      };
+    }
+  }, [props.collectionDataText]);
   const filteredReports = useMemo(() => {
     const normalized = reportFilter.trim().toLowerCase();
     if (!normalized) return props.reports;
@@ -98,6 +132,38 @@ export function CollectionRunnerPanel(props: {
   const selectedJson = useMemo(() => safeJson(selectedStep?.step.response?.bodyText || ''), [selectedStep?.step.response?.bodyText]);
   const selectedJsonRows = useMemo(() => (selectedJson == null ? [] : flattenJsonLeaves(selectedJson).slice(0, 60)), [selectedJson]);
   const selectedResponseHeaders = selectedStep?.step.response?.headers || [];
+  const selectedRequestRecord = selectedStep ? props.workspace.requests.find(record => record.request.id === selectedStep.step.requestId) || null : null;
+  const selectedBaselineExample = selectedRequestRecord?.request.examples.find(example => example.name.toLowerCase().includes('baseline')) || null;
+  const selectedBaselineSummary = selectedBaselineExample
+    ? compareSummary(selectedStep?.step.response?.bodyText || '', selectedBaselineExample.text || '')
+    : null;
+  const failureGroups = useMemo(() => {
+    const output = new Map<string, number>();
+    filteredReports.forEach(report => {
+      report.iterations.forEach(iteration => {
+        iteration.stepRuns
+          .filter(step => !step.ok && !step.skipped)
+          .forEach(step => {
+            output.set(step.stepKey, (output.get(step.stepKey) || 0) + 1);
+          });
+      });
+    });
+    return [...output.entries()].sort((left: [string, number], right: [string, number]) => right[1] - left[1]).slice(0, 8);
+  }, [filteredReports]);
+  const previousStepRefs = useMemo(() => {
+    if (!selectedReport || !selectedStep) return [] as string[];
+    const iteration = selectedReport.iterations.find(item => item.index === selectedStep.iterationIndex);
+    if (!iteration) return [];
+    return iteration.stepRuns
+      .filter(step => step.stepKey !== selectedStep.step.stepKey)
+      .map(step => [
+        `{{steps.${step.stepKey}.response.status}}`,
+        `{{steps.${step.stepKey}.response.body}}`,
+        `{{steps.${step.stepKey}.response.headers.content-type}}`
+      ])
+      .flat()
+      .slice(0, 9);
+  }, [selectedReport, selectedStep]);
 
   return (
     <section className="workspace-main">
@@ -145,9 +211,17 @@ export function CollectionRunnerPanel(props: {
           <div className="inspector-section" style={{ marginTop: 12 }}>
             <div className="checks-head">
               <Text fw={700} size="sm">Reports</Text>
-              <Button size="xs" variant="subtle" color="red" onClick={props.onClearReports}>
-                Clear
-              </Button>
+              <Group gap={6}>
+                <Button size="xs" variant="subtle" onClick={() => props.onExportReport?.('json')} disabled={!selectedReport}>
+                  JSON
+                </Button>
+                <Button size="xs" variant="subtle" onClick={() => props.onExportReport?.('html')} disabled={!selectedReport}>
+                  HTML
+                </Button>
+                <Button size="xs" variant="subtle" color="red" onClick={props.onClearReports}>
+                  Clear
+                </Button>
+              </Group>
             </div>
             <TextInput
               mt="sm"
@@ -420,9 +494,42 @@ export function CollectionRunnerPanel(props: {
 
               <div className="inspector-section">
                 <h3 className="section-title">Data File</h3>
+                <div className="summary-grid" style={{ marginBottom: 12 }}>
+                  <div className="summary-chip">
+                    <span>Format</span>
+                    <strong>{String(dataInspection.format).toUpperCase()}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Rows</span>
+                    <strong>{dataInspection.rows.length}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Columns</span>
+                    <strong>{dataInspection.columns.length}</strong>
+                  </div>
+                </div>
+                {dataInspection.error ? (
+                  <div className="check-card" style={{ marginBottom: 12 }}>
+                    <Text fw={700}>Validation</Text>
+                    <Text size="sm" c="dimmed">{dataInspection.error}</Text>
+                  </div>
+                ) : dataInspection.rows.length > 0 ? (
+                  <div className="check-card" style={{ marginBottom: 12 }}>
+                    <Text fw={700}>Preview</Text>
+                    <Text size="sm" c="dimmed">
+                      Columns: {dataInspection.columns.join(', ')}
+                    </Text>
+                    <CodeEditor
+                      value={JSON.stringify(dataInspection.rows.slice(0, 3), null, 2)}
+                      readOnly
+                      language="json"
+                      minHeight="120px"
+                    />
+                  </div>
+                ) : null}
                 <CodeEditor
                   value={props.collectionDataText}
-                  language="json"
+                  language={dataInspection.format === 'json' ? 'json' : 'text'}
                   onChange={props.onCollectionDataChange}
                   minHeight="220px"
                 />
@@ -466,6 +573,15 @@ export function CollectionRunnerPanel(props: {
                       .slice(0, 5)
                       .join(' | ')}
                   </Text>
+                  {failureGroups.length > 0 ? (
+                    <div className="repair-tag-list" style={{ marginTop: 12 }}>
+                      {failureGroups.map(([stepKey, count]: [string, number]) => (
+                        <Badge key={stepKey} variant="light" color="orange">
+                          {stepKey} · {count}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -498,6 +614,14 @@ export function CollectionRunnerPanel(props: {
                     />
                   </div>
                   <div className="check-card">
+                    <Text fw={700}>Step Bindings</Text>
+                    {previousStepRefs.length > 0 ? (
+                      <CodeEditor value={previousStepRefs.join('\n')} readOnly language="text" minHeight="96px" />
+                    ) : (
+                      <div className="empty-tab-state">This is the first resolved step in the iteration, so there are no previous step bindings yet.</div>
+                    )}
+                  </div>
+                  <div className="check-card">
                     <Text fw={700}>Response Body</Text>
                     <CodeEditor
                       value={selectedStep.step.response?.bodyText || ''}
@@ -505,6 +629,21 @@ export function CollectionRunnerPanel(props: {
                       language="json"
                       minHeight="220px"
                     />
+                  </div>
+                  <div className="check-card">
+                    <Text fw={700}>Baseline Drift</Text>
+                    {selectedBaselineExample ? (
+                      <>
+                        <Text size="sm" c="dimmed">
+                          Baseline example: {selectedBaselineExample.name}
+                        </Text>
+                        <Text size="sm" c="dimmed" mt={8}>
+                          {selectedBaselineSummary}
+                        </Text>
+                      </>
+                    ) : (
+                      <div className="empty-tab-state">No baseline example found for this request yet. Save one from History or Response to enable drift comparison.</div>
+                    )}
                   </div>
                   <div className="check-card">
                     <Text fw={700}>Extract JSON Values</Text>

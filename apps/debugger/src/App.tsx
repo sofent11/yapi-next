@@ -6,7 +6,8 @@ import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
 import { IconRefresh, IconSearch } from '@tabler/icons-react';
 import { createEmptyCheck, createNamedTemplateSource, inspectResolvedRequest } from '@yapi-debugger/core';
-import { createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
+import { save as saveFile } from '@tauri-apps/plugin-dialog';
+import { createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type ImportWarning, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
 import '@mantine/spotlight/styles.css';
 import {
   chooseDirectory,
@@ -22,6 +23,7 @@ import {
   syncMenuState,
   unwatchWorkspace,
   watchWorkspace,
+  writeDocument,
   type GitStatusPayload
 } from './lib/desktop';
 import {
@@ -29,6 +31,7 @@ import {
   createRequestInWorkspace,
   createWorkspace,
   buildImportPreviewSummary,
+  type ImportPreviewSummary,
   appendRunHistoryEntry,
   clearCollectionRunReports,
   clearRunHistory,
@@ -67,11 +70,14 @@ import { CollectionRunnerPanel } from './components/panels/CollectionRunnerPanel
 import { EnvironmentCenterPanel } from './components/panels/EnvironmentCenterPanel';
 import { HistoryPanel } from './components/panels/HistoryPanel';
 import { ImportPanel } from './components/panels/ImportPanel';
+import { ImportRepairPanel } from './components/panels/ImportRepairPanel';
 import { InterfaceTreePanel } from './components/panels/InterfaceTreePanel';
 import { SessionCenterPanel } from './components/panels/SessionCenterPanel';
 import { ScratchPadPanel } from './components/panels/ScratchPadPanel';
 import { WelcomePanel } from './components/panels/WelcomePanel';
 import { WorkspaceMainPanel } from './components/panels/WorkspaceMainPanel';
+import { buildImportRepairChecklist } from './lib/repair';
+import { collectionReportHtml, collectionReportJson } from './lib/report-export';
 import { Resizer } from './components/primitives/Resizer';
 import { StatusBar } from './components/layout/StatusBar';
 import { createScratchSession, loadScratchSessions, normalizeScratchTitle, saveScratchSessions, type ScratchSession } from './lib/scratch';
@@ -268,6 +274,17 @@ function normalizeHistoryEntry(entry: RunHistoryEntry): RunHistoryEntry {
   };
 }
 
+type ImportRepairSession = {
+  importedAt: string;
+  format: string;
+  requestIds: string[];
+  requestNames: string[];
+  warnings: ImportWarning[];
+  importedBaseUrl?: string;
+  previewSummary: ImportPreviewSummary | null;
+  strategy: 'append' | 'replace';
+};
+
 export function App() {
   const store = useWorkspaceStore();
   const gridRef = useRef<HTMLDivElement>(null);
@@ -297,6 +314,7 @@ export function App() {
   const [runtimeVariables, setRuntimeVariables] = useState<Record<string, string>>({});
   const [hostSessionSnapshots, setHostSessionSnapshots] = useState<Array<{ host: string; snapshot: SessionSnapshot }>>([]);
   const [gitInfo, setGitInfo] = useState<GitStatusPayload | null>(null);
+  const [lastImportSession, setLastImportSession] = useState<ImportRepairSession | null>(null);
 
   const spotlightActions = useMemo(() => {
     if (!store.workspace) return [];
@@ -343,6 +361,26 @@ export function App() {
   const selectedEnvironment = store.workspace?.environments.find(
     item => item.document.name === store.activeEnvironmentName
   )?.document || null;
+
+  const importedRecords = useMemo(() => {
+    if (!store.workspace || !lastImportSession) return [];
+    const importedIds = new Set(lastImportSession.requestIds);
+    return store.workspace.requests.filter(record => importedIds.has(record.request.id));
+  }, [store.workspace, lastImportSession]);
+
+  const importRepairChecklist = useMemo(() => {
+    if (!store.workspace || !lastImportSession) return null;
+    return buildImportRepairChecklist({
+      project: store.workspace.project,
+      environment: selectedEnvironment,
+      requests: importedRecords.map(record => ({
+        request: record.request,
+        cases: record.cases
+      })),
+      warnings: lastImportSession.warnings,
+      conflictCount: lastImportSession.previewSummary?.conflicts || 0
+    });
+  }, [store.workspace, lastImportSession, importedRecords, selectedEnvironment]);
 
   const selectedCollectionRecord = useMemo(() => {
     if (!store.workspace || !selectedCollectionId) return null;
@@ -440,6 +478,7 @@ export function App() {
     setSessionSnapshot(null);
     setHostSessionSnapshots([]);
     setGitInfo(null);
+    setLastImportSession(null);
     setSelectedCollectionId(workspace.collections[0]?.document.id || null);
     setDraftCollection(workspace.collections[0]?.document || null);
     setCollectionDataText(workspace.collections[0]?.dataText || '');
@@ -647,10 +686,23 @@ export function App() {
       if (!store.workspace || !store.importPreview) return;
       return importIntoWorkspace(store.workspace, store.importPreview, importStrategy);
     },
-    onSuccess: () => {
+    onSuccess: result => {
+      if (result) {
+        setLastImportSession({
+          importedAt: new Date().toISOString(),
+          format: result.detectedFormat,
+          requestIds: result.requestIds,
+          requestNames: result.requestNames,
+          warnings: result.warnings,
+          importedBaseUrl: result.importedBaseUrl,
+          previewSummary: importPreviewInfo,
+          strategy: result.strategy
+        });
+      }
       setImportOpened(false);
       store.setImportPreview(null);
       reloadWorkspace();
+      setActiveView('repair');
       handleRefreshGitStatus().catch(() => undefined);
       notifications.show({ color: 'teal', message: 'Import successful' });
     }
@@ -944,6 +996,7 @@ export function App() {
       }
       if (payload.action === 'close-workspace') {
         setUiState(defaultWorkspaceUiState());
+        setLastImportSession(null);
         store.setWorkspace(null);
         return;
       }
@@ -1186,6 +1239,92 @@ export function App() {
         : current
     );
     notifications.show({ color: 'teal', message: `Collection variable "${variableName}" updated` });
+  }
+
+  function handleOpenImportedRequest(targetRequestId: string | null, preferCase = false) {
+    if (!targetRequestId) return;
+    const record = store.workspace?.requests.find(item => item.request.id === targetRequestId);
+    if (!record) return;
+    setActiveView('workspace');
+    if (preferCase && record.cases[0]) {
+      store.selectNode({ kind: 'case', requestId: record.request.id, caseId: record.cases[0].id });
+      return;
+    }
+    store.selectNode({ kind: 'request', requestId: record.request.id });
+  }
+
+  function handleSeedImportVariables(scope: 'local' | 'shared') {
+    if (!selectedEnvironment || !importRepairChecklist || importRepairChecklist.missingVariables.length === 0) return;
+    store.updateEnvironment(selectedEnvironment.name, environment => {
+      const sharedVars = { ...(environment.sharedVars || environment.vars || {}) };
+      const localVars = { ...(environment.localVars || {}) };
+      importRepairChecklist.missingVariables.forEach(key => {
+        if (scope === 'local') {
+          if (!(key in localVars) && !(key in sharedVars)) {
+            localVars[key] = '';
+          }
+          return;
+        }
+        if (!(key in sharedVars)) {
+          sharedVars[key] = '';
+        }
+      });
+      return {
+        ...environment,
+        sharedVars,
+        localVars,
+        vars: {
+          ...sharedVars,
+          ...localVars
+        },
+        sharedHeaders: environment.sharedHeaders || environment.headers || [],
+        headers: environment.sharedHeaders || environment.headers || [],
+        overlayMode: Object.keys(localVars).length > 0 || environment.localFilePath ? 'overlay' : environment.overlayMode
+      };
+    });
+    saveMutation.mutate();
+    notifications.show({
+      color: 'teal',
+      message: `Seeded ${importRepairChecklist.missingVariables.length} variables into the ${scope === 'local' ? 'local overlay' : 'shared environment'}`
+    });
+  }
+
+  function handleApplyImportedBaseUrl() {
+    if (!lastImportSession?.importedBaseUrl || !store.workspace || !store.draftProject) return;
+    const nextProject = {
+      ...store.draftProject,
+      runtime: {
+        ...store.draftProject.runtime,
+        baseUrl: lastImportSession.importedBaseUrl
+      }
+    };
+    store.updateProject(nextProject);
+    saveMutation.mutate();
+    notifications.show({ color: 'teal', message: `Workspace baseUrl updated to ${lastImportSession.importedBaseUrl}` });
+  }
+
+  async function handleExportSelectedCollectionReport(format: 'json' | 'html') {
+    const report = collectionReports.find(item => item.id === selectedCollectionReportId) || collectionReports[0];
+    if (!report) {
+      notifications.show({ color: 'blue', message: 'Select a collection report first.' });
+      return;
+    }
+
+    const targetPath = await saveFile({
+      title: 'Export Collection Report',
+      defaultPath: `${slugify(report.collectionName || 'collection-report')}.${format}`,
+      filters: [
+        {
+          name: format.toUpperCase(),
+          extensions: [format]
+        }
+      ]
+    });
+    if (!targetPath) return;
+
+    const content = format === 'json' ? collectionReportJson(report) : collectionReportHtml(report);
+    await writeDocument(targetPath, content);
+    notifications.show({ color: 'teal', message: `Collection report exported as ${format.toUpperCase()}` });
   }
 
   async function handleRefreshGitStatus() {
@@ -1652,6 +1791,39 @@ export function App() {
     notifications.show({ color: 'teal', message: `Saved "${exampleName}" as baseline example` });
   }
 
+  async function handleSaveHistoryAsExample(entry: RunHistoryEntry) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === entry.requestId);
+    if (!record) {
+      notifications.show({ color: 'red', message: 'Source request not found, cannot save example' });
+      return;
+    }
+    const exampleName = window.prompt('Example name', `${entry.environmentName || 'history'}-${record.request.examples.length + 1}`)?.trim();
+    if (!exampleName) return;
+    const nextExamples = [
+      ...(record.request.examples || []).filter(example => example.name !== exampleName),
+      {
+        name: exampleName,
+        status: entry.response.status,
+        mimeType: entry.response.headers.find(header => header.name.toLowerCase() === 'content-type')?.value || 'application/json',
+        text: entry.response.bodyText
+      }
+    ];
+    await saveRequestRecord(
+      store.workspace.root,
+      {
+        ...record.request,
+        examples: nextExamples
+      },
+      record.cases,
+      record.resourceDirPath,
+      record.requestFilePath,
+      record.folderSegments
+    );
+    await reloadWorkspace({ kind: 'request', requestId: record.request.id });
+    notifications.show({ color: 'teal', message: `Saved "${exampleName}" as a reusable example` });
+  }
+
   async function handleGenerateHistoryDiffChecks(selectedEntry: RunHistoryEntry, compareEntry: RunHistoryEntry | null) {
     if (!store.workspace) return;
     const record = store.workspace.requests.find(item => item.request.id === selectedEntry.requestId);
@@ -1765,6 +1937,32 @@ export function App() {
     store.updateRequest({ ...store.draftRequest, examples: nextExamples });
     setSelectedExampleName(nextName);
     saveMutation.mutate();
+  }
+
+  function handleSaveAsCurrentResponse(action: 'example' | 'replace-example' | 'case' | 'status-check') {
+    if (action === 'example') {
+      void handleSaveResponseAsExample(false);
+      return;
+    }
+    if (action === 'replace-example') {
+      void handleSaveResponseAsExample(true);
+      return;
+    }
+    if (action === 'case') {
+      void handleCreateCaseFromCurrentResponse();
+      return;
+    }
+    if (activeView === 'scratch') {
+      notifications.show({ color: 'blue', message: 'Save the Scratch request to the workspace before creating reusable checks.' });
+      return;
+    }
+    if (store.response) {
+      void handleCreateCheckFromResponse({
+        type: 'status-equals',
+        label: `Status equals ${store.response.status}`,
+        expected: String(store.response.status)
+      });
+    }
   }
 
   if (!store.workspace) {
@@ -1928,6 +2126,7 @@ export function App() {
                 }
                 onSaveExample={() => handleSaveResponseAsExample(false)}
                 onReplaceExample={() => handleSaveResponseAsExample(true)}
+                onSaveAs={handleSaveAsCurrentResponse}
                 onCopyBody={() => copyToClipboard(currentScratch.response?.bodyText || '', 'Body copied')}
                 onCopyCurl={() => copyToClipboard(currentScratchPreview ? curlForPreview(currentScratchPreview) : '', 'cURL copied')}
                 onRefreshSession={handleRefreshSession}
@@ -1950,6 +2149,7 @@ export function App() {
                   onReplay={handleReplayHistory}
                   onOpenInScratch={handleOpenHistoryInScratch}
                   onDuplicateAsCase={handleDuplicateHistoryAsCase}
+                  onSaveAsExample={handleSaveHistoryAsExample}
                   onPinAsBaseline={handlePinHistoryAsBaseline}
                   onGenerateDiffChecks={handleGenerateHistoryDiffChecks}
                   onClear={handleClearHistory}
@@ -1968,6 +2168,31 @@ export function App() {
                   onRefresh={handleRefreshSession}
                   onClearSession={handleClearSessionCookies}
                   onClearRuntimeVars={() => setRuntimeVariables({})}
+                />
+              </section>
+            ) : activeView === 'repair' ? (
+              <section className="workspace-main" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                {renderTabHeader()}
+                <ImportRepairPanel
+                  activeEnvironmentName={store.activeEnvironmentName}
+                  environment={selectedEnvironment}
+                  checklist={importRepairChecklist}
+                  importedRequestCount={importedRecords.length}
+                  importedCaseCount={importedRecords.reduce((total, record) => total + record.cases.length, 0)}
+                  importedAtLabel={lastImportSession?.importedAt ? new Date(lastImportSession.importedAt).toLocaleString() : null}
+                  importFormat={lastImportSession?.format || null}
+                  previewSummary={lastImportSession?.previewSummary || null}
+                  onOpenImport={() => setImportOpened(true)}
+                  onOpenEnvironmentCenter={() => setActiveView('environments')}
+                  onOpenFirstBlocked={() => handleOpenImportedRequest(importRepairChecklist?.firstBlockedRequestId || null)}
+                  onOpenFirstRunnable={() => handleOpenImportedRequest(importRepairChecklist?.firstRunnableRequestId || null)}
+                  onSeedMissingVariables={handleSeedImportVariables}
+                  onApplyImportedBaseUrl={
+                    lastImportSession?.importedBaseUrl &&
+                    lastImportSession.importedBaseUrl !== 'https://api.example.com'
+                      ? handleApplyImportedBaseUrl
+                      : undefined
+                  }
                 />
               </section>
             ) : activeView === 'collections' ? (
@@ -1993,6 +2218,7 @@ export function App() {
                   onSelectReport={setSelectedCollectionReportId}
                   onSelectReportStep={setSelectedCollectionStepKey}
                   onExtractValue={handleExtractCollectionReportValue}
+                  onExportReport={handleExportSelectedCollectionReport}
                 />
               </section>
             ) : activeView === 'environments' ? (
@@ -2058,6 +2284,7 @@ export function App() {
                 onCopyCurl={() => copyToClipboard(currentRequestPreview ? curlForPreview(currentRequestPreview) : '', 'cURL copied')}
                 onSaveExample={() => handleSaveResponseAsExample(false)}
                 onReplaceExample={() => handleSaveResponseAsExample(true)}
+                onSaveAs={handleSaveAsCurrentResponse}
                 onRefreshSession={handleRefreshSession}
                 onClearSession={handleClearSessionCookies}
                 onCreateCheck={handleCreateCheckFromResponse}

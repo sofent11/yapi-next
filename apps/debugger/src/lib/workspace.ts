@@ -303,6 +303,16 @@ export async function importIntoWorkspace(
       : importedEnv;
     await saveEnvironment(root, merged);
   }
+
+  return {
+    requestIds: nextRecords.map(item => item.request.id),
+    requestNames: nextRecords.map(item => item.request.name),
+    warnings: result.warnings || [],
+    detectedFormat: result.detectedFormat,
+    importedBaseUrl: nextProject.runtime.baseUrl,
+    environmentNames: result.environments.map(item => item.name),
+    strategy
+  };
 }
 
 function mergeImportedHeaders(baseHeaders: EnvironmentDocument['headers'], nextHeaders: EnvironmentDocument['headers']) {

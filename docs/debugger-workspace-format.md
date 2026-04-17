@@ -142,13 +142,23 @@ steps:
 
 ### `collections/*.data.json`
 
-Collection 数据文件目前推荐使用 JSON 数组，每一行是一次迭代变量：
+Collection 数据文件支持 JSON / YAML 数组，以及带表头的 CSV。推荐在结构化数据较多时使用 JSON 数组，在测试同学维护批量样本时使用 CSV。
+
+JSON / YAML 每一行都是一次迭代变量：
 
 ```json
 [
   { "sku": "sku-001", "userId": "u-1" },
   { "sku": "sku-002", "userId": "u-2" }
 ]
+```
+
+CSV 示例：
+
+```csv
+sku,userId
+sku-001,u-1
+sku-002,u-2
 ```
 
 运行时变量解析优先级：

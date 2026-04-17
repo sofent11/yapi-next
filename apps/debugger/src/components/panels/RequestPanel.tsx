@@ -107,6 +107,8 @@ export function RequestPanel(props: {
     [props.requestInsight, workspace.project, requestDocument, selectedCase, selectedEnvironment]
   );
   const resolvedPreview = resolvedInsight.preview;
+  const blockingDiagnostics = resolvedInsight.diagnostics.filter(item => item.blocking);
+  const attentionDiagnostics = resolvedInsight.diagnostics.filter(item => !item.blocking);
 
   function updateSelectedCase(updater: (current: CaseDocument) => CaseDocument) {
     if (!selectedCase) return;
@@ -279,6 +281,20 @@ export function RequestPanel(props: {
           </Button>
         </div>
       </div>
+
+      {blockingDiagnostics.length > 0 || attentionDiagnostics.length > 0 ? (
+        <div className="request-diagnostics-banner">
+          {blockingDiagnostics.length > 0 ? (
+            <Badge color="red" variant="filled">{blockingDiagnostics.length} blocking</Badge>
+          ) : null}
+          {attentionDiagnostics.length > 0 ? (
+            <Badge color="orange" variant="light">{attentionDiagnostics.length} attention</Badge>
+          ) : null}
+          <Text size="sm" c="dimmed">
+            {blockingDiagnostics[0]?.message || attentionDiagnostics[0]?.message}
+          </Text>
+        </div>
+      ) : null}
 
       <Tabs value={props.activeTab} onChange={value => props.onTabChange(value as RequestTab)} className="request-tabs-ide">
         <Tabs.List>

@@ -21,6 +21,7 @@ export function HistoryPanel(props: {
   onReplay: (entry: RunHistoryEntry) => void;
   onOpenInScratch: (entry: RunHistoryEntry) => void;
   onDuplicateAsCase: (entry: RunHistoryEntry) => void;
+  onSaveAsExample: (entry: RunHistoryEntry) => void;
   onPinAsBaseline: (entry: RunHistoryEntry) => void;
   onGenerateDiffChecks: (selectedEntry: RunHistoryEntry, compareEntry: RunHistoryEntry | null) => void;
   onClear: () => void;
@@ -109,6 +110,7 @@ export function HistoryPanel(props: {
                 <div className="panel-toolbar-actions">
                   <Button size="xs" variant="default" onClick={() => props.onReplay(selectedEntry)}>Replay</Button>
                   <Button size="xs" variant="default" onClick={() => props.onOpenInScratch(selectedEntry)}>Open In Scratch</Button>
+                  <Button size="xs" variant="default" onClick={() => props.onSaveAsExample(selectedEntry)}>Save As Example</Button>
                   <Button size="xs" onClick={() => props.onDuplicateAsCase(selectedEntry)}>Duplicate As Case</Button>
                   <Button size="xs" variant="default" onClick={() => props.onPinAsBaseline(selectedEntry)}>Pin Baseline</Button>
                   <Button size="xs" variant="default" onClick={() => props.onGenerateDiffChecks(selectedEntry, compareEntry)}>Diff To Checks</Button>

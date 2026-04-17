@@ -1233,6 +1233,95 @@ mark {
   background: color-mix(in srgb, var(--surface) 86%, var(--accent-soft));
 }
 
+.request-diagnostics-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--orange-soft) 70%, var(--surface));
+}
+
+.repair-center {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 68%, var(--surface)) 0%, var(--surface) 28%),
+    var(--surface);
+}
+
+.repair-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 16px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.repair-column {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.repair-hero {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 78%, var(--accent-soft));
+}
+
+.repair-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.repair-step-list,
+.repair-actions,
+.repair-tag-list {
+  display: grid;
+  gap: 10px;
+}
+
+.repair-step {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.repair-step.is-complete {
+  border-color: color-mix(in srgb, var(--green) 26%, var(--line));
+  background: color-mix(in srgb, var(--green-soft) 55%, var(--surface));
+}
+
+.repair-step-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.repair-step-copy span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.repair-empty-state {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 10px;
+  padding: 32px;
+}
+
 .request-preview-warnings,
 .variable-audit-list,
 .json-inspector-list,
@@ -1313,6 +1402,12 @@ mark {
   .launchpad-sidebar {
     border-right: none;
     border-bottom: 1px solid var(--line);
+  }
+  .repair-layout,
+  .response-cookie-grid,
+  .response-compare-grid,
+  .request-preview-grid-secondary {
+    grid-template-columns: 1fr;
   }
 }
 

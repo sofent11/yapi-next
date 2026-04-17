@@ -5,10 +5,13 @@ import {
   buildWorkspaceIndex,
   buildCurlCommand,
   executeRequestScript,
+  inspectCollectionDataText,
   inspectResolvedRequest,
+  renderCollectionRunReportHtml,
   resolveRequest
 } from '../src/index';
 import {
+  createEmptyCollection,
   createDefaultEnvironment,
   createDefaultProject,
   createEmptyCase,
@@ -183,4 +186,69 @@ test('inspectResolvedRequest emits blocking diagnostics for missing values', () 
   assert.equal(insight.diagnostics.some(item => item.code === 'missing-variable' && item.blocking), true);
   assert.equal(insight.diagnostics.some(item => item.code === 'missing-base-url' && item.blocking), true);
   assert.equal(insight.diagnostics.some(item => item.code === 'missing-multipart-file' && item.blocking), true);
+});
+
+test('inspectCollectionDataText supports CSV tables', () => {
+  const inspection = inspectCollectionDataText(`sku,userId,enabled\nsku-001,u-1,true\nsku-002,u-2,false\n`);
+  assert.equal(inspection.format, 'csv');
+  assert.deepEqual(inspection.columns, ['sku', 'userId', 'enabled']);
+  assert.equal(inspection.rows[0]?.sku, 'sku-001');
+  assert.equal(inspection.rows[1]?.userId, 'u-2');
+});
+
+test('inspectResolvedRequest surfaces unsupported script APIs before send', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Profile');
+  request.url = '{{baseUrl}}/profile';
+  const caseDocument = createEmptyCase(request.id, 'scripted');
+  caseDocument.scripts = {
+    preRequest: 'pm.sendRequest("https://example.com/extra");',
+    postResponse: 'pm.vault.get("token");'
+  };
+
+  const insight = inspectResolvedRequest(project, request, caseDocument, environment);
+  assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-send-request'), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'script-unsupported-vault' && item.blocking === false), true);
+});
+
+test('renderCollectionRunReportHtml emits a readable report shell', () => {
+  const collection = createEmptyCollection('Smoke');
+  const html = renderCollectionRunReportHtml({
+    id: 'colrun_1',
+    workspaceRoot: '/tmp/demo',
+    collectionId: collection.id,
+    collectionName: 'Smoke',
+    environmentName: 'shared',
+    status: 'failed',
+    startedAt: '1',
+    finishedAt: '2',
+    iterationCount: 1,
+    passedSteps: 0,
+    failedSteps: 1,
+    skippedSteps: 0,
+    iterations: [
+      {
+        index: 0,
+        dataVars: {},
+        stepRuns: [
+          {
+            stepKey: 'login',
+            stepName: 'Login',
+            requestId: 'req_login',
+            ok: false,
+            skipped: false,
+            checkResults: [],
+            scriptLogs: [],
+            error: '401 Unauthorized'
+          }
+        ]
+      }
+    ]
+  });
+
+  assert.match(html, /Smoke/);
+  assert.match(html, /401 Unauthorized/);
+  assert.match(html, /Failure Summary/);
 });
