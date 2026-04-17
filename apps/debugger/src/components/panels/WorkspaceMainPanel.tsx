@@ -24,6 +24,8 @@ import { KeyValueEditor } from '../primitives/KeyValueEditor';
 import { Resizer } from '../primitives/Resizer';
 import { RequestPanel } from './RequestPanel';
 import { ResponsePanel } from './ResponsePanel';
+import type { GitStatusPayload } from '../../lib/desktop';
+import { TabHeader } from '../layout/TabHeader';
 
 function categoryLabel(path: string | null) {
   if (!path) return 'Project';
@@ -56,6 +58,7 @@ function projectCounts(workspace: WorkspaceIndex) {
 export function WorkspaceMainPanel(props: {
   workspace: WorkspaceIndex;
   selectedNode: SelectedNode;
+  openTabs: SelectedNode[];
   categoryRequests: WorkspaceIndex['requests'];
   draftProject: ProjectDocument | null;
   request: RequestDocument | null;
@@ -75,6 +78,7 @@ export function WorkspaceMainPanel(props: {
   selectedExampleName: string | null;
   sessionSnapshot: SessionSnapshot | null;
   mainSplitRatio: number;
+  gitStatus?: GitStatusPayload | null;
   onProjectChange: (project: ProjectDocument) => void;
   onDeleteProject: () => void;
   onEnvironmentChange: (name: string) => void;
@@ -103,6 +107,13 @@ export function WorkspaceMainPanel(props: {
   onMainSplitRatioChange: (ratio: number) => void;
   onSaveAuthProfile?: (name: string, auth: any) => void;
   onExtractValue?: (target: 'local' | 'runtime', input: { suggestedName: string; value: string }) => void;
+  onRefreshGitStatus?: () => void;
+  onCopySuggestedCommitMessage?: () => void;
+  onGitPull?: () => void;
+  onGitPush?: () => void;
+  onOpenTerminal?: () => void;
+  onTabSelect: (node: SelectedNode) => void;
+  onTabClose: (node: SelectedNode) => void;
 }) {
   const splitRef = useRef<HTMLDivElement | null>(null);
   const counts = useMemo(() => projectCounts(props.workspace), [props.workspace]);
@@ -110,6 +121,18 @@ export function WorkspaceMainPanel(props: {
   const caseId = selectedCaseId(props.selectedNode);
   const selectedCase = props.cases.find(item => item.id === caseId) || null;
   const breadcrumbs = projectBreadcrumbs(props.workspace.project, props.selectedNode, request);
+
+  function renderTabHeader() {
+    return (
+      <TabHeader
+        workspace={props.workspace}
+        tabs={props.openTabs}
+        activeNode={props.selectedNode}
+        onSelect={props.onTabSelect}
+        onClose={props.onTabClose}
+      />
+    );
+  }
 
   function renderToolbar(actions?: React.ReactNode) {
     return (
@@ -140,6 +163,7 @@ export function WorkspaceMainPanel(props: {
     const project = props.draftProject;
     return (
       <section className="workspace-main">
+        {renderTabHeader()}
         {renderToolbar(
           <Button size="xs" variant="filled" leftSection={<IconDeviceFloppy size={14} />} onClick={props.onSave}>
             Save Project
@@ -206,6 +230,59 @@ export function WorkspaceMainPanel(props: {
             </div>
           </div>
 
+          <div className="inspector-section">
+            <div className="checks-head">
+              <h3 className="section-title">Git Helper</h3>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button size="xs" variant="default" onClick={props.onRefreshGitStatus}>Refresh</Button>
+                <Button size="xs" variant="default" onClick={props.onOpenTerminal}>Open Terminal</Button>
+                <Button size="xs" variant="default" onClick={props.onCopySuggestedCommitMessage}>
+                  Copy Commit Message
+                </Button>
+                <Button size="xs" variant="default" onClick={props.onGitPull}>Pull</Button>
+                <Button size="xs" variant="default" onClick={props.onGitPush}>Push</Button>
+              </div>
+            </div>
+            {props.gitStatus?.isRepo ? (
+              <>
+                <div className="summary-grid" style={{ marginTop: 12 }}>
+                  <div className="summary-chip">
+                    <span>Branch</span>
+                    <strong>{props.gitStatus.branch || 'detached'}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Dirty</span>
+                    <strong>{props.gitStatus.dirty ? props.gitStatus.changedFiles.length : 0}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Ahead</span>
+                    <strong>{props.gitStatus.ahead}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Behind</span>
+                    <strong>{props.gitStatus.behind}</strong>
+                  </div>
+                </div>
+                <div className="checks-list" style={{ marginTop: 12 }}>
+                  {props.gitStatus.changedFiles.length > 0 ? (
+                    props.gitStatus.changedFiles.slice(0, 12).map(file => (
+                      <div key={file} className="check-result-row">
+                        <div className="tree-row-copy">
+                          <strong>{file.split('/').at(-1)}</strong>
+                          <span>{file}</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-tab-state">Working tree is clean.</div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="empty-tab-state" style={{ marginTop: 12 }}>This workspace is not inside a Git repository.</div>
+            )}
+          </div>
+
           <div className="inspector-section danger-section" style={{ marginTop: 40 }}>
             <div className="danger-section-copy">
               <Text fw={700} c="red">Danger Zone</Text>
@@ -225,6 +302,7 @@ export function WorkspaceMainPanel(props: {
   if (props.selectedNode.kind === 'category') {
     return (
       <section className="workspace-main">
+        {renderTabHeader()}
         {renderToolbar(
           <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={props.onCreateInterface}>
             New Request
@@ -269,6 +347,7 @@ export function WorkspaceMainPanel(props: {
   if (!request) {
     return (
       <section className="workspace-main" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {renderTabHeader()}
         {renderToolbar()}
         <div style={{ 
           flex: 1, 
@@ -312,6 +391,7 @@ export function WorkspaceMainPanel(props: {
 
   return (
     <section className="workspace-main">
+      {renderTabHeader()}
       {renderToolbar(
         <div style={{ display: 'flex', gap: 8 }}>
           <Button size="xs" variant="default" onClick={props.onCopyToScratch}>

@@ -3,6 +3,15 @@ import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import type { CollectionRunReport, SendRequestResult, SessionSnapshot } from '@yapi-debugger/schema';
 
+export type GitStatusPayload = {
+  branch: string;
+  isRepo: boolean;
+  dirty: boolean;
+  ahead: number;
+  behind: number;
+  changedFiles: string[];
+};
+
 export type MenuAction =
   | { action: 'open-project' }
   | { action: 'new-project' }
@@ -122,6 +131,22 @@ export async function inspectSession(sessionId: string, url?: string): Promise<S
 
 export async function clearSession(sessionId: string) {
   await invoke('session_clear', { sessionId });
+}
+
+export async function gitStatus(root: string): Promise<GitStatusPayload> {
+  return invoke('git_status', { root });
+}
+
+export async function gitPull(root: string): Promise<string> {
+  return invoke('git_pull', { root });
+}
+
+export async function gitPush(root: string): Promise<string> {
+  return invoke('git_push', { root });
+}
+
+export async function openTerminal(root: string) {
+  await invoke('open_terminal', { root });
 }
 
 export function listenMenuActions(handler: (action: MenuAction) => void) {

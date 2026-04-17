@@ -6,6 +6,7 @@ export function SessionCenterPanel(props: {
   activeEnvironmentName: string;
   runtimeVariables: Record<string, string>;
   sessionSnapshot: SessionSnapshot | null;
+  hostSnapshots: Array<{ host: string; snapshot: SessionSnapshot }>;
   targetUrl: string | null;
   onRefresh: () => void;
   onClearSession: () => void;
@@ -38,6 +39,10 @@ export function SessionCenterPanel(props: {
               <div className="summary-chip">
                 <span>Cookies</span>
                 <strong>{props.sessionSnapshot?.cookies.length || 0}</strong>
+              </div>
+              <div className="summary-chip">
+                <span>Hosts</span>
+                <strong>{props.hostSnapshots.length}</strong>
               </div>
               <div className="summary-chip">
                 <span>Runtime Vars</span>
@@ -87,6 +92,25 @@ export function SessionCenterPanel(props: {
                 <div className="empty-tab-state">No runtime variables captured yet. Extract values from a response or set them via scripts.</div>
               )}
             </div>
+          </div>
+
+          <div className="inspector-section">
+            <h3 className="section-title">Per-Host Cookie Visibility</h3>
+            {props.hostSnapshots.length ? (
+              <div className="checks-list">
+                {props.hostSnapshots.map(item => (
+                  <div key={item.host} className="check-card">
+                    <Text fw={700}>{item.host}</Text>
+                    <Text size="xs" c="dimmed">{item.snapshot.cookies.length} cookies</Text>
+                    <Code block style={{ marginTop: 12, whiteSpace: 'pre-wrap' }}>
+                      {item.snapshot.cookieHeader || ''}
+                    </Code>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-tab-state">No host-specific cookie views are available yet. Run requests against one or more hosts first.</div>
+            )}
           </div>
         </div>
       </div>

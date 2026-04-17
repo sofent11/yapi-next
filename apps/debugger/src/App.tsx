@@ -5,17 +5,22 @@ import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
 import { IconRefresh } from '@tabler/icons-react';
 import { createEmptyCheck, createNamedTemplateSource, inspectResolvedRequest } from '@yapi-debugger/core';
-import { createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type RunHistoryEntry, slugify, type WorkspaceIndex } from '@yapi-debugger/schema';
+import { createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex } from '@yapi-debugger/schema';
 import {
   chooseDirectory,
   chooseImportFile,
   clearSession,
   deleteEntry,
+  gitPull,
+  gitPush,
+  gitStatus,
   inspectSession,
   listenMenuActions,
+  openTerminal,
   syncMenuState,
   unwatchWorkspace,
-  watchWorkspace
+  watchWorkspace,
+  type GitStatusPayload
 } from './lib/desktop';
 import {
   createCaseForRequest,
@@ -103,7 +108,8 @@ function loadWorkspaceUiState(root: string): WorkspaceUiState {
       ...defaultWorkspaceUiState(),
       ...parsed,
       expandedRequestIds: Array.isArray(parsed.expandedRequestIds) ? parsed.expandedRequestIds : [],
-      lastSelectedNode: parsed.lastSelectedNode || { kind: 'project' }
+      lastSelectedNode: parsed.lastSelectedNode || { kind: 'project' },
+      openTabs: Array.isArray(parsed.openTabs) ? parsed.openTabs : [{ kind: 'project' }]
     };
   } catch (_err) {
     return defaultWorkspaceUiState();
@@ -161,6 +167,68 @@ function normalizeVariableName(seed: string) {
     .join('') || 'value';
 }
 
+function uniqueOrigins(urls: Array<string | null | undefined>) {
+  const output = new Set<string>();
+  urls.forEach(value => {
+    if (!value) return;
+    try {
+      output.add(new URL(value).origin);
+    } catch (_error) {
+      return;
+    }
+  });
+  return [...output];
+}
+
+function suggestedCommitMessage(input: GitStatusPayload | null) {
+  if (!input?.dirty) return 'chore(debugger): refresh workspace state';
+  const debuggerFiles = input.changedFiles.filter(file => file.includes('requests/') || file.includes('environments/') || file.includes('collections/'));
+  if (debuggerFiles.length === 0) return 'chore(debugger): update workspace metadata';
+  const requestChanges = debuggerFiles.filter(file => file.includes('.request.yaml')).length;
+  const envChanges = debuggerFiles.filter(file => file.includes('environments/')).length;
+  const collectionChanges = debuggerFiles.filter(file => file.includes('.collection.yaml')).length;
+  const parts = [];
+  if (requestChanges) parts.push(`${requestChanges} request${requestChanges > 1 ? 's' : ''}`);
+  if (envChanges) parts.push(`${envChanges} environment${envChanges > 1 ? 's' : ''}`);
+  if (collectionChanges) parts.push(`${collectionChanges} collection${collectionChanges > 1 ? 's' : ''}`);
+  return `chore(debugger): update ${parts.join(', ')}`;
+}
+
+function safeJson(text: string) {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function flattenJsonLeaves(input: unknown, prefix = '$', rows: Array<{ path: string; value: string }> = []) {
+  if (Array.isArray(input)) {
+    input.forEach((item, index) => flattenJsonLeaves(item, `${prefix}[${index}]`, rows));
+    return rows;
+  }
+  if (input && typeof input === 'object') {
+    Object.entries(input).forEach(([key, value]) => flattenJsonLeaves(value, `${prefix}.${key}`, rows));
+    return rows;
+  }
+  rows.push({
+    path: prefix,
+    value: typeof input === 'string' ? input : JSON.stringify(input)
+  });
+  return rows;
+}
+
+async function loadHostSessionSnapshots(root: string, urls: Array<string | null | undefined>) {
+  const origins = uniqueOrigins(urls).slice(0, 8);
+  if (origins.length === 0) return [] as Array<{ host: string; snapshot: SessionSnapshot }>;
+  return Promise.all(
+    origins.map(async host => ({
+      host,
+      snapshot: await inspectSession(root, host)
+    }))
+  );
+}
+
 function updateScratchSession(
   sessions: ScratchSession[],
   sessionId: string,
@@ -213,8 +281,10 @@ export function App() {
   const [scratchRequestTab, setScratchRequestTab] = useState<WorkspaceUiState['activeRequestTab']>('query');
   const [scratchResponseTab, setScratchResponseTab] = useState<WorkspaceUiState['activeResponseTab']>('body');
   const [scratchMainSplitRatio, setScratchMainSplitRatio] = useState(0.5);
-  const [sessionSnapshot, setSessionSnapshot] = useState<any | null>(null);
+  const [sessionSnapshot, setSessionSnapshot] = useState<SessionSnapshot | null>(null);
   const [runtimeVariables, setRuntimeVariables] = useState<Record<string, string>>({});
+  const [hostSessionSnapshots, setHostSessionSnapshots] = useState<Array<{ host: string; snapshot: SessionSnapshot }>>([]);
+  const [gitInfo, setGitInfo] = useState<GitStatusPayload | null>(null);
 
   const requestId = selectedRequestId(store.selectedNode);
   const caseId = selectedCaseId(store.selectedNode);
@@ -296,6 +366,8 @@ export function App() {
     setSelectedExampleName(null);
     setRuntimeVariables({});
     setSessionSnapshot(null);
+    setHostSessionSnapshots([]);
+    setGitInfo(null);
     setSelectedCollectionId(workspace.collections[0]?.document.id || null);
     setDraftCollection(workspace.collections[0]?.document || null);
     setCollectionDataText(workspace.collections[0]?.dataText || '');
@@ -303,6 +375,7 @@ export function App() {
       setActiveView('scratch');
     }
     store.setWorkspace(workspace);
+    store.setOpenTabs(nextUi.openTabs);
     store.selectNode(nextUi.lastSelectedNode);
   }
 
@@ -380,6 +453,7 @@ export function App() {
     },
     onSuccess: () => {
       reloadWorkspace(store.selectedNode);
+      handleRefreshGitStatus().catch(() => undefined);
       notifications.show({ color: 'teal', message: 'Changes saved' });
     },
     onError: error => {
@@ -505,6 +579,7 @@ export function App() {
       setImportOpened(false);
       store.setImportPreview(null);
       reloadWorkspace();
+      handleRefreshGitStatus().catch(() => undefined);
       notifications.show({ color: 'teal', message: 'Import successful' });
     }
   });
@@ -680,9 +755,10 @@ export function App() {
     if (!store.workspace?.root) return;
     saveWorkspaceUiState(store.workspace.root, {
       ...uiState,
-      lastSelectedNode: store.selectedNode
+      lastSelectedNode: store.selectedNode,
+      openTabs: store.openTabs
     });
-  }, [uiState, store.selectedNode, store.workspace?.root]);
+  }, [uiState, store.selectedNode, store.openTabs, store.workspace?.root]);
 
   useEffect(() => {
     saveScratchSessions(
@@ -730,6 +806,30 @@ export function App() {
       .then(setSessionSnapshot)
       .catch(() => setSessionSnapshot(null));
   }, [store.workspace?.root, sessionTargetUrl]);
+
+  useEffect(() => {
+    if (!store.workspace?.root) {
+      setGitInfo(null);
+      return;
+    }
+    gitStatus(store.workspace.root)
+      .then(setGitInfo)
+      .catch(() => setGitInfo(null));
+  }, [store.workspace?.root]);
+
+  useEffect(() => {
+    if (!store.workspace?.root) {
+      setHostSessionSnapshots([]);
+      return;
+    }
+    loadHostSessionSnapshots(store.workspace.root, [
+      sessionTargetUrl,
+      ...historyEntries.map(entry => entry.request.url),
+      ...historyEntries.map(entry => entry.response.url)
+    ])
+      .then(setHostSessionSnapshots)
+      .catch(() => setHostSessionSnapshots([]));
+  }, [store.workspace?.root, sessionTargetUrl, historyEntries]);
 
   useEffect(() => {
     if (!store.workspace?.root) {
@@ -904,8 +1004,16 @@ export function App() {
   async function handleRefreshSession() {
     if (!store.workspace) return;
     try {
-      const snapshot = await inspectSession(store.workspace.root, sessionTargetUrl || undefined);
+      const [snapshot, hostSnapshots] = await Promise.all([
+        inspectSession(store.workspace.root, sessionTargetUrl || undefined),
+        loadHostSessionSnapshots(store.workspace.root, [
+          sessionTargetUrl,
+          ...historyEntries.map(entry => entry.request.url),
+          ...historyEntries.map(entry => entry.response.url)
+        ])
+      ]);
       setSessionSnapshot(snapshot);
+      setHostSessionSnapshots(hostSnapshots);
       notifications.show({ color: 'teal', message: 'Session snapshot refreshed' });
     } catch (error) {
       notifications.show({ color: 'red', message: `Failed to inspect session: ${(error as Error).message}` });
@@ -916,7 +1024,13 @@ export function App() {
     if (!store.workspace) return;
     try {
       await clearSession(store.workspace.root);
-      setSessionSnapshot(null);
+      const hostSnapshots = await loadHostSessionSnapshots(store.workspace.root, [
+        sessionTargetUrl,
+        ...historyEntries.map(entry => entry.request.url),
+        ...historyEntries.map(entry => entry.response.url)
+      ]);
+      setSessionSnapshot(sessionTargetUrl ? await inspectSession(store.workspace.root, sessionTargetUrl) : null);
+      setHostSessionSnapshots(hostSnapshots);
       notifications.show({ color: 'teal', message: 'Workspace session cleared' });
     } catch (error) {
       notifications.show({ color: 'red', message: `Failed to clear session: ${(error as Error).message}` });
@@ -974,6 +1088,62 @@ export function App() {
       };
     });
     notifications.show({ color: 'teal', message: `Local secret "${variableName}" saved to environment overlay` });
+  }
+
+  function handleExtractCollectionReportValue(target: 'local' | 'runtime' | 'collection', input: { suggestedName: string; value: string }) {
+    if (target === 'local' || target === 'runtime') {
+      handleExtractResponseValue(target, input);
+      return;
+    }
+    const variableName = window.prompt('Collection variable name', normalizeVariableName(input.suggestedName))?.trim();
+    if (!variableName) return;
+    if (!draftCollection) {
+      notifications.show({ color: 'red', message: 'Select a collection before extracting collection variables.' });
+      return;
+    }
+    setDraftCollection(current =>
+      current
+        ? {
+            ...current,
+            vars: {
+              ...current.vars,
+              [variableName]: input.value
+            }
+          }
+        : current
+    );
+    notifications.show({ color: 'teal', message: `Collection variable "${variableName}" updated` });
+  }
+
+  async function handleRefreshGitStatus() {
+    if (!store.workspace) return;
+    try {
+      setGitInfo(await gitStatus(store.workspace.root));
+    } catch (error) {
+      notifications.show({ color: 'red', message: `Failed to read git status: ${(error as Error).message}` });
+    }
+  }
+
+  async function handleGitPull() {
+    if (!store.workspace) return;
+    try {
+      const output = await gitPull(store.workspace.root);
+      await handleRefreshGitStatus();
+      notifications.show({ color: 'teal', message: output || 'Git pull completed' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: `Git pull failed: ${(error as Error).message}` });
+    }
+  }
+
+  async function handleGitPush() {
+    if (!store.workspace) return;
+    try {
+      const output = await gitPush(store.workspace.root);
+      await handleRefreshGitStatus();
+      notifications.show({ color: 'teal', message: output || 'Git push completed' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: `Git push failed: ${(error as Error).message}` });
+    }
   }
 
   async function handleCreateCheckFromResponse(input: {
@@ -1344,6 +1514,89 @@ export function App() {
     notifications.show({ color: 'teal', message: 'Case created from history' });
   }
 
+  async function handlePinHistoryAsBaseline(entry: RunHistoryEntry) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === entry.requestId);
+    if (!record) {
+      notifications.show({ color: 'red', message: 'Source request not found, cannot save baseline example' });
+      return;
+    }
+    const exampleName = window.prompt('Baseline example name', `${entry.environmentName || 'baseline'}-baseline`)?.trim();
+    if (!exampleName) return;
+    const nextExamples = [
+      ...(record.request.examples || []).filter(example => example.name !== exampleName),
+      {
+        name: exampleName,
+        status: entry.response.status,
+        mimeType: entry.response.headers.find(header => header.name.toLowerCase() === 'content-type')?.value || 'application/json',
+        text: entry.response.bodyText
+      }
+    ];
+    await saveRequestRecord(
+      store.workspace.root,
+      {
+        ...record.request,
+        examples: nextExamples
+      },
+      record.cases,
+      record.resourceDirPath,
+      record.requestFilePath,
+      record.folderSegments
+    );
+    await reloadWorkspace({ kind: 'request', requestId: record.request.id });
+    notifications.show({ color: 'teal', message: `Saved "${exampleName}" as baseline example` });
+  }
+
+  async function handleGenerateHistoryDiffChecks(selectedEntry: RunHistoryEntry, compareEntry: RunHistoryEntry | null) {
+    if (!store.workspace) return;
+    const record = store.workspace.requests.find(item => item.request.id === selectedEntry.requestId);
+    if (!record) {
+      notifications.show({ color: 'red', message: 'Source request not found, cannot generate checks' });
+      return;
+    }
+    const selectedJson = safeJson(selectedEntry.response.bodyText);
+    const compareJson = compareEntry ? safeJson(compareEntry.response.bodyText) : null;
+    const selectedLeaves = flattenJsonLeaves(selectedJson);
+    const compareMap = new Map(flattenJsonLeaves(compareJson).map(item => [item.path, item.value]));
+    const changedLeaves = selectedLeaves.filter(item => compareMap.get(item.path) !== item.value).slice(0, 12);
+    const nextChecks = [];
+    nextChecks.push({
+      ...createEmptyCheck('status-equals'),
+      label: `Status equals ${selectedEntry.response.status}`,
+      expected: String(selectedEntry.response.status)
+    });
+    changedLeaves.forEach(item => {
+      nextChecks.push({
+        ...createEmptyCheck('json-equals'),
+        label: `History diff guard: ${item.path}`,
+        path: item.path,
+        expected: item.value
+      });
+    });
+    const nextCase = createEmptyCase(record.request.id, `History Diff Guard ${record.cases.length + 1}`);
+    nextCase.environment = selectedEntry.environmentName;
+    nextCase.origin = {
+      type: 'history',
+      runId: selectedEntry.id,
+      collectionId: selectedEntry.sourceCollectionId,
+      stepKey: selectedEntry.sourceStepKey
+    };
+    nextCase.checks = nextChecks;
+    await saveRequestRecord(
+      store.workspace.root,
+      record.request,
+      [...record.cases, nextCase],
+      record.resourceDirPath,
+      record.requestFilePath,
+      record.folderSegments
+    );
+    await reloadWorkspace({ kind: 'case', requestId: record.request.id, caseId: nextCase.id });
+    notifications.show({
+      color: 'teal',
+      message: `Generated ${nextChecks.length} checks from history${compareEntry ? ' diff' : ''}`
+    });
+  }
+
   async function handleClearHistory() {
     if (!store.workspace) return;
     await clearRunHistory(store.workspace.root);
@@ -1460,6 +1713,11 @@ export function App() {
               <Badge variant="dot" color={runMutation.isPending || scratchRunMutation.isPending ? 'blue' : 'gray'} size="sm">
                 {runMutation.isPending || scratchRunMutation.isPending ? 'Running' : 'Idle'}
               </Badge>
+              {gitInfo?.isRepo ? (
+                <Badge variant="light" color={gitInfo.dirty ? 'orange' : 'teal'} size="sm">
+                  {gitInfo.branch || 'git'}{gitInfo.dirty ? ` · ${gitInfo.changedFiles.length} dirty` : ' · clean'}
+                </Badge>
+              ) : null}
               <ActionIcon variant="subtle" color="gray" onClick={() => openMutation.mutate(store.workspace!.root)}>
                 <IconRefresh size={16} />
               </ActionIcon>
@@ -1490,6 +1748,7 @@ export function App() {
             <InterfaceTreePanel
               workspace={store.workspace}
               selectedNode={store.selectedNode}
+              gitStatus={gitInfo}
               searchText={store.searchText}
               categoryDraft={categoryDraft}
               creatingCategory={creatingCategory}
@@ -1582,6 +1841,8 @@ export function App() {
                 onReplay={handleReplayHistory}
                 onOpenInScratch={handleOpenHistoryInScratch}
                 onDuplicateAsCase={handleDuplicateHistoryAsCase}
+                onPinAsBaseline={handlePinHistoryAsBaseline}
+                onGenerateDiffChecks={handleGenerateHistoryDiffChecks}
                 onClear={handleClearHistory}
               />
             ) : activeView === 'sessions' ? (
@@ -1590,6 +1851,7 @@ export function App() {
                 activeEnvironmentName={store.activeEnvironmentName}
                 runtimeVariables={runtimeVariables}
                 sessionSnapshot={sessionSnapshot}
+                hostSnapshots={hostSessionSnapshots}
                 targetUrl={sessionTargetUrl}
                 onRefresh={handleRefreshSession}
                 onClearSession={handleClearSessionCookies}
@@ -1615,6 +1877,7 @@ export function App() {
                 onClearReports={handleClearCollectionReports}
                 onSelectReport={setSelectedCollectionReportId}
                 onSelectReportStep={setSelectedCollectionStepKey}
+                onExtractValue={handleExtractCollectionReportValue}
               />
             ) : activeView === 'environments' ? (
               <EnvironmentCenterPanel
@@ -1632,6 +1895,9 @@ export function App() {
               <WorkspaceMainPanel
                 workspace={store.workspace}
                 selectedNode={store.selectedNode}
+                openTabs={store.openTabs}
+                onTabSelect={store.selectNode}
+                onTabClose={store.closeTab}
                 categoryRequests={categoryRequests}
                 draftProject={store.draftProject}
                 request={store.draftRequest}
@@ -1651,6 +1917,7 @@ export function App() {
                 selectedExampleName={selectedExampleName}
                 sessionSnapshot={sessionSnapshot}
                 mainSplitRatio={uiState.mainSplitRatio}
+                gitStatus={gitInfo}
                 onProjectChange={project => store.updateProject(project)}
                 onDeleteProject={handleDeleteProject}
                 onEnvironmentChange={name => store.setActiveEnvironment(name)}
@@ -1678,6 +1945,18 @@ export function App() {
                 onCreateCaseFromResponse={handleCreateCaseFromCurrentResponse}
                 onSaveAuthProfile={handleSaveAuthProfile}
                 onExtractValue={handleExtractResponseValue}
+                onRefreshGitStatus={handleRefreshGitStatus}
+                onCopySuggestedCommitMessage={() =>
+                  copyToClipboard(suggestedCommitMessage(gitInfo), 'Suggested commit message copied')
+                }
+                onGitPull={handleGitPull}
+                onGitPush={handleGitPush}
+                onOpenTerminal={() =>
+                  store.workspace &&
+                  openTerminal(store.workspace.root).catch(error => {
+                    notifications.show({ color: 'red', message: `Failed to open terminal: ${(error as Error).message}` });
+                  })
+                }
                 onMainSplitRatioChange={ratio =>
                   updateUiState(current => ({
                     ...current,

@@ -21,6 +21,19 @@ export type SelectedNode =
   | { kind: 'request'; requestId: string }
   | { kind: 'case'; requestId: string; caseId: string };
 
+export function nodeToId(node: SelectedNode): string {
+  switch (node.kind) {
+    case 'project':
+      return 'project';
+    case 'category':
+      return `category:${node.path}`;
+    case 'request':
+      return `request:${node.requestId}`;
+    case 'case':
+      return `case:${node.requestId}:${node.caseId}`;
+  }
+}
+
 export type RequestTab = 'query' | 'headers' | 'body' | 'auth' | 'checks' | 'scripts' | 'settings' | 'preview';
 export type ResponseTab = 'body' | 'headers' | 'json' | 'cookies' | 'compare' | 'raw';
 
@@ -31,6 +44,7 @@ export type WorkspaceUiState = {
   lastSelectedNode: SelectedNode;
   activeRequestTab: RequestTab;
   activeResponseTab: ResponseTab;
+  openTabs: SelectedNode[];
 };
 
 export function defaultWorkspaceUiState(): WorkspaceUiState {
@@ -40,13 +54,15 @@ export function defaultWorkspaceUiState(): WorkspaceUiState {
     expandedRequestIds: [],
     lastSelectedNode: { kind: 'project' },
     activeRequestTab: 'query',
-    activeResponseTab: 'body'
+    activeResponseTab: 'body',
+    openTabs: [{ kind: 'project' }]
   };
 }
 
 type WorkspaceStore = {
   workspace: WorkspaceIndex | null;
   selectedNode: SelectedNode;
+  openTabs: SelectedNode[];
   activeEnvironmentName: string;
   recentRoots: string[];
   importPreview: ImportResult | null;
@@ -63,6 +79,8 @@ type WorkspaceStore = {
   setWorkspace: (workspace: WorkspaceIndex | null) => void;
   setRecentRoots: (roots: string[]) => void;
   selectNode: (node: SelectedNode) => void;
+  openTab: (node: SelectedNode) => void;
+  closeTab: (nodeToClose: SelectedNode) => void;
   setActiveEnvironment: (name: string) => void;
   setImportPreview: (preview: ImportResult | null) => void;
   setImportAuth: (auth: ImportAuth) => void;
@@ -74,6 +92,7 @@ type WorkspaceStore = {
   setResponse: (response: SendRequestResult | null, checkResults?: CheckResult[], scriptLogs?: ScriptLog[]) => void;
   setError: (error: string | null) => void;
   setSearchText: (text: string) => void;
+  setOpenTabs: (tabs: SelectedNode[]) => void;
 };
 
 function defaultImportAuth(): ImportAuth {
@@ -158,6 +177,7 @@ function draftStateForSelection(workspace: WorkspaceIndex | null, node: Selected
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   workspace: null,
   selectedNode: { kind: 'project' },
+  openTabs: [{ kind: 'project' }],
   activeEnvironmentName: 'shared',
   recentRoots: [],
   importPreview: null,
@@ -184,6 +204,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     set({
       workspace,
       selectedNode,
+      openTabs: [selectedNode],
       activeEnvironmentName,
       draftProject: draft.draftProject,
       draftRequest: draft.draftRequest,
@@ -203,8 +224,12 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
     const workspace = get().workspace;
     const selectedNode = normalizeSelection(workspace, node);
     const draft = draftStateForSelection(workspace, selectedNode);
+    const openTabs = get().openTabs;
+    const alreadyOpen = openTabs.some(t => nodeToId(t) === nodeToId(selectedNode));
+    
     set({
       selectedNode,
+      openTabs: alreadyOpen ? openTabs : [...openTabs, selectedNode],
       draftProject: draft.draftProject,
       draftRequest: draft.draftRequest,
       draftCases: draft.draftCases,
@@ -214,6 +239,29 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       scriptLogs: [],
       requestError: null
     });
+  },
+  openTab(node) {
+    get().selectNode(node);
+  },
+  closeTab(nodeToClose) {
+    const openTabs = get().openTabs;
+    const selectedNode = get().selectedNode;
+    const nextTabs = openTabs.filter(t => nodeToId(t) !== nodeToId(nodeToClose));
+    
+    if (nextTabs.length === 0) {
+      nextTabs.push({ kind: 'project' });
+    }
+
+    if (nodeToId(selectedNode) === nodeToId(nodeToClose)) {
+      const closingIndex = openTabs.findIndex(t => nodeToId(t) === nodeToId(nodeToClose));
+      const nextActive = nextTabs[closingIndex] || nextTabs[nextTabs.length - 1];
+      get().selectNode(nextActive);
+    }
+    
+    set({ openTabs: nextTabs });
+  },
+  setOpenTabs(tabs) {
+    set({ openTabs: tabs });
   },
   setActiveEnvironment(name) {
     set({ activeEnvironmentName: name });

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs,
+    process::Command,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
     time::Instant,
@@ -148,6 +149,17 @@ struct SessionSnapshot {
     url: Option<String>,
     cookie_header: String,
     cookies: Vec<SessionCookie>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitStatusPayload {
+    branch: String,
+    is_repo: bool,
+    dirty: bool,
+    ahead: usize,
+    behind: usize,
+    changed_files: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -664,6 +676,149 @@ fn parse_cookie_header(header: &str) -> Vec<SessionCookie> {
         .collect()
 }
 
+fn run_git(root: &str, args: &[&str]) -> Result<std::process::Output, String> {
+    Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn git_status(root: String) -> Result<GitStatusPayload, String> {
+    let branch_output = run_git(&root, &["status", "--short", "--branch"])?;
+    if !branch_output.status.success() {
+        return Ok(GitStatusPayload {
+            branch: String::new(),
+            is_repo: false,
+            dirty: false,
+            ahead: 0,
+            behind: 0,
+            changed_files: Vec::new(),
+        });
+    }
+
+    let stdout = String::from_utf8_lossy(&branch_output.stdout);
+    let mut lines = stdout.lines();
+    let branch_line = lines.next().unwrap_or_default();
+    let branch = branch_line
+        .strip_prefix("## ")
+        .unwrap_or(branch_line)
+        .split("...")
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let ahead = branch_line
+        .split("ahead ")
+        .nth(1)
+        .and_then(|value| value.split(']').next())
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(0);
+    let behind = branch_line
+        .split("behind ")
+        .nth(1)
+        .and_then(|value| value.split(']').next())
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(0);
+    let changed_files = lines
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.len() < 4 {
+                return None;
+            }
+            Some(trimmed[3..].trim().to_string())
+        })
+        .collect::<Vec<_>>();
+
+    Ok(GitStatusPayload {
+        branch,
+        is_repo: true,
+        dirty: !changed_files.is_empty(),
+        ahead,
+        behind,
+        changed_files,
+    })
+}
+
+#[tauri::command]
+fn git_pull(root: String) -> Result<String, String> {
+    let output = run_git(&root, &["pull", "--ff-only"])?;
+    if output.status.success() {
+        return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
+    }
+    Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+}
+
+#[tauri::command]
+fn git_push(root: String) -> Result<String, String> {
+    let output = run_git(&root, &["push"])?;
+    if output.status.success() {
+        return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
+    }
+    Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+}
+
+#[tauri::command]
+fn open_terminal(root: String) -> Result<(), String> {
+    let root_path = PathBuf::from(&root);
+    if !root_path.exists() {
+        return Err("Workspace root does not exist".into());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .args(["-a", "Terminal", &root])
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let launchers = [
+            ("x-terminal-emulator", vec![format!("--working-directory={root}")]),
+            ("gnome-terminal", vec![format!("--working-directory={root}")]),
+            ("konsole", vec!["--workdir".into(), root.clone()]),
+            ("xfce4-terminal", vec!["--working-directory".into(), root.clone()]),
+        ];
+
+        for (program, args) in launchers {
+            if Command::new(program).args(&args).spawn().is_ok() {
+                return Ok(());
+            }
+        }
+        return Err("No supported terminal launcher was found".into());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if Command::new("cmd")
+            .args(["/C", "start", "", "wt", "-d", &root])
+            .spawn()
+            .is_ok()
+        {
+            return Ok(());
+        }
+
+        let escaped = root.replace('\'', "''");
+        Command::new("powershell")
+            .args([
+                "-NoExit",
+                "-Command",
+                &format!("Set-Location -LiteralPath '{escaped}'"),
+            ])
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[allow(unreachable_code)]
+    Err("Opening a terminal is not supported on this platform".into())
+}
+
 #[tauri::command]
 fn session_inspect(session_id: String, url: Option<String>) -> Result<SessionSnapshot, String> {
     let normalized = normalize_path(&session_id);
@@ -915,6 +1070,10 @@ pub fn run() {
             collection_report_clear,
             session_inspect,
             session_clear,
+            git_status,
+            git_pull,
+            git_push,
+            open_terminal,
             request_send
         ])
         .run(tauri::generate_context!())

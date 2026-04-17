@@ -18,6 +18,34 @@ function reportOptions(reports: CollectionRunReport[]) {
   }));
 }
 
+function safeJson(text: string) {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function flattenJsonLeaves(input: unknown, prefix = '$', rows: Array<{ path: string; value: string }> = []) {
+  if (Array.isArray(input)) {
+    input.forEach((item, index) => flattenJsonLeaves(item, `${prefix}[${index}]`, rows));
+    return rows;
+  }
+  if (input && typeof input === 'object') {
+    Object.entries(input).forEach(([key, value]) => flattenJsonLeaves(value, `${prefix}.${key}`, rows));
+    return rows;
+  }
+  rows.push({
+    path: prefix,
+    value: typeof input === 'string' ? input : JSON.stringify(input)
+  });
+  return rows;
+}
+
+function stepSelectionValue(iterationIndex: number, stepKey: string) {
+  return `${iterationIndex}:${stepKey}`;
+}
+
 export function CollectionRunnerPanel(props: {
   workspace: WorkspaceIndex;
   selectedCollectionId: string | null;
@@ -37,6 +65,7 @@ export function CollectionRunnerPanel(props: {
   onClearReports: () => void;
   onSelectReport: (id: string | null) => void;
   onSelectReportStep: (stepKey: string | null) => void;
+  onExtractValue?: (target: 'local' | 'runtime' | 'collection', input: { suggestedName: string; value: string }) => void;
 }) {
   const [reportFilter, setReportFilter] = useState('');
   const requestChoices = useMemo(() => requestOptions(props.workspace), [props.workspace]);
@@ -49,12 +78,26 @@ export function CollectionRunnerPanel(props: {
   }, [props.reports, reportFilter]);
   const selectedReport = filteredReports.find(report => report.id === props.selectedReportId) || filteredReports[0] || null;
   const draftCollection = props.draftCollection;
-  const selectedStep =
-    selectedReport?.iterations
-      .flatMap(iteration => iteration.stepRuns)
-      .find(step => step.stepKey === props.selectedReportStepKey) ||
-    selectedReport?.iterations[0]?.stepRuns[0] ||
-    null;
+  const selectedStep = useMemo(() => {
+    if (!selectedReport) return null;
+    const pointer = props.selectedReportStepKey || '';
+    const [rawIterationIndex, rawStepKey] = pointer.split(':');
+    const parsedIterationIndex = Number(rawIterationIndex);
+    if (!Number.isNaN(parsedIterationIndex) && rawStepKey) {
+      const exactIteration = selectedReport.iterations[parsedIterationIndex];
+      const exactStep = exactIteration?.stepRuns.find(step => step.stepKey === rawStepKey);
+      if (exactStep) return { iterationIndex: parsedIterationIndex, step: exactStep };
+    }
+    for (const iteration of selectedReport.iterations) {
+      const match = iteration.stepRuns.find(step => step.stepKey === props.selectedReportStepKey);
+      if (match) return { iterationIndex: iteration.index, step: match };
+    }
+    const fallbackStep = selectedReport.iterations[0]?.stepRuns[0];
+    return fallbackStep ? { iterationIndex: selectedReport.iterations[0]?.index || 0, step: fallbackStep } : null;
+  }, [props.selectedReportStepKey, selectedReport]);
+  const selectedJson = useMemo(() => safeJson(selectedStep?.step.response?.bodyText || ''), [selectedStep?.step.response?.bodyText]);
+  const selectedJsonRows = useMemo(() => (selectedJson == null ? [] : flattenJsonLeaves(selectedJson).slice(0, 60)), [selectedJson]);
+  const selectedResponseHeaders = selectedStep?.step.response?.headers || [];
 
   return (
     <section className="workspace-main">
@@ -395,10 +438,16 @@ export function CollectionRunnerPanel(props: {
                 <h3 className="section-title">Latest Report Detail</h3>
                 <Select
                   placeholder="Select step"
-                  value={props.selectedReportStepKey || selectedStep?.stepKey || null}
+                  value={
+                    props.selectedReportStepKey?.includes(':')
+                      ? props.selectedReportStepKey
+                      : selectedStep
+                        ? stepSelectionValue(selectedStep.iterationIndex, selectedStep.step.stepKey)
+                        : null
+                  }
                   data={selectedReport.iterations.flatMap(iteration =>
                     iteration.stepRuns.map(stepRun => ({
-                      value: stepRun.stepKey,
+                      value: stepSelectionValue(iteration.index, stepRun.stepKey),
                       label: `${iteration.dataLabel || `Iteration ${iteration.index + 1}`} · ${stepRun.stepKey}`
                     }))
                   )}
@@ -425,11 +474,13 @@ export function CollectionRunnerPanel(props: {
                   <div className="check-card">
                     <Group justify="space-between">
                       <div>
-                        <Text fw={700}>{selectedStep.stepName}</Text>
-                        <Text size="sm" c="dimmed">{selectedStep.request?.method || 'N/A'} {selectedStep.request?.url || selectedStep.error || ''}</Text>
+                        <Text fw={700}>{selectedStep.step.stepName}</Text>
+                        <Text size="sm" c="dimmed">
+                          {selectedStep.step.request?.method || 'N/A'} {selectedStep.step.request?.url || selectedStep.step.error || ''}
+                        </Text>
                       </div>
-                      <Badge color={selectedStep.ok ? 'green' : selectedStep.skipped ? 'gray' : 'red'}>
-                        {selectedStep.skipped ? 'SKIPPED' : selectedStep.ok ? 'PASS' : 'FAIL'}
+                      <Badge color={selectedStep.step.ok ? 'green' : selectedStep.step.skipped ? 'gray' : 'red'}>
+                        {selectedStep.step.skipped ? 'SKIPPED' : selectedStep.step.ok ? 'PASS' : 'FAIL'}
                       </Badge>
                     </Group>
                   </div>
@@ -437,9 +488,9 @@ export function CollectionRunnerPanel(props: {
                     <Text fw={700}>Checks</Text>
                     <CodeEditor
                       value={
-                        selectedStep.checkResults.length > 0
-                          ? selectedStep.checkResults.map(result => `${result.ok ? 'PASS' : 'FAIL'} ${result.label}: ${result.message}`).join('\n')
-                          : selectedStep.error || 'No checks recorded.'
+                        selectedStep.step.checkResults.length > 0
+                          ? selectedStep.step.checkResults.map(result => `${result.ok ? 'PASS' : 'FAIL'} ${result.label}: ${result.message}`).join('\n')
+                          : selectedStep.step.error || 'No checks recorded.'
                       }
                       readOnly
                       language="text"
@@ -449,11 +500,112 @@ export function CollectionRunnerPanel(props: {
                   <div className="check-card">
                     <Text fw={700}>Response Body</Text>
                     <CodeEditor
-                      value={selectedStep.response?.bodyText || ''}
+                      value={selectedStep.step.response?.bodyText || ''}
                       readOnly
                       language="json"
                       minHeight="220px"
                     />
+                  </div>
+                  <div className="check-card">
+                    <Text fw={700}>Extract JSON Values</Text>
+                    {selectedJsonRows.length ? (
+                      <div className="json-inspector-list" style={{ marginTop: 12 }}>
+                        {selectedJsonRows.map(row => (
+                          <div key={row.path} className="json-inspector-row">
+                            <div className="json-inspector-copy">
+                              <strong>{row.path}</strong>
+                              <span>{row.value}</span>
+                            </div>
+                            {props.onExtractValue ? (
+                              <Group gap={6}>
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  onClick={() =>
+                                    props.onExtractValue?.('runtime', {
+                                      suggestedName: row.path.replace(/[^a-zA-Z0-9]+/g, '_'),
+                                      value: row.value
+                                    })
+                                  }
+                                >
+                                  Runtime
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  onClick={() =>
+                                    props.onExtractValue?.('local', {
+                                      suggestedName: row.path.replace(/[^a-zA-Z0-9]+/g, '_'),
+                                      value: row.value
+                                    })
+                                  }
+                                >
+                                  Local
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  onClick={() =>
+                                    props.onExtractValue?.('collection', {
+                                      suggestedName: row.path.replace(/[^a-zA-Z0-9]+/g, '_'),
+                                      value: row.value
+                                    })
+                                  }
+                                >
+                                  Collection
+                                </Button>
+                              </Group>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="empty-tab-state" style={{ marginTop: 12 }}>
+                        This step body is not valid JSON, so structured extraction is unavailable.
+                      </div>
+                    )}
+                  </div>
+                  <div className="check-card">
+                    <Text fw={700}>Extract Headers</Text>
+                    {selectedResponseHeaders.length ? (
+                      <div className="json-inspector-list" style={{ marginTop: 12 }}>
+                        {selectedResponseHeaders.map(header => (
+                          <div key={`${header.name}:${header.value}`} className="json-inspector-row">
+                            <div className="json-inspector-copy">
+                              <strong>{header.name}</strong>
+                              <span>{header.value}</span>
+                            </div>
+                            {props.onExtractValue ? (
+                              <Group gap={6}>
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  onClick={() => props.onExtractValue?.('runtime', { suggestedName: header.name, value: header.value })}
+                                >
+                                  Runtime
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  onClick={() => props.onExtractValue?.('local', { suggestedName: header.name, value: header.value })}
+                                >
+                                  Local
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  onClick={() => props.onExtractValue?.('collection', { suggestedName: header.name, value: header.value })}
+                                >
+                                  Collection
+                                </Button>
+                              </Group>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="empty-tab-state" style={{ marginTop: 12 }}>No response headers were captured for this step.</div>
+                    )}
                   </div>
                 </div>
               ) : (

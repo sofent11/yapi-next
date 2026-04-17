@@ -13,6 +13,7 @@ import {
 import type { WorkspaceIndex, WorkspaceTreeNode } from '@yapi-debugger/schema';
 import type { SelectedNode } from '../../store/workspace-store';
 import { ResourceContextMenu, type ResourceContextMenuItem } from '../primitives/ResourceContextMenu';
+import type { GitStatusPayload } from '../../lib/desktop';
 
 function nodeMatchesSearch(node: WorkspaceTreeNode, normalized: string) {
   if (!normalized) return true;
@@ -20,6 +21,30 @@ function nodeMatchesSearch(node: WorkspaceTreeNode, normalized: string) {
     return [node.name, node.method, node.requestPath].join(' ').toLowerCase().includes(normalized);
   }
   return node.name.toLowerCase().includes(normalized);
+}
+
+function getNodeGitStatus(node: WorkspaceTreeNode, workspace: WorkspaceIndex, gitStatus: GitStatusPayload | null) {
+  if (!gitStatus || !gitStatus.dirty) return null;
+  const changedFiles = gitStatus.changedFiles;
+
+  if (node.kind === 'request') {
+    const record = workspace.requests.find(r => r.request.id === node.requestId);
+    if (!record) return null;
+    const isDirty = changedFiles.some(f => f === record.requestFilePath || f.startsWith(record.resourceDirPath));
+    return isDirty ? 'M' : null;
+  }
+
+  if (node.kind === 'category') {
+    const prefix = `requests/${node.path}/`;
+    const isDirty = changedFiles.some(f => f.startsWith(prefix));
+    return isDirty ? 'M' : null;
+  }
+
+  if (node.kind === 'project') {
+    return gitStatus.dirty ? 'M' : null;
+  }
+
+  return null;
 }
 
 function filterTree(node: WorkspaceTreeNode, normalized: string): WorkspaceTreeNode | null {
@@ -124,6 +149,8 @@ function renderNode(props: {
   expandedRequestIds: Set<string>;
   renamingId: string | null;
   renamingValue: string;
+  workspace: WorkspaceIndex;
+  gitStatus: GitStatusPayload | null;
   setRenamingValue: (val: string) => void;
   onConfirmRename: () => void;
   onCancelRename: () => void;
@@ -139,6 +166,7 @@ function renderNode(props: {
   const selectedCaseId = caseIdFromSelection(props.selectedNode);
   const selectedCategory = categoryPathFromSelection(props.selectedNode);
   const isRenaming = props.renamingId === props.node.id;
+  const gitMark = getNodeGitStatus(props.node, props.workspace, props.gitStatus);
 
   if (props.node.kind === 'project') {
     const active = props.selectedNode.kind === 'project';
@@ -152,6 +180,7 @@ function renderNode(props: {
         >
           <span className="tree-row-copy">
             <strong>{highlightText(props.node.name, props.normalized)}</strong>
+            {gitMark && <span className="git-mark">{gitMark}</span>}
           </span>
         </button>
         <div className="tree-children">
@@ -191,6 +220,7 @@ function renderNode(props: {
             ) : (
               <strong>{highlightText(node.name, props.normalized)}</strong>
             )}
+            {gitMark && <span className="git-mark">{gitMark}</span>}
           </span>
         </button>
         <div className="tree-children">
@@ -240,6 +270,7 @@ function renderNode(props: {
               ) : (
                 <strong>{highlightText(node.name, props.normalized)}</strong>
               )}
+              {gitMark && <span className="git-mark">{gitMark}</span>}
             </span>
             {node.caseCount > 0 && <span className="tree-count-badge">{node.caseCount}</span>}
           </button>
@@ -282,6 +313,7 @@ function renderNode(props: {
         ) : (
           <strong>{highlightText(node.name, props.normalized)}</strong>
         )}
+        {gitMark && <span className="git-mark">{gitMark}</span>}
       </span>
     </button>
   );
@@ -292,6 +324,7 @@ const selectedCategoryPath = (node: SelectedNode) => (node.kind === 'category' ?
 export function InterfaceTreePanel(props: {
   workspace: WorkspaceIndex;
   selectedNode: SelectedNode;
+  gitStatus: GitStatusPayload | null;
   searchText: string;
   categoryDraft: string;
   creatingCategory: boolean;
@@ -574,6 +607,8 @@ export function InterfaceTreePanel(props: {
               expandedRequestIds,
               renamingId,
               renamingValue,
+              workspace: props.workspace,
+              gitStatus: props.gitStatus,
               setRenamingValue,
               onConfirmRename: handleConfirmRename,
               onCancelRename: () => {
