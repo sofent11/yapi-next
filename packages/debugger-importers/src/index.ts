@@ -2,9 +2,11 @@ import YAML from 'yaml';
 import {
   createDefaultEnvironment,
   createDefaultProject,
+  createEmptyCase,
   createEmptyRequest,
   type CaseDocument,
   type EnvironmentDocument,
+  type ImportWarning,
   type ImportResult,
   type RequestDocument,
   type ResponseExample
@@ -20,6 +22,7 @@ type ImportContext = {
   projectName: string;
   requests: ImportedRequestRecord[];
   environments: EnvironmentDocument[];
+  warnings: ImportWarning[];
 };
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'] as const;
@@ -136,6 +139,7 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
   const project = createDefaultProject(document.info?.title || 'Imported API');
   const environments = [createDefaultEnvironment('shared')];
   const requests: ImportedRequestRecord[] = [];
+  const warnings: ImportWarning[] = [];
   const isSwagger2 = String(document.swagger || '').startsWith('2.');
   const serverUrl =
     document.servers?.[0]?.url ||
@@ -255,7 +259,7 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
       };
 
       pushRequest(
-        { projectName: project.name, requests, environments },
+        { projectName: project.name, requests, environments, warnings },
         Array.isArray(operation.tags) && operation.tags.length > 0 ? [String(operation.tags[0])] : [],
         request
       );
@@ -271,7 +275,8 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
     },
     project,
     environments,
-    requests
+    requests,
+    warnings
   };
 }
 
@@ -279,6 +284,7 @@ function importHar(document: Record<string, any>): ImportResult {
   const project = createDefaultProject(document.log?.creator?.name || 'Imported HAR');
   const requests: ImportedRequestRecord[] = [];
   const environments = [createDefaultEnvironment('shared')];
+  const warnings: ImportWarning[] = [];
   const entries = Array.isArray(document.log?.entries) ? document.log.entries : [];
 
   entries.forEach((entry: any) => {
@@ -325,7 +331,7 @@ function importHar(document: Record<string, any>): ImportResult {
     }
 
     pushRequest(
-      { projectName: project.name, requests, environments },
+      { projectName: project.name, requests, environments, warnings },
       [folderName],
       request
     );
@@ -340,19 +346,51 @@ function importHar(document: Record<string, any>): ImportResult {
     },
     project,
     environments,
-    requests
+    requests,
+    warnings
   };
+}
+
+function extractPostmanScript(item: any, listen: 'prerequest' | 'test') {
+  const events = Array.isArray(item?.event) ? item.event : [];
+  const matched = events.filter((event: any) => event?.listen === listen);
+  if (matched.length === 0) return '';
+  return matched
+    .map((event: any) => Array.isArray(event?.script?.exec) ? event.script.exec.join('\n') : String(event?.script?.exec || ''))
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function collectScriptWarnings(requestName: string, script: string, warnings: ImportWarning[]) {
+  if (!script.trim()) return;
+  const unsupportedPatterns = [
+    { token: 'pm.sendRequest', message: 'pm.sendRequest is not supported yet and was preserved as script text only.' },
+    { token: 'pm.vault', message: 'pm.vault is not supported yet and was preserved as script text only.' },
+    { token: 'postman.', message: 'Legacy postman.* APIs may not execute correctly and were preserved as script text only.' }
+  ];
+
+  unsupportedPatterns.forEach(pattern => {
+    if (script.includes(pattern.token)) {
+      warnings.push({
+        level: 'warning',
+        scope: 'case',
+        requestName,
+        message: `${requestName}: ${pattern.message}`
+      });
+    }
+  });
 }
 
 function walkPostmanItems(
   items: any[],
   folderSegments: string[],
   requests: ImportedRequestRecord[],
-  environments: EnvironmentDocument[]
+  environments: EnvironmentDocument[],
+  warnings: ImportWarning[]
 ) {
   items.forEach(item => {
     if (Array.isArray(item.item)) {
-      walkPostmanItems(item.item, [...folderSegments, String(item.name || 'Folder')], requests, environments);
+      walkPostmanItems(item.item, [...folderSegments, String(item.name || 'Folder')], requests, environments, warnings);
       return;
     }
 
@@ -414,10 +452,24 @@ function walkPostmanItems(
         : []
     };
 
+    const prerequestScript = extractPostmanScript(item, 'prerequest');
+    const postResponseScript = extractPostmanScript(item, 'test');
+    const importedCases: CaseDocument[] = [];
+
+    if (prerequestScript || postResponseScript) {
+      collectScriptWarnings(document.name, `${prerequestScript}\n${postResponseScript}`, warnings);
+      const importedCase = createEmptyCase(document.id, 'Imported Script Case');
+      importedCase.scripts = {
+        preRequest: prerequestScript,
+        postResponse: postResponseScript
+      };
+      importedCases.push(importedCase);
+    }
+
     requests.push({
       folderSegments,
       request: document,
-      cases: []
+      cases: importedCases
     });
   });
 }
@@ -426,7 +478,8 @@ function importPostman(document: Record<string, any>): ImportResult {
   const project = createDefaultProject(document.info?.name || 'Imported Collection');
   const environments = [createDefaultEnvironment('shared')];
   const requests: ImportedRequestRecord[] = [];
-  walkPostmanItems(Array.isArray(document.item) ? document.item : [], [], requests, environments);
+  const warnings: ImportWarning[] = [];
+  walkPostmanItems(Array.isArray(document.item) ? document.item : [], [], requests, environments, warnings);
 
   return {
     detectedFormat: 'postman',
@@ -437,7 +490,8 @@ function importPostman(document: Record<string, any>): ImportResult {
     },
     project,
     environments,
-    requests
+    requests,
+    warnings
   };
 }
 
@@ -461,6 +515,7 @@ export function importSourceText(content: string): ImportResult {
     summary: { requests: 0, folders: 0, environments: 1 },
     project: createDefaultProject('Imported Workspace'),
     environments: [createDefaultEnvironment('shared')],
-    requests: []
+    requests: [],
+    warnings: []
   };
 }

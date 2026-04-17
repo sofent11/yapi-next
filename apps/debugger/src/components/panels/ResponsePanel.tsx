@@ -1,6 +1,6 @@
 import { Badge, Button, Group, Select, Tabs, Text } from '@mantine/core';
 import { IconPlayerPlay, IconAlertCircle } from '@tabler/icons-react';
-import type { CheckResult, RequestDocument, ResolvedRequestPreview, SendRequestResult } from '@yapi-debugger/schema';
+import type { CheckResult, RequestDocument, ResolvedRequestPreview, ScriptLog, SendRequestResult } from '@yapi-debugger/schema';
 import type { ResponseTab } from '../../store/workspace-store';
 import { CodeEditor } from '../editors/CodeEditor';
 
@@ -20,6 +20,7 @@ export function ResponsePanel(props: {
   requestPreview: ResolvedRequestPreview | null;
   requestDocument: RequestDocument | null;
   checkResults: CheckResult[];
+  scriptLogs: ScriptLog[];
   selectedExampleName: string | null;
   activeTab: ResponseTab;
   onTabChange: (tab: ResponseTab) => void;
@@ -83,6 +84,20 @@ export function ResponsePanel(props: {
               <div className="tree-row-copy">
                 <strong>{result.label}</strong>
                 <span>{result.message}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {props.scriptLogs.length > 0 ? (
+        <div className="check-results-banner">
+          {props.scriptLogs.map((log, index) => (
+            <div key={`${log.phase}-${index}`} className="check-result-row">
+              <Badge color={log.level === 'error' ? 'red' : 'blue'}>{log.phase}</Badge>
+              <div className="tree-row-copy">
+                <strong>{log.level === 'error' ? 'Script Error' : 'Script Log'}</strong>
+                <span>{log.message}</span>
               </div>
             </div>
           ))}

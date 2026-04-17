@@ -24,6 +24,7 @@
     "debugger:web:dev": "npm run dev:web --prefix apps/debugger",
     "debugger:build": "npm run build:web --prefix apps/debugger",
     "debugger:bundle": "npm run build --prefix apps/debugger",
+    "debugger:test": "tsx --test packages/debugger-core/test/*.test.ts packages/debugger-importers/test/*.test.ts",
     "next:build": "npm run next:types:build && npm run next:api:build && npm run next:web:build",
     "next:start": "./scripts/start-next.sh"
   },
@@ -37,6 +38,7 @@
     "debugger:web:dev": "仅启动调试器前端开发服务器",
     "debugger:build": "构建调试器前端资源",
     "debugger:bundle": "构建调试器桌面安装包",
+    "debugger:test": "运行调试器 core/importer 轻量回归测试",
     "next:smoke:api": "运行新版 API 兼容冒烟测试",
     "next:self-assess:api": "运行新版 API 全量自评",
     "test": "执行 Next 构建校验"
@@ -49,6 +51,9 @@
   "license": "Apache-2.0",
   "dependencies": {
     "axios": "^1.11.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
   },
   "engines": {
     "node": ">= 22.0.0",

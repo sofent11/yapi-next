@@ -66,6 +66,9 @@ npm run debugger:build
 # 构建调试器桌面安装包
 npm run debugger:bundle
 
+# 运行调试器核心能力测试
+npm run debugger:test
+
 # 仅检查 Web TypeScript 类型
 npm run next:web:typecheck
 
@@ -162,7 +165,8 @@ docker compose up -d --build
 
 - 工作区目录即项目，接口、Case、环境变量都以 YAML / JSON 文本文件落盘
 - 支持从 OpenAPI 3.x、Swagger 2.0、HAR、Postman Collection v2.1 导入到本地项目
-- 支持接口下多个 Case、环境切换、原生桌面请求发送、响应查看
+- 支持接口下多个 Case、前后置脚本、环境切换、workspace 级会话复用、原生桌面请求发送与响应查看
+- 支持多步骤 Collection Runner、数据文件驱动、集合级通用校验与本地报告缓存
 - 一期不依赖 YApi API，不做云同步和团队实时协同
 
 工作区格式与目录约定见：

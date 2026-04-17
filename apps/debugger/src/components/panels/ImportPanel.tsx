@@ -14,7 +14,9 @@ export function ImportPanel(props: {
     folders: number;
     environments: number;
     conflicts: number;
+    warnings: number;
   } | null;
+  warnings: Array<{ level: string; message: string }>;
   onImportUrlChange: (url: string) => void;
   onImportStrategyChange: (strategy: 'append' | 'replace') => void;
   onImportAuthChange: (auth: ImportAuth) => void;
@@ -54,6 +56,7 @@ export function ImportPanel(props: {
             value={props.importAuth.mode}
             data={[
               { value: 'none', label: 'No Token' },
+              { value: 'bearer', label: 'Bearer Token' },
               { value: 'header', label: 'Custom Header' },
               { value: 'query', label: 'Query Parameter' }
             ]}
@@ -62,17 +65,25 @@ export function ImportPanel(props: {
 
           {props.importAuth.mode !== 'none' && (
             <div className="form-grid form-grid-2" style={{ marginTop: 12 }}>
+              {props.importAuth.mode === 'bearer' ? null : (
+                <TextInput
+                  label="Key"
+                  placeholder={props.importAuth.mode === 'header' ? 'Authorization' : 'token'}
+                  value={props.importAuth.key}
+                  onChange={event => props.onImportAuthChange({ ...props.importAuth, key: event.currentTarget.value })}
+                />
+              )}
               <TextInput
-                label="Key"
-                placeholder={props.importAuth.mode === 'header' ? 'Authorization' : 'token'}
-                value={props.importAuth.key}
-                onChange={event => props.onImportAuthChange({ ...props.importAuth, key: event.currentTarget.value })}
-              />
-              <TextInput
-                label="Value"
+                label={props.importAuth.mode === 'bearer' ? 'Token' : 'Value'}
                 placeholder="Your token here"
-                value={props.importAuth.value}
-                onChange={event => props.onImportAuthChange({ ...props.importAuth, value: event.currentTarget.value })}
+                value={props.importAuth.mode === 'bearer' ? props.importAuth.token : props.importAuth.value}
+                onChange={event =>
+                  props.onImportAuthChange(
+                    props.importAuth.mode === 'bearer'
+                      ? { ...props.importAuth, token: event.currentTarget.value }
+                      : { ...props.importAuth, value: event.currentTarget.value }
+                  )
+                }
               />
             </div>
           )}
@@ -116,7 +127,24 @@ export function ImportPanel(props: {
                 {props.importPreviewInfo.conflicts}
               </strong>
             </div>
+            <div className="summary-tile">
+              <span>Warnings</span>
+              <strong style={{ color: props.importPreviewInfo.warnings > 0 ? 'var(--orange)' : 'inherit' }}>
+                {props.importPreviewInfo.warnings}
+              </strong>
+            </div>
           </div>
+
+          {props.warnings.length > 0 ? (
+            <div className="checks-list" style={{ marginTop: 16 }}>
+              {props.warnings.map((warning, index) => (
+                <div key={`${warning.level}-${index}`} className="check-card">
+                  <Text fw={700}>{warning.level.toUpperCase()}</Text>
+                  <Text size="sm" c="dimmed">{warning.message}</Text>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           <Select
             label="Conflict Strategy"

@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const SCHEMA_VERSION = 1;
 export const REQUEST_SUFFIX = '.request.yaml';
 export const CASE_SUFFIX = '.case.yaml';
+export const COLLECTION_SUFFIX = '.collection.yaml';
 export const LOCAL_ENV_SUFFIX = '.local.yaml';
 export const DEFAULT_GITIGNORE = ['.DS_Store', 'environments/*.local.yaml', '.yapi-debugger-cache/'].join('\n') + '\n';
 export const BODY_SIDECAR_THRESHOLD = 1800;
@@ -128,9 +129,13 @@ export type CaseOverrides = z.infer<typeof caseOverridesSchema>;
 
 export const caseCheckTypeSchema = z.enum([
   'status-equals',
+  'header-equals',
   'header-includes',
   'json-exists',
-  'json-equals'
+  'json-equals',
+  'body-contains',
+  'body-regex',
+  'response-time-lt'
 ]);
 export type CaseCheckType = z.infer<typeof caseCheckTypeSchema>;
 
@@ -144,6 +149,20 @@ export const caseCheckSchema = z.object({
 });
 export type CaseCheck = z.infer<typeof caseCheckSchema>;
 
+export const caseScriptsSchema = z.object({
+  preRequest: z.string().default(''),
+  postResponse: z.string().default('')
+});
+export type CaseScripts = z.infer<typeof caseScriptsSchema>;
+
+export const caseOriginSchema = z.object({
+  type: z.enum(['history', 'collection-run']),
+  runId: z.string().min(1),
+  collectionId: z.string().optional(),
+  stepKey: z.string().optional()
+});
+export type CaseOrigin = z.infer<typeof caseOriginSchema>;
+
 export const caseDocumentSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION).default(SCHEMA_VERSION),
   id: z.string().min(1),
@@ -152,9 +171,52 @@ export const caseDocumentSchema = z.object({
   environment: z.string().optional(),
   notes: z.string().default(''),
   overrides: caseOverridesSchema.default({}),
-  checks: z.array(caseCheckSchema).default([])
+  checks: z.array(caseCheckSchema).default([]),
+  scripts: caseScriptsSchema.optional(),
+  origin: caseOriginSchema.optional()
 });
 export type CaseDocument = z.infer<typeof caseDocumentSchema>;
+
+export const collectionStepSchema = z.object({
+  key: z.string().min(1),
+  requestId: z.string().min(1),
+  caseId: z.string().optional(),
+  enabled: z.boolean().default(true),
+  name: z.string().optional()
+});
+export type CollectionStep = z.infer<typeof collectionStepSchema>;
+
+export const collectionRulesSchema = z.object({
+  requireSuccessStatus: z.boolean().default(false),
+  maxDurationMs: z.number().int().positive().optional(),
+  requiredJsonPaths: z.array(z.string()).default([])
+});
+export type CollectionRules = z.infer<typeof collectionRulesSchema>;
+
+export const collectionDocumentSchema = z.object({
+  schemaVersion: z.literal(SCHEMA_VERSION).default(SCHEMA_VERSION),
+  id: z.string().min(1),
+  name: z.string().min(1),
+  defaultEnvironment: z.string().default('shared'),
+  stopOnFailure: z.boolean().default(true),
+  iterationCount: z.number().int().positive().default(1),
+  vars: z.record(z.string(), z.string()).default({}),
+  dataFile: z.string().optional(),
+  rules: collectionRulesSchema.default({
+    requireSuccessStatus: false,
+    requiredJsonPaths: []
+  }),
+  steps: z.array(collectionStepSchema).default([])
+});
+export type CollectionDocument = z.infer<typeof collectionDocumentSchema>;
+
+export const workspaceCollectionRecordSchema = z.object({
+  document: collectionDocumentSchema,
+  filePath: z.string(),
+  dataFilePath: z.string().optional(),
+  dataText: z.string().default('')
+});
+export type WorkspaceCollectionRecord = z.infer<typeof workspaceCollectionRecordSchema>;
 
 export const workspaceRequestRecordSchema = z.object({
   request: requestDocumentSchema,
@@ -249,10 +311,19 @@ export const workspaceIndexSchema = z.object({
   project: projectDocumentSchema,
   environments: z.array(workspaceEnvironmentRecordSchema).default([]),
   requests: z.array(workspaceRequestRecordSchema).default([]),
+  collections: z.array(workspaceCollectionRecordSchema).default([]),
   tree: z.array(workspaceTreeNodeSchema).default([]),
   gitignorePath: z.string().optional()
 });
 export type WorkspaceIndex = z.infer<typeof workspaceIndexSchema>;
+
+export const importWarningSchema = z.object({
+  level: z.enum(['info', 'warning']).default('warning'),
+  scope: z.enum(['project', 'request', 'case']).default('request'),
+  requestName: z.string().optional(),
+  message: z.string().min(1)
+});
+export type ImportWarning = z.infer<typeof importWarningSchema>;
 
 export const importAuthSchema = z.object({
   mode: z.enum(['none', 'bearer', 'header', 'query']).default('none'),
@@ -282,7 +353,8 @@ export const importResultSchema = z.object({
     folderSegments: z.array(z.string()).default([]),
     request: requestDocumentSchema,
     cases: z.array(caseDocumentSchema).default([])
-  })).default([])
+  })).default([]),
+  warnings: z.array(importWarningSchema).default([])
 });
 export type ImportResult = z.infer<typeof importResultSchema>;
 
@@ -292,6 +364,7 @@ export const sendRequestInputSchema = z.object({
   headers: z.array(parameterRowSchema).default([]),
   query: z.array(parameterRowSchema).default([]),
   body: requestBodySchema.default({ mode: 'none', text: '', fields: [] }),
+  sessionId: z.string().optional(),
   timeoutMs: z.number().int().positive().optional(),
   followRedirects: z.boolean().optional()
 });
@@ -330,9 +403,17 @@ export const checkResultSchema = z.object({
   ok: z.boolean(),
   message: z.string(),
   expected: z.string().optional(),
-  actual: z.string().optional()
+  actual: z.string().optional(),
+  source: z.enum(['builtin', 'script', 'collection-rule']).default('builtin')
 });
 export type CheckResult = z.infer<typeof checkResultSchema>;
+
+export const scriptLogSchema = z.object({
+  phase: z.enum(['pre-request', 'post-response']),
+  level: z.enum(['log', 'error']).default('log'),
+  message: z.string()
+});
+export type ScriptLog = z.infer<typeof scriptLogSchema>;
 
 export const runHistoryEntrySchema = z.object({
   id: z.string().min(1),
@@ -344,9 +425,53 @@ export const runHistoryEntrySchema = z.object({
   environmentName: z.string().optional(),
   request: resolvedRequestPreviewSchema,
   response: sendRequestResultSchema,
-  checkResults: z.array(checkResultSchema).default([])
+  checkResults: z.array(checkResultSchema).default([]),
+  scriptLogs: z.array(scriptLogSchema).default([]),
+  sourceCollectionId: z.string().optional(),
+  sourceCollectionName: z.string().optional(),
+  sourceStepKey: z.string().optional()
 });
 export type RunHistoryEntry = z.infer<typeof runHistoryEntrySchema>;
+
+export const collectionStepRunSchema = z.object({
+  stepKey: z.string().min(1),
+  stepName: z.string(),
+  requestId: z.string(),
+  caseId: z.string().optional(),
+  ok: z.boolean(),
+  skipped: z.boolean().default(false),
+  request: resolvedRequestPreviewSchema.optional(),
+  response: sendRequestResultSchema.optional(),
+  checkResults: z.array(checkResultSchema).default([]),
+  scriptLogs: z.array(scriptLogSchema).default([]),
+  error: z.string().optional()
+});
+export type CollectionStepRun = z.infer<typeof collectionStepRunSchema>;
+
+export const collectionIterationReportSchema = z.object({
+  index: z.number().int().nonnegative(),
+  dataLabel: z.string().optional(),
+  dataVars: z.record(z.string(), z.string()).default({}),
+  stepRuns: z.array(collectionStepRunSchema).default([])
+});
+export type CollectionIterationReport = z.infer<typeof collectionIterationReportSchema>;
+
+export const collectionRunReportSchema = z.object({
+  id: z.string().min(1),
+  workspaceRoot: z.string(),
+  collectionId: z.string().min(1),
+  collectionName: z.string().min(1),
+  environmentName: z.string().optional(),
+  status: z.enum(['passed', 'failed', 'partial']).default('passed'),
+  startedAt: z.string(),
+  finishedAt: z.string(),
+  iterationCount: z.number().int().positive().default(1),
+  passedSteps: z.number().int().nonnegative().default(0),
+  failedSteps: z.number().int().nonnegative().default(0),
+  skippedSteps: z.number().int().nonnegative().default(0),
+  iterations: z.array(collectionIterationReportSchema).default([])
+});
+export type CollectionRunReport = z.infer<typeof collectionRunReportSchema>;
 
 export function slugify(input: string) {
   return input
@@ -395,7 +520,28 @@ export function createEmptyCase(requestId: string, name = 'Smoke'): CaseDocument
     extendsRequest: requestId,
     notes: '',
     overrides: {},
-    checks: []
+    checks: [],
+    scripts: {
+      preRequest: '',
+      postResponse: ''
+    }
+  });
+}
+
+export function createEmptyCollection(name = 'New Collection'): CollectionDocument {
+  return collectionDocumentSchema.parse({
+    schemaVersion: SCHEMA_VERSION,
+    id: createId('col'),
+    name,
+    defaultEnvironment: 'shared',
+    stopOnFailure: true,
+    iterationCount: 1,
+    vars: {},
+    rules: {
+      requireSuccessStatus: false,
+      requiredJsonPaths: []
+    },
+    steps: []
   });
 }
 

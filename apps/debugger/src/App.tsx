@@ -5,7 +5,7 @@ import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
 import { IconRefresh } from '@tabler/icons-react';
 import { resolveRequest } from '@yapi-debugger/core';
-import { createEmptyCase, type RunHistoryEntry, slugify, type WorkspaceIndex } from '@yapi-debugger/schema';
+import { createEmptyCase, type CollectionDocument, type CollectionRunReport, type RunHistoryEntry, slugify, type WorkspaceIndex } from '@yapi-debugger/schema';
 import {
   chooseDirectory,
   chooseImportFile,
@@ -20,12 +20,18 @@ import {
   createRequestInWorkspace,
   createWorkspace,
   buildImportPreviewSummary,
+  clearCollectionRunReports,
   clearRunHistory,
+  collectionReportSeed,
+  createCollectionInWorkspace,
+  curlForPreview,
   deleteCaseInWorkspace,
   deleteCategoryInWorkspace,
+  deleteCollectionInWorkspace,
   deleteRequestInWorkspace,
   duplicateCaseInWorkspace,
   duplicateRequestInWorkspace,
+  loadCollectionRunReports,
   loadRunHistory,
   importFromFile,
   importFromUrl,
@@ -34,13 +40,17 @@ import {
   renameCaseInWorkspace,
   renameCategoryInWorkspace,
   renameRequestInWorkspace,
+  rerunFailedStepKeys,
+  runCollection,
   runResolvedRequest,
+  saveCollectionRecord,
   saveRunHistory,
   saveEnvironment,
   saveProject,
   saveRequestRecord
 } from './lib/workspace';
 import { AppRail, type AppRailView } from './components/panels/AppRail';
+import { CollectionRunnerPanel } from './components/panels/CollectionRunnerPanel';
 import { EnvironmentCenterPanel } from './components/panels/EnvironmentCenterPanel';
 import { HistoryPanel } from './components/panels/HistoryPanel';
 import { ImportPanel } from './components/panels/ImportPanel';
@@ -147,6 +157,12 @@ export function App() {
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [selectedExampleName, setSelectedExampleName] = useState<string | null>(null);
   const [importStrategy, setImportStrategy] = useState<'append' | 'replace'>('append');
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [draftCollection, setDraftCollection] = useState<CollectionDocument | null>(null);
+  const [collectionDataText, setCollectionDataText] = useState('');
+  const [collectionReports, setCollectionReports] = useState<CollectionRunReport[]>([]);
+  const [selectedCollectionReportId, setSelectedCollectionReportId] = useState<string | null>(null);
+  const [selectedCollectionStepKey, setSelectedCollectionStepKey] = useState<string | null>(null);
 
   const requestId = selectedRequestId(store.selectedNode);
   const caseId = selectedCaseId(store.selectedNode);
@@ -155,6 +171,11 @@ export function App() {
   const selectedEnvironment = store.workspace?.environments.find(
     item => item.document.name === store.activeEnvironmentName
   )?.document || null;
+
+  const selectedCollectionRecord = useMemo(() => {
+    if (!store.workspace || !selectedCollectionId) return null;
+    return store.workspace.collections.find(item => item.document.id === selectedCollectionId) || null;
+  }, [store.workspace, selectedCollectionId]);
 
   const categoryRequests = useMemo(() => {
     if (!store.workspace || !categoryPath) return [];
@@ -187,6 +208,9 @@ export function App() {
     const nextUi = loadWorkspaceUiState(workspace.root);
     setUiState(nextUi);
     setSelectedExampleName(null);
+    setSelectedCollectionId(workspace.collections[0]?.document.id || null);
+    setDraftCollection(workspace.collections[0]?.document || null);
+    setCollectionDataText(workspace.collections[0]?.dataText || '');
     store.setWorkspace(workspace);
     store.selectNode(nextUi.lastSelectedNode);
   }
@@ -199,6 +223,13 @@ export function App() {
     if (!store.workspace?.root) return;
     const workspace = await openWorkspace(store.workspace.root);
     store.setWorkspace(workspace);
+    const nextCollection =
+      workspace.collections.find(item => item.document.id === selectedCollectionId) ||
+      workspace.collections[0] ||
+      null;
+    setSelectedCollectionId(nextCollection?.document.id || null);
+    setDraftCollection(nextCollection?.document || null);
+    setCollectionDataText(nextCollection?.dataText || '');
     if (nodeToSelect) store.selectNode(nodeToSelect);
   };
 
@@ -244,6 +275,16 @@ export function App() {
           record?.folderSegments || []
         );
       }
+      if (draftCollection) {
+        const currentRecord = store.workspace.collections.find(item => item.document.id === draftCollection.id);
+        await saveCollectionRecord(
+          store.workspace.root,
+          draftCollection,
+          collectionDataText,
+          currentRecord?.filePath,
+          currentRecord?.dataFilePath
+        );
+      }
     },
     onSuccess: () => {
       reloadWorkspace(store.selectedNode);
@@ -261,14 +302,15 @@ export function App() {
     },
     onSuccess: async result => {
       if (!result || !store.workspace || !requestId) return;
-      store.setResponse(result.response, result.checkResults);
+      store.setResponse(result.response, result.checkResults, result.scriptLogs);
       await saveRunHistory(
         store.workspace,
         requestId,
         caseId || undefined,
         result.preview,
         result.response,
-        result.checkResults
+        result.checkResults,
+        result.scriptLogs
       );
       loadRunHistory(store.workspace.root).then(setHistoryEntries);
     },
@@ -325,6 +367,44 @@ export function App() {
     },
     onSuccess: ({ requestId: reqId, caseId: nextCaseId }) => {
       reloadWorkspace({ kind: 'case', requestId: reqId, caseId: nextCaseId });
+    }
+  });
+
+  const addCollectionMutation = useMutation({
+    mutationFn: (targetRequestId?: string) => {
+      if (!store.workspace) throw new Error('No workspace');
+      return createCollectionInWorkspace(store.workspace.root, store.workspace, targetRequestId);
+    },
+    onSuccess: async nextId => {
+      await reloadWorkspace();
+      setSelectedCollectionId(nextId);
+      setActiveView('collections');
+      notifications.show({ color: 'teal', message: 'Collection created' });
+    }
+  });
+
+  const runCollectionMutation = useMutation({
+    mutationFn: async (options?: { stepKeys?: string[]; seedReport?: CollectionRunReport | null }) => {
+      if (!store.workspace || !selectedCollectionId) throw new Error('No collection selected');
+      return runCollection(store.workspace, selectedCollectionId, {
+        environmentName: store.activeEnvironmentName,
+        stepKeys: options?.stepKeys,
+        seedReport: options?.seedReport
+      });
+    },
+    onSuccess: async report => {
+      if (!store.workspace) return;
+      setCollectionReports(current => [report, ...current]);
+      setSelectedCollectionReportId(report.id);
+      setSelectedCollectionStepKey(report.iterations[0]?.stepRuns[0]?.stepKey || null);
+      notifications.show({ color: report.failedSteps > 0 ? 'orange' : 'teal', message: `Collection run ${report.status}` });
+      const firstRun = report.iterations[0]?.stepRuns.find(step => step.request && step.response);
+      if (firstRun?.request && firstRun.response) {
+        store.setResponse(firstRun.response, firstRun.checkResults, firstRun.scriptLogs);
+      }
+    },
+    onError: error => {
+      notifications.show({ color: 'red', message: `Collection run failed: ${(error as Error).message}` });
     }
   });
 
@@ -456,6 +536,30 @@ export function App() {
   }, [store.workspace?.root]);
 
   useEffect(() => {
+    if (!store.workspace?.root) {
+      setCollectionReports([]);
+      setSelectedCollectionReportId(null);
+      return;
+    }
+    loadCollectionRunReports(store.workspace.root)
+      .then(reports => {
+        setCollectionReports(reports);
+        setSelectedCollectionReportId(reports[0]?.id || null);
+      })
+      .catch(() => undefined);
+  }, [store.workspace?.root]);
+
+  useEffect(() => {
+    if (!store.workspace) return;
+    const nextCollection =
+      store.workspace.collections.find(item => item.document.id === selectedCollectionId) ||
+      store.workspace.collections[0] ||
+      null;
+    setDraftCollection(nextCollection?.document || null);
+    setCollectionDataText(nextCollection?.dataText || '');
+  }, [store.workspace, selectedCollectionId]);
+
+  useEffect(() => {
     const unlistenPromise = listenMenuActions(payload => {
       if (payload.action === 'open-project') {
         handleOpenDirectory();
@@ -541,6 +645,65 @@ export function App() {
       authProfiles: []
     });
     reloadWorkspace();
+  }
+
+  function handleSelectCollection(id: string | null) {
+    setSelectedCollectionId(id);
+    setSelectedCollectionReportId(null);
+    setSelectedCollectionStepKey(null);
+  }
+
+  function handleCreateCollection() {
+    addCollectionMutation.mutate(requestId || undefined);
+  }
+
+  async function handleDeleteCollection() {
+    if (!store.workspace || !selectedCollectionRecord) return;
+    if (!window.confirm(`Delete collection "${selectedCollectionRecord.document.name}"?`)) return;
+    await deleteCollectionInWorkspace(selectedCollectionRecord);
+    notifications.show({ color: 'teal', message: 'Collection deleted' });
+    reloadWorkspace();
+  }
+
+  async function handleSaveCollection() {
+    if (!store.workspace || !draftCollection) return;
+    const currentRecord = store.workspace.collections.find(item => item.document.id === draftCollection.id);
+    await saveCollectionRecord(
+      store.workspace.root,
+      draftCollection,
+      collectionDataText,
+      currentRecord?.filePath,
+      currentRecord?.dataFilePath
+    );
+    notifications.show({ color: 'teal', message: 'Collection saved' });
+    reloadWorkspace();
+  }
+
+  function handleRunCollection() {
+    runCollectionMutation.mutate(undefined);
+  }
+
+  function handleRerunFailedCollectionSteps() {
+    const selectedReport = collectionReports.find(report => report.id === selectedCollectionReportId) || collectionReports[0];
+    if (!selectedReport) return;
+    const stepKeys = rerunFailedStepKeys(selectedReport);
+    if (stepKeys.length === 0) {
+      notifications.show({ color: 'blue', message: 'No failed steps to rerun' });
+      return;
+    }
+    runCollectionMutation.mutate({
+      stepKeys,
+      seedReport: collectionReportSeed(selectedReport)
+    });
+  }
+
+  async function handleClearCollectionReports() {
+    if (!store.workspace) return;
+    await clearCollectionRunReports(store.workspace.root);
+    setCollectionReports([]);
+    setSelectedCollectionReportId(null);
+    setSelectedCollectionStepKey(null);
+    notifications.show({ color: 'teal', message: 'Collection reports cleared' });
   }
 
   function handleSelectProject() {
@@ -718,7 +881,7 @@ export function App() {
         }
       }
     }
-    store.setResponse(entry.response, entry.checkResults);
+    store.setResponse(entry.response, entry.checkResults, entry.scriptLogs);
   }
 
   async function handleDuplicateHistoryAsCase(entry: RunHistoryEntry) {
@@ -731,6 +894,12 @@ export function App() {
 
     const nextCase = createEmptyCase(record.request.id, `${entry.caseName || 'Replay'} ${historyEntries.length + 1}`);
     nextCase.environment = entry.environmentName;
+    nextCase.origin = {
+      type: 'history',
+      runId: entry.id,
+      collectionId: entry.sourceCollectionId,
+      stepKey: entry.sourceStepKey
+    };
     nextCase.overrides = {
       method: entry.request.method,
       url: entry.request.url,
@@ -907,6 +1076,27 @@ export function App() {
                 onDuplicateAsCase={handleDuplicateHistoryAsCase}
                 onClear={handleClearHistory}
               />
+            ) : activeView === 'collections' ? (
+              <CollectionRunnerPanel
+                workspace={store.workspace}
+                selectedCollectionId={selectedCollectionId}
+                draftCollection={draftCollection}
+                collectionDataText={collectionDataText}
+                reports={collectionReports}
+                selectedReportId={selectedCollectionReportId}
+                selectedReportStepKey={selectedCollectionStepKey}
+                onSelectCollection={handleSelectCollection}
+                onCollectionChange={collection => setDraftCollection(collection)}
+                onCollectionDataChange={setCollectionDataText}
+                onCreateCollection={handleCreateCollection}
+                onDeleteCollection={handleDeleteCollection}
+                onSaveCollection={handleSaveCollection}
+                onRunCollection={handleRunCollection}
+                onRerunFailed={handleRerunFailedCollectionSteps}
+                onClearReports={handleClearCollectionReports}
+                onSelectReport={setSelectedCollectionReportId}
+                onSelectReportStep={setSelectedCollectionStepKey}
+              />
             ) : activeView === 'environments' ? (
               <EnvironmentCenterPanel
                 workspace={store.workspace}
@@ -930,6 +1120,7 @@ export function App() {
                 requestError={store.requestError}
                 requestPreview={currentRequestPreview}
                 checkResults={store.checkResults}
+                scriptLogs={store.scriptLogs}
                 cases={store.draftCases}
                 activeEnvironmentName={store.activeEnvironmentName}
                 selectedEnvironment={selectedEnvironment}
@@ -956,7 +1147,7 @@ export function App() {
                 onResponseTabChange={tab => updateUiState(current => ({ ...current, activeResponseTab: tab }))}
                 onSelectExample={setSelectedExampleName}
                 onCopyBody={() => copyToClipboard(store.response?.bodyText || '', 'Body copied')}
-                onCopyCurl={() => copyToClipboard('curl ...', 'cURL copied')}
+                onCopyCurl={() => copyToClipboard(currentRequestPreview ? curlForPreview(currentRequestPreview) : '', 'cURL copied')}
                 onSaveExample={() => handleSaveResponseAsExample(false)}
                 onReplaceExample={() => handleSaveResponseAsExample(true)}
                 onMainSplitRatioChange={ratio =>
@@ -978,6 +1169,7 @@ export function App() {
           importStrategy={importStrategy}
           importAuth={store.importAuth}
           importPreviewInfo={importPreviewInfo}
+          warnings={store.importPreview?.warnings || []}
           onImportUrlChange={setImportUrl}
           onImportStrategyChange={setImportStrategy}
           onImportAuthChange={auth => store.setImportAuth(auth)}

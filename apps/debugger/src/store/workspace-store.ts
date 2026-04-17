@@ -10,6 +10,7 @@ import {
   type ImportResult,
   type ProjectDocument,
   type RequestDocument,
+  type ScriptLog,
   type SendRequestResult,
   type WorkspaceIndex
 } from '@yapi-debugger/schema';
@@ -20,7 +21,7 @@ export type SelectedNode =
   | { kind: 'request'; requestId: string }
   | { kind: 'case'; requestId: string; caseId: string };
 
-export type RequestTab = 'query' | 'headers' | 'body' | 'auth' | 'checks' | 'settings' | 'preview';
+export type RequestTab = 'query' | 'headers' | 'body' | 'auth' | 'checks' | 'scripts' | 'settings' | 'preview';
 export type ResponseTab = 'body' | 'headers' | 'raw';
 
 export type WorkspaceUiState = {
@@ -52,6 +53,7 @@ type WorkspaceStore = {
   importAuth: ImportAuth;
   response: SendRequestResult | null;
   checkResults: CheckResult[];
+  scriptLogs: ScriptLog[];
   requestError: string | null;
   draftProject: ProjectDocument | null;
   draftRequest: RequestDocument | null;
@@ -69,7 +71,7 @@ type WorkspaceStore = {
   updateCaseList: (cases: CaseDocument[]) => void;
   updateEnvironment: (name: string, updater: (environment: EnvironmentDocument) => EnvironmentDocument) => void;
   addDraftCase: () => void;
-  setResponse: (response: SendRequestResult | null, checkResults?: CheckResult[]) => void;
+  setResponse: (response: SendRequestResult | null, checkResults?: CheckResult[], scriptLogs?: ScriptLog[]) => void;
   setError: (error: string | null) => void;
   setSearchText: (text: string) => void;
 };
@@ -162,6 +164,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   importAuth: defaultImportAuth(),
   response: null,
   checkResults: [],
+  scriptLogs: [],
   requestError: null,
   draftProject: null,
   draftRequest: null,
@@ -188,6 +191,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       isDirty: false,
       response: null,
       checkResults: [],
+      scriptLogs: [],
       requestError: null,
       searchText: ''
     });
@@ -207,6 +211,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       isDirty: false,
       response: null,
       checkResults: [],
+      scriptLogs: [],
       requestError: null
     });
   },
@@ -255,11 +260,11 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       isDirty: true
     });
   },
-  setResponse(response, checkResults = []) {
-    set({ response, checkResults, requestError: null });
+  setResponse(response, checkResults = [], scriptLogs = []) {
+    set({ response, checkResults, scriptLogs, requestError: null });
   },
   setError(error) {
-    set({ requestError: error, response: null, checkResults: [] });
+    set({ requestError: error, response: null, checkResults: [], scriptLogs: [] });
   },
   setSearchText(text) {
     set({ searchText: text });

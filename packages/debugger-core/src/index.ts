@@ -2,13 +2,17 @@ import YAML from 'yaml';
 import {
   BODY_SIDECAR_THRESHOLD,
   CASE_SUFFIX,
+  COLLECTION_SUFFIX,
   DEFAULT_GITIGNORE,
   LOCAL_ENV_SUFFIX,
   REQUEST_SUFFIX,
+  collectionDocumentSchema,
+  collectionStepSchema,
   authConfigSchema,
   caseCheckSchema,
   caseDocumentSchema,
   createDefaultEnvironment,
+  createEmptyCollection,
   createDefaultProject,
   createId,
   emptyParameterRow,
@@ -16,14 +20,13 @@ import {
   projectDocumentSchema,
   resolvedRequestPreviewSchema,
   runtimeSettingsSchema,
-  sendRequestResultSchema,
   requestBodySchema,
   requestDocumentSchema,
   slugify,
   type AuthConfig,
   type CaseCheck,
   type CaseDocument,
-  type CheckResult,
+  type CollectionDocument,
   type EnvironmentDocument,
   type ParameterRow,
   type ProjectDocument,
@@ -31,13 +34,24 @@ import {
   type RequestDocument,
   type ResolvedRequestPreview,
   type ResponseExample,
-  type SendRequestInput,
+  type ScriptLog,
   type SendRequestResult,
+  type WorkspaceCollectionRecord,
   type WorkspaceEnvironmentRecord,
   type WorkspaceIndex,
   type WorkspaceRequestRecord,
   type WorkspaceTreeNode
 } from '@yapi-debugger/schema';
+import {
+  applyCollectionRules,
+  buildCurlCommand,
+  evaluateChecks,
+  executeRequestScript,
+  interpolateResolvedRequest,
+  interpolateString,
+  mergeTemplateSources,
+  readPathValue
+} from './runtime';
 
 export type FileEntry = {
   path: string;
@@ -79,6 +93,11 @@ function parseCaseFile(_filePath: string, content: string): CaseDocument {
   return caseDocumentSchema.parse(input);
 }
 
+function parseCollectionFile(_filePath: string, content: string): CollectionDocument {
+  const input = parseYamlDocument<unknown>(content);
+  return collectionDocumentSchema.parse(input);
+}
+
 function parseEnvironmentFile(filePath: string, content: string): EnvironmentDocument {
   const input = parseYamlDocument<unknown>(content);
   const parsed = environmentDocumentSchema.parse(input);
@@ -117,6 +136,7 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
   const project = projectDocumentSchema.parse(parseYamlDocument<unknown>(input.projectContent));
   const environmentRecords: WorkspaceEnvironmentRecord[] = [];
   const requestRecords: WorkspaceRequestRecord[] = [];
+  const collectionRecords: WorkspaceCollectionRecord[] = [];
   const requestsByPath = new Map<string, WorkspaceRequestRecord>();
 
   const filePaths = Object.keys(input.fileContents).sort((a: string, b: string) => a.localeCompare(b, 'zh-CN'));
@@ -164,6 +184,18 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
       environmentRecords.push({
         document: parseEnvironmentFile(filePath, content),
         filePath
+      });
+      continue;
+    }
+
+    if (filePath.includes('/collections/') && filePath.endsWith(COLLECTION_SUFFIX)) {
+      const document = parseCollectionFile(filePath, content);
+      const dataFilePath = document.dataFile;
+      collectionRecords.push({
+        document,
+        filePath,
+        dataFilePath,
+        dataText: dataFilePath && input.fileContents[dataFilePath] ? input.fileContents[dataFilePath] : ''
       });
     }
   }
@@ -225,6 +257,7 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
     project,
     environments: sortRecords(environmentRecords.map(item => ({ ...item, name: item.document.name }))) as WorkspaceEnvironmentRecord[],
     requests: requestRecords,
+    collections: sortRecords(collectionRecords.map(item => ({ ...item, name: item.document.name }))) as WorkspaceCollectionRecord[],
     tree: [projectNode],
     gitignorePath: `${input.root}/.gitignore`
   };
@@ -389,6 +422,40 @@ export function materializeRequestDocuments(
   );
 }
 
+function collectionDataFilePath(collection: CollectionDocument) {
+  return collection.dataFile || `collections/${slugify(collection.name)}.data.json`;
+}
+
+export function materializeCollectionDocument(
+  collection: CollectionDocument,
+  rootPath: string,
+  dataText = ''
+) {
+  const nextCollection = collectionDocumentSchema.parse(collection);
+  const fileBase = `collections/${slugify(nextCollection.name)}`;
+  const filePath = `${fileBase}${COLLECTION_SUFFIX}`;
+  const shouldWriteData = dataText.trim().length > 0;
+  const dataFile = shouldWriteData ? collectionDataFilePath({ ...nextCollection, dataFile: `${fileBase}.data.json` }) : undefined;
+  const writes: WorkspaceFileWrite[] = [
+    {
+      path: rootPath ? `${rootPath}/${filePath}` : filePath,
+      content: stringifyYamlDocument({
+        ...nextCollection,
+        dataFile
+      })
+    }
+  ];
+
+  if (shouldWriteData && dataFile) {
+    writes.push({
+      path: rootPath ? `${rootPath}/${dataFile}` : dataFile,
+      content: dataText.trim()
+    });
+  }
+
+  return writes;
+}
+
 export function materializeEnvironmentDocument(environment: EnvironmentDocument, rootPath: string) {
   const name = slugify(environment.name);
   const suffix = environment.name === 'local' ? LOCAL_ENV_SUFFIX : '.yaml';
@@ -407,27 +474,30 @@ export function materializeProjectDocument(project: ProjectDocument, rootPath: s
 
 export function applyEnvironmentVariables(input: string, environment: EnvironmentDocument | undefined) {
   if (!environment) return input;
-  return input.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_, key: string) => environment.vars[key] ?? '');
+  return interpolateString(input, [environment.vars]);
 }
 
 function mergeVariableSources(
   project: ProjectDocument,
-  environment: EnvironmentDocument | undefined
+  environment: EnvironmentDocument | undefined,
+  extraSources: Array<Record<string, unknown>> = []
 ) {
-  return {
-    baseUrl: environment?.vars.baseUrl || project.runtime.baseUrl || '',
-    ...project.runtime.vars,
-    ...environment?.vars
-  } as Record<string, string>;
+  const sources = mergeTemplateSources({
+    project,
+    environment,
+    extraSources
+  });
+  return sources;
 }
 
 export function applyProjectVariables(
   input: string,
   project: ProjectDocument,
-  environment: EnvironmentDocument | undefined
+  environment: EnvironmentDocument | undefined,
+  extraSources: Array<Record<string, unknown>> = []
 ) {
-  const variables = mergeVariableSources(project, environment);
-  return input.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_, key: string) => variables[key] ?? '');
+  const variables = mergeVariableSources(project, environment, extraSources);
+  return interpolateString(input, variables);
 }
 
 function mergeRows(baseRows: ParameterRow[], overrideRows?: ParameterRow[]) {
@@ -494,136 +564,19 @@ function encodeBasicAuth(username: string, password: string) {
   return output;
 }
 
-function normalizedPathValue(input: string) {
-  const value = input.trim();
-  if (!value) return '/';
-  return value.startsWith('$.') ? value.slice(2) : value.startsWith('$') ? value.slice(1) : value;
-}
-
-function tokenizedPath(input: string) {
-  return normalizedPathValue(input)
-    .replace(/\[(\d+)\]/g, '.$1')
-    .split('.')
-    .filter(Boolean);
-}
-
-function readJsonPath(payload: unknown, path: string) {
-  return tokenizedPath(path).reduce<unknown>((current, segment) => {
-    if (current == null) return undefined;
-    if (Array.isArray(current)) {
-      const index = Number(segment);
-      return Number.isInteger(index) ? current[index] : undefined;
-    }
-    if (typeof current === 'object') {
-      return (current as Record<string, unknown>)[segment];
-    }
-    return undefined;
-  }, payload);
-}
-
-function stringifyValue(input: unknown) {
-  if (typeof input === 'string') return input;
-  if (input == null) return '';
-  try {
-    return JSON.stringify(input);
-  } catch (_error) {
-    return String(input);
-  }
-}
-
-function parseJsonPayload(bodyText: string) {
-  try {
-    return JSON.parse(bodyText) as unknown;
-  } catch (_error) {
-    return undefined;
-  }
-}
-
-export function evaluateChecks(response: SendRequestResult, checks: CaseCheck[]): CheckResult[] {
-  const parsedResponse = sendRequestResultSchema.parse(response);
-  const jsonPayload = parseJsonPayload(parsedResponse.bodyText);
-  const headerMap = new Map(parsedResponse.headers.map(item => [item.name.toLowerCase(), item.value]));
-
-  return checks
-    .filter(check => check.enabled)
-    .map(check => {
-      const normalized = caseCheckSchema.parse(check);
-      const label = normalized.label || normalized.type;
-
-      if (normalized.type === 'status-equals') {
-        const expected = normalized.expected || '200';
-        const actual = String(parsedResponse.status);
-        return {
-          id: normalized.id,
-          label,
-          ok: actual === expected,
-          message: actual === expected ? `Status is ${actual}` : `Expected status ${expected}, got ${actual}`,
-          expected,
-          actual
-        };
-      }
-
-      if (normalized.type === 'header-includes') {
-        const actual = headerMap.get(normalized.path.trim().toLowerCase()) || '';
-        const expected = normalized.expected || '';
-        return {
-          id: normalized.id,
-          label,
-          ok: actual.includes(expected),
-          message: actual.includes(expected)
-            ? `Header ${normalized.path} contains expected value`
-            : `Header ${normalized.path} does not include "${expected}"`,
-          expected,
-          actual
-        };
-      }
-
-      if (normalized.type === 'json-exists') {
-        const actualValue = readJsonPath(jsonPayload, normalized.path);
-        const actual = stringifyValue(actualValue);
-        return {
-          id: normalized.id,
-          label,
-          ok: actualValue !== undefined,
-          message:
-            actualValue !== undefined ? `JSON path ${normalized.path} exists` : `JSON path ${normalized.path} not found`,
-          actual
-        };
-      }
-
-      const actualValue = readJsonPath(jsonPayload, normalized.path);
-      const actual = stringifyValue(actualValue);
-      let expectedValue: unknown = normalized.expected;
-      try {
-        expectedValue = JSON.parse(normalized.expected);
-      } catch (_error) {
-        expectedValue = normalized.expected;
-      }
-      const expected = stringifyValue(expectedValue);
-      const ok = stringifyValue(actualValue) === expected;
-      return {
-        id: normalized.id,
-        label,
-        ok,
-        message: ok ? `JSON path ${normalized.path} matches expected value` : `JSON path ${normalized.path} does not match`,
-        expected,
-        actual
-      };
-    });
-}
-
 export function resolveRequest(
   project: ProjectDocument,
   request: RequestDocument,
   caseDocument: CaseDocument | undefined,
-  environment: EnvironmentDocument | undefined
+  environment: EnvironmentDocument | undefined,
+  extraSources: Array<Record<string, unknown>> = []
 ): ResolvedRequest {
   const body = caseDocument?.overrides.body ?? request.body;
   const { auth, authSource } = mergeAuth(request.auth, caseDocument?.overrides.auth, environment);
   const runtime = mergeRuntime(request, caseDocument);
   const rawUrl = caseDocument?.overrides.url || request.url;
-  const url = applyProjectVariables(rawUrl, project, environment);
-  const path = applyProjectVariables(caseDocument?.overrides.path || request.path || '', project, environment);
+  const url = applyProjectVariables(rawUrl, project, environment, extraSources);
+  const path = applyProjectVariables(caseDocument?.overrides.path || request.path || '', project, environment, extraSources);
   const baseHeaders = [
     ...project.runtime.headers,
     ...(environment?.headers || []),
@@ -631,22 +584,22 @@ export function resolveRequest(
   ];
   const headers = mergeRows(baseHeaders, caseDocument?.overrides.headers).map((row: ParameterRow) => ({
     ...row,
-    value: applyProjectVariables(row.value, project, environment),
-    filePath: row.filePath ? applyProjectVariables(row.filePath, project, environment) : row.filePath
+    value: applyProjectVariables(row.value, project, environment, extraSources),
+    filePath: row.filePath ? applyProjectVariables(row.filePath, project, environment, extraSources) : row.filePath
   }));
   const query = mergeRows(request.query, caseDocument?.overrides.query).map((row: ParameterRow) => ({
     ...row,
-    value: applyProjectVariables(row.value, project, environment)
+    value: applyProjectVariables(row.value, project, environment, extraSources)
   }));
 
   const resolvedBody = normalizeBody(body);
   const mergedBody = {
     ...resolvedBody,
-    text: applyProjectVariables(resolvedBody.text, project, environment),
+    text: applyProjectVariables(resolvedBody.text, project, environment, extraSources),
     fields: resolvedBody.fields.map((row: ParameterRow) => ({
       ...row,
-      value: applyProjectVariables(row.value, project, environment),
-      filePath: row.filePath ? applyProjectVariables(row.filePath, project, environment) : row.filePath
+      value: applyProjectVariables(row.value, project, environment, extraSources),
+      filePath: row.filePath ? applyProjectVariables(row.filePath, project, environment, extraSources) : row.filePath
     }))
   };
 
@@ -655,7 +608,7 @@ export function resolveRequest(
   if (auth.type === 'bearer' && auth.token) {
     authHeaders.push({
       name: 'Authorization',
-      value: `Bearer ${applyProjectVariables(auth.token, project, environment)}`,
+      value: `Bearer ${applyProjectVariables(auth.token, project, environment, extraSources)}`,
       enabled: true,
       kind: 'text',
       filePath: undefined
@@ -665,7 +618,7 @@ export function resolveRequest(
     const target = auth.addTo || 'header';
     const row = {
       name: auth.key,
-      value: applyProjectVariables(auth.value || '', project, environment),
+      value: applyProjectVariables(auth.value || '', project, environment, extraSources),
       enabled: true,
       kind: 'text' as const,
       filePath: undefined
@@ -677,8 +630,8 @@ export function resolveRequest(
     }
   }
   if (auth.type === 'basic' && auth.username) {
-    const username = applyProjectVariables(auth.username, project, environment);
-    const password = applyProjectVariables(auth.password || '', project, environment);
+    const username = applyProjectVariables(auth.username, project, environment, extraSources);
+    const password = applyProjectVariables(auth.password || '', project, environment, extraSources);
     const value = encodeBasicAuth(username, password);
     authHeaders.push({
       name: 'Authorization',
@@ -689,14 +642,14 @@ export function resolveRequest(
     });
   }
 
-  const mergedVariables = mergeVariableSources(project, environment);
+  const mergedVariables = mergeVariableSources(project, environment, extraSources);
   let candidateUrl = url;
   if (!candidateUrl || (!candidateUrl.includes('://') && !rawUrl.startsWith('{{'))) {
-    const baseUrl = mergedVariables.baseUrl || '';
+    const baseUrl = String(readPathValue(mergedVariables[mergedVariables.length - 1], 'baseUrl') || '');
     candidateUrl = `${baseUrl}${candidateUrl || path || ''}`;
   }
 
-  return resolvedRequestPreviewSchema.parse({
+  return interpolateResolvedRequest(resolvedRequestPreviewSchema.parse({
     name: caseDocument ? `${request.name} / ${caseDocument.name}` : request.name,
     environmentName: caseDocument?.environment || environment?.name,
     authSource,
@@ -708,7 +661,7 @@ export function resolveRequest(
     body: mergedBody,
     timeoutMs: runtime.timeoutMs,
     followRedirects: runtime.followRedirects
-  });
+  }), extraSources);
 }
 
 export function createEmptyCheck(type: CaseCheck['type'] = 'status-equals'): CaseCheck {
@@ -717,8 +670,18 @@ export function createEmptyCheck(type: CaseCheck['type'] = 'status-equals'): Cas
     type,
     label: '',
     enabled: true,
-    path: type === 'header-includes' ? 'content-type' : type.startsWith('json-') ? '$.data' : '',
-    expected: type === 'status-equals' ? '200' : ''
+    path:
+      type === 'header-includes' || type === 'header-equals'
+        ? 'content-type'
+        : type.startsWith('json-')
+          ? '$.data'
+          : '',
+    expected:
+      type === 'status-equals'
+        ? '200'
+        : type === 'response-time-lt'
+          ? '1000'
+          : ''
   });
 }
 
@@ -743,3 +706,29 @@ export function buildFileContentMap(entries: FileEntry[]) {
   walk(entries);
   return output;
 }
+
+export function parseCollectionDataText(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return [] as Array<Record<string, unknown>>;
+  const parsed = trimmed.startsWith('[') || trimmed.startsWith('{')
+    ? JSON.parse(trimmed)
+    : parseYamlDocument<unknown>(trimmed);
+
+  if (!Array.isArray(parsed)) {
+    throw new Error('Collection data file must contain a JSON/YAML array of objects');
+  }
+
+  return parsed.map((row, index) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+      throw new Error(`Collection data row ${index + 1} must be an object`);
+    }
+    return row as Record<string, unknown>;
+  });
+}
+
+export {
+  applyCollectionRules,
+  buildCurlCommand,
+  evaluateChecks,
+  executeRequestScript
+};

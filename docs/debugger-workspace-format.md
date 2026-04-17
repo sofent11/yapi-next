@@ -10,6 +10,9 @@ my-api-project/
   environments/
     shared.yaml
     local.local.yaml
+  collections/
+    smoke-suite.collection.yaml
+    smoke-suite.data.json
   requests/
     bootstrap/
       health-check.request.yaml
@@ -86,7 +89,7 @@ order: 0
 
 ### `requests/**/<request>/cases/*.case.yaml`
 
-每个接口下可以有多个 Case。Case 只保存对基础请求的覆盖项，不保存运行结果：
+每个接口下可以有多个 Case。Case 只保存对基础请求的覆盖项、断言和脚本，不保存运行结果：
 
 ```yaml
 schemaVersion: 1
@@ -100,7 +103,61 @@ overrides:
     - name: Authorization
       value: ""
       enabled: false
+scripts:
+  preRequest: |
+    pm.variables.set("traceId", "trace-001")
+  postResponse: |
+    pm.test("status ok", () => pm.expect(pm.response?.code).to.equal(200))
 ```
+
+### `collections/*.collection.yaml`
+
+Collection 用于组织多步骤链路回归或数据驱动场景：
+
+```yaml
+schemaVersion: 1
+id: col_2x91kd
+name: smoke-suite
+defaultEnvironment: shared
+stopOnFailure: true
+iterationCount: 1
+vars:
+  sku: sku-001
+rules:
+  requireSuccessStatus: true
+  maxDurationMs: 1500
+  requiredJsonPaths:
+    - $.data.id
+dataFile: collections/smoke-suite.data.json
+steps:
+  - key: login
+    requestId: req_login
+    caseId: case_smoke
+    enabled: true
+    name: Login
+  - key: profile
+    requestId: req_profile
+    enabled: true
+```
+
+### `collections/*.data.json`
+
+Collection 数据文件目前推荐使用 JSON 数组，每一行是一次迭代变量：
+
+```json
+[
+  { "sku": "sku-001", "userId": "u-1" },
+  { "sku": "sku-002", "userId": "u-2" }
+]
+```
+
+运行时变量解析优先级：
+
+- `data row vars`
+- `steps.<key>.*`
+- `collection vars`
+- `environment vars`
+- `project vars`
 
 ### `requests/**/<request>/bodies/*`
 
@@ -116,6 +173,7 @@ overrides:
 - 文件名使用可读 slug，稳定 ID 放在文档内容中
 - 不维护全局索引文件，目录结构即导航结构
 - 运行历史不回写项目目录，只保留在应用本地缓存目录
+- Collection 报告同样只保留在应用本地缓存目录，不进入 Git
 - 大文本拆 sidecar，小文本保留在 YAML 中，兼顾可读性与 diff 质量
 
 ## Git 建议

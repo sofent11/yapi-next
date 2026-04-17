@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
-import type { ResolvedRequestPreview, SendRequestResult } from '@yapi-debugger/schema';
+import type { CollectionRunReport, SendRequestResult } from '@yapi-debugger/schema';
 
 export type MenuAction =
   | { action: 'open-project' }
@@ -102,6 +102,18 @@ export async function appendHistory(entry: any) {
 
 export async function clearHistory(workspaceRoot?: string) {
   await invoke('history_clear', { workspaceRoot });
+}
+
+export async function loadCollectionReports(workspaceRoot?: string): Promise<CollectionRunReport[]> {
+  return invoke('collection_report_load', { workspaceRoot });
+}
+
+export async function appendCollectionReport(report: CollectionRunReport) {
+  await invoke('collection_report_append', { report });
+}
+
+export async function clearCollectionReports(workspaceRoot?: string) {
+  await invoke('collection_report_clear', { workspaceRoot });
 }
 
 export function listenMenuActions(handler: (action: MenuAction) => void) {

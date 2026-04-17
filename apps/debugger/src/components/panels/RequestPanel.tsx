@@ -51,9 +51,13 @@ function authTypeOptions() {
 function checkOptions() {
   return [
     { value: 'status-equals', label: 'Status Equals' },
+    { value: 'header-equals', label: 'Header Equals' },
     { value: 'header-includes', label: 'Header Includes' },
     { value: 'json-exists', label: 'JSON Path Exists' },
-    { value: 'json-equals', label: 'JSON Path Equals' }
+    { value: 'json-equals', label: 'JSON Path Equals' },
+    { value: 'body-contains', label: 'Body Contains' },
+    { value: 'body-regex', label: 'Body Regex' },
+    { value: 'response-time-lt', label: 'Response Time <' }
   ];
 }
 
@@ -196,6 +200,7 @@ export function RequestPanel(props: {
           <Tabs.Tab value="body" leftSection={<IconMessageCode size={14} />}>Body</Tabs.Tab>
           <Tabs.Tab value="auth" leftSection={<IconKey size={14} />}>Auth</Tabs.Tab>
           <Tabs.Tab value="checks" leftSection={<IconListCheck size={14} />}>Checks</Tabs.Tab>
+          <Tabs.Tab value="scripts" leftSection={<IconSettings size={14} />}>Scripts</Tabs.Tab>
           <Tabs.Tab value="settings" leftSection={<IconAdjustments size={14} />}>Settings</Tabs.Tab>
           <Tabs.Tab value="preview" leftSection={<IconPlayerPlay size={14} />}>Preview</Tabs.Tab>
         </Tabs.List>
@@ -469,9 +474,9 @@ export function RequestPanel(props: {
                               )
                             }
                           />
-                          {check.type === 'status-equals' ? null : (
+                          {check.type === 'status-equals' || check.type === 'body-contains' || check.type === 'body-regex' || check.type === 'response-time-lt' ? null : (
                             <TextInput
-                              label={check.type === 'header-includes' ? 'Header Name' : 'JSON Path'}
+                              label={check.type === 'header-includes' || check.type === 'header-equals' ? 'Header Name' : 'JSON Path'}
                               value={check.path}
                               onChange={event =>
                                 updateChecks(
@@ -500,6 +505,49 @@ export function RequestPanel(props: {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+          </Tabs.Panel>
+
+          <Tabs.Panel value="scripts">
+            {!selectedCase ? (
+              <div className="empty-tab-state">Scripts are case-scoped. Select or create a case to add pre-request and post-response logic.</div>
+            ) : (
+              <div className="checks-list">
+                <div className="check-card">
+                  <Text fw={700}>Pre-request Script</Text>
+                  <CodeEditor
+                    value={selectedCase.scripts?.preRequest || ''}
+                    language="text"
+                    onChange={value =>
+                      updateSelectedCase(current => ({
+                        ...current,
+                        scripts: {
+                          preRequest: value,
+                          postResponse: current.scripts?.postResponse || ''
+                        }
+                      }))
+                    }
+                    minHeight="180px"
+                  />
+                </div>
+                <div className="check-card">
+                  <Text fw={700}>Post-response Script</Text>
+                  <CodeEditor
+                    value={selectedCase.scripts?.postResponse || ''}
+                    language="text"
+                    onChange={value =>
+                      updateSelectedCase(current => ({
+                        ...current,
+                        scripts: {
+                          preRequest: current.scripts?.preRequest || '',
+                          postResponse: value
+                        }
+                      }))
+                    }
+                    minHeight="220px"
+                  />
+                </div>
               </div>
             )}
           </Tabs.Panel>

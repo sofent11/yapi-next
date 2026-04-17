@@ -13,6 +13,7 @@ import type {
   ProjectDocument,
   RequestDocument,
   ResolvedRequestPreview,
+  ScriptLog,
   SendRequestResult,
   WorkspaceIndex
 } from '@yapi-debugger/schema';
@@ -60,6 +61,7 @@ export function WorkspaceMainPanel(props: {
   requestError: string | null;
   requestPreview: ResolvedRequestPreview | null;
   checkResults: CheckResult[];
+  scriptLogs: ScriptLog[];
   cases: CaseDocument[];
   activeEnvironmentName: string;
   selectedEnvironment: EnvironmentDocument | null;
@@ -354,6 +356,7 @@ export function WorkspaceMainPanel(props: {
             requestPreview={props.requestPreview}
             requestDocument={request}
             checkResults={props.checkResults}
+            scriptLogs={props.scriptLogs}
             selectedExampleName={props.selectedExampleName}
             activeTab={props.activeResponseTab}
             onTabChange={props.onResponseTabChange}

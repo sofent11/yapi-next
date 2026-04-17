@@ -1,44 +1,56 @@
 import {
+  applyCollectionRules,
+  buildCurlCommand,
   buildWorkspaceIndex,
   createProjectSeed,
   evaluateChecks,
+  executeRequestScript,
+  materializeCollectionDocument,
   materializeEnvironmentDocument,
   materializeProjectDocument,
   materializeRequestDocuments,
+  parseCollectionDataText,
   resolveRequest
 } from '@yapi-debugger/core';
 import {
   createDefaultEnvironment,
-  createId,
   createEmptyCase,
+  createEmptyCollection,
   createEmptyRequest,
+  createId,
   emptyParameterRow,
   importAuthSchema,
   slugify,
   type CaseDocument,
   type CheckResult,
+  type CollectionDocument,
+  type CollectionRunReport,
+  type CollectionStepRun,
   type EnvironmentDocument,
   type ImportAuth,
   type ImportResult,
   type ProjectDocument,
-  type RequestDocument,
   type ResolvedRequestPreview,
   type RunHistoryEntry,
+  type ScriptLog,
   type SendRequestResult,
+  type WorkspaceCollectionRecord,
   type WorkspaceIndex
 } from '@yapi-debugger/schema';
 import { importSourceText } from '@yapi-debugger/importers';
 import {
+  appendCollectionReport,
   appendHistory,
+  clearCollectionReports,
   clearHistory,
   deleteEntry,
   fetchImportUrl,
+  loadCollectionReports,
   loadHistory,
   readImportFile,
   scanWorkspace,
   sendRequest,
   writeDocument,
-  type ImportSourcePayload,
   type WorkspaceScanPayload
 } from './desktop';
 
@@ -55,6 +67,72 @@ function scanPayloadToIndex(payload: WorkspaceScanPayload) {
   });
 }
 
+function createRuntimeEnvironment(workspace: WorkspaceIndex, name: string) {
+  const source = workspace.environments.find(item => item.document.name === name)?.document;
+  return structuredClone(source || createDefaultEnvironment(name));
+}
+
+function collectionConflictsWithRecord(
+  existing: WorkspaceIndex['requests'][number],
+  imported: ImportResult['requests'][number]
+) {
+  return (
+    existing.request.name === imported.request.name &&
+    existing.folderSegments.join('/') === imported.folderSegments.join('/')
+  );
+}
+
+function uniqueCopyName(baseName: string, existingNames: string[]) {
+  const existing = new Set(existingNames.map(name => slugify(name)));
+  if (!existing.has(slugify(baseName))) {
+    return baseName;
+  }
+
+  let index = 2;
+  while (existing.has(slugify(`${baseName} ${index}`))) {
+    index += 1;
+  }
+  return `${baseName} ${index}`;
+}
+
+function stepOutputFromRun(preview: ResolvedRequestPreview, response: SendRequestResult) {
+  const headerMap = Object.fromEntries(response.headers.map(item => [item.name.toLowerCase(), item.value]));
+  let parsedBody: unknown = response.bodyText;
+  try {
+    parsedBody = JSON.parse(response.bodyText);
+  } catch (_error) {
+    parsedBody = response.bodyText;
+  }
+
+  return {
+    request: {
+      method: preview.method,
+      url: preview.url,
+      query: Object.fromEntries(preview.query.filter(item => item.enabled && item.name.trim()).map(item => [item.name, item.value])),
+      headers: Object.fromEntries(preview.headers.filter(item => item.enabled && item.name.trim()).map(item => [item.name.toLowerCase(), item.value])),
+      body: preview.body.text
+    },
+    response: {
+      status: response.status,
+      durationMs: response.durationMs,
+      headers: headerMap,
+      body: parsedBody,
+      rawBody: response.bodyText
+    }
+  };
+}
+
+function seededStepOutputsFromReport(report: CollectionRunReport | null) {
+  if (!report) return {} as Record<string, unknown>;
+  const output: Record<string, unknown> = {};
+  report.iterations[0]?.stepRuns.forEach(stepRun => {
+    if (stepRun.request && stepRun.response) {
+      output[stepRun.stepKey] = stepOutputFromRun(stepRun.request, stepRun.response);
+    }
+  });
+  return output;
+}
+
 export async function openWorkspace(root: string) {
   const payload = await scanWorkspace(root);
   return scanPayloadToIndex(payload);
@@ -66,6 +144,7 @@ export type ImportPreviewSummary = {
   folders: number;
   environments: number;
   conflicts: number;
+  warnings: number;
 };
 
 export function buildImportPreviewSummary(
@@ -74,9 +153,7 @@ export function buildImportPreviewSummary(
 ): ImportPreviewSummary {
   let conflicts = 0;
   result.requests.forEach(imported => {
-    const existing = workspace.requests.find(record =>
-      conflictsWithRecord(record, imported)
-    );
+    const existing = workspace.requests.find(record => collectionConflictsWithRecord(record, imported));
     if (existing) conflicts += 1;
   });
 
@@ -88,18 +165,9 @@ export function buildImportPreviewSummary(
       return set;
     }, new Set<string>()).size,
     environments: result.environments.length,
-    conflicts
+    conflicts,
+    warnings: result.warnings?.length || 0
   };
-}
-
-function conflictsWithRecord(
-  existing: WorkspaceIndex['requests'][number],
-  imported: ImportResult['requests'][number]
-) {
-  return (
-    existing.request.name === imported.request.name &&
-    existing.folderSegments.join('/') === imported.folderSegments.join('/')
-  );
 }
 
 export async function importIntoWorkspace(
@@ -112,7 +180,7 @@ export async function importIntoWorkspace(
   const deleteTargets: WorkspaceIndex['requests'][number][] = [];
 
   for (const imported of result.requests) {
-    const target = workspace.requests.find(record => conflictsWithRecord(record, imported));
+    const target = workspace.requests.find(record => collectionConflictsWithRecord(record, imported));
     if (!target) {
       nextRecords.push(imported);
       continue;
@@ -133,9 +201,7 @@ export async function importIntoWorkspace(
 
 export async function createWorkspace(root: string, projectName: string) {
   const seed = createProjectSeed({ projectName, includeSampleRequest: true });
-  await Promise.all(
-    seed.writes.map(item => writeDocument(`${root}/${item.path}`, item.content))
-  );
+  await Promise.all(seed.writes.map(item => writeDocument(`${root}/${item.path}`, item.content)));
   return openWorkspace(root);
 }
 
@@ -151,7 +217,7 @@ export async function saveProject(root: string, project: ProjectDocument) {
 
 export async function saveRequestRecord(
   root: string,
-  request: RequestDocument,
+  request: ReturnType<typeof createEmptyRequest>,
   cases: CaseDocument[],
   previousResourceDirPath?: string,
   previousRequestFilePath?: string,
@@ -165,6 +231,24 @@ export async function saveRequestRecord(
   }
 
   const writes = materializeRequestDocuments([{ folderSegments, request, cases }], root);
+  await Promise.all(writes.map(item => writeDocument(item.path, item.content)));
+}
+
+export async function saveCollectionRecord(
+  root: string,
+  collection: CollectionDocument,
+  dataText: string,
+  previousFilePath?: string,
+  previousDataFilePath?: string
+) {
+  if (previousFilePath) {
+    await deleteEntry(previousFilePath, false).catch(() => undefined);
+  }
+  if (previousDataFilePath) {
+    await deleteEntry(previousDataFilePath, false).catch(() => undefined);
+  }
+
+  const writes = materializeCollectionDocument(collection, root, dataText);
   await Promise.all(writes.map(item => writeDocument(item.path, item.content)));
 }
 
@@ -184,11 +268,7 @@ export async function createRequestInWorkspace(root: string, folderPath: string 
   return request.id;
 }
 
-export async function createCaseForRequest(
-  root: string,
-  workspace: WorkspaceIndex,
-  requestId: string
-) {
+export async function createCaseForRequest(root: string, workspace: WorkspaceIndex, requestId: string) {
   const record = workspace.requests.find(r => r.request.id === requestId);
   if (!record) throw new Error('Request not found');
   const nextCase = createEmptyCase(requestId, `Case ${record.cases.length + 1}`);
@@ -203,17 +283,22 @@ export async function createCaseForRequest(
   return { requestId, caseId: nextCase.id };
 }
 
-function uniqueCopyName(baseName: string, existingNames: string[]) {
-  const existing = new Set(existingNames.map(name => slugify(name)));
-  if (!existing.has(slugify(baseName))) {
-    return baseName;
+export async function createCollectionInWorkspace(
+  root: string,
+  workspace: WorkspaceIndex,
+  requestId?: string
+) {
+  const collection = createEmptyCollection('New Collection');
+  if (requestId) {
+    collection.steps.push({
+      key: 'step_1',
+      requestId,
+      enabled: true,
+      name: 'Initial Step'
+    });
   }
-
-  let index = 2;
-  while (existing.has(slugify(`${baseName} ${index}`))) {
-    index += 1;
-  }
-  return `${baseName} ${index}`;
+  await saveCollectionRecord(root, collection, '');
+  return collection.id;
 }
 
 export async function renameRequestInWorkspace(
@@ -260,6 +345,15 @@ export async function deleteRequestInWorkspace(record: WorkspaceIndex['requests'
   }
   if (record.requestFilePath) {
     await deleteEntry(record.requestFilePath, false);
+  }
+}
+
+export async function deleteCollectionInWorkspace(record: WorkspaceCollectionRecord) {
+  if (record.filePath) {
+    await deleteEntry(record.filePath, false).catch(() => undefined);
+  }
+  if (record.dataFilePath) {
+    await deleteEntry(record.dataFilePath, false).catch(() => undefined);
   }
 }
 
@@ -365,16 +459,80 @@ export async function importFromUrl(url: string, auth: ImportAuth) {
   };
 }
 
-export async function runResolvedRequest(workspace: WorkspaceIndex, requestId: string, caseId?: string) {
+export type RequestRunContext = {
+  extraSources?: Array<Record<string, unknown>>;
+  state?: {
+    variables: Record<string, string>;
+    environment: EnvironmentDocument;
+  };
+  collectionRules?: {
+    requireSuccessStatus: boolean;
+    maxDurationMs?: number;
+    requiredJsonPaths?: string[];
+  };
+  sourceCollection?: {
+    id: string;
+    name: string;
+    stepKey: string;
+  };
+};
+
+export async function runResolvedRequest(
+  workspace: WorkspaceIndex,
+  requestId: string,
+  caseId?: string,
+  context: RequestRunContext = {}
+) {
   const record = workspace.requests.find(r => r.request.id === requestId);
   if (!record) throw new Error('Request not found');
   const caseDocument = record.cases.find(c => c.id === caseId);
-  const envName = caseDocument?.environment || workspace.project.defaultEnvironment;
-  const env = workspace.environments.find(e => e.document.name === envName)?.document;
-  const preview = resolveRequest(workspace.project, record.request, caseDocument, env);
+  const envName = caseDocument?.environment || context.state?.environment.name || workspace.project.defaultEnvironment;
+  const runtimeEnvironment = context.state?.environment || createRuntimeEnvironment(workspace, envName);
+  const state = context.state || {
+    variables: {},
+    environment: runtimeEnvironment
+  };
+
+  const previewBeforeScripts = resolveRequest(
+    workspace.project,
+    record.request,
+    caseDocument,
+    state.environment,
+    context.extraSources || []
+  );
+  const preScript = executeRequestScript({
+    phase: 'pre-request',
+    script: caseDocument?.scripts?.preRequest || '',
+    state,
+    request: previewBeforeScripts
+  });
+  const preview = {
+    ...preScript.request,
+    sessionId: workspace.root
+  };
   const response = await sendRequest(preview);
-  const checkResults = caseDocument ? evaluateChecks(response, caseDocument.checks || []) : [];
-  return { preview, response, checkResults };
+  const builtinChecks = caseDocument ? evaluateChecks(response, caseDocument.checks || []) : [];
+  const collectionChecks = context.collectionRules
+    ? applyCollectionRules({
+        ...context.collectionRules,
+        response
+      })
+    : [];
+  const postScript = executeRequestScript({
+    phase: 'post-response',
+    script: caseDocument?.scripts?.postResponse || '',
+    state: preScript.state,
+    request: preview,
+    response
+  });
+
+  return {
+    preview,
+    response,
+    checkResults: [...builtinChecks, ...collectionChecks, ...postScript.testResults],
+    scriptLogs: [...preScript.logs, ...postScript.logs],
+    state: postScript.state
+  };
 }
 
 export async function saveRunHistory(
@@ -383,7 +541,9 @@ export async function saveRunHistory(
   caseId: string | undefined,
   preview: ResolvedRequestPreview,
   response: SendRequestResult,
-  checkResults: CheckResult[]
+  checkResults: CheckResult[],
+  scriptLogs: ScriptLog[] = [],
+  sourceCollection?: { id: string; name: string; stepKey: string }
 ) {
   const record = workspace.requests.find(r => r.request.id === requestId);
   if (!record) return;
@@ -398,7 +558,11 @@ export async function saveRunHistory(
     environmentName: preview.environmentName,
     request: preview,
     response,
-    checkResults
+    checkResults,
+    scriptLogs,
+    sourceCollectionId: sourceCollection?.id,
+    sourceCollectionName: sourceCollection?.name,
+    sourceStepKey: sourceCollection?.stepKey
   };
   await appendHistory(entry);
 }
@@ -409,4 +573,169 @@ export async function clearRunHistory(root: string) {
 
 export async function loadRunHistory(root: string): Promise<RunHistoryEntry[]> {
   return loadHistory(root);
+}
+
+export type CollectionRunOptions = {
+  environmentName?: string;
+  stepKeys?: string[];
+  seedReport?: CollectionRunReport | null;
+};
+
+export async function runCollection(
+  workspace: WorkspaceIndex,
+  collectionId: string,
+  options: CollectionRunOptions = {}
+) {
+  const record = workspace.collections.find(item => item.document.id === collectionId);
+  if (!record) throw new Error('Collection not found');
+
+  const collection = record.document;
+  const environmentName = options.environmentName || collection.defaultEnvironment || workspace.project.defaultEnvironment;
+  const baseEnvironment = createRuntimeEnvironment(workspace, environmentName);
+  const parsedDataRows = parseCollectionDataText(record.dataText || '');
+  const iterations =
+    parsedDataRows.length > 0
+      ? parsedDataRows
+      : Array.from({ length: Math.max(collection.iterationCount || 1, 1) }, () => ({} as Record<string, unknown>));
+
+  const reportIterations: CollectionRunReport['iterations'] = [];
+  let passedSteps = 0;
+  let failedSteps = 0;
+  let skippedSteps = 0;
+
+  for (let index = 0; index < iterations.length; index += 1) {
+    const dataVars = iterations[index] || {};
+    const runtimeEnvironment = structuredClone(baseEnvironment);
+    const runtimeState = {
+      variables: { ...collection.vars },
+      environment: runtimeEnvironment
+    };
+    const seeded = seededStepOutputsFromReport(options.seedReport || null);
+    const stepRuns: CollectionStepRun[] = [];
+
+    const activeSteps = collection.steps.filter(step => step.enabled && (!options.stepKeys || options.stepKeys.includes(step.key)));
+    let stop = false;
+    for (const step of activeSteps) {
+      if (stop) {
+        stepRuns.push({
+          stepKey: step.key,
+          stepName: step.name || step.key,
+          requestId: step.requestId,
+          caseId: step.caseId,
+          ok: false,
+          skipped: true,
+          checkResults: [],
+          scriptLogs: [],
+          error: 'Skipped after previous failure'
+        });
+        skippedSteps += 1;
+        continue;
+      }
+
+      try {
+        const run = await runResolvedRequest(workspace, step.requestId, step.caseId, {
+          extraSources: [
+            dataVars,
+            { steps: seeded },
+            runtimeState.variables
+          ],
+          state: runtimeState,
+          collectionRules: collection.rules,
+          sourceCollection: {
+            id: collection.id,
+            name: collection.name,
+            stepKey: step.key
+          }
+        });
+
+        seeded[step.key] = stepOutputFromRun(run.preview, run.response);
+        const ok = run.checkResults.every(result => result.ok);
+        stepRuns.push({
+          stepKey: step.key,
+          stepName: step.name || step.key,
+          requestId: step.requestId,
+          caseId: step.caseId,
+          ok,
+          skipped: false,
+          request: run.preview,
+          response: run.response,
+          checkResults: run.checkResults,
+          scriptLogs: run.scriptLogs
+        });
+
+        if (ok) {
+          passedSteps += 1;
+        } else {
+          failedSteps += 1;
+          if (collection.stopOnFailure) {
+            stop = true;
+          }
+        }
+      } catch (error) {
+        failedSteps += 1;
+        stepRuns.push({
+          stepKey: step.key,
+          stepName: step.name || step.key,
+          requestId: step.requestId,
+          caseId: step.caseId,
+          ok: false,
+          skipped: false,
+          checkResults: [],
+          scriptLogs: [],
+          error: (error as Error).message || 'Collection step failed'
+        });
+        if (collection.stopOnFailure) {
+          stop = true;
+        }
+      }
+    }
+
+    reportIterations.push({
+      index,
+      dataLabel: parsedDataRows.length > 0 ? `Row ${index + 1}` : undefined,
+      dataVars: Object.fromEntries(Object.entries(dataVars).map(([key, value]) => [key, String(value ?? '')])),
+      stepRuns
+    });
+  }
+
+  const report: CollectionRunReport = {
+    id: createId('colrun'),
+    workspaceRoot: workspace.root,
+    collectionId: collection.id,
+    collectionName: collection.name,
+    environmentName,
+    status: failedSteps === 0 ? 'passed' : passedSteps > 0 ? 'partial' : 'failed',
+    startedAt: new Date().toISOString(),
+    finishedAt: new Date().toISOString(),
+    iterationCount: reportIterations.length || 1,
+    passedSteps,
+    failedSteps,
+    skippedSteps,
+    iterations: reportIterations
+  };
+  await appendCollectionReport(report);
+  return report;
+}
+
+export async function loadCollectionRunReports(root: string): Promise<CollectionRunReport[]> {
+  return loadCollectionReports(root);
+}
+
+export async function clearCollectionRunReports(root: string) {
+  await clearCollectionReports(root);
+}
+
+export function rerunFailedStepKeys(report: CollectionRunReport) {
+  return report.iterations
+    .flatMap(iteration => iteration.stepRuns)
+    .filter(step => !step.ok && !step.skipped)
+    .map(step => step.stepKey);
+}
+
+export function collectionReportSeed(report: CollectionRunReport) {
+  return report;
+}
+
+export function curlForPreview(preview: ResolvedRequestPreview) {
+  return buildCurlCommand(preview);
 }

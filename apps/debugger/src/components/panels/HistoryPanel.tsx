@@ -54,6 +54,11 @@ export function HistoryPanel(props: {
                   <div>
                     <Text size="xs" fw={700} c="dimmed">Selected Run</Text>
                     <Text size="sm">{selectedEntry.request.method} {selectedEntry.request.url}</Text>
+                    {selectedEntry.sourceCollectionName ? (
+                      <Text size="xs" c="dimmed">
+                        From {selectedEntry.sourceCollectionName} / {selectedEntry.sourceStepKey || 'step'}
+                      </Text>
+                    ) : null}
                   </div>
                   <Group gap="xs">
                     <Badge color={selectedEntry.response.ok ? 'green' : 'red'}>{selectedEntry.response.status}</Badge>
@@ -88,6 +93,19 @@ export function HistoryPanel(props: {
                         </div>
                       ))}
                     </div>
+                  )}
+                </div>
+                <div className="check-card">
+                  <Text fw={700}>Script Logs</Text>
+                  {selectedEntry.scriptLogs.length === 0 ? (
+                    <div className="empty-tab-state">No script logs were recorded for this run.</div>
+                  ) : (
+                    <CodeEditor
+                      value={selectedEntry.scriptLogs.map(log => `[${log.phase}] ${log.message}`).join('\n')}
+                      readOnly
+                      language="text"
+                      minHeight="180px"
+                    />
                   )}
                 </div>
               </div>

@@ -1,15 +1,17 @@
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use reqwest::{
+    cookie::Jar,
     header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE},
     multipart::{Form, Part},
     redirect::Policy,
+    Client,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
     time::Instant,
 };
 use tauri::{
@@ -19,6 +21,8 @@ use tauri::{
 
 static WATCHERS: OnceLock<Mutex<HashMap<String, RecommendedWatcher>>> = OnceLock::new();
 static RECENT_ROOTS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+static SESSION_JARS: OnceLock<Mutex<HashMap<String, Arc<Jar>>>> = OnceLock::new();
+static SESSION_CLIENTS: OnceLock<Mutex<HashMap<String, Client>>> = OnceLock::new();
 
 fn watcher_store() -> &'static Mutex<HashMap<String, RecommendedWatcher>> {
     WATCHERS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -26,6 +30,14 @@ fn watcher_store() -> &'static Mutex<HashMap<String, RecommendedWatcher>> {
 
 fn recent_root_store() -> &'static Mutex<Vec<String>> {
     RECENT_ROOTS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn session_jar_store() -> &'static Mutex<HashMap<String, Arc<Jar>>> {
+    SESSION_JARS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn session_client_store() -> &'static Mutex<HashMap<String, Client>> {
+    SESSION_CLIENTS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -97,6 +109,7 @@ struct SendRequestInput {
     headers: Vec<ParameterRow>,
     query: Vec<ParameterRow>,
     body: RequestBody,
+    session_id: Option<String>,
     timeout_ms: Option<u64>,
     follow_redirects: Option<bool>,
 }
@@ -197,6 +210,36 @@ fn save_history_entries<R: Runtime>(
 ) -> Result<(), String> {
     let file_path = history_file_path(app)?;
     let content = serde_json::to_string_pretty(entries).map_err(|error| error.to_string())?;
+    fs::write(file_path, content).map_err(|error| error.to_string())
+}
+
+fn collection_report_file_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| error.to_string())?;
+    fs::create_dir_all(&cache_dir).map_err(|error| error.to_string())?;
+    Ok(cache_dir.join("collection-reports.json"))
+}
+
+fn load_collection_reports<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<serde_json::Value>, String> {
+    let file_path = collection_report_file_path(app)?;
+    if !file_path.exists() {
+        return Ok(Vec::new());
+    }
+    let content = fs::read_to_string(file_path).map_err(|error| error.to_string())?;
+    if content.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    serde_json::from_str(&content).map_err(|error| error.to_string())
+}
+
+fn save_collection_reports<R: Runtime>(
+    app: &AppHandle<R>,
+    reports: &[serde_json::Value],
+) -> Result<(), String> {
+    let file_path = collection_report_file_path(app)?;
+    let content = serde_json::to_string_pretty(reports).map_err(|error| error.to_string())?;
     fs::write(file_path, content).map_err(|error| error.to_string())
 }
 
@@ -506,6 +549,83 @@ fn history_clear(app: AppHandle, workspace_root: Option<String>) -> Result<(), S
     save_history_entries(&app, &[])
 }
 
+#[tauri::command]
+fn collection_report_load(
+    app: AppHandle,
+    workspace_root: Option<String>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let reports = load_collection_reports(&app)?;
+    if let Some(root) = workspace_root {
+        let normalized = normalize_path(&root);
+        return Ok(reports
+            .into_iter()
+            .filter(|report| {
+                report
+                    .get("workspaceRoot")
+                    .and_then(|value| value.as_str())
+                    .map(|value| normalize_path(value) == normalized)
+                    .unwrap_or(false)
+            })
+            .collect());
+    }
+    Ok(reports)
+}
+
+#[tauri::command]
+fn collection_report_append(app: AppHandle, report: serde_json::Value) -> Result<(), String> {
+    let mut reports = load_collection_reports(&app)?;
+    reports.insert(0, report);
+    if reports.len() > 100 {
+        reports.truncate(100);
+    }
+    save_collection_reports(&app, &reports)
+}
+
+#[tauri::command]
+fn collection_report_clear(app: AppHandle, workspace_root: Option<String>) -> Result<(), String> {
+    if let Some(root) = workspace_root {
+        let normalized = normalize_path(&root);
+        let next_reports = load_collection_reports(&app)?
+            .into_iter()
+            .filter(|report| {
+                report
+                    .get("workspaceRoot")
+                    .and_then(|value| value.as_str())
+                    .map(|value| normalize_path(value) != normalized)
+                    .unwrap_or(true)
+            })
+            .collect::<Vec<_>>();
+        return save_collection_reports(&app, &next_reports);
+    }
+
+    save_collection_reports(&app, &[])
+}
+
+fn build_http_client(jar: Arc<Jar>, timeout_ms: u64, follow_redirects: bool) -> Result<Client, String> {
+    reqwest::Client::builder()
+        .cookie_provider(jar)
+        .timeout(std::time::Duration::from_millis(timeout_ms))
+        .redirect(if follow_redirects {
+            Policy::limited(10)
+        } else {
+            Policy::none()
+        })
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+fn session_jar(session_id: &str) -> Result<Arc<Jar>, String> {
+    let mut store = session_jar_store()
+        .lock()
+        .map_err(|_| "session jar store poisoned".to_string())?;
+    if let Some(existing) = store.get(session_id) {
+        return Ok(existing.clone());
+    }
+    let jar = Arc::new(Jar::default());
+    store.insert(session_id.to_string(), jar.clone());
+    Ok(jar)
+}
+
 fn header_map(rows: &[ParameterRow], body: &RequestBody) -> Result<HeaderMap, String> {
     let mut headers = HeaderMap::new();
     for row in rows.iter().filter(|row| row.enabled && !row.name.trim().is_empty()) {
@@ -571,15 +691,28 @@ async fn request_send(input: SendRequestInput) -> Result<SendRequestResult, Stri
         .method
         .parse::<reqwest::Method>()
         .map_err(|error| error.to_string())?;
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_millis(input.timeout_ms.unwrap_or(30_000)))
-        .redirect(if input.follow_redirects.unwrap_or(true) {
-            Policy::limited(10)
+    let timeout_ms = input.timeout_ms.unwrap_or(30_000);
+    let follow_redirects = input.follow_redirects.unwrap_or(true);
+    let client = if let Some(session_id) = input.session_id.as_deref() {
+        let normalized_session = normalize_path(session_id);
+        let jar = session_jar(&normalized_session)?;
+        if follow_redirects {
+            let mut clients = session_client_store()
+                .lock()
+                .map_err(|_| "session client store poisoned".to_string())?;
+            if let Some(existing) = clients.get(&normalized_session) {
+                existing.clone()
+            } else {
+                let client = build_http_client(jar.clone(), timeout_ms, true)?;
+                clients.insert(normalized_session.clone(), client.clone());
+                client
+            }
         } else {
-            Policy::none()
-        })
-        .build()
-        .map_err(|error| error.to_string())?;
+            build_http_client(jar, timeout_ms, false)?
+        }
+    } else {
+        build_http_client(Arc::new(Jar::default()), timeout_ms, follow_redirects)?
+    };
 
     let start = Instant::now();
     let mut request = client.request(method, &input.url);
@@ -704,6 +837,9 @@ pub fn run() {
             history_load,
             history_append,
             history_clear,
+            collection_report_load,
+            collection_report_append,
+            collection_report_clear,
             request_send
         ])
         .run(tauri::generate_context!())
