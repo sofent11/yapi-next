@@ -41,11 +41,13 @@ export function HistoryPanel(props: {
   const selectedEntry = filteredEntries.find(item => item.id === props.selectedEntryId) || filteredEntries[0] || null;
   const compareEntry =
     filteredEntries.find(item => item.id === compareEntryId) ||
-    filteredEntries.find(item => item.id !== selectedEntry?.id) ||
+    filteredEntries.find(item => selectedEntry && item.id !== selectedEntry.id) ||
     null;
+  const selectedCheckResults = Array.isArray(selectedEntry?.checkResults) ? selectedEntry.checkResults : [];
+  const selectedScriptLogs = Array.isArray(selectedEntry?.scriptLogs) ? selectedEntry.scriptLogs : [];
 
   return (
-    <section className="workspace-main history-center">
+    <div className="history-center" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div className="panel-toolbar">
         <div className="breadcrumb-list">
           <span className="breadcrumb-chip">History</span>
@@ -121,7 +123,7 @@ export function HistoryPanel(props: {
                     placeholder="Select another run"
                     value={compareEntry?.id || null}
                     data={filteredEntries
-                      .filter(entry => entry.id !== selectedEntry.id)
+                      .filter(entry => !selectedEntry || entry.id !== selectedEntry.id)
                       .map(entry => ({
                         value: entry.id,
                         label: `${entry.requestName} · ${entry.response.status} · ${entry.response.durationMs} ms`
@@ -148,11 +150,11 @@ export function HistoryPanel(props: {
               <div className="checks-list">
                 <div className="check-card">
                   <Text fw={700}>Check Results</Text>
-                  {selectedEntry.checkResults.length === 0 ? (
+                  {selectedCheckResults.length === 0 ? (
                     <div className="empty-tab-state">No case checks were attached to this run.</div>
                   ) : (
                     <div className="checks-list">
-                      {selectedEntry.checkResults.map(result => (
+                      {selectedCheckResults.map(result => (
                         <div key={result.id} className="check-result-row">
                           <Badge color={result.ok ? 'green' : 'red'}>{result.ok ? 'PASS' : 'FAIL'}</Badge>
                           <div className="tree-row-copy">
@@ -166,11 +168,11 @@ export function HistoryPanel(props: {
                 </div>
                 <div className="check-card">
                   <Text fw={700}>Script Logs</Text>
-                  {selectedEntry.scriptLogs.length === 0 ? (
+                  {selectedScriptLogs.length === 0 ? (
                     <div className="empty-tab-state">No script logs were recorded for this run.</div>
                   ) : (
                     <CodeEditor
-                      value={selectedEntry.scriptLogs.map(log => `[${log.phase}] ${log.message}`).join('\n')}
+                      value={selectedScriptLogs.map(log => `[${log.phase}] ${log.message}`).join('\n')}
                       readOnly
                       language="text"
                       minHeight="180px"
@@ -182,6 +184,6 @@ export function HistoryPanel(props: {
           ) : null}
         </div>
       </div>
-    </section>
+    </div>
   );
 }

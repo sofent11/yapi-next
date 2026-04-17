@@ -1,5 +1,5 @@
-import { Button, Text, TextInput } from '@mantine/core';
-import { IconFolderOpen, IconPlus, IconHistory } from '@tabler/icons-react';
+import { Button, Text, TextInput, Paper, Group, Stack, Badge } from '@mantine/core';
+import { IconFolderOpen, IconPlus, IconHistory, IconRocket, IconBolt, IconGitBranch } from '@tabler/icons-react';
 
 export function WelcomePanel(props: {
   projectName: string;
@@ -19,6 +19,29 @@ export function WelcomePanel(props: {
             <br /><br />
             Everything is stored as plain text files, perfect for Git collaboration.
           </p>
+
+          <Stack gap="xs" mt="xl">
+            <Paper p="sm" withBorder style={{ background: 'var(--surface-muted)' }}>
+              <Group gap="xs" mb={4}>
+                <IconRocket size={16} color="var(--accent)" />
+                <Text size="xs" fw={700}>Quick Tips</Text>
+              </Group>
+              <Stack gap={6}>
+                <Group gap={6}>
+                  <Badge variant="outline" size="xs" color="gray">Cmd+K</Badge>
+                  <Text size="xs" c="dimmed">Global Search</Text>
+                </Group>
+                <Group gap={6}>
+                  <IconGitBranch size={12} color="var(--muted)" />
+                  <Text size="xs" c="dimmed">Built-in Git integration</Text>
+                </Group>
+                <Group gap={6}>
+                  <IconBolt size={12} color="var(--muted)" />
+                  <Text size="xs" c="dimmed">Drag & Drop to reorder</Text>
+                </Group>
+              </Stack>
+            </Paper>
+          </Stack>
         </div>
 
         <div className="launchpad-main">

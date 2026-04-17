@@ -186,6 +186,24 @@ struct CheckResult {
     message: String,
     expected: Option<String>,
     actual: Option<String>,
+    #[serde(default = "default_check_result_source")]
+    source: String,
+}
+
+fn default_check_result_source() -> String {
+    "builtin".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ScriptLog {
+    phase: String,
+    #[serde(default = "default_script_log_level")]
+    level: String,
+    message: String,
+}
+
+fn default_script_log_level() -> String {
+    "log".into()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -200,7 +218,16 @@ struct RunHistoryEntry {
     environment_name: Option<String>,
     request: ResolvedRequestPreview,
     response: SendRequestResult,
+    #[serde(default)]
     check_results: Vec<CheckResult>,
+    #[serde(default)]
+    script_logs: Vec<ScriptLog>,
+    #[serde(default)]
+    source_collection_id: Option<String>,
+    #[serde(default)]
+    source_collection_name: Option<String>,
+    #[serde(default)]
+    source_step_key: Option<String>,
 }
 
 fn default_parameter_kind() -> String {

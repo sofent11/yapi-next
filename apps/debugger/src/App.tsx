@@ -62,6 +62,7 @@ import {
   saveScratchRequestToWorkspace
 } from './lib/workspace';
 import { AppRail, type AppRailView } from './components/panels/AppRail';
+import { TabHeader } from './components/layout/TabHeader';
 import { CollectionRunnerPanel } from './components/panels/CollectionRunnerPanel';
 import { EnvironmentCenterPanel } from './components/panels/EnvironmentCenterPanel';
 import { HistoryPanel } from './components/panels/HistoryPanel';
@@ -72,6 +73,7 @@ import { ScratchPadPanel } from './components/panels/ScratchPadPanel';
 import { WelcomePanel } from './components/panels/WelcomePanel';
 import { WorkspaceMainPanel } from './components/panels/WorkspaceMainPanel';
 import { Resizer } from './components/primitives/Resizer';
+import { StatusBar } from './components/layout/StatusBar';
 import { createScratchSession, loadScratchSessions, normalizeScratchTitle, saveScratchSessions, type ScratchSession } from './lib/scratch';
 import {
   defaultWorkspaceUiState,
@@ -258,6 +260,14 @@ function scratchSessionFromHistory(entry: RunHistoryEntry) {
   });
 }
 
+function normalizeHistoryEntry(entry: RunHistoryEntry): RunHistoryEntry {
+  return {
+    ...entry,
+    checkResults: Array.isArray(entry.checkResults) ? entry.checkResults : [],
+    scriptLogs: Array.isArray(entry.scriptLogs) ? entry.scriptLogs : []
+  };
+}
+
 export function App() {
   const store = useWorkspaceStore();
   const gridRef = useRef<HTMLDivElement>(null);
@@ -395,6 +405,28 @@ export function App() {
     currentScratchPreview?.url ||
     null;
 
+  const responseInfo = useMemo(() => {
+    if (!store.response) return null;
+    return {
+      status: store.response.status,
+      duration: store.response.durationMs,
+      ok: store.response.status >= 200 && store.response.status < 300
+    };
+  }, [store.response]);
+
+  function renderTabHeader() {
+    if (!store.workspace) return null;
+    return (
+      <TabHeader
+        workspace={store.workspace}
+        tabs={store.openTabs}
+        activeNode={store.selectedNode}
+        onSelect={store.selectNode}
+        onClose={store.closeTab}
+      />
+    );
+  }
+
   const importPreviewInfo = useMemo(() => {
     if (!store.workspace || !store.importPreview) return null;
     return buildImportPreviewSummary(store.workspace, store.importPreview);
@@ -525,7 +557,7 @@ export function App() {
         result.checkResults,
         result.scriptLogs
       );
-      loadRunHistory(store.workspace.root).then(setHistoryEntries);
+      loadRunHistory(store.workspace.root).then(entries => setHistoryEntries(entries.map(normalizeHistoryEntry)));
     },
     onError: error => {
       const message = (error as any).message || String(error) || 'Unknown network error';
@@ -573,7 +605,7 @@ export function App() {
         result.checkResults,
         result.scriptLogs
       );
-      loadRunHistory(store.workspace.root).then(setHistoryEntries);
+      loadRunHistory(store.workspace.root).then(entries => setHistoryEntries(entries.map(normalizeHistoryEntry)));
       inspectSession(store.workspace.root, result.preview.url).then(setSessionSnapshot).catch(() => setSessionSnapshot(null));
     },
     onError: error => {
@@ -831,8 +863,9 @@ export function App() {
     }
     loadRunHistory(store.workspace.root)
       .then(entries => {
-        setHistoryEntries(entries);
-        setSelectedHistoryId(entries[0]?.id || null);
+        const normalizedEntries = entries.map(normalizeHistoryEntry);
+        setHistoryEntries(normalizedEntries);
+        setSelectedHistoryId(normalizedEntries[0]?.id || null);
       })
       .catch(() => undefined);
   }, [store.workspace?.root]);
@@ -1908,63 +1941,75 @@ export function App() {
                 onMainSplitRatioChange={setScratchMainSplitRatio}
               />
             ) : activeView === 'history' ? (
-              <HistoryPanel
-                entries={historyEntries}
-                selectedEntryId={selectedHistoryId}
-                onSelectEntry={setSelectedHistoryId}
-                onReplay={handleReplayHistory}
-                onOpenInScratch={handleOpenHistoryInScratch}
-                onDuplicateAsCase={handleDuplicateHistoryAsCase}
-                onPinAsBaseline={handlePinHistoryAsBaseline}
-                onGenerateDiffChecks={handleGenerateHistoryDiffChecks}
-                onClear={handleClearHistory}
-              />
+              <section className="workspace-main" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                {renderTabHeader()}
+                <HistoryPanel
+                  entries={historyEntries}
+                  selectedEntryId={selectedHistoryId}
+                  onSelectEntry={setSelectedHistoryId}
+                  onReplay={handleReplayHistory}
+                  onOpenInScratch={handleOpenHistoryInScratch}
+                  onDuplicateAsCase={handleDuplicateHistoryAsCase}
+                  onPinAsBaseline={handlePinHistoryAsBaseline}
+                  onGenerateDiffChecks={handleGenerateHistoryDiffChecks}
+                  onClear={handleClearHistory}
+                />
+              </section>
             ) : activeView === 'sessions' ? (
-              <SessionCenterPanel
-                workspace={store.workspace}
-                activeEnvironmentName={store.activeEnvironmentName}
-                runtimeVariables={runtimeVariables}
-                sessionSnapshot={sessionSnapshot}
-                hostSnapshots={hostSessionSnapshots}
-                targetUrl={sessionTargetUrl}
-                onRefresh={handleRefreshSession}
-                onClearSession={handleClearSessionCookies}
-                onClearRuntimeVars={() => setRuntimeVariables({})}
-              />
+              <section className="workspace-main" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                {renderTabHeader()}
+                <SessionCenterPanel
+                  workspace={store.workspace}
+                  activeEnvironmentName={store.activeEnvironmentName}
+                  runtimeVariables={runtimeVariables}
+                  sessionSnapshot={sessionSnapshot}
+                  hostSnapshots={hostSessionSnapshots}
+                  targetUrl={sessionTargetUrl}
+                  onRefresh={handleRefreshSession}
+                  onClearSession={handleClearSessionCookies}
+                  onClearRuntimeVars={() => setRuntimeVariables({})}
+                />
+              </section>
             ) : activeView === 'collections' ? (
-              <CollectionRunnerPanel
-                workspace={store.workspace}
-                selectedCollectionId={selectedCollectionId}
-                draftCollection={draftCollection}
-                collectionDataText={collectionDataText}
-                reports={collectionReports}
-                selectedReportId={selectedCollectionReportId}
-                selectedReportStepKey={selectedCollectionStepKey}
-                onSelectCollection={handleSelectCollection}
-                onCollectionChange={collection => setDraftCollection(collection)}
-                onCollectionDataChange={setCollectionDataText}
-                onCreateCollection={handleCreateCollection}
-                onDeleteCollection={handleDeleteCollection}
-                onSaveCollection={handleSaveCollection}
-                onRunCollection={handleRunCollection}
-                onRerunFailed={handleRerunFailedCollectionSteps}
-                onClearReports={handleClearCollectionReports}
-                onSelectReport={setSelectedCollectionReportId}
-                onSelectReportStep={setSelectedCollectionStepKey}
-                onExtractValue={handleExtractCollectionReportValue}
-              />
+              <section className="workspace-main" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                {renderTabHeader()}
+                <CollectionRunnerPanel
+                  workspace={store.workspace}
+                  selectedCollectionId={selectedCollectionId}
+                  draftCollection={draftCollection}
+                  collectionDataText={collectionDataText}
+                  reports={collectionReports}
+                  selectedReportId={selectedCollectionReportId}
+                  selectedReportStepKey={selectedCollectionStepKey}
+                  onSelectCollection={handleSelectCollection}
+                  onCollectionChange={collection => setDraftCollection(collection)}
+                  onCollectionDataChange={setCollectionDataText}
+                  onCreateCollection={handleCreateCollection}
+                  onDeleteCollection={handleDeleteCollection}
+                  onSaveCollection={handleSaveCollection}
+                  onRunCollection={handleRunCollection}
+                  onRerunFailed={handleRerunFailedCollectionSteps}
+                  onClearReports={handleClearCollectionReports}
+                  onSelectReport={setSelectedCollectionReportId}
+                  onSelectReportStep={setSelectedCollectionStepKey}
+                  onExtractValue={handleExtractCollectionReportValue}
+                />
+              </section>
             ) : activeView === 'environments' ? (
-              <EnvironmentCenterPanel
-                workspace={store.workspace}
-                draftProject={store.draftProject}
-                activeEnvironmentName={store.activeEnvironmentName}
-                selectedEnvironment={selectedEnvironment}
-                onEnvironmentChange={name => store.setActiveEnvironment(name)}
-                onProjectChange={project => store.updateProject(project)}
-                onEnvironmentUpdate={(name, updater) => store.updateEnvironment(name, updater)}
-                onAddEnvironment={handleAddEnvironment}
-                onSave={() => saveMutation.mutate()}
-              />
+              <section className="workspace-main" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                {renderTabHeader()}
+                <EnvironmentCenterPanel
+                  workspace={store.workspace}
+                  draftProject={store.draftProject}
+                  activeEnvironmentName={store.activeEnvironmentName}
+                  selectedEnvironment={selectedEnvironment}
+                  onEnvironmentChange={name => store.setActiveEnvironment(name)}
+                  onProjectChange={project => store.updateProject(project)}
+                  onEnvironmentUpdate={(name, updater) => store.updateEnvironment(name, updater)}
+                  onAddEnvironment={handleAddEnvironment}
+                  onSave={() => saveMutation.mutate()}
+                />
+              </section>
             ) : (
               <WorkspaceMainPanel
                 workspace={store.workspace}
@@ -2040,6 +2085,12 @@ export function App() {
               />
             )}
           </main>
+          <StatusBar
+            gitStatus={gitInfo}
+            activeEnvironment={store.activeEnvironmentName}
+            responseInfo={responseInfo}
+            onRefreshGit={handleRefreshGitStatus}
+          />
         </div>
       </div>
 
