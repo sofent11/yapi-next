@@ -15,29 +15,29 @@ export function WelcomePanel(props: {
         <div className="launchpad-sidebar">
           <h1 className="launchpad-title">YAPI Next Debugger</h1>
           <p className="section-description" style={{ fontSize: '0.9rem', lineHeight: 1.6 }}>
-            面向开发与测试的本地优先接口调试工作区。
+            面向开发与测试协作的本地优先 API 工作台。
             <br /><br />
-            请求、环境、Case 与 Collection 都以文本文件保存，方便纳入 Git 协作与本地回归。
+            先建立工作区，再导入 API 规范、修复阻塞项、发送请求，并把有效结果沉淀为 Case 与 Collection。
           </p>
 
           <Stack gap="xs" mt="xl">
             <Paper p="sm" withBorder style={{ background: 'var(--surface-muted)' }}>
               <Group gap="xs" mb={4}>
                 <IconRocket size={16} color="var(--accent)" />
-                <Text size="xs" fw={700}>快速开始</Text>
+                <Text size="xs" fw={700}>开始路径</Text>
               </Group>
               <Stack gap={6}>
                 <Group gap={6}>
-                  <Badge variant="outline" size="xs" color="gray">Cmd+K</Badge>
-                  <Text size="xs" c="dimmed">快速搜索请求与目录</Text>
+                  <Badge variant="outline" size="xs" color="gray">1</Badge>
+                  <Text size="xs" c="dimmed">打开已有工作区，或先新建一个本地目录</Text>
                 </Group>
                 <Group gap={6}>
-                  <IconGitBranch size={12} color="var(--muted)" />
-                  <Text size="xs" c="dimmed">内置 Git 同步视图</Text>
+                  <Badge variant="outline" size="xs" color="gray">2</Badge>
+                  <Text size="xs" c="dimmed">进入工作台后导入 OpenAPI / HAR / Postman</Text>
                 </Group>
                 <Group gap={6}>
-                  <IconBolt size={12} color="var(--muted)" />
-                  <Text size="xs" c="dimmed">支持拖拽整理目录与请求</Text>
+                  <Badge variant="outline" size="xs" color="gray">3</Badge>
+                  <Text size="xs" c="dimmed">把调试结果保存为 Case，再加入 Collection 复跑</Text>
                 </Group>
               </Stack>
             </Paper>
@@ -50,7 +50,7 @@ export function WelcomePanel(props: {
             <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
               <TextInput
                 size="sm"
-                label="新建本地调试项目"
+                label="新建本地工作区"
                 placeholder="例如：支付接口联调"
                 value={props.projectName}
                 onChange={event => props.onProjectNameChange(event.currentTarget.value)}
@@ -61,7 +61,7 @@ export function WelcomePanel(props: {
                   leftSection={<IconFolderOpen size={16} />}
                   onClick={props.onOpenDirectory}
                 >
-                  导入已有 API / 打开工作区
+                  打开现有工作区
                 </Button>
                 <Button
                   variant="filled"
@@ -69,9 +69,12 @@ export function WelcomePanel(props: {
                   onClick={props.onCreateWorkspace}
                   disabled={!props.projectName.trim()}
                 >
-                  新建本地调试项目
+                  新建本地工作区
                 </Button>
               </div>
+              <Text size="xs" c="dimmed">
+                API 导入发生在进入工作区之后，这样请求、环境、Case 和 Collection 才会落在同一个本地项目里。
+              </Text>
             </div>
           </div>
 

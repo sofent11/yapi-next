@@ -153,7 +153,7 @@ export function ResponsePanel(props: {
             ]}
             onChange={value => props.onSelectExample(value === '__live__' ? null : value || null)}
           />
-          {parsedJson != null ? (
+          {props.response && parsedJson != null ? (
             <Button
               size="xs"
               variant={prettifyJson ? 'filled' : 'default'}
@@ -163,21 +163,23 @@ export function ResponsePanel(props: {
               {prettifyJson ? '已格式化' : '格式化 JSON'}
             </Button>
           ) : null}
-          <Button size="xs" variant="default" onClick={props.onCopyBody} disabled={!displayBody}>复制响应</Button>
-          <Button size="xs" variant="default" onClick={props.onCopyCurl} disabled={!props.requestPreview}>复制 cURL</Button>
-          <Group gap={6} wrap="wrap" className="response-header-actions-secondary">
-            <Button size="xs" variant="filled" color="indigo" onClick={props.onSaveAs} disabled={!props.response}>
-              Save As
-            </Button>
-            <Button size="xs" variant="filled" color="indigo" onClick={props.onReplaceExample} disabled={!props.response || !selectedExample}>
-              覆盖当前 Example
-            </Button>
-          </Group>
+          {props.response ? (
+            <Group gap={6} wrap="wrap" className="response-header-actions-secondary">
+              <Button size="xs" variant="default" onClick={props.onCopyBody} disabled={!displayBody}>复制响应</Button>
+              <Button size="xs" variant="default" onClick={props.onCopyCurl} disabled={!props.requestPreview}>复制 cURL</Button>
+              <Button size="xs" variant="filled" color="indigo" onClick={props.onSaveAs} disabled={!props.onSaveAs}>
+                Save As
+              </Button>
+              <Button size="xs" variant="default" onClick={props.onReplaceExample} disabled={!selectedExample}>
+                覆盖当前 Example
+              </Button>
+            </Group>
+          ) : null}
         </Group>
       </div>
 
       {props.response ? (
-        <div className="response-quick-actions">
+        <div className="response-quick-actions response-results-toolbar">
           {props.requestPreview?.authState ? (
             <Text size="xs" c="dimmed">
               认证 {props.requestPreview.authState.type}
@@ -185,6 +187,9 @@ export function ResponsePanel(props: {
               {` · 注入${props.requestPreview.authState.tokenInjected ? '成功' : '未注入'} · 缓存 ${props.requestPreview.authState.cacheStatus}`}
             </Text>
           ) : null}
+          <Button size="xs" variant="default" onClick={props.onSaveAs} disabled={!props.onSaveAs}>
+            保存为资产
+          </Button>
           <Button
             size="xs"
             variant="light"

@@ -86,6 +86,7 @@ export function CollectionRunnerPanel(props: {
   onCopyText?: (value: string, successMessage: string) => void;
 }) {
   const [reportFilter, setReportFilter] = useState('');
+  const [activeStudioTab, setActiveStudioTab] = useState<'design' | 'data' | 'reports'>('design');
   const requestChoices = useMemo(() => requestOptions(props.workspace), [props.workspace]);
   const dataInspection = useMemo(() => {
     if (!props.collectionDataText.trim()) {
@@ -184,6 +185,15 @@ export function CollectionRunnerPanel(props: {
           <span className="breadcrumb-chip">{props.workspace.collections.length} total</span>
         </div>
         <div className="panel-toolbar-actions">
+          <Button size="xs" variant={activeStudioTab === 'design' ? 'filled' : 'default'} onClick={() => setActiveStudioTab('design')}>
+            Design
+          </Button>
+          <Button size="xs" variant={activeStudioTab === 'data' ? 'filled' : 'default'} onClick={() => setActiveStudioTab('data')}>
+            Data
+          </Button>
+          <Button size="xs" variant={activeStudioTab === 'reports' ? 'filled' : 'default'} onClick={() => setActiveStudioTab('reports')}>
+            Reports
+          </Button>
           <Button size="xs" variant="default" onClick={props.onCreateCollection}>New Collection</Button>
           <Button size="xs" variant="default" color="red" onClick={props.onDeleteCollection} disabled={!draftCollection}>
             Delete
@@ -279,7 +289,7 @@ export function CollectionRunnerPanel(props: {
         <div className="environment-main">
           {draftCollection ? (
             <>
-              <div className="inspector-section">
+              <div className={activeStudioTab === 'design' ? 'inspector-section collection-stage is-active' : 'inspector-section collection-stage'}>
                 <h3 className="section-title">Collection Settings</h3>
                 <div className="settings-grid">
                   <TextInput
@@ -663,7 +673,7 @@ export function CollectionRunnerPanel(props: {
                 </div>
               </div>
 
-              <div className="inspector-section">
+              <div className={activeStudioTab === 'data' ? 'inspector-section collection-stage is-active' : 'inspector-section collection-stage'}>
                 <h3 className="section-title">Data File</h3>
                 <div className="summary-grid" style={{ marginBottom: 12 }}>
                   <div className="summary-chip">
@@ -711,7 +721,7 @@ export function CollectionRunnerPanel(props: {
           )}
 
           {selectedReport ? (
-            <div className="inspector-section">
+            <div className={activeStudioTab === 'reports' ? 'inspector-section collection-stage is-active' : 'inspector-section collection-stage'}>
               <div className="checks-head">
                 <h3 className="section-title">Latest Report Detail</h3>
                 <Select

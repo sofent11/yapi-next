@@ -19,6 +19,8 @@ import { ResponsePanel } from './ResponsePanel';
 
 export function ScratchPadPanel(props: {
   workspace: WorkspaceIndex;
+  scratchSessions: Array<{ id: string; title: string }>;
+  selectedScratchId: string | null;
   request: RequestDocument;
   response: SendRequestResult | null;
   requestError: string | null;
@@ -38,6 +40,7 @@ export function ScratchPadPanel(props: {
   onRun: () => void;
   onSaveToWorkspace: () => void;
   onNewScratch: () => void;
+  onSelectScratch: (id: string) => void;
   onRequestTabChange: (tab: RequestTab) => void;
   onResponseTabChange: (tab: ResponseTab | 'json' | 'cookies' | 'compare') => void;
   onSelectExample: (name: string | null) => void;
@@ -60,9 +63,20 @@ export function ScratchPadPanel(props: {
       <div className="panel-toolbar">
         <div className="breadcrumb-list">
           <span className="breadcrumb-chip">Scratch</span>
-          <span className="breadcrumb-chip">临时请求</span>
+          <span className="breadcrumb-chip">临时试验区</span>
         </div>
         <div className="panel-toolbar-actions">
+          <select
+            className="scratch-session-select"
+            value={props.selectedScratchId || ''}
+            onChange={event => props.onSelectScratch(event.currentTarget.value)}
+          >
+            {props.scratchSessions.map(session => (
+              <option key={session.id} value={session.id}>
+                {session.title}
+              </option>
+            ))}
+          </select>
           {props.isDirty && <Badge color="orange" variant="filled" size="xs">Unsaved</Badge>}
           <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={props.onNewScratch}>
             新建 Scratch
@@ -83,6 +97,7 @@ export function ScratchPadPanel(props: {
         <div className="pane-surface">
           <RequestPanel
             workspace={props.workspace}
+            activeEnvironmentName={props.selectedEnvironment?.name}
             selectedEnvironment={props.selectedEnvironment}
             request={props.request}
             selectedCase={null}

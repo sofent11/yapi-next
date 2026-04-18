@@ -1,5 +1,5 @@
 import { Group, Text, Tooltip } from '@mantine/core';
-import { IconGitBranch, IconArrowUpRight, IconArrowDownRight, IconNetwork, IconClock, IconCheck, IconX, IconFileDelta } from '@tabler/icons-react';
+import { IconGitBranch, IconArrowUpRight, IconArrowDownRight, IconClock, IconCheck, IconX } from '@tabler/icons-react';
 import type { GitStatusPayload } from '../../lib/desktop';
 
 export function StatusBar(props: {
@@ -29,24 +29,12 @@ export function StatusBar(props: {
 
         {props.gitStatus?.isRepo ? (
           <div className="status-item">
-            <IconFileDelta size={14} />
-            <Text size="xs">未提交: <strong>{props.gitStatus.dirty ? props.gitStatus.changedFiles.length : 0}</strong></Text>
-          </div>
-        ) : null}
-
-        {props.gitStatus?.isRepo ? (
-          <div className="status-item">
             <IconArrowUpRight size={14} />
             <Text size="xs">{props.gitStatus.ahead}</Text>
             <IconArrowDownRight size={14} />
             <Text size="xs">{props.gitStatus.behind}</Text>
           </div>
         ) : null}
-
-        <div className="status-item">
-          <IconNetwork size={14} />
-          <Text size="xs">环境: <strong>{props.activeEnvironment}</strong></Text>
-        </div>
 
         {props.responseInfo && (
           <div className={`status-response-pill animate-in ${responseTone}`}>

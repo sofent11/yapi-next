@@ -95,14 +95,14 @@ export function WorkspaceHomePanel(props: {
       <div className="panel-toolbar">
         <div className="breadcrumb-list">
           <span className="breadcrumb-chip">{props.workspace.project.name}</span>
-          <span className="breadcrumb-chip">工作区首页</span>
+          <span className="breadcrumb-chip">Workbench</span>
         </div>
         <div className="panel-toolbar-actions">
           <Button size="xs" variant="default" leftSection={<IconUpload size={14} />} onClick={props.onOpenImport}>
             导入 API 规范
           </Button>
           <Button size="xs" variant="default" leftSection={<IconLifebuoy size={14} />} onClick={props.onOpenRepair}>
-            打开导入任务
+            打开 Import Tasks
           </Button>
         </div>
       </div>
@@ -112,17 +112,20 @@ export function WorkspaceHomePanel(props: {
           <div className="workspace-home-hero">
             <div>
               <Text className="section-kicker">本地优先接口工作区</Text>
-              <h2 className="workspace-home-title">先导入 API，再把一次调试沉淀成可复跑的请求、Case 和 Collection。</h2>
+              <h2 className="workspace-home-title">先建工作区，再把一次调试沉淀成可复跑的请求、Case 与 Collection。</h2>
               <Text size="sm" c="dimmed" maw={680}>
-                这套调试器最强的地方，在于同一份本地文件既能支撑开发联调，也能支撑测试回归。建议先导入规范、修复阻塞项、发送成功一次，再保存为 Case 并加入 Collection。
+                这套调试器的核心不是单次发送，而是把联调结果保存成团队可继续使用的本地资产。建议先导入规范、处理导入任务、完成首次发送，再保存为 Case 并加入 Collection。
               </Text>
             </div>
             <div className="workspace-home-primary-actions">
               <Button leftSection={<IconUpload size={16} />} onClick={props.onOpenImport}>
-                导入已有 API
+                导入 API
+              </Button>
+              <Button variant="default" leftSection={<IconLifebuoy size={16} />} onClick={props.onOpenRepair}>
+                处理导入任务
               </Button>
               <Button variant="default" leftSection={<IconPlugConnected size={16} />} onClick={props.onOpenEnvironmentCenter}>
-                准备环境与认证
+                准备环境
               </Button>
             </div>
           </div>
@@ -130,7 +133,7 @@ export function WorkspaceHomePanel(props: {
           <div className="workspace-home-hero compact">
             <div>
               <Text className="section-kicker">主流程</Text>
-              <h2 className="workspace-home-title">导入、修复、发送、保存为 Case，然后加入 Collection 复跑。</h2>
+              <h2 className="workspace-home-title">导入、修复、发送、沉淀 Case，再组合成可回放的 Collection。</h2>
               <Text size="sm" c="dimmed" maw={720}>
                 让同一份 Request 资产在开发联调和回归检查之间自然流转，而不是在不同工具里重复搭建。
               </Text>
@@ -145,7 +148,7 @@ export function WorkspaceHomePanel(props: {
                 onClick={props.onOpenFirstBlocked}
                 disabled={!props.repairSummary || props.repairSummary.blockingCount === 0}
               >
-                处理第一个阻塞请求
+                打开首个阻塞项
               </Button>
               <Button
                 variant="default"
@@ -201,11 +204,11 @@ export function WorkspaceHomePanel(props: {
           <div className="workspace-home-card">
             <div className="workspace-home-card-head">
               <div>
-                <Text className="section-kicker">Recent Import</Text>
-                <h3 className="section-title">Import to runnable</h3>
+                <Text className="section-kicker">Import Tasks</Text>
+                <h3 className="section-title">从导入结果走向可运行</h3>
               </div>
               <Button size="xs" variant="subtle" rightSection={<IconArrowRight size={12} />} onClick={props.onOpenRepair}>
-                Repair
+                打开任务流
               </Button>
             </div>
             {props.importSession ? (
@@ -229,12 +232,12 @@ export function WorkspaceHomePanel(props: {
                   </div>
                 </div>
                 <Text size="sm" c="dimmed">
-                  Imported {props.importSession.importedAt}. Runnable score {props.importSession.runnableScore}% with {props.importSession.warningCount} warnings left to review.
+                  最近一次导入于 {props.importSession.importedAt} 完成。当前 runnable score 为 {props.importSession.runnableScore}% ，还有 {props.importSession.warningCount} 个提醒待确认。
                 </Text>
               </>
             ) : (
               <div className="empty-tab-state">
-                No recent import batch yet. Import OpenAPI, Swagger, HAR, or Postman to start the main flow.
+                还没有导入批次。先导入 OpenAPI、Swagger、HAR 或 Postman，再把导入 warning 收敛成可执行任务。
               </div>
             )}
           </div>

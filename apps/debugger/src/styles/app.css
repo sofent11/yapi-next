@@ -1,20 +1,30 @@
+@import url("https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap");
+
 :root {
   color-scheme: light;
-  font-family: "Inter", "PingFang SC", sans-serif;
-  --font-ui: "Inter", "PingFang SC", sans-serif;
+  font-family: "Public Sans", "PingFang SC", sans-serif;
+  --font-ui: "Public Sans", "PingFang SC", sans-serif;
+  --font-display: "Sora", "PingFang SC", sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Mono", monospace;
-  --canvas: #f6f8fa;
-  --surface: #ffffff;
-  --surface-raised: #fdfdfe;
-  --surface-panel: #ffffff;
-  --surface-muted: #f1f3f5;
-  --line: #d1d9e0;
-  --line-strong: #adb5bd;
-  --text: #1b1f24;
-  --muted: #6e7781;
-  --muted-strong: #444d56;
-  --accent: #0969da;
-  --accent-soft: #f0f7ff;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 48px;
+  --canvas: oklch(0.965 0.008 248);
+  --surface: oklch(0.992 0.004 248);
+  --surface-raised: oklch(0.985 0.007 248);
+  --surface-panel: oklch(0.987 0.006 248);
+  --surface-muted: oklch(0.96 0.01 248);
+  --line: oklch(0.89 0.015 248);
+  --line-strong: oklch(0.79 0.02 248);
+  --text: oklch(0.22 0.02 248);
+  --muted: oklch(0.51 0.018 248);
+  --muted-strong: oklch(0.37 0.02 248);
+  --accent: oklch(0.54 0.16 249);
+  --accent-soft: oklch(0.95 0.03 249);
   --green: #1a7f37;
   --green-soft: #dafbe1;
   --blue: #0969da;
@@ -73,6 +83,7 @@ mark {
   font-size: 0.95rem;
   font-weight: 600;
   line-height: 1.2;
+  font-family: var(--font-display);
 }
 
 .recent-root-label {
@@ -232,21 +243,22 @@ mark {
 }
 
 .workspace-contextbar {
-  min-height: 40px;
+  min-height: 48px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding: 0 16px;
+  gap: 16px;
+  padding: 0 18px;
   border-bottom: 1px solid var(--line);
-  background: var(--surface);
+  background: color-mix(in oklch, var(--surface) 86%, var(--surface-muted));
 }
 
 .workspace-context-copy {
   min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .workspace-context-label {
@@ -258,15 +270,18 @@ mark {
 
 .workspace-context-title {
   font-size: 0.9rem;
-  font-weight: 650;
+  font-weight: 700;
+  font-family: var(--font-display);
 }
 
 .workspace-context-path {
   min-width: 0;
-  max-width: 52vw;
+  max-width: min(52vw, 720px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 .workspace-context-actions {
@@ -309,7 +324,7 @@ mark {
   grid-template-columns: 48px minmax(240px, var(--tree-width)) 1px minmax(0, 1fr);
   gap: 0;
   overflow: hidden;
-  background: var(--surface);
+  background: linear-gradient(180deg, color-mix(in oklch, var(--surface) 92%, var(--canvas)), var(--surface));
 }
 
 .app-rail,
@@ -384,11 +399,11 @@ mark {
 }
 
 .app-rail {
-  padding: 12px 0;
+  padding: 14px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: var(--surface-muted);
+  background: color-mix(in oklch, var(--surface-muted) 92%, var(--surface));
   border-right: 1px solid var(--line);
 }
 
@@ -400,6 +415,8 @@ mark {
   justify-content: center;
   color: var(--accent);
   margin-bottom: 12px;
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--accent-soft) 70%, white);
 }
 
 .app-rail .mantine-ActionIcon-root {
@@ -429,9 +446,9 @@ mark {
 }
 
 .tree-panel-header {
-  padding: 12px 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--line);
-  background: var(--surface-muted);
+  background: color-mix(in oklch, var(--surface-muted) 90%, var(--surface));
   user-select: none;
 }
 
@@ -696,7 +713,7 @@ mark {
   align-items: center;
   flex-wrap: wrap;
   flex-shrink: 0;
-  padding: 8px 16px;
+  padding: 10px 18px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   gap: 12px;
@@ -756,11 +773,40 @@ mark {
 }
 
 .request-header-compact {
-  padding: 12px 16px;
+  padding: 14px 18px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   flex-shrink: 0;
   overflow-x: auto;
+  display: grid;
+  gap: 12px;
+}
+
+.request-header-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.request-header-meta-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.request-header-meta-pills {
+  justify-content: flex-end;
+}
+
+.request-case-strip {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.request-case-strip .mantine-Select-root {
+  width: 240px;
 }
 
 .method-url-group {
@@ -770,7 +816,7 @@ mark {
   gap: 1px;
   background: var(--line);
   padding: 1px;
-  border-radius: 4px;
+  border-radius: 10px;
   min-width: 0;
   min-height: 38px;
   overflow-x: auto;
@@ -783,7 +829,7 @@ mark {
 }
 
 .method-select-ide .mantine-Select-input {
-  border-radius: 3px 0 0 3px !important;
+  border-radius: 9px 0 0 9px !important;
   border: none !important;
   font-weight: 700;
   background: var(--surface-muted);
@@ -806,7 +852,7 @@ mark {
 }
 
 .request-panel .mantine-Button-root[variant="default"] {
-  border-radius: 0 3px 3px 0 !important;
+  border-radius: 0 9px 9px 0 !important;
   border: none !important;
 }
 
@@ -820,11 +866,41 @@ mark {
   white-space: nowrap;
 }
 
+.request-tab-tier {
+  display: flex;
+  gap: 8px;
+  padding: 10px 18px 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.request-tab-tier-button {
+  border: 1px solid var(--line);
+  background: color-mix(in oklch, var(--surface-muted) 75%, var(--surface));
+  color: var(--muted-strong);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.request-tab-tier-button.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: color-mix(in oklch, var(--accent) 22%, var(--line));
+}
+
+.request-tab-tier-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .request-tabs-ide .mantine-Tabs-list,
 .response-tabs-ide .mantine-Tabs-list {
-  padding: 0 16px;
+  padding: 0 18px;
   border-bottom: 1px solid var(--line);
-  background: var(--surface-muted);
+  background: color-mix(in oklch, var(--surface-muted) 92%, var(--surface));
   flex-wrap: nowrap;
   flex-shrink: 0;
   overflow-x: auto;
@@ -841,7 +917,7 @@ mark {
 .request-tab-content,
 .response-tab-content {
   flex: 1;
-  padding: 16px;
+  padding: 18px;
   overflow-y: auto;
 }
 
@@ -860,14 +936,14 @@ mark {
 
 .response-header-ide {
   min-height: 48px;
-  padding: 8px 16px;
+  padding: 10px 18px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
   flex-shrink: 0;
   border-bottom: 1px solid var(--line);
-  background: var(--surface-muted);
+  background: color-mix(in oklch, var(--surface-muted) 92%, var(--surface));
   gap: 16px;
 }
 
@@ -906,6 +982,32 @@ mark {
 .response-header-actions-secondary {
   min-width: 0;
   justify-content: flex-end;
+}
+
+.response-results-toolbar {
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in oklch, var(--accent-soft) 35%, var(--surface));
+}
+
+.scratch-session-select {
+  min-width: 220px;
+  max-width: 280px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 7px 10px;
+  font: inherit;
+}
+
+.collection-stage {
+  scroll-margin-top: 24px;
+}
+
+.collection-stage.is-active {
+  outline: 1px solid color-mix(in oklch, var(--accent) 16%, var(--line));
+  border-radius: 16px;
+  background: color-mix(in oklch, var(--accent-soft) 26%, var(--surface));
 }
 
 .debugger-spotlight-overlay {

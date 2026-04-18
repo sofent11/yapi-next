@@ -3,6 +3,7 @@ import { Badge, Button, Checkbox, Group, NumberInput, Select, Tabs, Text, TextIn
 import { notifications } from '@mantine/notifications';
 import { 
   IconAdjustments, 
+  IconDeviceFloppy,
   IconKey, 
   IconListCheck, 
   IconMessageCode, 
@@ -82,8 +83,27 @@ function retryWhenOptions() {
   ];
 }
 
+type RequestSection = 'request' | 'validation' | 'automation';
+
+function requestSectionForTab(tab: RequestTab): RequestSection {
+  if (tab === 'checks') return 'validation';
+  if (tab === 'scripts' || tab === 'settings') return 'automation';
+  return 'request';
+}
+
+function tabOptionsForSection(section: RequestSection) {
+  if (section === 'validation') {
+    return ['checks'] satisfies RequestTab[];
+  }
+  if (section === 'automation') {
+    return ['scripts', 'settings'] satisfies RequestTab[];
+  }
+  return ['query', 'headers', 'body', 'auth', 'preview'] satisfies RequestTab[];
+}
+
 export function RequestPanel(props: {
   workspace: WorkspaceIndex;
+  activeEnvironmentName?: string;
   selectedEnvironment: EnvironmentDocument | null;
   request: RequestDocument;
   selectedCase: CaseDocument | null;
@@ -93,8 +113,10 @@ export function RequestPanel(props: {
   onTabChange: (tab: RequestTab) => void;
   onRequestChange: (request: RequestDocument) => void;
   onCasesChange: (cases: CaseDocument[]) => void;
+  onCaseSelect?: (caseId: string | null) => void;
   onAddCase: () => void;
   onRun: () => void;
+  onSave?: () => void;
   cases: CaseDocument[];
   allowCases?: boolean;
   latestResponseOk?: boolean;
@@ -130,6 +152,8 @@ export function RequestPanel(props: {
   const resolvedPreview = resolvedInsight.preview;
   const blockingDiagnostics = resolvedInsight.diagnostics.filter(item => item.blocking);
   const attentionDiagnostics = resolvedInsight.diagnostics.filter(item => !item.blocking);
+  const activeSection = requestSectionForTab(props.activeTab);
+  const visibleTabs = new Set<RequestTab>(tabOptionsForSection(activeSection));
 
   function updateSelectedCase(updater: (current: CaseDocument) => CaseDocument) {
     if (!selectedCase) return;
@@ -240,6 +264,56 @@ export function RequestPanel(props: {
   return (
     <div className="request-panel">
       <div className="request-header-compact">
+        <div className="request-header-meta">
+          <div className="request-header-meta-copy">
+            <Text size="xs" fw={700} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              {allowCases ? 'Workbench Request' : 'Scratch Request'}
+            </Text>
+            <Text size="sm" fw={700}>
+              {selectedCase ? `${requestDocument.name} · ${selectedCase.name}` : requestDocument.name}
+            </Text>
+          </div>
+          <Group gap="xs" wrap="wrap" className="request-header-meta-pills">
+            {props.activeEnvironmentName ? (
+              <Badge variant="light" color="gray">
+                Env · {props.activeEnvironmentName}
+              </Badge>
+            ) : null}
+            {selectedCase ? (
+              <Badge variant="light" color="indigo">
+                Case Active
+              </Badge>
+            ) : null}
+            {props.isDirty ? (
+              <Badge variant="filled" color="orange">
+                Unsaved
+              </Badge>
+            ) : null}
+          </Group>
+        </div>
+
+        {allowCases ? (
+          <div className="request-case-strip">
+            <Select
+              size="xs"
+              label="Case"
+              placeholder="Base request"
+              value={selectedCase?.id || '__base__'}
+              data={[
+                { value: '__base__', label: 'Base Request' },
+                ...props.cases.map(caseItem => ({
+                  value: caseItem.id,
+                  label: caseItem.name
+                }))
+              ]}
+              onChange={value => props.onCaseSelect?.(value === '__base__' ? null : value || null)}
+            />
+            <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={() => props.onAddCase()}>
+              New Case
+            </Button>
+          </div>
+        ) : null}
+
         <div className="method-url-group">
           <Select
             size="sm"
@@ -271,27 +345,12 @@ export function RequestPanel(props: {
             }}
             variant="filled"
           />
-          <Button 
-            size="sm" 
-            variant="default" 
-            leftSection={<IconPlus size={14} />} 
-            onClick={() => props.onAddCase()}
-            title="Create new case for this request"
-            disabled={!allowCases}
-          >
-            新建 Case
-          </Button>
-          {allowCases && props.latestResponseOk ? (
-            <>
-              <Button size="sm" variant="filled" color="indigo" onClick={props.onSaveAsCase}>
-                保存为 Case
-              </Button>
-              <Button size="sm" variant="default" onClick={props.onAddToCollection}>
-                加入 Collection
-              </Button>
-            </>
+          {props.onSave ? (
+            <Button size="sm" variant="default" leftSection={<IconDeviceFloppy size={14} />} onClick={props.onSave}>
+              保存
+            </Button>
           ) : null}
-          <Button size="sm" variant={allowCases && props.latestResponseOk ? 'default' : 'filled'} leftSection={<IconPlayerPlay size={14} />} loading={props.isRunning} onClick={props.onRun}>
+          <Button size="sm" variant="filled" leftSection={<IconPlayerPlay size={14} />} loading={props.isRunning} onClick={props.onRun}>
             发送请求
           </Button>
         </div>
@@ -312,15 +371,40 @@ export function RequestPanel(props: {
       ) : null}
 
       <Tabs value={props.activeTab} onChange={value => props.onTabChange(value as RequestTab)} className="request-tabs-ide">
+        <div className="request-tab-tier">
+          <button
+            type="button"
+            className={activeSection === 'request' ? 'request-tab-tier-button is-active' : 'request-tab-tier-button'}
+            onClick={() => props.onTabChange('query')}
+          >
+            Request
+          </button>
+          <button
+            type="button"
+            className={activeSection === 'validation' ? 'request-tab-tier-button is-active' : 'request-tab-tier-button'}
+            onClick={() => props.onTabChange('checks')}
+            disabled={!allowCases}
+          >
+            Validation
+          </button>
+          <button
+            type="button"
+            className={activeSection === 'automation' ? 'request-tab-tier-button is-active' : 'request-tab-tier-button'}
+            onClick={() => props.onTabChange('scripts')}
+            disabled={!allowCases}
+          >
+            Automation
+          </button>
+        </div>
         <Tabs.List>
-          <Tabs.Tab value="query" leftSection={<IconVariable size={14} />}>参数</Tabs.Tab>
-          <Tabs.Tab value="headers" leftSection={<IconListCheck size={14} />}>请求头</Tabs.Tab>
-          <Tabs.Tab value="body" leftSection={<IconMessageCode size={14} />}>请求体</Tabs.Tab>
-          <Tabs.Tab value="auth" leftSection={<IconKey size={14} />}>认证</Tabs.Tab>
-          <Tabs.Tab value="checks" leftSection={<IconListCheck size={14} />} disabled={!allowCases}>断言</Tabs.Tab>
-          <Tabs.Tab value="scripts" leftSection={<IconSettings size={14} />} disabled={!allowCases}>脚本</Tabs.Tab>
-          <Tabs.Tab value="settings" leftSection={<IconAdjustments size={14} />}>设置</Tabs.Tab>
-          <Tabs.Tab value="preview" leftSection={<IconPlayerPlay size={14} />}>预览</Tabs.Tab>
+          {visibleTabs.has('query') ? <Tabs.Tab value="query" leftSection={<IconVariable size={14} />}>参数</Tabs.Tab> : null}
+          {visibleTabs.has('headers') ? <Tabs.Tab value="headers" leftSection={<IconListCheck size={14} />}>请求头</Tabs.Tab> : null}
+          {visibleTabs.has('body') ? <Tabs.Tab value="body" leftSection={<IconMessageCode size={14} />}>请求体</Tabs.Tab> : null}
+          {visibleTabs.has('auth') ? <Tabs.Tab value="auth" leftSection={<IconKey size={14} />}>认证</Tabs.Tab> : null}
+          {visibleTabs.has('checks') ? <Tabs.Tab value="checks" leftSection={<IconListCheck size={14} />} disabled={!allowCases}>断言</Tabs.Tab> : null}
+          {visibleTabs.has('scripts') ? <Tabs.Tab value="scripts" leftSection={<IconSettings size={14} />} disabled={!allowCases}>脚本</Tabs.Tab> : null}
+          {visibleTabs.has('settings') ? <Tabs.Tab value="settings" leftSection={<IconAdjustments size={14} />}>设置</Tabs.Tab> : null}
+          {visibleTabs.has('preview') ? <Tabs.Tab value="preview" leftSection={<IconPlayerPlay size={14} />}>预览</Tabs.Tab> : null}
         </Tabs.List>
 
         <div className="request-tab-content">

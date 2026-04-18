@@ -402,15 +402,6 @@ export function WorkspaceMainPanel(props: {
           <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={() => props.onAddCase()}>
             New Case
           </Button>
-          <Button
-            size="xs"
-            variant="filled"
-            leftSection={<IconDeviceFloppy size={14} />}
-            onClick={props.onSave}
-            disabled={!props.isDirty}
-          >
-            Save
-          </Button>
         </div>
       )}
 
@@ -424,6 +415,7 @@ export function WorkspaceMainPanel(props: {
         <div className="pane-surface">
           <RequestPanel
             workspace={props.workspace}
+            activeEnvironmentName={props.activeEnvironmentName}
             selectedEnvironment={props.selectedEnvironment}
             request={request!}
             selectedCase={selectedCase}
@@ -433,11 +425,13 @@ export function WorkspaceMainPanel(props: {
             isRunning={props.isRunning}
             isDirty={props.isDirty}
             cases={props.cases}
+            onCaseSelect={props.onCaseSelect}
             onTabChange={props.onRequestTabChange}
             onRequestChange={props.onRequestChange}
             onCasesChange={props.onCasesChange}
             onAddCase={props.onAddCase}
             onRun={props.onRun}
+            onSave={props.onSave}
             latestResponseOk={Boolean(props.response?.ok)}
             onSaveAsCase={props.onCreateCaseFromResponse}
             onAddToCollection={props.onAddToCollection}

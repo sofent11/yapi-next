@@ -486,7 +486,8 @@ export function App() {
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState('');
   const [uiState, setUiState] = useState<WorkspaceUiState>(defaultWorkspaceUiState());
-  const [activeView, setActiveView] = useState<AppRailView>('home');
+  const [activeView, setActiveView] = useState<AppRailView>('workspace');
+  const [activeWorkbenchPane, setActiveWorkbenchPane] = useState<'overview' | 'import-tasks'>('overview');
   const [historyEntries, setHistoryEntries] = useState<RunHistoryEntry[]>([]);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [selectedExampleName, setSelectedExampleName] = useState<string | null>(null);
@@ -528,6 +529,7 @@ export function App() {
           rightSection: <span className="debugger-spotlight-pill is-category">分类</span>,
           onClick: () => {
             setActiveView('workspace');
+            setActiveWorkbenchPane('overview');
             store.selectNode({ kind: 'category', path: node.path });
           }
         });
@@ -546,6 +548,7 @@ export function App() {
           rightSection: <span className={`debugger-spotlight-pill is-method is-${method.toLowerCase()}`}>{method}</span>,
           onClick: () => {
             setActiveView('workspace');
+            setActiveWorkbenchPane('overview');
             store.selectNode({ kind: 'request', requestId: node.requestId });
           }
         });
@@ -665,6 +668,7 @@ export function App() {
       finishedAt: new Date(report.finishedAt).toLocaleString()
     };
   }, [collectionReports]);
+  const importTaskCount = importRepairChecklist?.tasks.length || 0;
   const currentSelectionSummary = useMemo(() => {
     const record = requestId ? findRecord(store.workspace, requestId) : null;
     const selectedCase = caseId ? record?.cases.find(item => item.id === caseId) || null : null;
@@ -684,6 +688,22 @@ export function App() {
   const currentScratch = useMemo(() => {
     return scratchSessions.find(session => session.id === selectedScratchId) || scratchSessions[0] || null;
   }, [scratchSessions, selectedScratchId]);
+  const contextResponseInfo = useMemo(() => {
+    if (activeView === 'scratch') {
+      if (!currentScratch?.response) return null;
+      return {
+        status: currentScratch.response.status,
+        duration: currentScratch.response.durationMs,
+        ok: currentScratch.response.ok
+      };
+    }
+    if (!store.response) return null;
+    return {
+      status: store.response.status,
+      duration: store.response.durationMs,
+      ok: store.response.status >= 200 && store.response.status < 300
+    };
+  }, [activeView, currentScratch, store.response]);
 
   const categoryRequests = useMemo(() => {
     if (!store.workspace || !categoryPath) return [];
@@ -737,15 +757,6 @@ export function App() {
     currentScratchPreview?.url ||
     null;
 
-  const responseInfo = useMemo(() => {
-    if (!store.response) return null;
-    return {
-      status: store.response.status,
-      duration: store.response.durationMs,
-      ok: store.response.status >= 200 && store.response.status < 300
-    };
-  }, [store.response]);
-
   function renderTabHeader() {
     if (!store.workspace) return null;
     return (
@@ -764,6 +775,18 @@ export function App() {
     return buildImportPreviewSummary(store.workspace, store.importPreview);
   }, [store.workspace, store.importPreview]);
 
+  function openWorkbenchOverview() {
+    setActiveView('workspace');
+    setActiveWorkbenchPane('overview');
+    store.selectNode({ kind: 'project' });
+  }
+
+  function openImportTasks() {
+    setActiveView('workspace');
+    setActiveWorkbenchPane('import-tasks');
+    store.selectNode({ kind: 'project' });
+  }
+
   function applyWorkspaceState(workspace: WorkspaceIndex) {
     const nextUi = loadWorkspaceUiState(workspace.root);
     setUiState(nextUi);
@@ -777,7 +800,8 @@ export function App() {
     setSelectedCollectionId(workspace.collections[0]?.document.id || null);
     setDraftCollection(workspace.collections[0]?.document || null);
     setCollectionDataText(workspace.collections[0]?.dataText || '');
-    setActiveView('home');
+    setActiveView('workspace');
+    setActiveWorkbenchPane('overview');
     store.setWorkspace(workspace);
     store.setOpenTabs(nextUi.openTabs);
     store.selectNode(nextUi.lastSelectedNode);
@@ -1007,7 +1031,9 @@ export function App() {
       setImportOpened(false);
       store.setImportPreview(null);
       reloadWorkspace();
-      setActiveView('repair');
+      setActiveView('workspace');
+      setActiveWorkbenchPane('import-tasks');
+      store.selectNode({ kind: 'project' });
       handleRefreshGitStatus().catch(() => undefined);
       notifications.show({ color: 'teal', message: 'Import successful' });
     }
@@ -1958,21 +1984,25 @@ export function App() {
 
   function handleSelectProject() {
     setActiveView('workspace');
+    setActiveWorkbenchPane('overview');
     store.selectNode({ kind: 'project' });
   }
 
   function handleSelectCategory(path: string) {
     setActiveView('workspace');
+    setActiveWorkbenchPane('overview');
     store.selectNode({ kind: 'category', path });
   }
 
   function handleSelectRequest(requestIdToSelect: string) {
     setActiveView('workspace');
+    setActiveWorkbenchPane('overview');
     store.selectNode({ kind: 'request', requestId: requestIdToSelect });
   }
 
   function handleSelectCase(requestIdOfCase: string, caseIdToSelect: string) {
     setActiveView('workspace');
+    setActiveWorkbenchPane('overview');
     store.selectNode({ kind: 'case', requestId: requestIdOfCase, caseId: caseIdToSelect });
   }
 
@@ -2536,25 +2566,15 @@ export function App() {
             <div className="workspace-context-copy">
               <span className="workspace-context-label">本地调试工作区</span>
               <strong className="workspace-context-title">{store.workspace.project.name}</strong>
+              <span className="workspace-context-path">{store.workspace.root}</span>
             </div>
 
             <div className="workspace-context-actions">
-              {activeView === 'scratch' ? (
-                <Select
-                  size="xs"
-                  className="compact-select"
-                  value={currentScratch?.id || null}
-                  data={scratchSessions.map(session => ({
-                    value: session.id,
-                    label: session.title
-                  }))}
-                  onChange={value => value && setSelectedScratchId(value)}
-                  style={{ width: 220 }}
-                />
+              {activeView === 'workspace' && importTaskCount > 0 ? (
+                <Badge variant="light" color={activeWorkbenchPane === 'import-tasks' ? 'orange' : 'gray'} size="sm" style={{ cursor: 'pointer' }} onClick={openImportTasks}>
+                  Import Tasks · {importTaskCount}
+                </Badge>
               ) : null}
-              <Badge variant="light" color={activeView === 'scratch' ? 'indigo' : 'gray'} size="sm" style={{ cursor: 'pointer' }} onClick={() => setActiveView('scratch')}>
-                Scratch
-              </Badge>
               <Select
                 size="xs"
                 className="compact-select"
@@ -2593,10 +2613,11 @@ export function App() {
               workspaceName={store.workspace.project.name}
               isDirty={store.isDirty}
               activeView={activeView}
+              importTaskCount={importTaskCount}
               onChangeView={view => {
                 setActiveView(view);
-                if (view === 'home') {
-                  store.selectNode({ kind: 'project' });
+                if (view === 'workspace') {
+                  openWorkbenchOverview();
                 }
               }}
             />
@@ -2647,40 +2668,67 @@ export function App() {
               max={420}
             />
 
-            {activeView === 'home' ? (
-              <WorkspaceHomePanel
-                workspace={store.workspace}
-                gitStatus={gitInfo}
-                gitRisks={gitRisks}
-                importSession={homeImportSummary}
-                repairSummary={
-                  importRepairChecklist
-                    ? {
-                        blockingCount: importRepairChecklist.blockingCount,
-                        warningCount: importRepairChecklist.warningCount,
-                        runnableCount: importRepairChecklist.runnableRequestIds.length
-                      }
-                    : null
-                }
-                recentSuccess={homeRecentSuccess}
-                lastCollectionRun={homeLastCollectionRun}
-                suggestedCommitMessage={suggestedCommitMessage(gitInfo)}
-                onOpenImport={() => setImportOpened(true)}
-                onOpenRepair={() => setActiveView('repair')}
-                onOpenEnvironmentCenter={() => setActiveView('environments')}
-                onOpenFirstBlocked={() => handleOpenImportedRequest(importRepairChecklist?.firstBlockedRequestId || null)}
-                onOpenLastSuccessfulRequest={handleOpenLastSuccessfulRequest}
-                onRunLastCollection={handleRunLatestCollection}
-                onOpenCollections={() => setActiveView('collections')}
-                onOpenHistory={() => setActiveView('history')}
-                onRefreshGit={handleRefreshGitStatus}
-                onCopySuggestedCommitMessage={() =>
-                  copyToClipboard(suggestedCommitMessage(gitInfo), 'Suggested commit message copied')
-                }
-              />
+            {activeView === 'workspace' && store.selectedNode.kind === 'project' ? (
+              activeWorkbenchPane === 'import-tasks' ? (
+                <ImportRepairPanel
+                  activeEnvironmentName={store.activeEnvironmentName}
+                  environment={selectedEnvironment}
+                  checklist={importRepairChecklist}
+                  importedRequestCount={importedRecords.length}
+                  importedCaseCount={importedRecords.reduce((total, record) => total + record.cases.length, 0)}
+                  importedAtLabel={lastImportSession?.importedAt ? new Date(lastImportSession.importedAt).toLocaleString() : null}
+                  importFormat={lastImportSession?.format || null}
+                  previewSummary={lastImportSession?.previewSummary || null}
+                  onOpenImport={() => setImportOpened(true)}
+                  onOpenEnvironmentCenter={() => setActiveView('environments')}
+                  onOpenFirstBlocked={() => handleOpenImportedRequest(importRepairChecklist?.firstBlockedRequestId || null)}
+                  onOpenFirstRunnable={() => handleOpenImportedRequest(importRepairChecklist?.firstRunnableRequestId || null)}
+                  onOpenTaskRequest={requestId => handleOpenImportedRequest(requestId)}
+                  onSeedMissingVariables={handleSeedImportVariables}
+                  onApplyImportedBaseUrl={
+                    lastImportSession?.importedBaseUrl &&
+                    lastImportSession.importedBaseUrl !== 'https://api.example.com'
+                      ? handleApplyImportedBaseUrl
+                      : undefined
+                  }
+                />
+              ) : (
+                <WorkspaceHomePanel
+                  workspace={store.workspace}
+                  gitStatus={gitInfo}
+                  gitRisks={gitRisks}
+                  importSession={homeImportSummary}
+                  repairSummary={
+                    importRepairChecklist
+                      ? {
+                          blockingCount: importRepairChecklist.blockingCount,
+                          warningCount: importRepairChecklist.warningCount,
+                          runnableCount: importRepairChecklist.runnableRequestIds.length
+                        }
+                      : null
+                  }
+                  recentSuccess={homeRecentSuccess}
+                  lastCollectionRun={homeLastCollectionRun}
+                  suggestedCommitMessage={suggestedCommitMessage(gitInfo)}
+                  onOpenImport={() => setImportOpened(true)}
+                  onOpenRepair={openImportTasks}
+                  onOpenEnvironmentCenter={() => setActiveView('environments')}
+                  onOpenFirstBlocked={() => handleOpenImportedRequest(importRepairChecklist?.firstBlockedRequestId || null)}
+                  onOpenLastSuccessfulRequest={handleOpenLastSuccessfulRequest}
+                  onRunLastCollection={handleRunLatestCollection}
+                  onOpenCollections={() => setActiveView('collections')}
+                  onOpenHistory={() => setActiveView('history')}
+                  onRefreshGit={handleRefreshGitStatus}
+                  onCopySuggestedCommitMessage={() =>
+                    copyToClipboard(suggestedCommitMessage(gitInfo), 'Suggested commit message copied')
+                  }
+                />
+              )
             ) : activeView === 'scratch' && currentScratch ? (
               <ScratchPadPanel
                 workspace={store.workspace}
+                scratchSessions={scratchSessions}
+                selectedScratchId={selectedScratchId}
                 request={currentScratch.request}
                 response={currentScratch.response}
                 requestError={currentScratch.requestError}
@@ -2700,6 +2748,7 @@ export function App() {
                 onRun={() => scratchRunMutation.mutate()}
                 onSaveToWorkspace={handleSaveScratchToWorkspace}
                 onNewScratch={() => handleCreateScratch()}
+                onSelectScratch={id => setSelectedScratchId(id)}
                 onRequestTabChange={setScratchRequestTab}
                 onResponseTabChange={setScratchResponseTab}
                 onSelectExample={name =>
@@ -2762,32 +2811,6 @@ export function App() {
                   }
                 />
               </section>
-            ) : activeView === 'repair' ? (
-              <section className="workspace-main" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                {renderTabHeader()}
-                <ImportRepairPanel
-                  activeEnvironmentName={store.activeEnvironmentName}
-                  environment={selectedEnvironment}
-                  checklist={importRepairChecklist}
-                  importedRequestCount={importedRecords.length}
-                  importedCaseCount={importedRecords.reduce((total, record) => total + record.cases.length, 0)}
-                  importedAtLabel={lastImportSession?.importedAt ? new Date(lastImportSession.importedAt).toLocaleString() : null}
-                  importFormat={lastImportSession?.format || null}
-                  previewSummary={lastImportSession?.previewSummary || null}
-                  onOpenImport={() => setImportOpened(true)}
-                  onOpenEnvironmentCenter={() => setActiveView('environments')}
-                  onOpenFirstBlocked={() => handleOpenImportedRequest(importRepairChecklist?.firstBlockedRequestId || null)}
-                  onOpenFirstRunnable={() => handleOpenImportedRequest(importRepairChecklist?.firstRunnableRequestId || null)}
-                  onOpenTaskRequest={requestId => handleOpenImportedRequest(requestId)}
-                  onSeedMissingVariables={handleSeedImportVariables}
-                  onApplyImportedBaseUrl={
-                    lastImportSession?.importedBaseUrl &&
-                    lastImportSession.importedBaseUrl !== 'https://api.example.com'
-                      ? handleApplyImportedBaseUrl
-                      : undefined
-                  }
-                />
-              </section>
             ) : activeView === 'collections' ? (
               <section className="workspace-main" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 {renderTabHeader()}
@@ -2841,7 +2864,7 @@ export function App() {
                   onSave={() => saveMutation.mutate()}
                 />
               </section>
-            ) : (
+            ) : activeView === 'workspace' ? (
               <WorkspaceMainPanel
                 workspace={store.workspace}
                 selectedNode={store.selectedNode}
@@ -2874,7 +2897,14 @@ export function App() {
                 onEnvironmentUpdate={(name, updater) => store.updateEnvironment(name, updater)}
                 onRequestChange={request => store.updateRequest(request)}
                 onCasesChange={cases => store.updateCaseList(cases)}
-                onCaseSelect={id => id && handleSelectCase(requestId!, id)}
+                onCaseSelect={id => {
+                  if (!requestId) return;
+                  if (!id) {
+                    handleSelectRequest(requestId);
+                    return;
+                  }
+                  handleSelectCase(requestId, id);
+                }}
                 onAddCase={handleAddCase}
                 onRun={() => runMutation.mutate()}
                 onSave={() => saveMutation.mutate()}
@@ -2916,12 +2946,18 @@ export function App() {
                   }))
                 }
               />
+            ) : (
+              <section className="workspace-main">
+                <div className="empty-tab-state" style={{ margin: 24 }}>
+                  Pick a workspace mode from the rail to continue.
+                </div>
+              </section>
             )}
           </main>
           <StatusBar
             gitStatus={gitInfo}
             activeEnvironment={store.activeEnvironmentName}
-            responseInfo={responseInfo}
+            responseInfo={contextResponseInfo}
             onRefreshGit={handleRefreshGitStatus}
           />
         </div>
