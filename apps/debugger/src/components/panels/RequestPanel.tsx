@@ -86,7 +86,7 @@ export function RequestPanel(props: {
   onAddToCollection?: () => void;
   requestInsight?: ResolvedRequestInsight | null;
   sessionSnapshot?: SessionSnapshot | null;
-  onSaveAuthProfile?: (name: string, auth: AuthConfig) => void;
+  onSaveAuthProfile?: (seed: string, auth: AuthConfig) => void;
   onRefreshRequestAuth?: () => void;
   onCopyText?: (value: string, successMessage: string) => void;
 }) {
@@ -244,7 +244,7 @@ export function RequestPanel(props: {
             size="sm"
             className="url-input-ide"
             value={effectiveUrl}
-            placeholder="Enter request URL"
+            placeholder="输入请求地址，支持直接粘贴 cURL"
             onChange={event => applyUrlChange(event.currentTarget.value)}
             onPaste={event => {
               const pastedText = event.clipboardData.getData('text');
@@ -263,20 +263,20 @@ export function RequestPanel(props: {
             title="Create new case for this request"
             disabled={!allowCases}
           >
-            Case
+            新建 Case
           </Button>
           {allowCases && props.latestResponseOk ? (
             <>
               <Button size="sm" variant="filled" color="indigo" onClick={props.onSaveAsCase}>
-                Save as Case
+                保存为 Case
               </Button>
               <Button size="sm" variant="default" onClick={props.onAddToCollection}>
-                Add to Collection
+                加入 Collection
               </Button>
             </>
           ) : null}
           <Button size="sm" variant={allowCases && props.latestResponseOk ? 'default' : 'filled'} leftSection={<IconPlayerPlay size={14} />} loading={props.isRunning} onClick={props.onRun}>
-            Send
+            发送请求
           </Button>
         </div>
       </div>
@@ -284,10 +284,10 @@ export function RequestPanel(props: {
       {blockingDiagnostics.length > 0 || attentionDiagnostics.length > 0 ? (
         <div className="request-diagnostics-banner">
           {blockingDiagnostics.length > 0 ? (
-            <Badge color="red" variant="filled">{blockingDiagnostics.length} blocking</Badge>
+            <Badge color="red" variant="filled">{blockingDiagnostics.length} 个阻塞项</Badge>
           ) : null}
           {attentionDiagnostics.length > 0 ? (
-            <Badge color="orange" variant="light">{attentionDiagnostics.length} attention</Badge>
+            <Badge color="orange" variant="light">{attentionDiagnostics.length} 个待确认项</Badge>
           ) : null}
           <Text size="sm" c="dimmed">
             {blockingDiagnostics[0]?.message || attentionDiagnostics[0]?.message}
@@ -297,14 +297,14 @@ export function RequestPanel(props: {
 
       <Tabs value={props.activeTab} onChange={value => props.onTabChange(value as RequestTab)} className="request-tabs-ide">
         <Tabs.List>
-          <Tabs.Tab value="query" leftSection={<IconVariable size={14} />}>Params</Tabs.Tab>
-          <Tabs.Tab value="headers" leftSection={<IconListCheck size={14} />}>Headers</Tabs.Tab>
-          <Tabs.Tab value="body" leftSection={<IconMessageCode size={14} />}>Body</Tabs.Tab>
-          <Tabs.Tab value="auth" leftSection={<IconKey size={14} />}>Auth</Tabs.Tab>
-          <Tabs.Tab value="checks" leftSection={<IconListCheck size={14} />} disabled={!allowCases}>Checks</Tabs.Tab>
-          <Tabs.Tab value="scripts" leftSection={<IconSettings size={14} />} disabled={!allowCases}>Scripts</Tabs.Tab>
-          <Tabs.Tab value="settings" leftSection={<IconAdjustments size={14} />}>Settings</Tabs.Tab>
-          <Tabs.Tab value="preview" leftSection={<IconPlayerPlay size={14} />}>Preview</Tabs.Tab>
+          <Tabs.Tab value="query" leftSection={<IconVariable size={14} />}>参数</Tabs.Tab>
+          <Tabs.Tab value="headers" leftSection={<IconListCheck size={14} />}>请求头</Tabs.Tab>
+          <Tabs.Tab value="body" leftSection={<IconMessageCode size={14} />}>请求体</Tabs.Tab>
+          <Tabs.Tab value="auth" leftSection={<IconKey size={14} />}>认证</Tabs.Tab>
+          <Tabs.Tab value="checks" leftSection={<IconListCheck size={14} />} disabled={!allowCases}>断言</Tabs.Tab>
+          <Tabs.Tab value="scripts" leftSection={<IconSettings size={14} />} disabled={!allowCases}>脚本</Tabs.Tab>
+          <Tabs.Tab value="settings" leftSection={<IconAdjustments size={14} />}>设置</Tabs.Tab>
+          <Tabs.Tab value="preview" leftSection={<IconPlayerPlay size={14} />}>预览</Tabs.Tab>
         </Tabs.List>
 
         <div className="request-tab-content">
@@ -757,12 +757,10 @@ export function RequestPanel(props: {
                     variant="default"
                     onClick={() => {
                       const seed = auth.profileName || requestDocument.name || 'auth-profile';
-                      const name = window.prompt('Auth profile name', seed)?.trim();
-                      if (!name) return;
-                      props.onSaveAuthProfile?.(name, auth);
+                      props.onSaveAuthProfile?.(seed, auth);
                     }}
                   >
-                    Save As Environment Profile
+                    保存为环境认证配置
                   </Button>
                 </div>
               ) : null}

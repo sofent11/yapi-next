@@ -95,14 +95,14 @@ export function WorkspaceHomePanel(props: {
       <div className="panel-toolbar">
         <div className="breadcrumb-list">
           <span className="breadcrumb-chip">{props.workspace.project.name}</span>
-          <span className="breadcrumb-chip">Workspace Home</span>
+          <span className="breadcrumb-chip">工作区首页</span>
         </div>
         <div className="panel-toolbar-actions">
           <Button size="xs" variant="default" leftSection={<IconUpload size={14} />} onClick={props.onOpenImport}>
-            Import Spec
+            导入 API 规范
           </Button>
           <Button size="xs" variant="default" leftSection={<IconLifebuoy size={14} />} onClick={props.onOpenRepair}>
-            Open Repair
+            打开导入任务
           </Button>
         </div>
       </div>
@@ -111,33 +111,33 @@ export function WorkspaceHomePanel(props: {
         {!hasWorkspaceContent ? (
           <div className="workspace-home-hero">
             <div>
-              <Text className="section-kicker">Local-First Request Workspace</Text>
-              <h2 className="workspace-home-title">Start with one import, then turn it into reusable requests and collections.</h2>
+              <Text className="section-kicker">本地优先接口工作区</Text>
+              <h2 className="workspace-home-title">先导入 API，再把一次调试沉淀成可复跑的请求、Case 和 Collection。</h2>
               <Text size="sm" c="dimmed" maw={680}>
-                This debugger is strongest when the same local files serve both fast developer debugging and repeatable test flows. Import a spec first, repair the blockers, send one request, then save it as a Case and run it in a Collection.
+                这套调试器最强的地方，在于同一份本地文件既能支撑开发联调，也能支撑测试回归。建议先导入规范、修复阻塞项、发送成功一次，再保存为 Case 并加入 Collection。
               </Text>
             </div>
             <div className="workspace-home-primary-actions">
               <Button leftSection={<IconUpload size={16} />} onClick={props.onOpenImport}>
-                Import Spec
+                导入已有 API
               </Button>
               <Button variant="default" leftSection={<IconPlugConnected size={16} />} onClick={props.onOpenEnvironmentCenter}>
-                Prepare Environment
+                准备环境与认证
               </Button>
             </div>
           </div>
         ) : (
           <div className="workspace-home-hero compact">
             <div>
-              <Text className="section-kicker">Main Flow</Text>
-              <h2 className="workspace-home-title">Import, repair, send, save as Case, then run a Collection.</h2>
+              <Text className="section-kicker">主流程</Text>
+              <h2 className="workspace-home-title">导入、修复、发送、保存为 Case，然后加入 Collection 复跑。</h2>
               <Text size="sm" c="dimmed" maw={720}>
-                Keep the same Request assets flowing through development debugging and regression checks instead of rebuilding them in separate tools.
+                让同一份 Request 资产在开发联调和回归检查之间自然流转，而不是在不同工具里重复搭建。
               </Text>
             </div>
             <div className="workspace-home-primary-actions">
               <Button leftSection={<IconUpload size={16} />} onClick={props.onOpenImport}>
-                Import Spec
+                继续导入
               </Button>
               <Button
                 variant="default"
@@ -145,7 +145,7 @@ export function WorkspaceHomePanel(props: {
                 onClick={props.onOpenFirstBlocked}
                 disabled={!props.repairSummary || props.repairSummary.blockingCount === 0}
               >
-                Open First Blocked Request
+                处理第一个阻塞请求
               </Button>
               <Button
                 variant="default"
@@ -153,7 +153,7 @@ export function WorkspaceHomePanel(props: {
                 onClick={props.onOpenLastSuccessfulRequest}
                 disabled={!props.recentSuccess}
               >
-                Open Last Successful Request
+                打开最近成功请求
               </Button>
               <Button
                 variant="default"
@@ -161,7 +161,7 @@ export function WorkspaceHomePanel(props: {
                 onClick={props.onRunLastCollection}
                 disabled={!props.lastCollectionRun}
               >
-                Run Last Collection
+                运行最近 Collection
               </Button>
             </div>
           </div>

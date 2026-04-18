@@ -1,7 +1,7 @@
 import { ActionIcon, Stack, Tooltip } from '@mantine/core';
-import { IconApi, IconFolders, IconHistory, IconHome2, IconLifebuoy, IconPencilBolt, IconPlugConnected, IconCookie } from '@tabler/icons-react';
+import { IconApi, IconFolders, IconGitBranch, IconHistory, IconHome2, IconPlugConnected } from '@tabler/icons-react';
 
-export type AppRailView = 'home' | 'scratch' | 'workspace' | 'repair' | 'collections' | 'history' | 'environments' | 'sessions';
+export type AppRailView = 'home' | 'scratch' | 'workspace' | 'repair' | 'collections' | 'history' | 'environments' | 'sessions' | 'sync';
 
 function railVariant(active: boolean) {
   return active ? 'filled' : 'subtle';
@@ -20,51 +20,39 @@ export function AppRail(props: {
       </div>
 
       <Stack gap="xs" style={{ flex: 1, alignItems: 'center', marginTop: 12 }}>
-        <Tooltip label="Workspace Home" position="right" withArrow>
+        <Tooltip label="首页" position="right" withArrow>
           <ActionIcon variant={railVariant(props.activeView === 'home')} size="lg" radius="md" onClick={() => props.onChangeView('home')}>
             <IconHome2 size={20} />
           </ActionIcon>
         </Tooltip>
 
-        <Tooltip label="Scratch" position="right" withArrow>
-          <ActionIcon variant={railVariant(props.activeView === 'scratch')} size="lg" radius="md" onClick={() => props.onChangeView('scratch')}>
-            <IconPencilBolt size={20} />
-          </ActionIcon>
-        </Tooltip>
-
-        <Tooltip label="Requests" position="right" withArrow>
+        <Tooltip label="请求" position="right" withArrow>
           <ActionIcon variant={railVariant(props.activeView === 'workspace')} size="lg" radius="md" onClick={() => props.onChangeView('workspace')}>
             <IconApi size={20} />
           </ActionIcon>
         </Tooltip>
 
-        <Tooltip label="Repair Center" position="right" withArrow>
-          <ActionIcon variant={railVariant(props.activeView === 'repair')} size="lg" radius="md" onClick={() => props.onChangeView('repair')}>
-            <IconLifebuoy size={20} />
-          </ActionIcon>
-        </Tooltip>
-
-        <Tooltip label="Collections" position="right" withArrow>
+        <Tooltip label="集合" position="right" withArrow>
           <ActionIcon variant={railVariant(props.activeView === 'collections')} size="lg" radius="md" onClick={() => props.onChangeView('collections')}>
             <IconFolders size={20} />
           </ActionIcon>
         </Tooltip>
 
-        <Tooltip label="History" position="right" withArrow>
+        <Tooltip label="历史" position="right" withArrow>
           <ActionIcon variant={railVariant(props.activeView === 'history')} size="lg" radius="md" color="gray" onClick={() => props.onChangeView('history')}>
             <IconHistory size={20} />
           </ActionIcon>
         </Tooltip>
 
-        <Tooltip label="Environments" position="right" withArrow>
+        <Tooltip label="环境" position="right" withArrow>
           <ActionIcon variant={railVariant(props.activeView === 'environments')} size="lg" radius="md" color="gray" onClick={() => props.onChangeView('environments')}>
             <IconPlugConnected size={20} />
           </ActionIcon>
         </Tooltip>
 
-        <Tooltip label="Sessions" position="right" withArrow>
-          <ActionIcon variant={railVariant(props.activeView === 'sessions')} size="lg" radius="md" color="gray" onClick={() => props.onChangeView('sessions')}>
-            <IconCookie size={20} />
+        <Tooltip label="同步" position="right" withArrow>
+          <ActionIcon variant={railVariant(props.activeView === 'sync')} size="lg" radius="md" color="gray" onClick={() => props.onChangeView('sync')}>
+            <IconGitBranch size={20} />
           </ActionIcon>
         </Tooltip>
       </Stack>

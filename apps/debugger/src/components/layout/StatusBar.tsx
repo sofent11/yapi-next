@@ -18,7 +18,7 @@ export function StatusBar(props: {
     <footer className="app-status-bar">
       <Group gap="md" style={{ flex: 1 }}>
         {props.gitStatus?.isRepo && (
-          <Tooltip label="Git Branch" position="top" withArrow>
+          <Tooltip label="当前 Git 分支" position="top" withArrow>
             <div className="status-item clickable" onClick={props.onRefreshGit}>
               <IconGitBranch size={14} />
               <Text size="xs" fw={600}>{props.gitStatus.branch || 'detached'}</Text>
@@ -30,7 +30,7 @@ export function StatusBar(props: {
         {props.gitStatus?.isRepo ? (
           <div className="status-item">
             <IconFileDelta size={14} />
-            <Text size="xs">Dirty: <strong>{props.gitStatus.dirty ? props.gitStatus.changedFiles.length : 0}</strong></Text>
+            <Text size="xs">未提交: <strong>{props.gitStatus.dirty ? props.gitStatus.changedFiles.length : 0}</strong></Text>
           </div>
         ) : null}
 
@@ -45,7 +45,7 @@ export function StatusBar(props: {
 
         <div className="status-item">
           <IconNetwork size={14} />
-          <Text size="xs">Env: <strong>{props.activeEnvironment}</strong></Text>
+          <Text size="xs">环境: <strong>{props.activeEnvironment}</strong></Text>
         </div>
 
         {props.responseInfo && (

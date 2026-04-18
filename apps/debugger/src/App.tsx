@@ -5,7 +5,7 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
 import { IconRefresh, IconSearch } from '@tabler/icons-react';
-import { createEmptyCheck, createNamedTemplateSource, inspectResolvedRequest } from '@yapi-debugger/core';
+import { createEmptyCheck, createNamedTemplateSource, evaluateSyncGuard, inspectResolvedRequest } from '@yapi-debugger/core';
 import { save as saveFile } from '@tauri-apps/plugin-dialog';
 import { createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type EnvironmentDocument, type ImportWarning, type ResponseExample, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
 import '@mantine/spotlight/styles.css';
@@ -72,12 +72,13 @@ import { HistoryPanel } from './components/panels/HistoryPanel';
 import { ImportPanel } from './components/panels/ImportPanel';
 import { ImportRepairPanel } from './components/panels/ImportRepairPanel';
 import { InterfaceTreePanel } from './components/panels/InterfaceTreePanel';
-import { SessionCenterPanel } from './components/panels/SessionCenterPanel';
 import { ScratchPadPanel } from './components/panels/ScratchPadPanel';
+import { SyncCenterPanel } from './components/panels/SyncCenterPanel';
 import { WelcomePanel } from './components/panels/WelcomePanel';
 import { WorkspaceHomePanel } from './components/panels/WorkspaceHomePanel';
 import { WorkspaceMainPanel } from './components/panels/WorkspaceMainPanel';
 import { buildImportRepairChecklist } from './lib/repair';
+import { confirmAction, promptForSaveAs, promptForText } from './lib/dialogs';
 import { collectionReportHtml, collectionReportJson } from './lib/report-export';
 import { Resizer } from './components/primitives/Resizer';
 import { StatusBar } from './components/layout/StatusBar';
@@ -92,6 +93,8 @@ import {
 
 const RECENT_STORAGE_KEY = 'yapi-debugger.recent-roots';
 const UI_STORAGE_KEY_PREFIX = 'yapi-debugger.ui';
+const IMPORT_SESSION_STORAGE_KEY_PREFIX = 'yapi-debugger.import-session';
+const LAST_SYNC_STORAGE_KEY_PREFIX = 'yapi-debugger.last-sync';
 
 function loadRecentRoots() {
   try {
@@ -108,6 +111,14 @@ function saveRecentRoots(roots: string[]) {
 
 function uiStorageKey(root: string) {
   return `${UI_STORAGE_KEY_PREFIX}:${root}`;
+}
+
+function importSessionStorageKey(root: string) {
+  return `${IMPORT_SESSION_STORAGE_KEY_PREFIX}:${root}`;
+}
+
+function lastSyncStorageKey(root: string) {
+  return `${LAST_SYNC_STORAGE_KEY_PREFIX}:${root}`;
 }
 
 function loadWorkspaceUiState(root: string): WorkspaceUiState {
@@ -129,6 +140,19 @@ function loadWorkspaceUiState(root: string): WorkspaceUiState {
 
 function saveWorkspaceUiState(root: string, state: WorkspaceUiState) {
   window.localStorage.setItem(uiStorageKey(root), JSON.stringify(state));
+}
+
+function loadPersistedJson<T>(key: string) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch (_err) {
+    return null;
+  }
+}
+
+function savePersistedJson(key: string, value: unknown) {
+  window.localStorage.setItem(key, JSON.stringify(value));
 }
 
 function selectedRequestId(node: SelectedNode) {
@@ -309,6 +333,30 @@ type ImportRepairSession = {
   strategy: 'append' | 'replace';
 };
 
+function loadImportRepairSession(root: string) {
+  return loadPersistedJson<ImportRepairSession>(importSessionStorageKey(root));
+}
+
+function saveImportRepairSession(root: string, session: ImportRepairSession | null) {
+  if (!session) {
+    window.localStorage.removeItem(importSessionStorageKey(root));
+    return;
+  }
+  savePersistedJson(importSessionStorageKey(root), session);
+}
+
+function loadLastSyncAt(root: string) {
+  return loadPersistedJson<string>(lastSyncStorageKey(root));
+}
+
+function saveLastSyncAt(root: string, timestamp: string | null) {
+  if (!timestamp) {
+    window.localStorage.removeItem(lastSyncStorageKey(root));
+    return;
+  }
+  savePersistedJson(lastSyncStorageKey(root), timestamp);
+}
+
 type GitRiskItem = {
   id: string;
   title: string;
@@ -399,6 +447,7 @@ export function App() {
   const [hostSessionSnapshots, setHostSessionSnapshots] = useState<Array<{ host: string; snapshot: SessionSnapshot }>>([]);
   const [gitInfo, setGitInfo] = useState<GitStatusPayload | null>(null);
   const [lastImportSession, setLastImportSession] = useState<ImportRepairSession | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
   const spotlightActions = useMemo(() => {
     if (!store.workspace) return [];
@@ -492,6 +541,7 @@ export function App() {
   }, [store.workspace, lastImportSession, importedRecords, selectedEnvironment]);
 
   const gitRisks = useMemo(() => collectGitRisks(store.workspace), [store.workspace]);
+  const syncGuard = useMemo(() => evaluateSyncGuard(gitInfo), [gitInfo]);
   const homeImportSummary = useMemo(() => {
     if (!lastImportSession) return null;
     return {
@@ -633,7 +683,8 @@ export function App() {
     setSessionSnapshot(null);
     setHostSessionSnapshots([]);
     setGitInfo(null);
-    setLastImportSession(null);
+    setLastImportSession(loadImportRepairSession(workspace.root));
+    setLastSyncAt(loadLastSyncAt(workspace.root));
     setSelectedCollectionId(workspace.collections[0]?.document.id || null);
     setDraftCollection(workspace.collections[0]?.document || null);
     setCollectionDataText(workspace.collections[0]?.dataText || '');
@@ -849,7 +900,7 @@ export function App() {
     },
     onSuccess: result => {
       if (result) {
-        setLastImportSession({
+        const nextSession = {
           importedAt: new Date().toISOString(),
           format: result.detectedFormat,
           requestIds: result.requestIds,
@@ -858,7 +909,11 @@ export function App() {
           importedBaseUrl: result.importedBaseUrl,
           previewSummary: importPreviewInfo,
           strategy: result.strategy
-        });
+        } satisfies ImportRepairSession;
+        setLastImportSession(nextSession);
+        if (store.workspace) {
+          saveImportRepairSession(store.workspace.root, nextSession);
+        }
       }
       setImportOpened(false);
       store.setImportPreview(null);
@@ -1214,12 +1269,21 @@ export function App() {
 
   async function handleAddEnvironment() {
     if (!store.workspace) return;
-    const nextName = window.prompt('Enter new environment name', 'staging')?.trim();
+    const nextName = await promptForText({
+      title: '新建环境',
+      label: '环境名称',
+      defaultValue: 'staging',
+      placeholder: '例如：staging / test / local',
+      confirmLabel: '创建环境',
+      validate: value => {
+        if (!value) return '请输入环境名称。';
+        if (store.workspace?.environments.some(item => item.document.name === value)) {
+          return '环境名称已存在，请换一个名称。';
+        }
+        return null;
+      }
+    });
     if (!nextName) return;
-    if (store.workspace.environments.some(item => item.document.name === nextName)) {
-      notifications.show({ color: 'red', message: 'Environment name already exists' });
-      return;
-    }
     await saveEnvironment(store.workspace.root, {
       schemaVersion: 1,
       name: nextName,
@@ -1339,8 +1403,17 @@ export function App() {
     }
   }
 
-  function handleSaveAuthProfile(name: string, auth: AuthConfig) {
+  async function handleSaveAuthProfile(seed: string, auth: AuthConfig) {
     if (!selectedEnvironment) return;
+    const name = await promptForText({
+      title: '保存为环境认证配置',
+      label: '认证配置名称',
+      defaultValue: seed,
+      placeholder: '例如：admin-token / oauth-client',
+      confirmLabel: '保存配置',
+      validate: value => (!value ? '请输入认证配置名称。' : null)
+    });
+    if (!name) return;
     store.updateEnvironment(selectedEnvironment.name, environment => ({
       ...environment,
       authProfiles: [
@@ -1354,8 +1427,15 @@ export function App() {
     notifications.show({ color: 'teal', message: `Auth profile "${name}" saved` });
   }
 
-  function handleExtractResponseValue(target: 'local' | 'runtime', input: { suggestedName: string; value: string }) {
-    const variableName = window.prompt('Variable name', normalizeVariableName(input.suggestedName))?.trim();
+  async function handleExtractResponseValue(target: 'local' | 'runtime', input: { suggestedName: string; value: string }) {
+    const variableName = await promptForText({
+      title: target === 'runtime' ? '提取为运行时变量' : '提取为本地环境变量',
+      label: '变量名',
+      defaultValue: normalizeVariableName(input.suggestedName),
+      placeholder: '例如：userId / accessToken',
+      confirmLabel: '保存变量',
+      validate: value => (!value ? '请输入变量名。' : null)
+    });
     if (!variableName) return;
     if (target === 'runtime') {
       setRuntimeVariables(current => ({
@@ -1392,12 +1472,19 @@ export function App() {
     notifications.show({ color: 'teal', message: `Local secret "${variableName}" saved to environment overlay` });
   }
 
-  function handleExtractCollectionReportValue(target: 'local' | 'runtime' | 'collection', input: { suggestedName: string; value: string }) {
+  async function handleExtractCollectionReportValue(target: 'local' | 'runtime' | 'collection', input: { suggestedName: string; value: string }) {
     if (target === 'local' || target === 'runtime') {
-      handleExtractResponseValue(target, input);
+      await handleExtractResponseValue(target, input);
       return;
     }
-    const variableName = window.prompt('Collection variable name', normalizeVariableName(input.suggestedName))?.trim();
+    const variableName = await promptForText({
+      title: '提取为 Collection 变量',
+      label: '变量名',
+      defaultValue: normalizeVariableName(input.suggestedName),
+      placeholder: '例如：orderId / profileId',
+      confirmLabel: '保存变量',
+      validate: value => (!value ? '请输入变量名。' : null)
+    });
     if (!variableName) return;
     if (!draftCollection) {
       notifications.show({ color: 'red', message: 'Select a collection before extracting collection variables.' });
@@ -1523,8 +1610,16 @@ export function App() {
 
   async function handleGitPull() {
     if (!store.workspace) return;
+    if (!syncGuard.canPull) {
+      setActiveView('sync');
+      notifications.show({ color: 'orange', message: syncGuard.pullReason || '当前不能执行 Pull。' });
+      return;
+    }
     try {
       const output = await gitPull(store.workspace.root);
+      const syncedAt = new Date().toISOString();
+      setLastSyncAt(syncedAt);
+      saveLastSyncAt(store.workspace.root, syncedAt);
       await handleRefreshGitStatus();
       notifications.show({ color: 'teal', message: output || 'Git pull completed' });
     } catch (error) {
@@ -1534,8 +1629,16 @@ export function App() {
 
   async function handleGitPush() {
     if (!store.workspace) return;
+    if (!syncGuard.canPush) {
+      setActiveView('sync');
+      notifications.show({ color: 'orange', message: syncGuard.pushReason || '当前不能执行 Push。' });
+      return;
+    }
     try {
       const output = await gitPush(store.workspace.root);
+      const syncedAt = new Date().toISOString();
+      setLastSyncAt(syncedAt);
+      saveLastSyncAt(store.workspace.root, syncedAt);
       await handleRefreshGitStatus();
       notifications.show({ color: 'teal', message: output || 'Git push completed' });
     } catch (error) {
@@ -1696,7 +1799,13 @@ export function App() {
 
   async function handleDeleteCollection() {
     if (!store.workspace || !selectedCollectionRecord) return;
-    if (!window.confirm(`Delete collection "${selectedCollectionRecord.document.name}"?`)) return;
+    const confirmed = await confirmAction({
+      title: '删除 Collection',
+      message: `将删除 Collection「${selectedCollectionRecord.document.name}」。`,
+      detail: `该 Collection 当前包含 ${selectedCollectionRecord.document.steps.length} 个步骤，此操作不会删除底层请求与 Case。`,
+      confirmLabel: '确认删除'
+    });
+    if (!confirmed) return;
     await deleteCollectionInWorkspace(selectedCollectionRecord);
     notifications.show({ color: 'teal', message: 'Collection deleted' });
     reloadWorkspace();
@@ -1845,7 +1954,16 @@ export function App() {
   async function handleDeleteCategory(path: string) {
     if (!store.workspace) return;
     const total = store.workspace.requests.filter(record => isSameOrChildPath(record.folderSegments.join('/'), path)).length;
-    if (!window.confirm(`Delete category "${path}" and its ${total} requests?`)) return;
+    const caseTotal = store.workspace.requests
+      .filter(record => isSameOrChildPath(record.folderSegments.join('/'), path))
+      .reduce((sum, record) => sum + record.cases.length, 0);
+    const confirmed = await confirmAction({
+      title: '删除目录',
+      message: `将删除目录「${path}」。`,
+      detail: `影响范围：${total} 个请求，${caseTotal} 个 Case。此操作不可撤销。`,
+      confirmLabel: '确认删除'
+    });
+    if (!confirmed) return;
     deleteCategoryMutation.mutate(path);
     notifications.show({ color: 'teal', message: 'Category deleted' });
   }
@@ -1872,7 +1990,13 @@ export function App() {
     if (!store.workspace) return;
     const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
     if (!record) return;
-    if (!window.confirm(`Delete request "${record.request.name}"?`)) return;
+    const confirmed = await confirmAction({
+      title: '删除请求',
+      message: `将删除请求「${record.request.name}」。`,
+      detail: `会同时删除该请求下的 ${record.cases.length} 个 Case。此操作不可撤销。`,
+      confirmLabel: '确认删除'
+    });
+    if (!confirmed) return;
     deleteRequestMutation.mutate(targetRequestId);
     notifications.show({ color: 'teal', message: 'Request deleted' });
   }
@@ -1901,7 +2025,13 @@ export function App() {
     const record = store.workspace.requests.find(item => item.request.id === targetRequestId);
     const caseItem = record?.cases.find(item => item.id === targetCaseId);
     if (!record || !caseItem) return;
-    if (!window.confirm(`Delete case "${caseItem.name}"?`)) return;
+    const confirmed = await confirmAction({
+      title: '删除 Case',
+      message: `将删除 Case「${caseItem.name}」。`,
+      detail: '该操作只影响当前请求下的这个可复跑方案，不会删除原始请求。',
+      confirmLabel: '确认删除'
+    });
+    if (!confirmed) return;
     deleteCaseMutation.mutate({ requestId: targetRequestId, caseId: targetCaseId });
     notifications.show({ color: 'teal', message: 'Case deleted' });
   }
@@ -2016,7 +2146,13 @@ export function App() {
       notifications.show({ color: 'red', message: 'Source request not found, cannot save baseline example' });
       return;
     }
-    const exampleName = window.prompt('Baseline example name', `${entry.environmentName || 'baseline'}-baseline`)?.trim();
+    const exampleName = await promptForText({
+      title: '保存为 Baseline',
+      label: 'Baseline 名称',
+      defaultValue: `${entry.environmentName || 'baseline'}-baseline`,
+      confirmLabel: '保存 Baseline',
+      validate: value => (!value ? '请输入 Baseline 名称。' : null)
+    });
     if (!exampleName) return;
     const nextExamples = upsertRequestExample(record.request.examples || [], {
       name: exampleName,
@@ -2047,7 +2183,13 @@ export function App() {
       notifications.show({ color: 'red', message: 'Source request not found, cannot save example' });
       return;
     }
-    const exampleName = window.prompt('Example name', `${entry.environmentName || 'history'}-${record.request.examples.length + 1}`)?.trim();
+    const exampleName = await promptForText({
+      title: '保存为 Example',
+      label: 'Example 名称',
+      defaultValue: `${entry.environmentName || 'history'}-${record.request.examples.length + 1}`,
+      confirmLabel: '保存 Example',
+      validate: value => (!value ? '请输入 Example 名称。' : null)
+    });
     if (!exampleName) return;
     const nextExamples = upsertRequestExample(record.request.examples || [], {
       name: exampleName,
@@ -2129,13 +2271,19 @@ export function App() {
     notifications.show({ color: 'teal', message: 'Run history cleared' });
   }
 
-  async function handleSaveResponseAsExample(replaceExisting = false) {
+  async function handleSaveResponseAsExample(replaceExisting = false, forcedName?: string) {
     if (activeView === 'scratch') {
       if (!currentScratch || !currentScratch.response) return;
       const nextName =
         replaceExisting && currentScratch.selectedExampleName
           ? currentScratch.selectedExampleName
-          : window.prompt('Enter example name', 'Scratch Response');
+          : forcedName || await promptForText({
+              title: '保存为 Example',
+              label: 'Example 名称',
+              defaultValue: 'Scratch Response',
+              confirmLabel: '保存 Example',
+              validate: value => (!value ? '请输入 Example 名称。' : null)
+            });
       if (!nextName) return;
       const previous = (currentScratch.request.examples || []).find(ex => ex.name === nextName);
       const nextExamples = upsertRequestExample(currentScratch.request.examples || [], {
@@ -2156,7 +2304,16 @@ export function App() {
     }
 
     if (!store.draftRequest || !store.response) return;
-    const nextName = replaceExisting && selectedExampleName ? selectedExampleName : window.prompt('Enter example name', 'Success Response');
+    const nextName =
+      replaceExisting && selectedExampleName
+        ? selectedExampleName
+        : forcedName || await promptForText({
+            title: '保存为 Example',
+            label: 'Example 名称',
+            defaultValue: 'Success Response',
+            confirmLabel: '保存 Example',
+            validate: value => (!value ? '请输入 Example 名称。' : null)
+          });
     if (!nextName) return;
     const previous = (store.draftRequest.examples || []).find(ex => ex.name === nextName);
     const nextExamples = upsertRequestExample(store.draftRequest.examples || [], {
@@ -2171,10 +2328,16 @@ export function App() {
     saveMutation.mutate();
   }
 
-  async function handlePinCurrentResponseAsBaseline() {
+  async function handlePinCurrentResponseAsBaseline(forcedName?: string) {
     if (activeView === 'scratch') {
       if (!currentScratch?.response) return;
-      const nextName = window.prompt('Baseline name', currentScratch.selectedExampleName || 'scratch-baseline')?.trim();
+      const nextName = forcedName || await promptForText({
+        title: '保存为 Baseline',
+        label: 'Baseline 名称',
+        defaultValue: currentScratch.selectedExampleName || 'scratch-baseline',
+        confirmLabel: '保存 Baseline',
+        validate: value => (!value ? '请输入 Baseline 名称。' : null)
+      });
       if (!nextName) return;
       const nextExamples = upsertRequestExample(currentScratch.request.examples || [], {
         name: nextName,
@@ -2194,7 +2357,13 @@ export function App() {
     }
 
     if (!store.draftRequest || !store.response) return;
-    const nextName = window.prompt('Baseline name', selectedExampleName || `${store.activeEnvironmentName}-baseline`)?.trim();
+    const nextName = forcedName || await promptForText({
+      title: '保存为 Baseline',
+      label: 'Baseline 名称',
+      defaultValue: selectedExampleName || `${store.activeEnvironmentName}-baseline`,
+      confirmLabel: '保存 Baseline',
+      validate: value => (!value ? '请输入 Baseline 名称。' : null)
+    });
     if (!nextName) return;
     const nextExamples = upsertRequestExample(store.draftRequest.examples || [], {
       name: nextName,
@@ -2208,25 +2377,35 @@ export function App() {
     saveMutation.mutate();
   }
 
-  function handleSaveAsCurrentResponse(action: 'example' | 'replace-example' | 'case' | 'status-check') {
-    if (action === 'example') {
-      void handleSaveResponseAsExample(false);
+  async function handleSaveAsCurrentResponse() {
+    const selection = await promptForSaveAs({
+      title: '保存当前结果',
+      description: '统一入口：把当前响应保存为 Example、Baseline、Case 或校验。',
+      defaultName:
+        activeView === 'scratch'
+          ? currentScratch?.selectedExampleName || 'scratch-baseline'
+          : selectedExampleName || `${store.activeEnvironmentName}-baseline`
+    });
+    if (!selection) return;
+
+    if (selection.target === 'example') {
+      await handleSaveResponseAsExample(false, selection.name);
       return;
     }
-    if (action === 'replace-example') {
-      void handleSaveResponseAsExample(true);
+    if (selection.target === 'baseline') {
+      await handlePinCurrentResponseAsBaseline(selection.name);
       return;
     }
-    if (action === 'case') {
-      void handleCreateCaseFromCurrentResponse();
+    if (selection.target === 'case') {
+      await handleCreateCaseFromCurrentResponse();
       return;
     }
     if (activeView === 'scratch') {
-      notifications.show({ color: 'blue', message: 'Save the Scratch request to the workspace before creating reusable checks.' });
+      notifications.show({ color: 'blue', message: '请先把 Scratch 请求保存到工作区，再生成可复用校验。' });
       return;
     }
     if (store.response) {
-      void handleCreateCheckFromResponse({
+      await handleCreateCheckFromResponse({
         type: 'status-equals',
         label: `Status equals ${store.response.status}`,
         expected: String(store.response.status)
@@ -2253,7 +2432,7 @@ export function App() {
         <div className="workspace-frame">
           <div className="workspace-contextbar">
             <div className="workspace-context-copy">
-              <span className="workspace-context-label">Debugger</span>
+              <span className="workspace-context-label">本地调试工作区</span>
               <strong className="workspace-context-title">{store.workspace.project.name}</strong>
             </div>
 
@@ -2271,6 +2450,9 @@ export function App() {
                   style={{ width: 220 }}
                 />
               ) : null}
+              <Badge variant="light" color={activeView === 'scratch' ? 'indigo' : 'gray'} size="sm" style={{ cursor: 'pointer' }} onClick={() => setActiveView('scratch')}>
+                Scratch
+              </Badge>
               <Select
                 size="xs"
                 className="compact-select"
@@ -2283,11 +2465,11 @@ export function App() {
                 style={{ width: 120 }}
               />
               <Badge variant="dot" color={runMutation.isPending || scratchRunMutation.isPending ? 'blue' : 'gray'} size="sm">
-                {runMutation.isPending || scratchRunMutation.isPending ? 'Running' : 'Idle'}
+                {runMutation.isPending || scratchRunMutation.isPending ? '运行中' : '空闲'}
               </Badge>
               {gitInfo?.isRepo ? (
                 <Badge variant="light" color={gitInfo.dirty ? 'orange' : 'teal'} size="sm">
-                  {gitInfo.branch || 'git'}{gitInfo.dirty ? ` · ${gitInfo.changedFiles.length} dirty` : ' · clean'}
+                  {gitInfo.branch || 'git'}{gitInfo.dirty ? ` · ${gitInfo.changedFiles.length} 未提交` : ' · 干净'}
                 </Badge>
               ) : null}
               <ActionIcon variant="subtle" color="gray" onClick={() => openMutation.mutate(store.workspace!.root)}>
@@ -2424,9 +2606,7 @@ export function App() {
                     selectedExampleName: name
                   }))
                 }
-                onSaveExample={() => handleSaveResponseAsExample(false)}
                 onReplaceExample={() => handleSaveResponseAsExample(true)}
-                onPinBaseline={handlePinCurrentResponseAsBaseline}
                 onSaveAs={handleSaveAsCurrentResponse}
                 onCopyBody={() => copyToClipboard(currentScratch.response?.bodyText || '', 'Body copied')}
                 onCopyCurl={() => copyToClipboard(currentScratchPreview ? curlForPreview(currentScratchPreview) : '', 'cURL copied')}
@@ -2456,19 +2636,28 @@ export function App() {
                   onClear={handleClearHistory}
                 />
               </section>
-            ) : activeView === 'sessions' ? (
+            ) : activeView === 'sync' ? (
               <section className="workspace-main" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 {renderTabHeader()}
-                <SessionCenterPanel
+                <SyncCenterPanel
                   workspace={store.workspace}
-                  activeEnvironmentName={store.activeEnvironmentName}
-                  runtimeVariables={runtimeVariables}
-                  sessionSnapshot={sessionSnapshot}
-                  hostSnapshots={hostSessionSnapshots}
-                  targetUrl={sessionTargetUrl}
-                  onRefresh={handleRefreshSession}
-                  onClearSession={handleClearSessionCookies}
-                  onClearRuntimeVars={() => setRuntimeVariables({})}
+                  gitStatus={gitInfo}
+                  syncGuard={syncGuard}
+                  gitRisks={gitRisks}
+                  suggestedCommitMessage={suggestedCommitMessage(gitInfo)}
+                  lastSyncAt={lastSyncAt}
+                  onRefresh={handleRefreshGitStatus}
+                  onPull={handleGitPull}
+                  onPush={handleGitPush}
+                  onOpenTerminal={() =>
+                    store.workspace &&
+                    openTerminal(store.workspace.root).catch(error => {
+                      notifications.show({ color: 'red', message: `Failed to open terminal: ${(error as Error).message}` });
+                    })
+                  }
+                  onCopySuggestedCommitMessage={() =>
+                    copyToClipboard(suggestedCommitMessage(gitInfo), 'Suggested commit message copied')
+                  }
                 />
               </section>
             ) : activeView === 'repair' ? (
@@ -2536,10 +2725,17 @@ export function App() {
                   draftProject={store.draftProject}
                   activeEnvironmentName={store.activeEnvironmentName}
                   selectedEnvironment={selectedEnvironment}
+                  runtimeVariables={runtimeVariables}
+                  sessionSnapshot={sessionSnapshot}
+                  hostSnapshots={hostSessionSnapshots}
+                  targetUrl={sessionTargetUrl}
                   onEnvironmentChange={name => store.setActiveEnvironment(name)}
                   onProjectChange={project => store.updateProject(project)}
                   onEnvironmentUpdate={(name, updater) => store.updateEnvironment(name, updater)}
                   onAddEnvironment={handleAddEnvironment}
+                  onRefreshSession={handleRefreshSession}
+                  onClearSession={handleClearSessionCookies}
+                  onClearRuntimeVars={() => setRuntimeVariables({})}
                   onSave={() => saveMutation.mutate()}
                 />
               </section>
@@ -2589,9 +2785,7 @@ export function App() {
                 onSelectExample={setSelectedExampleName}
                 onCopyBody={() => copyToClipboard(store.response?.bodyText || '', 'Body copied')}
                 onCopyCurl={() => copyToClipboard(currentRequestPreview ? curlForPreview(currentRequestPreview) : '', 'cURL copied')}
-                onSaveExample={() => handleSaveResponseAsExample(false)}
                 onReplaceExample={() => handleSaveResponseAsExample(true)}
-                onPinBaseline={handlePinCurrentResponseAsBaseline}
                 onSaveAs={handleSaveAsCurrentResponse}
                 onRefreshSession={handleRefreshSession}
                 onClearSession={handleClearSessionCookies}

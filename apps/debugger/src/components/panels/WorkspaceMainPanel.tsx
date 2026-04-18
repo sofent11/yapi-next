@@ -98,10 +98,8 @@ export function WorkspaceMainPanel(props: {
   onSelectExample: (name: string | null) => void;
   onCopyBody: () => void;
   onCopyCurl: () => void;
-  onSaveExample: () => void;
   onReplaceExample: () => void;
-  onPinBaseline: () => void;
-  onSaveAs?: (action: 'example' | 'replace-example' | 'case' | 'status-check') => void;
+  onSaveAs?: () => void;
   onRefreshSession: () => void;
   onClearSession: () => void;
   onCreateCheck: (input: any) => void;
@@ -471,9 +469,7 @@ export function WorkspaceMainPanel(props: {
             onSelectExample={props.onSelectExample}
             onCopyBody={props.onCopyBody}
             onCopyCurl={props.onCopyCurl}
-            onSaveExample={props.onSaveExample}
             onReplaceExample={props.onReplaceExample}
-            onPinBaseline={props.onPinBaseline}
             onSaveAs={props.onSaveAs}
             onRefreshSession={props.onRefreshSession}
             onClearSession={props.onClearSession}

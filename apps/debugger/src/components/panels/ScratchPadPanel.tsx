@@ -41,10 +41,8 @@ export function ScratchPadPanel(props: {
   onRequestTabChange: (tab: RequestTab) => void;
   onResponseTabChange: (tab: ResponseTab | 'json' | 'cookies' | 'compare') => void;
   onSelectExample: (name: string | null) => void;
-  onSaveExample: () => void;
   onReplaceExample: () => void;
-  onPinBaseline: () => void;
-  onSaveAs?: (action: 'example' | 'replace-example' | 'case' | 'status-check') => void;
+  onSaveAs?: () => void;
   onCopyBody: () => void;
   onCopyCurl: () => void;
   onRefreshSession: () => void;
@@ -62,15 +60,15 @@ export function ScratchPadPanel(props: {
       <div className="panel-toolbar">
         <div className="breadcrumb-list">
           <span className="breadcrumb-chip">Scratch</span>
-          <span className="breadcrumb-chip">Temporary Request</span>
+          <span className="breadcrumb-chip">临时请求</span>
         </div>
         <div className="panel-toolbar-actions">
           {props.isDirty && <Badge color="orange" variant="filled" size="xs">Unsaved</Badge>}
           <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={props.onNewScratch}>
-            New Scratch
+            新建 Scratch
           </Button>
           <Button size="xs" variant="filled" leftSection={<IconDeviceFloppy size={14} />} onClick={props.onSaveToWorkspace}>
-            Save To Workspace
+            保存到工作区
           </Button>
         </div>
       </div>
@@ -128,9 +126,7 @@ export function ScratchPadPanel(props: {
             onSelectExample={props.onSelectExample}
             onCopyBody={props.onCopyBody}
             onCopyCurl={props.onCopyCurl}
-            onSaveExample={props.onSaveExample}
             onReplaceExample={props.onReplaceExample}
-            onPinBaseline={props.onPinBaseline}
             onSaveAs={props.onSaveAs}
             onRefreshSession={props.onRefreshSession}
             onClearSession={props.onClearSession}

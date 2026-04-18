@@ -1,4 +1,5 @@
 import YAML from 'yaml';
+import { buildImportJourneyState, evaluateSyncGuard } from './beta';
 import {
   BODY_SIDECAR_THRESHOLD,
   CASE_SUFFIX,
@@ -1931,8 +1932,10 @@ export function renderCollectionRunReportHtml(report: CollectionRunReport) {
 
 export {
   applyCollectionRules,
+  buildImportJourneyState,
   buildCurlCommand,
   evaluateChecks,
+  evaluateSyncGuard,
   executeRequestScript,
   interpolateString,
   mergeTemplateSources

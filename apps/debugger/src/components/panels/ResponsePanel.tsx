@@ -95,10 +95,8 @@ export function ResponsePanel(props: {
   onSelectExample: (name: string | null) => void;
   onCopyBody: () => void;
   onCopyCurl: () => void;
-  onSaveExample: () => void;
   onReplaceExample: () => void;
-  onPinBaseline: () => void;
-  onSaveAs?: (action: 'example' | 'replace-example' | 'case' | 'status-check') => void;
+  onSaveAs?: () => void;
   onRefreshSession: () => void;
   onClearSession: () => void;
   onCreateCheck: (input: GeneratedCheckInput) => void;
@@ -129,7 +127,7 @@ export function ResponsePanel(props: {
       <div className="response-header-ide">
         <div className="response-status-group">
           <Text size="xs" fw={700} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Response
+            响应结果
           </Text>
           {props.response ? (
             <div className="response-metrics">
@@ -140,17 +138,17 @@ export function ResponsePanel(props: {
               <Text size="xs" fw={600} c="dimmed">{props.response.sizeBytes}B</Text>
             </div>
           ) : props.requestError ? (
-            <Badge color="red" variant="filled" size="xs">ERROR</Badge>
+            <Badge color="red" variant="filled" size="xs">请求失败</Badge>
           ) : null}
         </div>
         <Group gap="xs" wrap="wrap" className="response-header-actions">
           <Select
             size="xs"
             className="response-example-select"
-            placeholder="Live Response"
+            placeholder="查看实时响应"
             value={props.selectedExampleName || '__live__'}
             data={[
-              { value: '__live__', label: 'Live Response' },
+              { value: '__live__', label: '实时响应' },
               ...examples.map(example => ({ value: example.name, label: exampleOptionLabel(example.name, example.role) }))
             ]}
             onChange={value => props.onSelectExample(value === '__live__' ? null : value || null)}
@@ -162,23 +160,17 @@ export function ResponsePanel(props: {
               color={prettifyJson ? 'indigo' : 'gray'}
               onClick={() => setPrettifyJson(current => !current)}
             >
-              {prettifyJson ? 'Prettified' : 'Prettify'}
+              {prettifyJson ? '已格式化' : '格式化 JSON'}
             </Button>
           ) : null}
-          <Button size="xs" variant="default" onClick={props.onCopyBody} disabled={!displayBody}>Copy</Button>
-          <Button size="xs" variant="default" onClick={props.onCopyCurl} disabled={!props.requestPreview}>cURL</Button>
+          <Button size="xs" variant="default" onClick={props.onCopyBody} disabled={!displayBody}>复制响应</Button>
+          <Button size="xs" variant="default" onClick={props.onCopyCurl} disabled={!props.requestPreview}>复制 cURL</Button>
           <Group gap={6} wrap="wrap" className="response-header-actions-secondary">
-            <Button size="xs" variant="default" onClick={props.onSaveExample} disabled={!props.response}>
-              Save Example
-            </Button>
-            <Button size="xs" variant="default" onClick={props.onPinBaseline} disabled={!props.response}>
-              Set Baseline
-            </Button>
-            <Button size="xs" variant="default" onClick={() => props.onSaveAs?.('case')} disabled={!props.response}>
-              Save Case
+            <Button size="xs" variant="filled" color="indigo" onClick={props.onSaveAs} disabled={!props.response}>
+              Save As
             </Button>
             <Button size="xs" variant="filled" color="indigo" onClick={props.onReplaceExample} disabled={!props.response || !selectedExample}>
-              Update Selected
+              覆盖当前 Example
             </Button>
           </Group>
         </Group>
@@ -188,9 +180,9 @@ export function ResponsePanel(props: {
         <div className="response-quick-actions">
           {props.requestPreview?.authState ? (
             <Text size="xs" c="dimmed">
-              Auth {props.requestPreview.authState.type}
+              认证 {props.requestPreview.authState.type}
               {props.requestPreview.authState.profileName ? ` · ${props.requestPreview.authState.profileName}` : ''}
-              {` · injected ${props.requestPreview.authState.tokenInjected ? 'yes' : 'no'} · cache ${props.requestPreview.authState.cacheStatus}`}
+              {` · 注入${props.requestPreview.authState.tokenInjected ? '成功' : '未注入'} · 缓存 ${props.requestPreview.authState.cacheStatus}`}
             </Text>
           ) : null}
           <Button
@@ -204,16 +196,16 @@ export function ResponsePanel(props: {
               })
             }
           >
-            Add Status Check
+            生成状态校验
           </Button>
           <Button size="xs" variant="default" onClick={props.onCreateCaseFromResponse}>
-            Create Case From Response
+            从当前响应生成 Case
           </Button>
           <Button size="xs" variant="subtle" onClick={props.onRefreshSession}>
-            Refresh Session
+            刷新会话
           </Button>
           <Button size="xs" variant="subtle" color="red" onClick={props.onClearSession}>
-            Clear Session
+            清空会话
           </Button>
         </div>
       ) : null}
@@ -248,11 +240,11 @@ export function ResponsePanel(props: {
 
       <Tabs value={props.activeTab} onChange={value => props.onTabChange(value as ResponseTab | 'json' | 'cookies' | 'compare')} className="response-tabs-ide">
         <Tabs.List>
-          <Tabs.Tab value="body">Body</Tabs.Tab>
+          <Tabs.Tab value="body">正文</Tabs.Tab>
           <Tabs.Tab value="json" leftSection={<IconBraces size={14} />}>JSON</Tabs.Tab>
-          <Tabs.Tab value="headers">Headers</Tabs.Tab>
+          <Tabs.Tab value="headers">响应头</Tabs.Tab>
           <Tabs.Tab value="cookies" leftSection={<IconCookie size={14} />}>Cookies</Tabs.Tab>
-          <Tabs.Tab value="compare" leftSection={<IconGitCompare size={14} />}>Compare</Tabs.Tab>
+          <Tabs.Tab value="compare" leftSection={<IconGitCompare size={14} />}>对比</Tabs.Tab>
           <Tabs.Tab value="raw">Raw</Tabs.Tab>
         </Tabs.List>
 
@@ -271,13 +263,13 @@ export function ResponsePanel(props: {
             }}>
               <IconAlertCircle size={48} stroke={1.5} />
               <div>
-                <Text fw={700} size="md">Request Failed</Text>
+                <Text fw={700} size="md">请求失败</Text>
                 <Text size="sm" mt={4} style={{ maxWidth: 400, wordBreak: 'break-word', fontFamily: 'var(--font-mono)' }}>
                   {props.requestError}
                 </Text>
               </div>
               <Text size="xs" c="dimmed" style={{ maxWidth: 300 }}>
-                This could be due to network issues, an invalid URL, or a server-side error. Check the console or your connection and try again.
+                可能是网络异常、URL 无效，或服务端返回错误。请先检查请求配置与连接状态。
               </Text>
             </div>
           ) : !props.response && !selectedExample ? (
@@ -291,9 +283,9 @@ export function ResponsePanel(props: {
               gap: 12
             }}>
               <IconPlayerPlay size={48} stroke={1.5} opacity={0.2} />
-              <Text size="sm" fw={500}>Ready to Send</Text>
+              <Text size="sm" fw={500}>准备发送</Text>
               <Text size="xs" style={{ maxWidth: 240, textAlign: 'center' }}>
-                Hit the Send button to execute the request or select a saved example to inspect.
+                点击“发送请求”查看实时结果，或切换到已保存的 Example / Baseline 进行对比。
               </Text>
             </div>
           ) : (
@@ -303,7 +295,7 @@ export function ResponsePanel(props: {
               </Tabs.Panel>
               <Tabs.Panel value="json">
                 {parsedJson == null ? (
-                  <div className="empty-tab-state">The current body is not valid JSON, so structured inspection is unavailable.</div>
+                  <div className="empty-tab-state">当前响应不是有效 JSON，暂时无法进行结构化查看。</div>
                 ) : (
                   <div className="json-inspector-list">
                     {jsonRows.map(row => (
@@ -324,7 +316,7 @@ export function ResponsePanel(props: {
                               })
                             }
                           >
-                            Exists
+                            路径存在
                           </Button>
                           <Button
                             size="xs"
@@ -338,7 +330,7 @@ export function ResponsePanel(props: {
                               })
                             }
                           >
-                            Equals
+                            结果相等
                           </Button>
                           {props.onExtractValue ? (
                             <>
@@ -347,14 +339,14 @@ export function ResponsePanel(props: {
                                 variant="subtle"
                                 onClick={() => props.onExtractValue?.('runtime', { suggestedName: row.path.replace(/[^a-zA-Z0-9]+/g, '_'), value: row.value })}
                               >
-                                Runtime Var
+                                提取到运行时
                               </Button>
                               <Button
                                 size="xs"
                                 variant="subtle"
                                 onClick={() => props.onExtractValue?.('local', { suggestedName: row.path.replace(/[^a-zA-Z0-9]+/g, '_'), value: row.value })}
                               >
-                                Local Var
+                                提取到本地环境
                               </Button>
                             </>
                           ) : null}
@@ -423,7 +415,7 @@ export function ResponsePanel(props: {
                     </div>
                   ))}
                   {!props.response?.headers.length ? (
-                    <div className="empty-tab-state">No response headers were captured.</div>
+                    <div className="empty-tab-state">当前没有采集到响应头。</div>
                   ) : null}
                   <CodeEditor value={displayHeaders} readOnly language="text" minHeight="180px" />
                 </div>
@@ -431,9 +423,9 @@ export function ResponsePanel(props: {
               <Tabs.Panel value="cookies">
                 <div className="response-cookie-grid">
                   <div className="check-card">
-                    <Text fw={700}>Response Set-Cookie</Text>
+                    <Text fw={700}>响应 Set-Cookie</Text>
                     {responseCookies.length === 0 ? (
-                      <div className="empty-tab-state">No Set-Cookie headers were returned by this response.</div>
+                      <div className="empty-tab-state">当前响应没有返回 Set-Cookie。</div>
                     ) : (
                       <div className="json-inspector-list">
                         {responseCookies.map(cookie => (
@@ -449,14 +441,14 @@ export function ResponsePanel(props: {
                                   variant="subtle"
                                   onClick={() => props.onExtractValue?.('runtime', { suggestedName: cookie.name, value: cookie.value })}
                                 >
-                                  Runtime Var
+                                  提取到运行时
                                 </Button>
                                 <Button
                                   size="xs"
                                   variant="subtle"
                                   onClick={() => props.onExtractValue?.('local', { suggestedName: cookie.name, value: cookie.value })}
                                 >
-                                  Local Var
+                                  提取到本地环境
                                 </Button>
                               </Group>
                             ) : null}
@@ -466,9 +458,9 @@ export function ResponsePanel(props: {
                     )}
                   </div>
                   <div className="check-card">
-                    <Text fw={700}>Session Cookies</Text>
+                    <Text fw={700}>当前会话 Cookies</Text>
                     {sessionCookies.length === 0 ? (
-                      <div className="empty-tab-state">No active session cookies are available for the current request URL.</div>
+                      <div className="empty-tab-state">当前请求 URL 还没有可复用的会话 Cookie。</div>
                     ) : (
                       <div className="json-inspector-list">
                         {sessionCookies.map(cookie => (
@@ -484,14 +476,14 @@ export function ResponsePanel(props: {
                                   variant="subtle"
                                   onClick={() => props.onExtractValue?.('runtime', { suggestedName: cookie.name, value: cookie.value })}
                                 >
-                                  Runtime Var
+                                  提取到运行时
                                 </Button>
                                 <Button
                                   size="xs"
                                   variant="subtle"
                                   onClick={() => props.onExtractValue?.('local', { suggestedName: cookie.name, value: cookie.value })}
                                 >
-                                  Local Var
+                                  提取到本地环境
                                 </Button>
                               </Group>
                             ) : null}
@@ -505,21 +497,21 @@ export function ResponsePanel(props: {
               </Tabs.Panel>
               <Tabs.Panel value="compare">
                 <div className="compare-summary-card">
-                  <Text fw={700}>Live vs Saved Output</Text>
+                  <Text fw={700}>实时响应 vs 已保存结果</Text>
                   <Text size="sm" c="dimmed">
                     {selectedExample
                       ? compareSummary(liveBody, selectedExample.text || '')
-                      : 'Select a saved example to compare it with the latest live response.'}
+                      : '选择一个已保存的 Example 或 Baseline，和最新响应做差异对比。'}
                   </Text>
                 </div>
                 <div className="response-compare-grid">
                   <div className="check-card">
-                    <Text fw={700}>Live Response</Text>
+                    <Text fw={700}>实时响应</Text>
                     <CodeEditor value={liveBody} readOnly language={responseBodyLanguage(liveBody)} minHeight="320px" />
                   </div>
                   <div className="check-card">
                     <Group justify="space-between">
-                      <Text fw={700}>Selected Example</Text>
+                      <Text fw={700}>已选结果</Text>
                       {selectedExample?.role === 'baseline' ? (
                         <Badge color="indigo" variant="light">
                           Baseline
