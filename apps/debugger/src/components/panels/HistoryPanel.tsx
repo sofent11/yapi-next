@@ -14,12 +14,24 @@ function compareSummary(left: RunHistoryEntry, right: RunHistoryEntry) {
   ].join(' ');
 }
 
+function runLabel(entry: RunHistoryEntry) {
+  return entry.requestName || entry.request.url || 'Unknown request';
+}
+
+function runSource(entry: RunHistoryEntry) {
+  if (entry.sourceCollectionName) {
+    return `${entry.sourceCollectionName} / ${entry.sourceStepKey || 'step'}`;
+  }
+  return 'Manual request run';
+}
+
 export function HistoryPanel(props: {
   entries: RunHistoryEntry[];
   selectedEntryId: string | null;
   onSelectEntry: (id: string) => void;
   onReplay: (entry: RunHistoryEntry) => void;
   onOpenInScratch: (entry: RunHistoryEntry) => void;
+  onOpenCollectionSource?: (entry: RunHistoryEntry) => void;
   onDuplicateAsCase: (entry: RunHistoryEntry) => void;
   onSaveAsExample: (entry: RunHistoryEntry) => void;
   onPinAsBaseline: (entry: RunHistoryEntry) => void;
@@ -32,7 +44,7 @@ export function HistoryPanel(props: {
     const normalized = searchText.trim().toLowerCase();
     if (!normalized) return props.entries;
     return props.entries.filter(entry =>
-      [entry.requestName, entry.caseName, entry.response.status, entry.environmentName, entry.request.url]
+      [entry.requestName, entry.caseName, entry.response.status, entry.environmentName, entry.request.url, entry.sourceCollectionName]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
@@ -48,7 +60,7 @@ export function HistoryPanel(props: {
   const selectedScriptLogs = Array.isArray(selectedEntry?.scriptLogs) ? selectedEntry.scriptLogs : [];
 
   return (
-    <div className="history-center" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div className="history-center">
       <div className="panel-toolbar">
         <div className="breadcrumb-list">
           <span className="breadcrumb-chip">History</span>
@@ -61,129 +73,188 @@ export function HistoryPanel(props: {
             value={searchText}
             onChange={event => setSearchText(event.currentTarget.value)}
           />
-          <Button size="xs" variant="default" color="red" onClick={props.onClear}>Clear History</Button>
+          <Button size="xs" variant="default" color="red" onClick={props.onClear}>
+            Clear History
+          </Button>
         </div>
       </div>
 
+      <div className="center-intro">
+        <Text size="sm" c="dimmed">
+          Replay previous runs, compare outputs, and turn useful executions into Cases, baselines, and reusable examples.
+        </Text>
+      </div>
+
       <div className="environment-layout">
-        <div className="environment-sidebar">
-          <Text fw={700} size="sm">Recent Runs</Text>
-          <div className="environment-list">
+        <aside className="environment-sidebar">
+          <div className="sidebar-section-head">
+            <Text fw={700} size="sm">Recent Runs</Text>
+            <Text size="xs" c="dimmed">Pick a run to inspect its outcome and choose the next path.</Text>
+          </div>
+          <div className="environment-list history-run-list">
             {filteredEntries.length === 0 ? (
-              <div className="empty-tab-state">No runs match the current filter. Send a request and it will appear here.</div>
+              <div className="empty-tab-state">
+                No runs yet. Send a request or run a collection, then come back here to replay and reuse the result.
+              </div>
             ) : (
               filteredEntries.map(entry => (
                 <button
                   key={entry.id}
                   type="button"
-                  className={entry.id === selectedEntry?.id ? 'environment-item is-active' : 'environment-item'}
+                  className={entry.id === selectedEntry?.id ? 'environment-item history-run-item is-active' : 'environment-item history-run-item'}
                   onClick={() => props.onSelectEntry(entry.id)}
                 >
-                  <strong>{entry.requestName}</strong>
-                  <span>{entry.caseName ? `${entry.caseName} · ` : ''}{entry.response.status} · {entry.response.durationMs} ms</span>
+                  <div className="history-run-item-head">
+                    <strong>{runLabel(entry)}</strong>
+                    <Badge color={entry.response.ok ? 'green' : 'red'} variant="light">
+                      {entry.response.status}
+                    </Badge>
+                  </div>
+                  <span>{entry.caseName ? `${entry.caseName} · ` : ''}{entry.environmentName || 'shared'} · {entry.response.durationMs} ms</span>
+                  <span>{runSource(entry)}</span>
                 </button>
               ))
             )}
           </div>
-        </div>
+        </aside>
 
         <div className="environment-main">
           {selectedEntry ? (
             <>
-              <div className="request-preview-card">
-                <div className="request-preview-head">
+              <section className="inspector-section">
+                <div className="checks-head">
                   <div>
-                    <Text size="xs" fw={700} c="dimmed">Selected Run</Text>
-                    <Text size="sm">{selectedEntry.request.method} {selectedEntry.request.url}</Text>
-                    {selectedEntry.sourceCollectionName ? (
-                      <Text size="xs" c="dimmed">
-                        From {selectedEntry.sourceCollectionName} / {selectedEntry.sourceStepKey || 'step'}
-                      </Text>
+                    <Text className="section-kicker">Run Summary</Text>
+                    <h3 className="section-title">Current run and what to do next</h3>
+                  </div>
+                </div>
+                <div className="summary-grid">
+                  <div className="summary-chip">
+                    <span>Request</span>
+                    <strong>{runLabel(selectedEntry)}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Case</span>
+                    <strong>{selectedEntry.caseName || 'Base Request'}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Environment</span>
+                    <strong>{selectedEntry.environmentName || 'shared'}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Source</span>
+                    <strong>{selectedEntry.sourceCollectionName ? 'Collection' : 'Manual'}</strong>
+                  </div>
+                </div>
+                <div className="check-card" style={{ marginTop: 12 }}>
+                  <div className="history-summary-head">
+                    <div>
+                      <Text fw={700}>{selectedEntry.request.method} {selectedEntry.request.url}</Text>
+                      <Text size="sm" c="dimmed">{runSource(selectedEntry)}</Text>
+                    </div>
+                    <Group gap="xs">
+                      <Badge color={selectedEntry.response.ok ? 'green' : 'red'}>{selectedEntry.response.status}</Badge>
+                      <Badge variant="light" color="gray">{selectedEntry.response.durationMs} ms</Badge>
+                    </Group>
+                  </div>
+                  <div className="history-action-grid">
+                    <Button size="xs" variant="filled" onClick={() => props.onReplay(selectedEntry)}>Replay</Button>
+                    <Button size="xs" variant="default" onClick={() => props.onOpenInScratch(selectedEntry)}>Open In Scratch</Button>
+                    <Button size="xs" variant="default" onClick={() => props.onDuplicateAsCase(selectedEntry)}>Duplicate As Case</Button>
+                    <Button size="xs" variant="default" onClick={() => props.onPinAsBaseline(selectedEntry)}>Set Baseline</Button>
+                  </div>
+                  <div className="history-action-grid secondary">
+                    <Button size="xs" variant="subtle" onClick={() => props.onSaveAsExample(selectedEntry)}>Save Example</Button>
+                    <Button size="xs" variant="subtle" onClick={() => props.onGenerateDiffChecks(selectedEntry, compareEntry)}>Diff To Checks</Button>
+                    {selectedEntry.sourceCollectionId && props.onOpenCollectionSource ? (
+                      <Button size="xs" variant="subtle" onClick={() => props.onOpenCollectionSource?.(selectedEntry)}>
+                        Open Collection
+                      </Button>
                     ) : null}
                   </div>
-                  <Group gap="xs">
-                    <Badge color={selectedEntry.response.ok ? 'green' : 'red'}>{selectedEntry.response.status}</Badge>
-                    <Badge variant="light" color="gray">{selectedEntry.response.durationMs} ms</Badge>
-                    <Badge variant="light" color="indigo">{selectedEntry.environmentName || 'shared'}</Badge>
-                  </Group>
                 </div>
-                <div className="panel-toolbar-actions">
-                  <Button size="xs" variant="default" onClick={() => props.onReplay(selectedEntry)}>Replay</Button>
-                  <Button size="xs" variant="default" onClick={() => props.onOpenInScratch(selectedEntry)}>Open In Scratch</Button>
-                  <Button size="xs" variant="default" onClick={() => props.onSaveAsExample(selectedEntry)}>Save Example</Button>
-                  <Button size="xs" onClick={() => props.onDuplicateAsCase(selectedEntry)}>Duplicate As Case</Button>
-                  <Button size="xs" variant="default" onClick={() => props.onPinAsBaseline(selectedEntry)}>Set Baseline</Button>
-                  <Button size="xs" variant="default" onClick={() => props.onGenerateDiffChecks(selectedEntry, compareEntry)}>Diff To Checks</Button>
-                </div>
-              </div>
+              </section>
 
-              <div className="check-card">
-                <Group justify="space-between">
-                  <Text fw={700}>Compare Runs</Text>
+              <section className="inspector-section">
+                <div className="checks-head">
+                  <div>
+                    <Text className="section-kicker">Compare</Text>
+                    <h3 className="section-title">Choose another run as reference</h3>
+                  </div>
                   <Select
                     size="xs"
                     placeholder="Select another run"
                     value={compareEntry?.id || null}
                     data={filteredEntries
-                      .filter(entry => !selectedEntry || entry.id !== selectedEntry.id)
+                      .filter(entry => entry.id !== selectedEntry.id)
                       .map(entry => ({
                         value: entry.id,
-                        label: `${entry.requestName} · ${entry.response.status} · ${entry.response.durationMs} ms`
+                        label: `${runLabel(entry)} · ${entry.response.status} · ${entry.response.durationMs} ms`
                       }))}
                     onChange={value => setCompareEntryId(value || null)}
                   />
-                </Group>
-                <Text size="sm" c="dimmed" mt={8}>
-                  {compareEntry ? compareSummary(selectedEntry, compareEntry) : 'Pick another run to compare status, latency, and body output.'}
+                </div>
+                <Text size="sm" c="dimmed">
+                  {compareEntry ? compareSummary(selectedEntry, compareEntry) : 'Pick another run to compare status, latency, and body output before generating checks.'}
                 </Text>
-              </div>
-
-              <div className="response-compare-grid">
-                <div className="check-card">
-                  <Text fw={700}>Selected Response</Text>
-                  <CodeEditor value={selectedEntry.response.bodyText || ''} readOnly language="json" minHeight="220px" />
+                <div className="response-compare-grid" style={{ marginTop: 12 }}>
+                  <div className="check-card" style={{ margin: 0 }}>
+                    <Text fw={700}>Selected Response</Text>
+                    <CodeEditor value={selectedEntry.response.bodyText || ''} readOnly language="json" minHeight="220px" />
+                  </div>
+                  <div className="check-card" style={{ margin: 0 }}>
+                    <Text fw={700}>Compared Response</Text>
+                    <CodeEditor value={compareEntry?.response.bodyText || ''} readOnly language="json" minHeight="220px" />
+                  </div>
                 </div>
-                <div className="check-card">
-                  <Text fw={700}>Compared Response</Text>
-                  <CodeEditor value={compareEntry?.response.bodyText || ''} readOnly language="json" minHeight="220px" />
-                </div>
-              </div>
+              </section>
 
-              <div className="checks-list">
-                <div className="check-card">
-                  <Text fw={700}>Check Results</Text>
-                  {selectedCheckResults.length === 0 ? (
-                    <div className="empty-tab-state">No case checks were attached to this run.</div>
-                  ) : (
-                    <div className="checks-list">
-                      {selectedCheckResults.map(result => (
-                        <div key={result.id} className="check-result-row">
-                          <Badge color={result.ok ? 'green' : 'red'}>{result.ok ? 'PASS' : 'FAIL'}</Badge>
-                          <div className="tree-row-copy">
-                            <strong>{result.label}</strong>
-                            <span>{result.message}</span>
+              <section className="inspector-section">
+                <div className="checks-head">
+                  <div>
+                    <Text className="section-kicker">Details</Text>
+                    <h3 className="section-title">Checks and script output</h3>
+                  </div>
+                </div>
+                <div className="checks-list">
+                  <div className="check-card" style={{ margin: 0 }}>
+                    <Text fw={700}>Check Results</Text>
+                    {selectedCheckResults.length === 0 ? (
+                      <div className="empty-tab-state">This run did not carry reusable checks. Duplicate it as a Case if you want to keep this state.</div>
+                    ) : (
+                      <div className="checks-list" style={{ marginTop: 12 }}>
+                        {selectedCheckResults.map(result => (
+                          <div key={result.id} className="check-result-row">
+                            <Badge color={result.ok ? 'green' : 'red'}>{result.ok ? 'PASS' : 'FAIL'}</Badge>
+                            <div className="tree-row-copy">
+                              <strong>{result.label}</strong>
+                              <span>{result.message}</span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="check-card" style={{ margin: 0 }}>
+                    <Text fw={700}>Script Logs</Text>
+                    {selectedScriptLogs.length === 0 ? (
+                      <div className="empty-tab-state">No script logs were recorded for this run.</div>
+                    ) : (
+                      <CodeEditor
+                        value={selectedScriptLogs.map(log => `[${log.phase}] ${log.message}`).join('\n')}
+                        readOnly
+                        language="text"
+                        minHeight="180px"
+                      />
+                    )}
+                  </div>
                 </div>
-                <div className="check-card">
-                  <Text fw={700}>Script Logs</Text>
-                  {selectedScriptLogs.length === 0 ? (
-                    <div className="empty-tab-state">No script logs were recorded for this run.</div>
-                  ) : (
-                    <CodeEditor
-                      value={selectedScriptLogs.map(log => `[${log.phase}] ${log.message}`).join('\n')}
-                      readOnly
-                      language="text"
-                      minHeight="180px"
-                    />
-                  )}
-                </div>
-              </div>
+              </section>
             </>
-          ) : null}
+          ) : (
+            <div className="empty-tab-state">No run selected. Send a request or run a collection to start building replayable history.</div>
+          )}
         </div>
       </div>
     </div>

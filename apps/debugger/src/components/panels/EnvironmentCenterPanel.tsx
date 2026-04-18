@@ -1,4 +1,4 @@
-import { Button, Checkbox, Code, Select, Text, TextInput } from '@mantine/core';
+import { Badge, Button, Checkbox, Code, Group, Select, Text, TextInput } from '@mantine/core';
 import type { AuthConfig, EnvironmentDocument, ProjectDocument, SessionSnapshot, WorkspaceIndex } from '@yapi-debugger/schema';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
 
@@ -75,45 +75,73 @@ export function EnvironmentCenterPanel(props: {
   const selectedEnvironment = props.selectedEnvironment;
   const project = props.draftProject || props.workspace.project;
   const runtimeEntries = Object.entries(props.runtimeVariables);
+  const sharedVarCount = Object.keys(selectedEnvironment?.sharedVars || selectedEnvironment?.vars || {}).length;
+  const localVarCount = Object.keys(selectedEnvironment?.localVars || {}).length;
+  const sharedHeaderCount = (selectedEnvironment?.sharedHeaders || selectedEnvironment?.headers || []).length;
+  const localHeaderCount = (selectedEnvironment?.localHeaders || []).length;
+  const authProfileCount = selectedEnvironment?.authProfiles.length || 0;
+  const hasOverlay = localVarCount > 0 || localHeaderCount > 0 || Boolean(selectedEnvironment?.localFilePath);
 
   return (
     <section className="workspace-main environment-center">
       <div className="panel-toolbar">
         <div className="breadcrumb-list">
           <span className="breadcrumb-chip">{project.name}</span>
-          <span className="breadcrumb-chip">环境中心</span>
+          <span className="breadcrumb-chip">Environments</span>
         </div>
         <div className="panel-toolbar-actions">
-          <Button size="xs" variant="default" onClick={props.onAddEnvironment}>新建环境</Button>
-          <Button size="xs" variant="default" onClick={props.onRefreshSession}>刷新会话</Button>
-          <Button size="xs" onClick={props.onSave}>保存变更</Button>
+          <Button size="xs" variant="default" onClick={props.onAddEnvironment}>New Environment</Button>
+          <Button size="xs" variant="default" onClick={props.onRefreshSession}>Refresh Runtime</Button>
+          <Button size="xs" onClick={props.onSave}>Save</Button>
         </div>
       </div>
 
+      <div className="center-intro">
+        <Text size="sm" c="dimmed">
+          Keep shared configuration, local secrets, and runtime session state separate so the team can collaborate safely without losing fast local debugging.
+        </Text>
+      </div>
+
       <div className="environment-layout">
-        <div className="environment-sidebar">
-          <Text fw={700} size="sm">环境列表</Text>
-          <div className="environment-list">
-            {props.workspace.environments.map(item => (
-              <button
-                key={item.document.name}
-                type="button"
-                className={item.document.name === props.activeEnvironmentName ? 'environment-item is-active' : 'environment-item'}
-                onClick={() => props.onEnvironmentChange(item.document.name)}
-              >
-                <strong>{item.document.name}</strong>
-                <span>{Object.keys(item.document.vars).length} 个变量</span>
-              </button>
-            ))}
+        <aside className="environment-sidebar">
+          <div className="sidebar-section-head">
+            <Text fw={700} size="sm">Environment List</Text>
+            <Text size="xs" c="dimmed">Choose which named environment the workspace should use right now.</Text>
           </div>
-        </div>
+          <div className="environment-list">
+            {props.workspace.environments.map(item => {
+              const mergedVarCount = Object.keys(item.document.vars || {}).length;
+              const overlayCount = Object.keys(item.document.localVars || {}).length + (item.document.localHeaders || []).length;
+              return (
+                <button
+                  key={item.document.name}
+                  type="button"
+                  className={item.document.name === props.activeEnvironmentName ? 'environment-item is-active' : 'environment-item'}
+                  onClick={() => props.onEnvironmentChange(item.document.name)}
+                >
+                  <strong>{item.document.name}</strong>
+                  <span>{mergedVarCount} vars · {item.document.authProfiles.length} auth profiles</span>
+                  <span>{overlayCount > 0 ? `${overlayCount} local overrides` : 'No local overlay'}</span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
 
         <div className="environment-main">
-          <div className="inspector-section">
-            <h3 className="section-title">工作区运行时</h3>
-            <div className="settings-grid">
+          <section className="inspector-section">
+            <div className="checks-head">
+              <div>
+                <Text className="section-kicker">Workspace Runtime</Text>
+                <h3 className="section-title">Project-level defaults</h3>
+              </div>
+            </div>
+            <Text size="sm" c="dimmed">
+              These defaults belong to the workspace itself. They are shared infrastructure, not session state.
+            </Text>
+            <div className="settings-grid" style={{ marginTop: 12 }}>
               <TextInput
-                label="默认 Base URL"
+                label="Default Base URL"
                 value={project.runtime.baseUrl}
                 onChange={event =>
                   props.onProjectChange({
@@ -140,72 +168,126 @@ export function EnvironmentCenterPanel(props: {
               nameLabel="Header"
               valueLabel="Value"
             />
-          </div>
+          </section>
 
           {selectedEnvironment ? (
             <>
-              <div className="inspector-section">
-                <h3 className="section-title">共享变量</h3>
-                <KeyValueEditor
-                  rows={toKeyValueRows(selectedEnvironment.sharedVars || selectedEnvironment.vars || {})}
-                  onChange={rows =>
-                    props.onEnvironmentUpdate(selectedEnvironment.name, environment =>
-                      rebuildEnvironment(environment, {
-                        sharedVars: Object.fromEntries(rows.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]))
-                      })
-                    )
-                  }
-                />
-              </div>
-
-              <div className="inspector-section">
-                <h3 className="section-title">本地敏感变量</h3>
-                <Text size="xs" c="dimmed" mb={8}>
-                  会保存在 `{selectedEnvironment.name}.local.yaml` 中，默认不会进入 Git。
-                </Text>
-                <KeyValueEditor
-                  rows={toKeyValueRows(selectedEnvironment.localVars || {})}
-                  onChange={rows =>
-                    props.onEnvironmentUpdate(selectedEnvironment.name, environment =>
-                      rebuildEnvironment(environment, {
-                        localVars: Object.fromEntries(rows.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]))
-                      })
-                    )
-                  }
-                />
-              </div>
-
-              <div className="inspector-section">
-                <h3 className="section-title">共享请求头</h3>
-                <KeyValueEditor
-                  rows={selectedEnvironment.sharedHeaders || selectedEnvironment.headers}
-                  onChange={rows =>
-                    props.onEnvironmentUpdate(selectedEnvironment.name, environment =>
-                      rebuildEnvironment(environment, {
-                        sharedHeaders: rows
-                      })
-                    )
-                  }
-                />
-              </div>
-
-              <div className="inspector-section">
-                <h3 className="section-title">本地敏感请求头</h3>
-                <KeyValueEditor
-                  rows={selectedEnvironment.localHeaders || []}
-                  onChange={rows =>
-                    props.onEnvironmentUpdate(selectedEnvironment.name, environment =>
-                      rebuildEnvironment(environment, {
-                        localHeaders: rows
-                      })
-                    )
-                  }
-                />
-              </div>
-
-              <div className="inspector-section">
+              <section className="inspector-section">
                 <div className="checks-head">
-                  <h3 className="section-title">认证配置 Profiles</h3>
+                  <div>
+                    <Text className="section-kicker">Environment Summary</Text>
+                    <h3 className="section-title">{selectedEnvironment.name}</h3>
+                  </div>
+                  <Badge color={hasOverlay ? 'orange' : 'gray'} variant="light">
+                    {hasOverlay ? 'Has local overlay' : 'Shared only'}
+                  </Badge>
+                </div>
+                <div className="summary-grid">
+                  <div className="summary-chip">
+                    <span>Shared Vars</span>
+                    <strong>{sharedVarCount}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Local Vars</span>
+                    <strong>{localVarCount}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Headers</span>
+                    <strong>{sharedHeaderCount + localHeaderCount}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Auth Profiles</span>
+                    <strong>{authProfileCount}</strong>
+                  </div>
+                </div>
+              </section>
+
+              <section className="inspector-section">
+                <div className="checks-head">
+                  <div>
+                    <Text className="section-kicker">Shared Layer</Text>
+                    <h3 className="section-title">Values that can enter Git</h3>
+                  </div>
+                </div>
+                <Text size="sm" c="dimmed">
+                  Keep only safe, collaborative defaults here. Everyone sharing this workspace will see these values.
+                </Text>
+                <div className="environment-layer-grid">
+                  <div className="check-card" style={{ margin: 0 }}>
+                    <Text fw={700}>Shared Variables</Text>
+                    <KeyValueEditor
+                      rows={toKeyValueRows(selectedEnvironment.sharedVars || selectedEnvironment.vars || {})}
+                      onChange={rows =>
+                        props.onEnvironmentUpdate(selectedEnvironment.name, environment =>
+                          rebuildEnvironment(environment, {
+                            sharedVars: Object.fromEntries(rows.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]))
+                          })
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="check-card" style={{ margin: 0 }}>
+                    <Text fw={700}>Shared Headers</Text>
+                    <KeyValueEditor
+                      rows={selectedEnvironment.sharedHeaders || selectedEnvironment.headers}
+                      onChange={rows =>
+                        props.onEnvironmentUpdate(selectedEnvironment.name, environment =>
+                          rebuildEnvironment(environment, {
+                            sharedHeaders: rows
+                          })
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section className="inspector-section">
+                <div className="checks-head">
+                  <div>
+                    <Text className="section-kicker">Local Layer</Text>
+                    <h3 className="section-title">Machine-only sensitive overrides</h3>
+                  </div>
+                </div>
+                <Text size="sm" c="dimmed">
+                  These values stay in `{selectedEnvironment.name}.local.yaml` and should not be committed. Use them for tokens, temp hosts, and personal overrides.
+                </Text>
+                <div className="environment-layer-grid">
+                  <div className="check-card" style={{ margin: 0 }}>
+                    <Text fw={700}>Local Variables</Text>
+                    <KeyValueEditor
+                      rows={toKeyValueRows(selectedEnvironment.localVars || {})}
+                      onChange={rows =>
+                        props.onEnvironmentUpdate(selectedEnvironment.name, environment =>
+                          rebuildEnvironment(environment, {
+                            localVars: Object.fromEntries(rows.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]))
+                          })
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="check-card" style={{ margin: 0 }}>
+                    <Text fw={700}>Local Headers</Text>
+                    <KeyValueEditor
+                      rows={selectedEnvironment.localHeaders || []}
+                      onChange={rows =>
+                        props.onEnvironmentUpdate(selectedEnvironment.name, environment =>
+                          rebuildEnvironment(environment, {
+                            localHeaders: rows
+                          })
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section className="inspector-section">
+                <div className="checks-head">
+                  <div>
+                    <Text className="section-kicker">Auth Profiles</Text>
+                    <h3 className="section-title">Reusable environment auth</h3>
+                  </div>
                   <Button
                     size="xs"
                     variant="default"
@@ -222,15 +304,18 @@ export function EnvironmentCenterPanel(props: {
                       }))
                     }
                   >
-                    添加 Profile
+                    Add Profile
                   </Button>
                 </div>
+                <Text size="sm" c="dimmed">
+                  Separate auth profiles from general variables so requests can reference a durable auth strategy instead of duplicating secret fields.
+                </Text>
                 {selectedEnvironment.authProfiles.length === 0 ? (
-                  <div className="empty-tab-state">还没有认证配置。新增一个 Profile 后，请求就可以直接引用环境级认证。</div>
+                  <div className="empty-tab-state">No auth profile yet. Add one if this environment should inject bearer, basic, API key, or OAuth credentials.</div>
                 ) : (
                   <div className="checks-list">
                     {selectedEnvironment.authProfiles.map(profile => (
-                      <div key={profile.name} className="check-card">
+                      <div key={profile.name} className="check-card" style={{ margin: 0 }}>
                         <div className="settings-grid">
                           <TextInput
                             label="Profile Name"
@@ -562,44 +647,38 @@ export function EnvironmentCenterPanel(props: {
                                   }))
                                 }
                               />
-                              <TextInput
-                                label="Cached Token"
-                                value={profile.auth.accessToken || ''}
-                                readOnly
-                              />
-                              <TextInput
-                                label="Cache Expires At"
-                                value={profile.auth.expiresAt || ''}
-                                readOnly
-                              />
+                              <TextInput label="Cached Token" value={profile.auth.accessToken || ''} readOnly />
+                              <TextInput label="Cache Expires At" value={profile.auth.expiresAt || ''} readOnly />
                             </>
                           ) : null}
                         </div>
-                        <Checkbox
-                          label="Keep this profile in the selected environment file"
-                          checked
-                          readOnly
-                        />
+                        <Checkbox label="Stored in the selected environment file" checked readOnly />
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
+              </section>
 
-              <div className="inspector-section">
+              <section className="inspector-section">
                 <div className="checks-head">
-                  <h3 className="section-title">会话与运行时</h3>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <Button size="xs" variant="default" onClick={props.onClearRuntimeVars}>清空运行时变量</Button>
-                    <Button size="xs" variant="default" color="red" onClick={props.onClearSession}>清空 Cookie Jar</Button>
+                  <div>
+                    <Text className="section-kicker">Runtime Layer</Text>
+                    <h3 className="section-title">Current session and extracted state</h3>
                   </div>
+                  <Group gap="xs">
+                    <Button size="xs" variant="default" onClick={props.onClearRuntimeVars}>Clear Runtime Vars</Button>
+                    <Button size="xs" variant="default" color="red" onClick={props.onClearSession}>Clear Cookie Jar</Button>
+                  </Group>
                 </div>
-                <Text size="xs" c="dimmed" mb={12}>
-                  当前目标 URL：{props.targetUrl || '还没有选中可预览的请求'}
+                <Text size="sm" c="dimmed">
+                  Nothing below is durable workspace configuration. These values only describe the current debugging session and can be regenerated.
                 </Text>
-                <div className="summary-grid">
+                <Text size="xs" c="dimmed" mt="sm">
+                  Current target URL: {props.targetUrl || 'No active request preview yet'}
+                </Text>
+                <div className="summary-grid" style={{ marginTop: 12 }}>
                   <div className="summary-chip">
-                    <span>运行时变量</span>
+                    <span>Runtime Vars</span>
                     <strong>{runtimeEntries.length}</strong>
                   </div>
                   <div className="summary-chip">
@@ -607,18 +686,18 @@ export function EnvironmentCenterPanel(props: {
                     <strong>{props.sessionSnapshot?.cookies.length || 0}</strong>
                   </div>
                   <div className="summary-chip">
-                    <span>Host 视图</span>
+                    <span>Host Snapshots</span>
                     <strong>{props.hostSnapshots.length}</strong>
                   </div>
                 </div>
 
-                <div className="checks-list" style={{ marginTop: 16 }}>
-                  <div className="check-card">
-                    <Text fw={700}>运行时变量</Text>
+                <div className="environment-layer-grid" style={{ marginTop: 16 }}>
+                  <div className="check-card" style={{ margin: 0 }}>
+                    <Text fw={700}>Runtime Variables</Text>
                     {runtimeEntries.length === 0 ? (
-                      <div className="empty-tab-state">还没有运行时变量。你可以在响应区把字段提取到运行时，供后续请求直接复用。</div>
+                      <div className="empty-tab-state">No runtime variables yet. Extract values from responses when you want downstream requests to reuse them.</div>
                     ) : (
-                      <div className="json-inspector-list">
+                      <div className="json-inspector-list" style={{ marginTop: 12 }}>
                         {runtimeEntries.map(([name, value]) => (
                           <div key={name} className="json-inspector-row">
                             <div className="json-inspector-copy">
@@ -630,9 +709,8 @@ export function EnvironmentCenterPanel(props: {
                       </div>
                     )}
                   </div>
-
-                  <div className="check-card">
-                    <Text fw={700}>当前会话 Cookie Header</Text>
+                  <div className="check-card" style={{ margin: 0 }}>
+                    <Text fw={700}>Current Cookie Header</Text>
                     <Code block style={{ marginTop: 12, whiteSpace: 'pre-wrap' }}>
                       {props.sessionSnapshot?.cookieHeader || ''}
                     </Code>
@@ -642,9 +720,9 @@ export function EnvironmentCenterPanel(props: {
                 {props.hostSnapshots.length > 0 ? (
                   <div className="checks-list" style={{ marginTop: 16 }}>
                     {props.hostSnapshots.map(item => (
-                      <div key={item.host} className="check-card">
+                      <div key={item.host} className="check-card" style={{ margin: 0 }}>
                         <Text fw={700}>{item.host}</Text>
-                        <Text size="xs" c="dimmed">{item.snapshot.cookies.length} 个 cookies</Text>
+                        <Text size="xs" c="dimmed">{item.snapshot.cookies.length} cookies captured for this host</Text>
                         <Code block style={{ marginTop: 12, whiteSpace: 'pre-wrap' }}>
                           {item.snapshot.cookieHeader || ''}
                         </Code>
@@ -652,10 +730,10 @@ export function EnvironmentCenterPanel(props: {
                     ))}
                   </div>
                 ) : null}
-              </div>
+              </section>
             </>
           ) : (
-            <div className="empty-tab-state">先选择一个环境，再开始编辑变量、请求头、认证配置与会话状态。</div>
+            <div className="empty-tab-state">Choose an environment first. Then edit shared defaults, local overrides, auth profiles, and runtime session state from one place.</div>
           )}
         </div>
       </div>

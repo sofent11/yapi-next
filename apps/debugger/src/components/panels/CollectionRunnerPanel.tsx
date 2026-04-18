@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, Group, NumberInput, Select, Text, TextInput } from '@mantine/core';
 import { inspectCollectionDataText } from '@yapi-debugger/core';
 import { createCollectionStep, type CollectionDocument, type CollectionRunReport, type WorkspaceIndex } from '@yapi-debugger/schema';
@@ -60,6 +60,7 @@ export function CollectionRunnerPanel(props: {
   selectedCollectionId: string | null;
   draftCollection: CollectionDocument | null;
   collectionDataText: string;
+  preferredTab?: 'design' | 'data' | 'reports' | null;
   reports: CollectionRunReport[];
   selectedReportId: string | null;
   selectedReportStepKey: string | null;
@@ -81,6 +82,8 @@ export function CollectionRunnerPanel(props: {
   onClearReports: () => void;
   onSelectReport: (id: string | null) => void;
   onSelectReportStep: (stepKey: string | null) => void;
+  onOpenRequest?: (requestId: string) => void;
+  onOpenCase?: (requestId: string, caseId: string) => void;
   onExtractValue?: (target: 'local' | 'runtime' | 'collection', input: { suggestedName: string; value: string }) => void;
   onExportReport?: (format: 'json' | 'html' | 'junit') => void;
   onCopyText?: (value: string, successMessage: string) => void;
@@ -176,6 +179,27 @@ export function CollectionRunnerPanel(props: {
       .flat()
       .slice(0, 9);
   }, [selectedReport, selectedStep]);
+  const showDesignView = activeStudioTab === 'design';
+  const showDataView = activeStudioTab === 'data';
+  const showReportsView = activeStudioTab === 'reports';
+  const selectedCollectionReportCount = useMemo(() => {
+    if (!draftCollection) return 0;
+    return props.reports.filter(report => report.collectionId === draftCollection.id).length;
+  }, [draftCollection, props.reports]);
+  const firstFailedStepPointer = useMemo(() => {
+    if (!selectedReport) return null;
+    for (const iteration of selectedReport.iterations) {
+      const failedStep = iteration.stepRuns.find(step => !step.ok && !step.skipped);
+      if (failedStep) return stepSelectionValue(iteration.index, failedStep.stepKey);
+    }
+    return null;
+  }, [selectedReport]);
+
+  useEffect(() => {
+    if (props.preferredTab) {
+      setActiveStudioTab(props.preferredTab);
+    }
+  }, [props.preferredTab]);
 
   return (
     <section className="workspace-main">
@@ -195,22 +219,41 @@ export function CollectionRunnerPanel(props: {
             Reports
           </Button>
           <Button size="xs" variant="default" onClick={props.onCreateCollection}>New Collection</Button>
-          <Button size="xs" variant="default" color="red" onClick={props.onDeleteCollection} disabled={!draftCollection}>
-            Delete
-          </Button>
-          <Button size="xs" onClick={props.onSaveCollection} disabled={!draftCollection}>Save</Button>
+          {(showDesignView || showDataView) ? (
+            <Button size="xs" onClick={props.onSaveCollection} disabled={!draftCollection}>Save</Button>
+          ) : null}
+          {showDesignView ? (
+            <Button size="xs" variant="default" color="red" onClick={props.onDeleteCollection} disabled={!draftCollection}>
+              Delete
+            </Button>
+          ) : null}
           <Button size="xs" color="dark" onClick={props.onRunCollection} disabled={!draftCollection}>
             Run
           </Button>
-          <Button size="xs" variant="default" onClick={props.onRerunFailed} disabled={!selectedReport}>
-            Rerun Failed
-          </Button>
+          {showReportsView ? (
+            <Button size="xs" variant="default" onClick={props.onRerunFailed} disabled={!selectedReport}>
+              Rerun Failed
+            </Button>
+          ) : null}
         </div>
+      </div>
+
+      <div className="center-intro">
+        <Text size="sm" c="dimmed">
+          Collections turn individual requests into repeatable flows. Switch between design, data, and reports so each step of that workflow stays focused.
+        </Text>
       </div>
 
       <div className="environment-layout">
         <div className="environment-sidebar">
-          <Text fw={700} size="sm">Collections</Text>
+          <div className="sidebar-section-head">
+            <Text fw={700} size="sm">{showReportsView ? 'Reports First' : 'Collections First'}</Text>
+            <Text size="xs" c="dimmed">
+              {showReportsView
+                ? 'Pick a recent run and inspect where the flow failed or what values should be extracted.'
+                : 'Pick a collection to edit its steps, environment defaults, and reusable variables.'}
+            </Text>
+          </div>
           <div className="environment-list">
             {props.workspace.collections.length === 0 ? (
               <div className="empty-tab-state">No collections yet. Create one to orchestrate multi-step flows.</div>
@@ -229,7 +272,7 @@ export function CollectionRunnerPanel(props: {
             )}
           </div>
 
-          <div className="inspector-section" style={{ marginTop: 12 }}>
+          <div className={showReportsView ? 'inspector-section collection-sidebar-section is-primary' : 'inspector-section collection-sidebar-section'} style={{ marginTop: 12 }}>
             <div className="checks-head">
               <Text fw={700} size="sm">Reports</Text>
               <Group gap={6}>
@@ -259,7 +302,10 @@ export function CollectionRunnerPanel(props: {
               placeholder="Select report"
               data={reportOptions(filteredReports)}
               value={props.selectedReportId || selectedReport?.id || null}
-              onChange={value => props.onSelectReport(value || null)}
+              onChange={value => {
+                setActiveStudioTab('reports');
+                props.onSelectReport(value || null);
+              }}
             />
             {selectedReport ? (
               <div className="summary-grid" style={{ marginTop: 12 }}>
@@ -281,16 +327,29 @@ export function CollectionRunnerPanel(props: {
                 </div>
               </div>
             ) : (
-              <div className="empty-tab-state" style={{ marginTop: 12 }}>No collection reports yet.</div>
+              <div className="empty-tab-state" style={{ marginTop: 12 }}>
+                No collection reports yet. Run a collection to inspect failures, drift, and extracted values here.
+              </div>
             )}
           </div>
         </div>
 
         <div className="environment-main">
-          {draftCollection ? (
+          {draftCollection && showDesignView ? (
             <>
               <div className={activeStudioTab === 'design' ? 'inspector-section collection-stage is-active' : 'inspector-section collection-stage'}>
-                <h3 className="section-title">Collection Settings</h3>
+                <div className="checks-head">
+                  <div>
+                    <Text className="section-kicker">Design</Text>
+                    <h3 className="section-title">Collection settings and run policy</h3>
+                  </div>
+                  <Badge variant="light" color="gray">
+                    {draftCollection.steps.length} steps · {selectedCollectionReportCount} reports
+                  </Badge>
+                </div>
+                <Text size="sm" c="dimmed" mb={12}>
+                  Define the reusable flow here: environment defaults, retries, required paths, and the execution rules that should travel with the collection.
+                </Text>
                 <div className="settings-grid">
                   <TextInput
                     label="Name"
@@ -443,7 +502,11 @@ export function CollectionRunnerPanel(props: {
               </div>
 
               <div className="inspector-section">
-                <h3 className="section-title">Collection Variables</h3>
+                <Text className="section-kicker">Variables</Text>
+                <h3 className="section-title">Reusable inputs for this flow</h3>
+                <Text size="sm" c="dimmed" mb={12}>
+                  Keep collection-level values here when multiple steps should reference the same placeholder without moving that data into an external file.
+                </Text>
                 <KeyValueEditor
                   rows={Object.entries(draftCollection.vars).map(([name, value]) => ({
                     name,
@@ -462,7 +525,10 @@ export function CollectionRunnerPanel(props: {
 
               <div className="inspector-section">
                 <div className="checks-head">
-                  <h3 className="section-title">Steps</h3>
+                  <div>
+                    <Text className="section-kicker">Steps</Text>
+                    <h3 className="section-title">Arrange requests into a repeatable sequence</h3>
+                  </div>
                   <Group gap={8}>
                     <Button
                       size="xs"
@@ -493,6 +559,9 @@ export function CollectionRunnerPanel(props: {
                     </Button>
                   </Group>
                 </div>
+                <Text size="sm" c="dimmed" mb={12}>
+                  Each step should answer one job in the flow. Add the current request directly from Workbench, or map an existing request and Case into the run order.
+                </Text>
                 {props.currentSelection?.requestId ? (
                   <Text size="sm" c="dimmed" mb={12}>
                     Current selection: {props.currentSelection.requestName}
@@ -672,58 +741,81 @@ export function CollectionRunnerPanel(props: {
                   ) : null}
                 </div>
               </div>
-
-              <div className={activeStudioTab === 'data' ? 'inspector-section collection-stage is-active' : 'inspector-section collection-stage'}>
-                <h3 className="section-title">Data File</h3>
-                <div className="summary-grid" style={{ marginBottom: 12 }}>
-                  <div className="summary-chip">
-                    <span>Format</span>
-                    <strong>{String(dataInspection.format).toUpperCase()}</strong>
-                  </div>
-                  <div className="summary-chip">
-                    <span>Rows</span>
-                    <strong>{dataInspection.rows.length}</strong>
-                  </div>
-                  <div className="summary-chip">
-                    <span>Columns</span>
-                    <strong>{dataInspection.columns.length}</strong>
-                  </div>
-                </div>
-                {dataInspection.error ? (
-                  <div className="check-card" style={{ marginBottom: 12 }}>
-                    <Text fw={700}>Validation</Text>
-                    <Text size="sm" c="dimmed">{dataInspection.error}</Text>
-                  </div>
-                ) : dataInspection.rows.length > 0 ? (
-                  <div className="check-card" style={{ marginBottom: 12 }}>
-                    <Text fw={700}>Preview</Text>
-                    <Text size="sm" c="dimmed">
-                      Columns: {dataInspection.columns.join(', ')}
-                    </Text>
-                    <CodeEditor
-                      value={JSON.stringify(dataInspection.rows.slice(0, 3), null, 2)}
-                      readOnly
-                      language="json"
-                      minHeight="120px"
-                    />
-                  </div>
-                ) : null}
-                <CodeEditor
-                  value={props.collectionDataText}
-                  language={dataInspection.format === 'json' ? 'json' : 'text'}
-                  onChange={props.onCollectionDataChange}
-                  minHeight="220px"
-                />
-              </div>
             </>
-          ) : (
-            <div className="empty-tab-state">Select a collection to edit it, or create a new one.</div>
-          )}
+          ) : null}
 
-          {selectedReport ? (
-            <div className={activeStudioTab === 'reports' ? 'inspector-section collection-stage is-active' : 'inspector-section collection-stage'}>
+          {draftCollection && showDataView ? (
+            <div className="inspector-section collection-stage is-active">
               <div className="checks-head">
-                <h3 className="section-title">Latest Report Detail</h3>
+                <div>
+                  <Text className="section-kicker">Data</Text>
+                  <h3 className="section-title">Data file and input quality</h3>
+                </div>
+              </div>
+              <Text size="sm" c="dimmed">
+                Use this tab only for iteration data: validate shape, inspect columns, and edit the file without the step editor competing for attention.
+              </Text>
+              <div className="summary-grid" style={{ marginTop: 12, marginBottom: 12 }}>
+                <div className="summary-chip">
+                  <span>Format</span>
+                  <strong>{String(dataInspection.format).toUpperCase()}</strong>
+                </div>
+                <div className="summary-chip">
+                  <span>Rows</span>
+                  <strong>{dataInspection.rows.length}</strong>
+                </div>
+                <div className="summary-chip">
+                  <span>Columns</span>
+                  <strong>{dataInspection.columns.length}</strong>
+                </div>
+              </div>
+              {dataInspection.error ? (
+                <div className="check-card" style={{ margin: 0, marginBottom: 12 }}>
+                  <Text fw={700}>Validation</Text>
+                  <Text size="sm" c="dimmed">{dataInspection.error}</Text>
+                </div>
+              ) : dataInspection.rows.length > 0 ? (
+                <div className="check-card" style={{ margin: 0, marginBottom: 12 }}>
+                  <Text fw={700}>Preview</Text>
+                  <Text size="sm" c="dimmed">
+                    Columns: {dataInspection.columns.join(', ')}
+                  </Text>
+                  <CodeEditor
+                    value={JSON.stringify(dataInspection.rows.slice(0, 3), null, 2)}
+                    readOnly
+                    language="json"
+                    minHeight="120px"
+                  />
+                </div>
+              ) : (
+                <div className="empty-tab-state" style={{ marginBottom: 12 }}>
+                  No data rows yet. Add JSON, YAML, or CSV rows here when this collection should iterate over multiple cases.
+                </div>
+              )}
+              <CodeEditor
+                value={props.collectionDataText}
+                language={dataInspection.format === 'json' ? 'json' : 'text'}
+                onChange={props.onCollectionDataChange}
+                minHeight="320px"
+              />
+            </div>
+          ) : null}
+
+          {!draftCollection ? (
+            <div className="empty-tab-state">Select a collection to edit its design, attach data, or inspect reports.</div>
+          ) : null}
+
+          {showReportsView ? (
+            selectedReport ? (
+            <div className="inspector-section collection-stage is-active">
+              <div className="checks-head">
+                <div>
+                  <Text className="section-kicker">Reports</Text>
+                  <h3 className="section-title">Run output, failures, and extracted values</h3>
+                </div>
+                <Badge variant="light" color={selectedReport.status === 'passed' ? 'teal' : selectedReport.status === 'failed' ? 'red' : 'gray'}>
+                  {selectedReport.status}
+                </Badge>
                 <Select
                   placeholder="Select step"
                   value={
@@ -742,6 +834,28 @@ export function CollectionRunnerPanel(props: {
                   onChange={value => props.onSelectReportStep(value || null)}
                 />
               </div>
+              <Text size="sm" c="dimmed" mb={12}>
+                Stay in this tab to inspect what happened during a run: identify the failed step, compare drift against the baseline, and extract reusable values without reopening the editor.
+              </Text>
+
+              <div className="summary-grid" style={{ marginBottom: 12 }}>
+                <div className="summary-chip">
+                  <span>Collection</span>
+                  <strong>{selectedReport.collectionName}</strong>
+                </div>
+                <div className="summary-chip">
+                  <span>Environment</span>
+                  <strong>{selectedReport.environmentName || 'shared'}</strong>
+                </div>
+                <div className="summary-chip">
+                  <span>Finished</span>
+                  <strong>{selectedReport.finishedAt}</strong>
+                </div>
+                <div className="summary-chip">
+                  <span>Iterations</span>
+                  <strong>{selectedReport.iterationCount}</strong>
+                </div>
+              </div>
 
               {selectedReport.failedSteps > 0 ? (
                 <div className="check-card" style={{ marginBottom: 12 }}>
@@ -757,9 +871,23 @@ export function CollectionRunnerPanel(props: {
                   {failureGroups.length > 0 ? (
                     <div className="repair-tag-list" style={{ marginTop: 12 }}>
                       {failureGroups.map(([stepKey, count]: [string, number]) => (
-                        <Badge key={stepKey} variant="light" color="orange">
+                        <Button
+                          key={stepKey}
+                          size="xs"
+                          variant="light"
+                          color="orange"
+                          onClick={() => {
+                            const failedMatch = selectedReport.iterations.find(iteration =>
+                              iteration.stepRuns.some(step => step.stepKey === stepKey && !step.ok && !step.skipped)
+                            );
+                            if (!failedMatch) return;
+                            const matchedStep = failedMatch.stepRuns.find(step => step.stepKey === stepKey && !step.ok && !step.skipped);
+                            if (!matchedStep) return;
+                            props.onSelectReportStep(stepSelectionValue(failedMatch.index, matchedStep.stepKey));
+                          }}
+                        >
                           {stepKey} · {count}
-                        </Badge>
+                        </Button>
                       ))}
                     </div>
                   ) : null}
@@ -776,10 +904,36 @@ export function CollectionRunnerPanel(props: {
                           {selectedStep.step.request?.method || 'N/A'} {selectedStep.step.request?.url || selectedStep.step.error || ''}
                         </Text>
                       </div>
-                      <Badge color={selectedStep.step.ok ? 'green' : selectedStep.step.skipped ? 'gray' : 'red'}>
-                        {selectedStep.step.skipped ? 'SKIPPED' : selectedStep.step.ok ? 'PASS' : 'FAIL'}
-                      </Badge>
+                      <Group gap="xs">
+                        <Badge color={selectedStep.step.ok ? 'green' : selectedStep.step.skipped ? 'gray' : 'red'}>
+                          {selectedStep.step.skipped ? 'SKIPPED' : selectedStep.step.ok ? 'PASS' : 'FAIL'}
+                        </Badge>
+                        {props.onOpenCase && selectedStep.step.caseId ? (
+                          <Button
+                            size="xs"
+                            variant="default"
+                            onClick={() => props.onOpenCase?.(selectedStep.step.requestId, selectedStep.step.caseId!)}
+                          >
+                            Open Case
+                          </Button>
+                        ) : props.onOpenRequest ? (
+                          <Button
+                            size="xs"
+                            variant="default"
+                            onClick={() => props.onOpenRequest?.(selectedStep.step.requestId)}
+                          >
+                            Open Request
+                          </Button>
+                        ) : null}
+                      </Group>
                     </Group>
+                    {firstFailedStepPointer && props.selectedReportStepKey !== firstFailedStepPointer ? (
+                      <Group gap="xs" mt="md">
+                        <Button size="xs" variant="subtle" color="orange" onClick={() => props.onSelectReportStep(firstFailedStepPointer)}>
+                          Jump To First Failure
+                        </Button>
+                      </Group>
+                    ) : null}
                   </div>
                   <div className="check-card">
                     <Text fw={700}>Checks</Text>
@@ -958,6 +1112,9 @@ export function CollectionRunnerPanel(props: {
                 <div className="empty-tab-state">Choose a step from the report to inspect the request and response.</div>
               )}
             </div>
+            ) : (
+              <div className="empty-tab-state">No report selected yet. Run a collection, then use this tab to inspect failures, drift, and step output.</div>
+            )
           ) : null}
         </div>
       </div>

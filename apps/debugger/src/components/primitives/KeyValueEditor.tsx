@@ -11,17 +11,20 @@ export function KeyValueEditor(props: {
   onPickFile?: (index: number) => void;
 }) {
   const rows = props.rows.length > 0 ? props.rows : [emptyParameterRow()];
+  const gridTemplate = props.allowFileRows
+    ? '180px 112px minmax(0, 1fr) 96px 56px'
+    : '180px minmax(0, 1fr) 96px 56px';
 
   return (
-    <div className="key-value-editor">
-      <div className="kv-head">
-        <div>{props.nameLabel || 'Key'}</div>
-        {props.allowFileRows ? <div>Type</div> : null}
-        <div>{props.valueLabel || 'Value'}</div>
-        <div style={{ textAlign: 'center' }}>Enabled</div>
-        <div />
-      </div>
+    <div className="key-value-editor" style={{ ['--kv-columns' as string]: gridTemplate }}>
       <div className="kv-body">
+        <div className="kv-head">
+          <div>{props.nameLabel || 'Key'}</div>
+          {props.allowFileRows ? <div>Type</div> : null}
+          <div>{props.valueLabel || 'Value'}</div>
+          <div className="kv-enabled-head">Enabled</div>
+          <div />
+        </div>
         {rows.map((row, index) => (
           <div className="kv-row" key={index}>
             <div>
@@ -86,7 +89,7 @@ export function KeyValueEditor(props: {
                 ) : null}
               </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <div className="kv-enabled-cell">
               <Checkbox
                 size="xs"
                 checked={row.enabled}
@@ -97,7 +100,7 @@ export function KeyValueEditor(props: {
                 }}
               />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <div className="kv-action-cell">
               <ActionIcon
                 size="sm"
                 variant="subtle"

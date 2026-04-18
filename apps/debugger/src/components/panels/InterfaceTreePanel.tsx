@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActionIcon, Badge, Button, ScrollArea, Text, TextInput } from '@mantine/core';
+import { ActionIcon, Button, ScrollArea, Text, TextInput } from '@mantine/core';
 import {
+  IconChevronLeft,
   IconChevronDown,
   IconChevronRight,
   IconFolderPlus,
@@ -91,6 +92,13 @@ function requestIdFromSelection(node: SelectedNode) {
 
 function caseIdFromSelection(node: SelectedNode) {
   return node.kind === 'case' ? node.caseId : null;
+}
+
+function selectionStateLabel(node: SelectedNode) {
+  if (node.kind === 'project') return 'project';
+  if (node.kind === 'category') return 'category';
+  if (node.kind === 'case') return 'case';
+  return 'request';
 }
 
 function rowClass(active: boolean, tone: string) {
@@ -373,6 +381,7 @@ export function InterfaceTreePanel(props: {
   workspace: WorkspaceIndex;
   selectedNode: SelectedNode;
   gitStatus: GitStatusPayload | null;
+  isCollapsed?: boolean;
   searchText: string;
   categoryDraft: string;
   creatingCategory: boolean;
@@ -383,6 +392,7 @@ export function InterfaceTreePanel(props: {
   onSelectRequest: (requestId: string) => void;
   onSelectCase: (requestId: string, caseId: string) => void;
   onOpenImport: () => void;
+  onToggleCollapse?: () => void;
   onCreateInterface: (categoryPath?: string | null) => void;
   onAddCase: (requestId?: string) => void;
   onRenameCategory: (path: string, nextName: string) => void;
@@ -415,6 +425,7 @@ export function InterfaceTreePanel(props: {
   const rootNode = props.workspace.tree[0];
   const expandedRequestIds = useMemo(() => new Set(props.expandedRequestIds), [props.expandedRequestIds]);
   const selectedCategoryNodePath = selectedCategoryPath(props.selectedNode);
+  const currentSelectionLabel = selectionStateLabel(props.selectedNode);
 
   const filteredRoot = useMemo(() => {
     if (!rootNode) return null;
@@ -547,6 +558,37 @@ export function InterfaceTreePanel(props: {
     return [];
   }, [contextMenu, props]);
 
+  if (props.isCollapsed) {
+    return (
+      <section className="tree-panel is-collapsed">
+        <div className="tree-panel-collapsed">
+          <ActionIcon
+            variant="subtle"
+            color="dark"
+            onClick={props.onToggleCollapse}
+            aria-label="Expand workspace explorer"
+          >
+            <IconChevronRight size={16} />
+          </ActionIcon>
+          <button
+            type="button"
+            className="tree-collapsed-project"
+            onClick={() => {
+              props.onToggleCollapse?.();
+              props.onSelectProject();
+            }}
+            aria-label={`Expand ${props.workspace.project.name} explorer`}
+          >
+            <span className="tree-collapsed-initial">
+              {props.workspace.project.name.trim().charAt(0).toUpperCase() || 'W'}
+            </span>
+            <span className={`tree-selection-state is-${currentSelectionLabel}`} aria-hidden="true" />
+          </button>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section
       className="tree-panel"
@@ -562,9 +604,22 @@ export function InterfaceTreePanel(props: {
       <div className="tree-panel-header">
         <div>
           <p className="tree-caption">Workspace Explorer</p>
-          <h2 className="tree-title">{props.workspace.project.name}</h2>
+          <div className="tree-title-row">
+            <h2 className="tree-title">{props.workspace.project.name}</h2>
+            <span className={`tree-selection-state is-${currentSelectionLabel}`} aria-label={`Current selection is ${currentSelectionLabel}`}>
+              {currentSelectionLabel}
+            </span>
+          </div>
         </div>
         <div className="tree-panel-actions">
+          <ActionIcon
+            variant="subtle"
+            color="dark"
+            onClick={props.onToggleCollapse}
+            aria-label="Collapse workspace explorer"
+          >
+            <IconChevronLeft size={16} />
+          </ActionIcon>
           {props.selectedNode.kind === 'project' ? (
             <>
               <ActionIcon variant="subtle" color="dark" onClick={props.onOpenImport} aria-label="Import to project">
@@ -620,15 +675,6 @@ export function InterfaceTreePanel(props: {
             setContextMenu({ x: event.clientX, y: event.clientY, target: { kind: 'blank' } });
           }}
         >
-          <div className="tree-section-header">
-            <Text size="xs" fw={700} c="dimmed" style={{ textTransform: 'uppercase' }}>
-              Structure
-            </Text>
-            <Badge variant="light" size="xs" color="gray">
-              {props.selectedNode.kind.toUpperCase()}
-            </Badge>
-          </div>
-
           {props.creatingCategory ? (
             <div className="tree-draft-row" style={{ padding: '4px 12px', display: 'flex', gap: 8 }}>
               <TextInput

@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { ActionIcon, Badge, Drawer, Select, Text, TextInput } from '@mantine/core';
 import { Spotlight, spotlight, type SpotlightActionData } from '@mantine/spotlight';
 import { modals } from '@mantine/modals';
@@ -360,6 +360,26 @@ function normalizeHistoryEntry(entry: RunHistoryEntry): RunHistoryEntry {
   };
 }
 
+function preferredCollectionReportStepKey(report: CollectionRunReport | null, preferredStepKey?: string | null) {
+  if (!report) return null;
+
+  if (preferredStepKey) {
+    for (const iteration of report.iterations) {
+      const exactMatch = iteration.stepRuns.find(step => step.stepKey === preferredStepKey);
+      if (exactMatch) return `${iteration.index}:${exactMatch.stepKey}`;
+    }
+  }
+
+  for (const iteration of report.iterations) {
+    const failedStep = iteration.stepRuns.find(step => !step.ok && !step.skipped);
+    if (failedStep) return `${iteration.index}:${failedStep.stepKey}`;
+  }
+
+  const fallbackStep = report.iterations[0]?.stepRuns[0];
+  if (!fallbackStep) return null;
+  return `${report.iterations[0]?.index || 0}:${fallbackStep.stepKey}`;
+}
+
 function responseMimeType(headers: Array<{ name: string; value: string }>) {
   return headers.find(header => header.name.toLowerCase() === 'content-type')?.value || 'application/json';
 }
@@ -495,6 +515,7 @@ export function App() {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [draftCollection, setDraftCollection] = useState<CollectionDocument | null>(null);
   const [collectionDataText, setCollectionDataText] = useState('');
+  const [collectionPanelTabHint, setCollectionPanelTabHint] = useState<'design' | 'data' | 'reports' | null>(null);
   const [collectionReports, setCollectionReports] = useState<CollectionRunReport[]>([]);
   const [selectedCollectionReportId, setSelectedCollectionReportId] = useState<string | null>(null);
   const [selectedCollectionStepKey, setSelectedCollectionStepKey] = useState<string | null>(null);
@@ -634,18 +655,23 @@ export function App() {
 
   const gitRisks = useMemo(() => collectGitRisks(store.workspace), [store.workspace]);
   const syncGuard = useMemo(() => evaluateSyncGuard(gitInfo), [gitInfo]);
+  const formatWorkspaceTimestamp = useCallback((value: string | number | Date | null | undefined) => {
+    if (!value) return '时间未知';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '时间未知' : date.toLocaleString();
+  }, []);
   const homeImportSummary = useMemo(() => {
     if (!lastImportSession) return null;
     return {
       format: lastImportSession.format,
-      importedAt: new Date(lastImportSession.importedAt).toLocaleString(),
+      importedAt: formatWorkspaceTimestamp(lastImportSession.importedAt),
       importedRequestCount: lastImportSession.requestIds.length,
       runnableCount: importRepairChecklist?.runnableRequestIds.length || 0,
       blockedCount: importRepairChecklist?.blockedRequestIds.length || 0,
       warningCount: lastImportSession.warnings.length,
       runnableScore: lastImportSession.previewSummary?.runnableScore || 0
     };
-  }, [importRepairChecklist, lastImportSession]);
+  }, [formatWorkspaceTimestamp, importRepairChecklist, lastImportSession]);
   const homeRecentSuccess = useMemo(() => {
     const entry = historyEntries.find(item => item.response?.ok);
     if (!entry) return null;
@@ -654,9 +680,9 @@ export function App() {
       requestName: entry.requestName || entry.request.url,
       status: entry.response.status,
       durationMs: entry.response.durationMs,
-      timestamp: new Date(entry.response.timestamp).toLocaleString()
+      timestamp: formatWorkspaceTimestamp(entry.response.timestamp)
     };
-  }, [historyEntries]);
+  }, [formatWorkspaceTimestamp, historyEntries]);
   const homeLastCollectionRun = useMemo(() => {
     const report = collectionReports[0];
     if (!report) return null;
@@ -665,9 +691,9 @@ export function App() {
       collectionName: report.collectionName,
       status: report.status,
       failedSteps: report.failedSteps,
-      finishedAt: new Date(report.finishedAt).toLocaleString()
+      finishedAt: formatWorkspaceTimestamp(report.finishedAt)
     };
-  }, [collectionReports]);
+  }, [collectionReports, formatWorkspaceTimestamp]);
   const importTaskCount = importRepairChecklist?.tasks.length || 0;
   const currentSelectionSummary = useMemo(() => {
     const record = requestId ? findRecord(store.workspace, requestId) : null;
@@ -800,6 +826,7 @@ export function App() {
     setSelectedCollectionId(workspace.collections[0]?.document.id || null);
     setDraftCollection(workspace.collections[0]?.document || null);
     setCollectionDataText(workspace.collections[0]?.dataText || '');
+    setCollectionPanelTabHint(null);
     setActiveView('workspace');
     setActiveWorkbenchPane('overview');
     store.setWorkspace(workspace);
@@ -1071,6 +1098,7 @@ export function App() {
     onSuccess: async nextId => {
       await reloadWorkspace();
       setSelectedCollectionId(nextId);
+      setCollectionPanelTabHint('design');
       setActiveView('collections');
       notifications.show({ color: 'teal', message: 'Collection created' });
     }
@@ -1088,8 +1116,11 @@ export function App() {
     onSuccess: async report => {
       if (!store.workspace) return;
       setCollectionReports(current => [report, ...current]);
+      setSelectedCollectionId(report.collectionId);
       setSelectedCollectionReportId(report.id);
-      setSelectedCollectionStepKey(report.iterations[0]?.stepRuns[0]?.stepKey || null);
+      setSelectedCollectionStepKey(preferredCollectionReportStepKey(report));
+      setCollectionPanelTabHint('reports');
+      setActiveView('collections');
       notifications.show({ color: report.failedSteps > 0 ? 'orange' : 'teal', message: `Collection run ${report.status}` });
       const firstRun = report.iterations[0]?.stepRuns.find(step => step.request && step.response);
       if (firstRun?.request && firstRun.response) {
@@ -1291,12 +1322,14 @@ export function App() {
     if (!store.workspace?.root) {
       setCollectionReports([]);
       setSelectedCollectionReportId(null);
+      setSelectedCollectionStepKey(null);
       return;
     }
     loadCollectionRunReports(store.workspace.root)
       .then(reports => {
         setCollectionReports(reports);
         setSelectedCollectionReportId(reports[0]?.id || null);
+        setSelectedCollectionStepKey(preferredCollectionReportStepKey(reports[0] || null));
       })
       .catch(() => undefined);
   }, [store.workspace?.root]);
@@ -1862,6 +1895,12 @@ export function App() {
     setSelectedCollectionStepKey(null);
   }
 
+  function handleSelectCollectionReport(id: string | null) {
+    setSelectedCollectionReportId(id);
+    const nextReport = collectionReports.find(report => report.id === id) || null;
+    setSelectedCollectionStepKey(preferredCollectionReportStepKey(nextReport));
+  }
+
   function handleCreateCollection() {
     addCollectionMutation.mutate({
       targetRequestId: requestId || undefined,
@@ -1911,6 +1950,7 @@ export function App() {
       currentRecord?.dataFilePath
     );
     setDraftCollection(nextCollection);
+    setCollectionPanelTabHint('design');
     setActiveView('collections');
     await reloadWorkspace();
     notifications.show({ color: 'teal', message: `Added ${stepName} to ${draftCollection.name}` });
@@ -1955,6 +1995,9 @@ export function App() {
       return;
     }
     setSelectedCollectionId(report.collectionId);
+    setSelectedCollectionReportId(report.id);
+    setSelectedCollectionStepKey(preferredCollectionReportStepKey(report));
+    setCollectionPanelTabHint('reports');
     setActiveView('collections');
     runCollectionMutation.mutate({ collectionId: report.collectionId });
   }
@@ -2395,6 +2438,19 @@ export function App() {
     });
   }
 
+  function handleOpenHistoryCollection(entry: RunHistoryEntry) {
+    if (!entry.sourceCollectionId) {
+      notifications.show({ color: 'blue', message: 'This run did not originate from a collection.' });
+      return;
+    }
+    const latestReport = collectionReports.find(report => report.collectionId === entry.sourceCollectionId) || null;
+    setSelectedCollectionId(entry.sourceCollectionId);
+    setSelectedCollectionReportId(latestReport?.id || null);
+    setSelectedCollectionStepKey(preferredCollectionReportStepKey(latestReport, entry.sourceStepKey));
+    setCollectionPanelTabHint(latestReport ? 'reports' : 'design');
+    setActiveView('collections');
+  }
+
   async function handleClearHistory() {
     if (!store.workspace) return;
     await clearRunHistory(store.workspace.root);
@@ -2605,7 +2661,8 @@ export function App() {
             className="workspace-grid"
             style={
               {
-                '--tree-width': `${uiState.treeWidth}px`
+                '--tree-width': uiState.isTreeCollapsed ? '44px' : `${uiState.treeWidth}px`,
+                '--tree-resizer-width': uiState.isTreeCollapsed ? '0px' : '1px'
               } as CSSProperties
             }
           >
@@ -2615,6 +2672,9 @@ export function App() {
               activeView={activeView}
               importTaskCount={importTaskCount}
               onChangeView={view => {
+                if (view === 'collections') {
+                  setCollectionPanelTabHint(null);
+                }
                 setActiveView(view);
                 if (view === 'workspace') {
                   openWorkbenchOverview();
@@ -2626,6 +2686,7 @@ export function App() {
               workspace={store.workspace}
               selectedNode={store.selectedNode}
               gitStatus={gitInfo}
+              isCollapsed={uiState.isTreeCollapsed}
               searchText={store.searchText}
               categoryDraft={categoryDraft}
               creatingCategory={creatingCategory}
@@ -2636,6 +2697,12 @@ export function App() {
               onSelectRequest={handleSelectRequest}
               onSelectCase={handleSelectCase}
               onOpenImport={() => setImportOpened(true)}
+              onToggleCollapse={() =>
+                updateUiState(current => ({
+                  ...current,
+                  isTreeCollapsed: !current.isTreeCollapsed
+                }))
+              }
               onCreateInterface={handleCreateInterface}
               onAddCase={handleAddCase}
               onRenameCategory={handleRenameCategory}
@@ -2663,6 +2730,7 @@ export function App() {
 
             <Resizer
               containerRef={gridRef}
+              className={uiState.isTreeCollapsed ? 'is-hidden' : ''}
               onResize={nextWidth => updateUiState(current => ({ ...current, treeWidth: Math.round(nextWidth) }))}
               min={260}
               max={420}
@@ -2714,6 +2782,7 @@ export function App() {
                   onOpenRepair={openImportTasks}
                   onOpenEnvironmentCenter={() => setActiveView('environments')}
                   onOpenFirstBlocked={() => handleOpenImportedRequest(importRepairChecklist?.firstBlockedRequestId || null)}
+                  onOpenFirstRunnable={() => handleOpenImportedRequest(importRepairChecklist?.firstRunnableRequestId || null)}
                   onOpenLastSuccessfulRequest={handleOpenLastSuccessfulRequest}
                   onRunLastCollection={handleRunLatestCollection}
                   onOpenCollections={() => setActiveView('collections')}
@@ -2780,6 +2849,7 @@ export function App() {
                   onSelectEntry={setSelectedHistoryId}
                   onReplay={handleReplayHistory}
                   onOpenInScratch={handleOpenHistoryInScratch}
+                  onOpenCollectionSource={handleOpenHistoryCollection}
                   onDuplicateAsCase={handleDuplicateHistoryAsCase}
                   onSaveAsExample={handleSaveHistoryAsExample}
                   onPinAsBaseline={handlePinHistoryAsBaseline}
@@ -2819,6 +2889,7 @@ export function App() {
                   selectedCollectionId={selectedCollectionId}
                   draftCollection={draftCollection}
                   collectionDataText={collectionDataText}
+                  preferredTab={collectionPanelTabHint}
                   reports={collectionReports}
                   selectedReportId={selectedCollectionReportId}
                   selectedReportStepKey={selectedCollectionStepKey}
@@ -2833,8 +2904,10 @@ export function App() {
                   onRunCollection={handleRunCollection}
                   onRerunFailed={handleRerunFailedCollectionSteps}
                   onClearReports={handleClearCollectionReports}
-                  onSelectReport={setSelectedCollectionReportId}
+                  onSelectReport={handleSelectCollectionReport}
                   onSelectReportStep={setSelectedCollectionStepKey}
+                  onOpenRequest={handleSelectRequest}
+                  onOpenCase={handleSelectCase}
                   onExtractValue={handleExtractCollectionReportValue}
                   onExportReport={handleExportSelectedCollectionReport}
                   onCopyText={(value, successMessage) => {

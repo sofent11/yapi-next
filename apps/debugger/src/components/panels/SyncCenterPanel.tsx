@@ -17,6 +17,16 @@ type SyncGuardState = {
   level: 'ready' | 'warning' | 'danger';
 };
 
+function fileName(path: string) {
+  return path.split('/').at(-1) || path;
+}
+
+function statusTone(level: SyncGuardState['level']) {
+  if (level === 'danger') return 'orange';
+  if (level === 'warning') return 'yellow';
+  return 'teal';
+}
+
 export function SyncCenterPanel(props: {
   workspace: WorkspaceIndex;
   gitStatus: GitStatusPayload | null;
@@ -31,116 +41,200 @@ export function SyncCenterPanel(props: {
   onCopySuggestedCommitMessage: () => void;
 }) {
   const changedFiles = props.gitStatus?.changedFiles || [];
+  const isRepo = Boolean(props.gitStatus?.isRepo);
+  const statusLabel =
+    props.syncGuard.level === 'danger'
+      ? 'Review before sync'
+      : props.syncGuard.level === 'warning'
+        ? 'Sync with caution'
+        : 'Ready to sync';
+  const nextStepCopy = !isRepo
+    ? 'This workspace is not connected to Git yet. Use the terminal to initialize or open the real repository root first.'
+    : !props.syncGuard.canPull
+      ? props.syncGuard.pullReason || 'Resolve the pull blocker before syncing from remote.'
+      : !props.syncGuard.canPush
+        ? props.syncGuard.pushReason || 'Resolve the push blocker before publishing local changes.'
+        : changedFiles.length > 0
+          ? 'You can sync now. Review changed files and commit deliberately before pushing.'
+          : 'The worktree is clean and safe. Pull or push whenever you are ready.';
+  const summaryItems = [
+    { label: 'Branch', value: props.gitStatus?.branch || 'Local folder only' },
+    { label: 'Worktree', value: changedFiles.length === 0 ? 'Clean' : `${changedFiles.length} changed` },
+    { label: 'Ahead / Behind', value: `${props.gitStatus?.ahead || 0} / ${props.gitStatus?.behind || 0}` },
+    { label: 'Last Sync', value: props.lastSyncAt ? new Date(props.lastSyncAt).toLocaleString() : 'Not recorded' }
+  ];
 
   return (
-    <section className="workspace-main">
+    <section className="workspace-main sync-center">
       <div className="panel-toolbar">
         <div className="breadcrumb-list">
           <span className="breadcrumb-chip">{props.workspace.project.name}</span>
-          <span className="breadcrumb-chip">Sync Center</span>
+          <span className="breadcrumb-chip">Sync</span>
         </div>
         <div className="panel-toolbar-actions">
-          <Button size="xs" variant="default" onClick={props.onRefresh}>刷新状态</Button>
-          <Button size="xs" variant="default" onClick={props.onOpenTerminal}>打开终端</Button>
-          <Button size="xs" variant="default" onClick={props.onCopySuggestedCommitMessage}>复制建议提交说明</Button>
+          <Button size="xs" variant="default" onClick={props.onRefresh}>Refresh</Button>
           <Button size="xs" variant="default" onClick={props.onPull} disabled={!props.gitStatus?.isRepo}>Pull</Button>
           <Button size="xs" onClick={props.onPush} disabled={!props.gitStatus?.isRepo}>Push</Button>
         </div>
       </div>
 
       <div className="sync-layout">
-        <div className="workspace-home-grid">
-          <div className="workspace-home-card workspace-home-card-wide">
-            <div className="workspace-home-card-head">
-              <div>
-                <Text className="section-kicker">同步概览</Text>
-                <h3 className="section-title">当前 Git 状态</h3>
+        <section className="sync-hero">
+          <div className="sync-hero-main">
+            <div className="sync-hero-copy">
+              <Text className="section-kicker">Sync Control</Text>
+              <h2 className="sync-hero-title">Can this workspace sync safely right now?</h2>
+              <Text size="sm" c="dimmed" className="sync-hero-body">
+                {nextStepCopy}
+              </Text>
+              <div className="sync-hero-status-row">
+                <Badge color={statusTone(props.syncGuard.level)} variant="light" size="lg">
+                  {statusLabel}
+                </Badge>
+                <Text size="sm" c="dimmed">
+                  {isRepo ? 'The summary below reflects the current repository state.' : 'Sync actions stay blocked until this folder is a Git repository.'}
+                </Text>
               </div>
-              <Badge color={props.syncGuard.level === 'danger' ? 'red' : props.syncGuard.level === 'warning' ? 'orange' : 'teal'} variant="light">
-                {props.syncGuard.level === 'danger' ? '需要先处理' : props.syncGuard.level === 'warning' ? '需要关注' : '可安全同步'}
+            </div>
+          </div>
+          <div className="summary-grid sync-summary-grid">
+            {summaryItems.map(item => (
+              <div key={item.label} className="summary-chip sync-summary-chip">
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="sync-guard-grid">
+          <div className={`check-card sync-guard-card ${props.syncGuard.canPull ? 'is-ready' : 'is-blocked'}`} style={{ margin: 0 }}>
+            <div className="sync-guard-head">
+              <div>
+                <Text className="section-kicker">Can Pull?</Text>
+                <h3 className="section-title">Pull safety</h3>
+              </div>
+              <Badge color={props.syncGuard.canPull ? 'teal' : 'orange'} variant="light" size="lg">
+                {props.syncGuard.canPull ? 'Ready' : 'Blocked'}
               </Badge>
             </div>
-            <div className="workspace-home-metric-grid">
-              <div className="summary-chip">
-                <span>分支</span>
-                <strong>{props.gitStatus?.branch || 'not-a-repo'}</strong>
-              </div>
-              <div className="summary-chip">
-                <span>未提交文件</span>
-                <strong>{changedFiles.length}</strong>
-              </div>
-              <div className="summary-chip">
-                <span>Ahead / Behind</span>
-                <strong>{`${props.gitStatus?.ahead || 0} / ${props.gitStatus?.behind || 0}`}</strong>
-              </div>
-              <div className="summary-chip">
-                <span>上次同步</span>
-                <strong>{props.lastSyncAt ? new Date(props.lastSyncAt).toLocaleString() : '尚未记录'}</strong>
-              </div>
+            <Text size="sm" c="dimmed" className="sync-guard-body">
+              {props.syncGuard.pullReason || 'The workspace can pull safely. No local condition is currently blocking this step.'}
+            </Text>
+            <div className="sync-next-step">
+              <span>Next</span>
+              <strong>
+                {props.syncGuard.canPull
+                  ? 'Pull from remote when you need the latest shared state.'
+                  : !isRepo
+                    ? 'Open the repository root or initialize Git first.'
+                    : 'Resolve the blocker above, then re-check the guard.'}
+              </strong>
             </div>
-            <div className="checks-list" style={{ marginTop: 16 }}>
-              <div className="check-card">
-                <Text fw={700}>Pull 安全提示</Text>
-                <Text size="sm" c={props.syncGuard.pullReason ? 'red' : 'dimmed'}>
-                  {props.syncGuard.pullReason || '当前可以安全执行 Pull。'}
-                </Text>
-              </div>
-              <div className="check-card">
-                <Text fw={700}>Push 安全提示</Text>
-                <Text size="sm" c={props.syncGuard.pushReason ? 'red' : 'dimmed'}>
-                  {props.syncGuard.pushReason || '当前可以安全执行 Push。'}
-                </Text>
-              </div>
-            </div>
+            <Group gap="xs" mt="md" className="sync-actions-row">
+              <Button size="xs" variant="default" onClick={props.onPull} disabled={!props.gitStatus?.isRepo || !props.syncGuard.canPull}>
+                Pull
+              </Button>
+              <Button size="xs" variant="subtle" onClick={props.onRefresh}>
+                Re-check
+              </Button>
+            </Group>
           </div>
 
-          <div className="workspace-home-card">
-            <div className="workspace-home-card-head">
+          <div className={`check-card sync-guard-card ${props.syncGuard.canPush ? 'is-ready' : 'is-blocked'}`} style={{ margin: 0 }}>
+            <div className="sync-guard-head">
               <div>
-                <Text className="section-kicker">建议动作</Text>
-                <h3 className="section-title">提交说明</h3>
+                <Text className="section-kicker">Can Push?</Text>
+                <h3 className="section-title">Push safety</h3>
               </div>
+              <Badge color={props.syncGuard.canPush ? 'teal' : 'orange'} variant="light" size="lg">
+                {props.syncGuard.canPush ? 'Ready' : 'Blocked'}
+              </Badge>
             </div>
-            <div className="check-card" style={{ marginTop: 8 }}>
-              <Text size="sm" fw={700}>建议的 commit message</Text>
-              <Text size="sm" c="dimmed">{props.suggestedCommitMessage}</Text>
+            <Text size="sm" c="dimmed" className="sync-guard-body">
+              {props.syncGuard.pushReason || 'The workspace can push safely. No sync guard is currently blocking this step.'}
+            </Text>
+            <div className="sync-next-step">
+              <span>Next</span>
+              <strong>
+                {props.syncGuard.canPush
+                  ? 'Push after you confirm the changed files and commit message are intentional.'
+                  : !isRepo
+                    ? 'Connect this workspace to Git before publishing changes.'
+                    : 'Clear the push blocker first, then re-check the guard.'}
+              </strong>
             </div>
+            <Group gap="xs" mt="md" className="sync-actions-row">
+              <Button size="xs" onClick={props.onPush} disabled={!props.gitStatus?.isRepo || !props.syncGuard.canPush}>
+                Push
+              </Button>
+              <Button size="xs" variant="subtle" onClick={props.onRefresh}>
+                Re-check
+              </Button>
+            </Group>
           </div>
-        </div>
+        </section>
 
         {props.gitRisks.length > 0 ? (
-          <div className="inspector-section" style={{ marginTop: 16 }}>
-            <h3 className="section-title">同步风险</h3>
-            <div className="checks-list">
+          <section className="inspector-section sync-risk-section">
+            <div className="checks-head">
+              <div>
+                <Text className="section-kicker">Why not now?</Text>
+                <h3 className="section-title">Sync risks to resolve first</h3>
+              </div>
+            </div>
+            <div className="sync-risk-list">
               {props.gitRisks.map(risk => (
-                <div key={risk.id} className="check-card">
+                <div key={risk.id} className="sync-risk-card">
                   <Group justify="space-between" align="flex-start">
                     <div>
                       <Text fw={700}>{risk.title}</Text>
-                      <Text size="sm" c="dimmed">{risk.description}</Text>
+                      <Text size="sm" c="dimmed" mt={6}>{risk.description}</Text>
                     </div>
-                    <Badge color={risk.severity === 'danger' ? 'red' : 'orange'}>{risk.severity === 'danger' ? '高风险' : '注意'}</Badge>
+                    <Badge color={risk.severity === 'danger' ? 'red' : 'orange'}>
+                      {risk.severity === 'danger' ? 'High risk' : 'Review'}
+                    </Badge>
                   </Group>
                 </div>
               ))}
             </div>
-          </div>
+          </section>
         ) : null}
 
-        <div className="inspector-section" style={{ marginTop: 16 }}>
-          <h3 className="section-title">未提交文件</h3>
-          {changedFiles.length === 0 ? (
-            <div className="empty-tab-state">当前没有未提交文件，工作区是干净的。</div>
-          ) : (
-            <div className="checks-list">
-              {changedFiles.map(file => (
-                <div key={file} className="check-card">
-                  <Text size="sm" fw={600}>{file}</Text>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <section className="sync-support-grid">
+          <div className="check-card sync-support-card" style={{ margin: 0 }}>
+            <Text className="section-kicker">Support</Text>
+            <h3 className="section-title">Suggested commit message</h3>
+            <div className="sync-commit-preview">{props.suggestedCommitMessage}</div>
+            <Group gap="xs" mt="md" className="sync-actions-row">
+              <Button size="xs" variant="default" onClick={props.onCopySuggestedCommitMessage}>
+                Copy message
+              </Button>
+              <Button size="xs" variant="subtle" onClick={props.onOpenTerminal}>
+                Open terminal
+              </Button>
+            </Group>
+          </div>
+
+          <div className="check-card sync-support-card" style={{ margin: 0 }}>
+            <Text className="section-kicker">Changed Files</Text>
+            <h3 className="section-title">What is currently dirty</h3>
+            {changedFiles.length === 0 ? (
+              <div className="empty-tab-state sync-empty-note" style={{ marginTop: 12 }}>
+                No uncommitted files. The workspace is clean.
+              </div>
+            ) : (
+              <div className="sync-file-list">
+                {changedFiles.map(file => (
+                  <div key={file} className="sync-file-row">
+                    <strong>{fileName(file)}</strong>
+                    <span>{file}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
     </section>
   );

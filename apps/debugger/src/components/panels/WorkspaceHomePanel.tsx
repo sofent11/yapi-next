@@ -2,14 +2,12 @@ import { Badge, Button, Group, Text } from '@mantine/core';
 import {
   IconAlertTriangle,
   IconArrowRight,
-  IconClockPlay,
   IconFolders,
   IconGitBranch,
   IconHistory,
   IconLifebuoy,
   IconPlayerPlay,
   IconPlugConnected,
-  IconSparkles,
   IconUpload
 } from '@tabler/icons-react';
 import type { WorkspaceIndex } from '@yapi-debugger/schema';
@@ -48,6 +46,20 @@ type CollectionRunSummary = {
   finishedAt: string;
 };
 
+type TaskTone = 'neutral' | 'warning' | 'success';
+
+type TaskItem = {
+  id: string;
+  title: string;
+  detail: string;
+  tone: TaskTone;
+  statusLabel: string;
+  primaryLabel: string;
+  primaryAction: () => void;
+  secondaryLabel?: string;
+  secondaryAction?: () => void;
+};
+
 function summaryCounts(workspace: WorkspaceIndex) {
   return {
     requests: workspace.requests.length,
@@ -61,6 +73,11 @@ function gitStatusTone(gitStatus: GitStatusPayload | null) {
   if (!gitStatus?.isRepo) return 'gray';
   if (gitStatus.dirty || gitStatus.behind > 0) return 'orange';
   return 'teal';
+}
+
+function displayLabel(value: string | null | undefined, fallback = '时间未知') {
+  if (!value || value === 'Invalid Date') return fallback;
+  return value;
 }
 
 export function WorkspaceHomePanel(props: {
@@ -80,6 +97,7 @@ export function WorkspaceHomePanel(props: {
   onOpenRepair: () => void;
   onOpenEnvironmentCenter: () => void;
   onOpenFirstBlocked: () => void;
+  onOpenFirstRunnable: () => void;
   onOpenLastSuccessfulRequest: () => void;
   onRunLastCollection: () => void;
   onOpenCollections: () => void;
@@ -88,7 +106,175 @@ export function WorkspaceHomePanel(props: {
   onCopySuggestedCommitMessage: () => void;
 }) {
   const counts = summaryCounts(props.workspace);
-  const hasWorkspaceContent = counts.requests > 0 || counts.collections > 0;
+  const blockingCount = props.repairSummary?.blockingCount ?? props.importSession?.blockedCount ?? 0;
+  const warningCount = props.repairSummary?.warningCount ?? props.importSession?.warningCount ?? 0;
+  const runnableCount = props.repairSummary?.runnableCount ?? props.importSession?.runnableCount ?? 0;
+  const hasWorkspaceContent = counts.requests > 0 || counts.collections > 0 || Boolean(props.importSession);
+
+  const tasks: TaskItem[] = [];
+
+  if (!props.importSession && counts.requests === 0) {
+    tasks.push({
+      id: 'import-api',
+      title: '导入 API 规范',
+      detail: '当前工作区还没有请求资产。',
+      tone: 'neutral',
+      statusLabel: '待开始',
+      primaryLabel: '导入 API',
+      primaryAction: props.onOpenImport
+    });
+  }
+
+  if (props.importSession && (blockingCount > 0 || counts.environments === 0 || warningCount > 0)) {
+    tasks.push({
+      id: 'repair-import',
+      title: blockingCount > 0 ? '处理导入阻塞' : counts.environments === 0 ? '补环境与认证' : '检查导入提醒',
+      detail:
+        blockingCount > 0
+          ? `${blockingCount} 个阻塞项，${warningCount} 个提醒，最近导入 ${props.importSession.importedRequestCount} 个请求。`
+          : counts.environments === 0
+            ? `最近导入 ${props.importSession.importedRequestCount} 个请求，但还没有可用环境。`
+            : `最近导入 ${props.importSession.importedRequestCount} 个请求，还有 ${warningCount} 个提醒待确认。`,
+      tone: blockingCount > 0 || warningCount > 0 ? 'warning' : 'neutral',
+      statusLabel: blockingCount > 0 ? `${blockingCount} blocked` : warningCount > 0 ? `${warningCount} warnings` : '待配置',
+      primaryLabel: blockingCount > 0 ? '打开首个阻塞项' : counts.environments === 0 ? '打开环境中心' : '打开 Import Tasks',
+      primaryAction: blockingCount > 0 ? props.onOpenFirstBlocked : counts.environments === 0 ? props.onOpenEnvironmentCenter : props.onOpenRepair,
+      secondaryLabel: blockingCount > 0 || warningCount > 0 ? 'Import Tasks' : undefined,
+      secondaryAction: blockingCount > 0 || warningCount > 0 ? props.onOpenRepair : undefined
+    });
+  }
+
+  if (!props.recentSuccess && runnableCount > 0) {
+    tasks.push({
+      id: 'send-first-request',
+      title: '发送首个成功请求',
+      detail: `${runnableCount} 个请求已可运行，先建立第一条真实响应。`,
+      tone: 'neutral',
+      statusLabel: `${runnableCount} runnable`,
+      primaryLabel: '打开可运行请求',
+      primaryAction: props.onOpenFirstRunnable,
+      secondaryLabel: '环境中心',
+      secondaryAction: props.onOpenEnvironmentCenter
+    });
+  }
+
+  if (props.recentSuccess && counts.cases === 0) {
+    tasks.push({
+      id: 'save-case',
+      title: '把成功请求保存为 Case',
+      detail: `最近跑通的是 ${props.recentSuccess.requestName}，现在还没有可复用 Case。`,
+      tone: 'neutral',
+      statusLabel: '未沉淀',
+      primaryLabel: '打开最近成功请求',
+      primaryAction: props.onOpenLastSuccessfulRequest,
+      secondaryLabel: 'History',
+      secondaryAction: props.onOpenHistory
+    });
+  }
+
+  if (counts.cases > 0 && counts.collections === 0) {
+    tasks.push({
+      id: 'build-collection',
+      title: '创建第一个 Collection',
+      detail: `已经有 ${counts.cases} 个 Case，但还没有回归编排。`,
+      tone: 'neutral',
+      statusLabel: '待编排',
+      primaryLabel: '打开 Collections',
+      primaryAction: props.onOpenCollections,
+      secondaryLabel: props.recentSuccess ? '打开最近成功请求' : undefined,
+      secondaryAction: props.recentSuccess ? props.onOpenLastSuccessfulRequest : undefined
+    });
+  }
+
+  if (props.lastCollectionRun && props.lastCollectionRun.failedSteps > 0) {
+    tasks.push({
+      id: 'rerun-failed-collection',
+      title: '处理最近 Collection 失败',
+      detail: `${props.lastCollectionRun.collectionName} 有 ${props.lastCollectionRun.failedSteps} 个失败步骤。`,
+      tone: 'warning',
+      statusLabel: `${props.lastCollectionRun.failedSteps} failed`,
+      primaryLabel: '再跑一次',
+      primaryAction: props.onRunLastCollection,
+      secondaryLabel: 'Collections',
+      secondaryAction: props.onOpenCollections
+    });
+  } else if (counts.collections > 0 && !props.lastCollectionRun) {
+    tasks.push({
+      id: 'run-first-collection',
+      title: '运行第一个 Collection',
+      detail: `当前已有 ${counts.collections} 个 Collection，但还没有运行记录。`,
+      tone: 'neutral',
+      statusLabel: '未运行',
+      primaryLabel: '打开 Collections',
+      primaryAction: props.onOpenCollections
+    });
+  }
+
+  if (props.gitStatus?.isRepo && (props.gitStatus.dirty || props.gitStatus.ahead > 0 || props.gitStatus.behind > 0 || props.gitRisks.length > 0)) {
+    tasks.push({
+      id: 'check-sync',
+      title: '确认同步前状态',
+      detail:
+        props.gitRisks.length > 0
+          ? props.gitRisks[0].title
+          : `当前分支 ${props.gitStatus.branch || 'detached'}，先确认工作树再同步。`,
+      tone: props.gitRisks.length > 0 || props.gitStatus.behind > 0 ? 'warning' : 'success',
+      statusLabel: props.gitRisks.length > 0 ? `${props.gitRisks.length} risks` : '可检查',
+      primaryLabel: '刷新 Git 状态',
+      primaryAction: props.onRefreshGit,
+      secondaryLabel: '复制 commit',
+      secondaryAction: props.onCopySuggestedCommitMessage
+    });
+  }
+
+  if (tasks.length === 0) {
+    if (props.lastCollectionRun) {
+      tasks.push({
+        id: 'rerun-collection',
+        title: '继续最近 Collection',
+        detail: `${props.lastCollectionRun.collectionName} 最近运行于 ${displayLabel(props.lastCollectionRun.finishedAt)}。`,
+        tone: 'success',
+        statusLabel: props.lastCollectionRun.status,
+        primaryLabel: '再跑一次',
+        primaryAction: props.onRunLastCollection,
+        secondaryLabel: 'Collections',
+        secondaryAction: props.onOpenCollections
+      });
+    } else if (props.recentSuccess) {
+      tasks.push({
+        id: 'continue-request',
+        title: '继续最近成功请求',
+        detail: `${props.recentSuccess.requestName} 最近成功发送于 ${displayLabel(props.recentSuccess.timestamp)}。`,
+        tone: 'success',
+        statusLabel: `${props.recentSuccess.status}`,
+        primaryLabel: '打开请求',
+        primaryAction: props.onOpenLastSuccessfulRequest,
+        secondaryLabel: 'History',
+        secondaryAction: props.onOpenHistory
+      });
+    } else {
+      tasks.push({
+        id: 'open-repair',
+        title: '检查可运行请求',
+        detail: '当前没有明显阻塞，但还没有最近成功记录。',
+        tone: 'neutral',
+        statusLabel: '待确认',
+        primaryLabel: runnableCount > 0 ? '打开可运行请求' : '打开 Import Tasks',
+        primaryAction: runnableCount > 0 ? props.onOpenFirstRunnable : props.onOpenRepair,
+        secondaryLabel: '环境中心',
+        secondaryAction: props.onOpenEnvironmentCenter
+      });
+    }
+  }
+
+  const nextTask = tasks[0];
+  const remainingTasks = tasks.slice(1, 5);
+  const showRecentRequest = Boolean(props.recentSuccess || runnableCount > 0);
+  const showCollections = Boolean(props.lastCollectionRun || counts.collections > 0 || counts.cases > 0);
+  const showResumePanel = showRecentRequest || showCollections;
+  const showSync = Boolean(
+    props.gitStatus?.isRepo && (props.gitStatus.dirty || props.gitStatus.ahead > 0 || props.gitStatus.behind > 0 || props.gitRisks.length > 0)
+  );
 
   return (
     <section className="workspace-main workspace-home">
@@ -99,408 +285,265 @@ export function WorkspaceHomePanel(props: {
         </div>
         <div className="panel-toolbar-actions">
           <Button size="xs" variant="default" leftSection={<IconUpload size={14} />} onClick={props.onOpenImport}>
-            导入 API 规范
+            导入 API
           </Button>
           <Button size="xs" variant="default" leftSection={<IconLifebuoy size={14} />} onClick={props.onOpenRepair}>
-            打开 Import Tasks
+            Import Tasks
           </Button>
         </div>
       </div>
 
       <div className="workspace-home-scroll">
         {!hasWorkspaceContent ? (
-          <div className="workspace-home-hero">
+          <div className="workspace-home-empty">
             <div>
-              <Text className="section-kicker">本地优先接口工作区</Text>
-              <h2 className="workspace-home-title">先建工作区，再把一次调试沉淀成可复跑的请求、Case 与 Collection。</h2>
-              <Text size="sm" c="dimmed" maw={680}>
-                这套调试器的核心不是单次发送，而是把联调结果保存成团队可继续使用的本地资产。建议先导入规范、处理导入任务、完成首次发送，再保存为 Case 并加入 Collection。
+              <Text className="section-kicker">Workbench</Text>
+              <h2 className="workspace-home-empty-title">当前工作区还没有请求资产</h2>
+              <Text size="sm" c="dimmed">
+                先导入 API 规范，再开始调试。
               </Text>
             </div>
-            <div className="workspace-home-primary-actions">
+            <div className="workspace-home-empty-actions">
               <Button leftSection={<IconUpload size={16} />} onClick={props.onOpenImport}>
                 导入 API
               </Button>
-              <Button variant="default" leftSection={<IconLifebuoy size={16} />} onClick={props.onOpenRepair}>
-                处理导入任务
-              </Button>
               <Button variant="default" leftSection={<IconPlugConnected size={16} />} onClick={props.onOpenEnvironmentCenter}>
-                准备环境
+                打开环境中心
               </Button>
             </div>
           </div>
         ) : (
-          <div className="workspace-home-hero compact">
-            <div>
-              <Text className="section-kicker">主流程</Text>
-              <h2 className="workspace-home-title">导入、修复、发送、沉淀 Case，再组合成可回放的 Collection。</h2>
-              <Text size="sm" c="dimmed" maw={720}>
-                让同一份 Request 资产在开发联调和回归检查之间自然流转，而不是在不同工具里重复搭建。
-              </Text>
-            </div>
-            <div className="workspace-home-primary-actions">
-              <Button leftSection={<IconUpload size={16} />} onClick={props.onOpenImport}>
-                继续导入
-              </Button>
-              <Button
-                variant="default"
-                leftSection={<IconAlertTriangle size={16} />}
-                onClick={props.onOpenFirstBlocked}
-                disabled={!props.repairSummary || props.repairSummary.blockingCount === 0}
-              >
-                打开首个阻塞项
-              </Button>
-              <Button
-                variant="default"
-                leftSection={<IconPlayerPlay size={16} />}
-                onClick={props.onOpenLastSuccessfulRequest}
-                disabled={!props.recentSuccess}
-              >
-                打开最近成功请求
-              </Button>
-              <Button
-                variant="default"
-                leftSection={<IconFolders size={16} />}
-                onClick={props.onRunLastCollection}
-                disabled={!props.lastCollectionRun}
-              >
-                运行最近 Collection
-              </Button>
-            </div>
-          </div>
-        )}
-
-        <div className="workspace-home-grid">
-          <div className="workspace-home-card workspace-home-card-wide">
-            <div className="workspace-home-card-head">
-              <div>
-                <Text className="section-kicker">Current Workspace</Text>
-                <h3 className="section-title">Asset overview</h3>
-              </div>
-              <Badge color="gray" variant="light">
-                local files
-              </Badge>
-            </div>
-            <div className="workspace-home-metric-grid">
-              <div className="summary-chip">
+          <div className="workspace-home-shell">
+            <div className="workspace-home-statusbar">
+              <div className="workspace-home-statusbar-item">
                 <span>Requests</span>
                 <strong>{counts.requests}</strong>
               </div>
-              <div className="summary-chip">
+              <div className="workspace-home-statusbar-item">
                 <span>Cases</span>
                 <strong>{counts.cases}</strong>
               </div>
-              <div className="summary-chip">
+              <div className="workspace-home-statusbar-item">
                 <span>Collections</span>
                 <strong>{counts.collections}</strong>
               </div>
-              <div className="summary-chip">
+              <div className="workspace-home-statusbar-item">
                 <span>Environments</span>
                 <strong>{counts.environments}</strong>
               </div>
             </div>
-          </div>
 
-          <div className="workspace-home-card">
-            <div className="workspace-home-card-head">
-              <div>
-                <Text className="section-kicker">Import Tasks</Text>
-                <h3 className="section-title">从导入结果走向可运行</h3>
+            <div className="workspace-home-next-card">
+              <div className="workspace-home-next-head">
+                <Text className="section-kicker">当前下一步</Text>
+                <span className={`workspace-home-task-status is-${nextTask.tone}`}>{nextTask.statusLabel}</span>
               </div>
-              <Button size="xs" variant="subtle" rightSection={<IconArrowRight size={12} />} onClick={props.onOpenRepair}>
-                打开任务流
-              </Button>
+              <h2 className="workspace-home-next-title">{nextTask.title}</h2>
+              <Text size="sm" c="dimmed">
+                {nextTask.detail}
+              </Text>
+              <div className="workspace-home-next-actions">
+                <Button
+                  leftSection={
+                    nextTask.id === 'import-api' ? <IconUpload size={16} /> : nextTask.id === 'check-sync' ? <IconGitBranch size={16} /> : nextTask.id.includes('collection') ? (
+                      <IconFolders size={16} />
+                    ) : nextTask.id === 'repair-import' ? (
+                      <IconAlertTriangle size={16} />
+                    ) : (
+                      <IconPlayerPlay size={16} />
+                    )
+                  }
+                  onClick={nextTask.primaryAction}
+                >
+                  {nextTask.primaryLabel}
+                </Button>
+                {nextTask.secondaryLabel && nextTask.secondaryAction ? (
+                  <Button variant="default" onClick={nextTask.secondaryAction}>
+                    {nextTask.secondaryLabel}
+                  </Button>
+                ) : null}
+              </div>
             </div>
-            {props.importSession ? (
-              <>
-                <div className="workspace-home-metric-grid compact">
-                  <div className="summary-chip">
-                    <span>Format</span>
-                    <strong>{props.importSession.format}</strong>
+
+            <div className="workspace-home-layout is-single">
+              {remainingTasks.length > 0 ? (
+                <div className="workspace-home-panel">
+                  <div className="workspace-home-panel-head">
+                    <div>
+                      <Text className="section-kicker">待处理</Text>
+                      <h3 className="section-title">接下来要做的事</h3>
+                    </div>
                   </div>
-                  <div className="summary-chip">
-                    <span>Imported</span>
-                    <strong>{props.importSession.importedRequestCount}</strong>
-                  </div>
-                  <div className="summary-chip">
-                    <span>Runnable</span>
-                    <strong>{props.importSession.runnableCount}</strong>
-                  </div>
-                  <div className="summary-chip">
-                    <span>Blocked</span>
-                    <strong>{props.importSession.blockedCount}</strong>
+                  <div className="workspace-home-task-list">
+                    {remainingTasks.map(task => (
+                      <div key={task.id} className="workspace-home-task-row">
+                        <div className="workspace-home-task-main">
+                          <div className="workspace-home-task-line">
+                            <Text fw={700} size="sm">
+                              {task.title}
+                            </Text>
+                            <span className={`workspace-home-task-status is-${task.tone}`}>{task.statusLabel}</span>
+                          </div>
+                          <Text size="sm" c="dimmed">
+                            {task.detail}
+                          </Text>
+                        </div>
+                        <div className="workspace-home-task-actions">
+                          <Button size="xs" variant="default" onClick={task.primaryAction}>
+                            {task.primaryLabel}
+                          </Button>
+                          {task.secondaryLabel && task.secondaryAction ? (
+                            <Button size="xs" variant="subtle" onClick={task.secondaryAction}>
+                              {task.secondaryLabel}
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                <Text size="sm" c="dimmed">
-                  最近一次导入于 {props.importSession.importedAt} 完成。当前 runnable score 为 {props.importSession.runnableScore}% ，还有 {props.importSession.warningCount} 个提醒待确认。
-                </Text>
-              </>
-            ) : (
-              <div className="empty-tab-state">
-                还没有导入批次。先导入 OpenAPI、Swagger、HAR 或 Postman，再把导入 warning 收敛成可执行任务。
-              </div>
-            )}
-          </div>
-
-          <div className="workspace-home-card">
-            <div className="workspace-home-card-head">
-              <div>
-                <Text className="section-kicker">Recent Success</Text>
-                <h3 className="section-title">Last runnable request</h3>
-              </div>
-              <Button size="xs" variant="subtle" rightSection={<IconArrowRight size={12} />} onClick={props.onOpenHistory}>
-                History
-              </Button>
-            </div>
-            {props.recentSuccess ? (
-              <>
-                <Group gap="xs">
-                  <Badge color="teal" variant="light">
-                    {props.recentSuccess.status}
-                  </Badge>
-                  <Badge color="gray" variant="light">
-                    {props.recentSuccess.durationMs} ms
-                  </Badge>
-                </Group>
-                <Text fw={700}>{props.recentSuccess.requestName}</Text>
-                <Text size="sm" c="dimmed">
-                  Last successful send at {props.recentSuccess.timestamp}.
-                </Text>
-                <Button size="xs" variant="default" onClick={props.onOpenLastSuccessfulRequest}>
-                  Open Request
-                </Button>
-              </>
-            ) : (
-              <div className="empty-tab-state">No successful request run yet. Send a Request once to unlock Case and Collection reuse.</div>
-            )}
-          </div>
-
-          <div className="workspace-home-card">
-            <div className="workspace-home-card-head">
-              <div>
-                <Text className="section-kicker">Collections</Text>
-                <h3 className="section-title">Latest regression run</h3>
-              </div>
-              <Button size="xs" variant="subtle" rightSection={<IconArrowRight size={12} />} onClick={props.onOpenCollections}>
-                Collections
-              </Button>
-            </div>
-            {props.lastCollectionRun ? (
-              <>
-                <Group gap="xs">
-                  <Badge color={props.lastCollectionRun.failedSteps > 0 ? 'orange' : 'teal'} variant="light">
-                    {props.lastCollectionRun.status}
-                  </Badge>
-                  <Badge color="gray" variant="light">
-                    {props.lastCollectionRun.failedSteps} failed
-                  </Badge>
-                </Group>
-                <Text fw={700}>{props.lastCollectionRun.collectionName}</Text>
-                <Text size="sm" c="dimmed">
-                  Latest run finished at {props.lastCollectionRun.finishedAt}.
-                </Text>
-                <Button size="xs" variant="default" onClick={props.onRunLastCollection}>
-                  Run Again
-                </Button>
-              </>
-            ) : (
-              <div className="empty-tab-state">No Collection run yet. Once a Request is stable, add it to a Collection and run it here.</div>
-            )}
-          </div>
-
-          <div className="workspace-home-card workspace-home-card-wide">
-            <div className="workspace-home-card-head">
-              <div>
-                <Text className="section-kicker">Git-First Status</Text>
-                <h3 className="section-title">Sync and review before sharing</h3>
-              </div>
-              <Group gap={8}>
-                <Button size="xs" variant="default" onClick={props.onRefreshGit}>
-                  Refresh
-                </Button>
-                <Button size="xs" variant="default" onClick={props.onCopySuggestedCommitMessage}>
-                  Copy Commit Message
-                </Button>
-              </Group>
-            </div>
-            <div className="workspace-home-metric-grid">
-              <div className="summary-chip">
-                <span>Repository</span>
-                <strong>{props.gitStatus?.isRepo ? 'Yes' : 'No'}</strong>
-              </div>
-              <div className="summary-chip">
-                <span>Branch</span>
-                <strong>{props.gitStatus?.branch || 'detached'}</strong>
-              </div>
-              <div className="summary-chip">
-                <span>Dirty Files</span>
-                <strong>{props.gitStatus?.dirty ? props.gitStatus.changedFiles.length : 0}</strong>
-              </div>
-              <div className="summary-chip">
-                <span>Ahead / Behind</span>
-                <strong>{`${props.gitStatus?.ahead || 0} / ${props.gitStatus?.behind || 0}`}</strong>
-              </div>
-            </div>
-            <Group gap="xs">
-              <Badge color={gitStatusTone(props.gitStatus)} variant="light">
-                {props.gitStatus?.isRepo ? 'git connected' : 'no repo'}
-              </Badge>
-              {props.gitRisks.length === 0 ? (
-                <Badge color="teal" variant="light">
-                  no sync risks detected
-                </Badge>
               ) : null}
-            </Group>
-            <Text size="sm" c="dimmed">
-              Suggested commit message: {props.suggestedCommitMessage}
-            </Text>
-            {props.gitRisks.length > 0 ? (
-              <div className="workspace-home-risk-list">
-                {props.gitRisks.map(risk => (
-                  <div key={risk.id} className="workspace-home-risk-row">
-                    <Group gap={8} align="flex-start" wrap="nowrap">
-                      <IconAlertTriangle size={16} color={risk.severity === 'danger' ? 'var(--red)' : 'var(--orange)'} />
-                      <div>
-                        <Text fw={700} size="sm">
-                          {risk.title}
-                        </Text>
-                        <Text size="sm" c="dimmed">
-                          {risk.description}
-                        </Text>
+
+              {showResumePanel ? (
+                <div className="workspace-home-panel">
+                  <div className="workspace-home-panel-head">
+                    <div>
+                      <Text className="section-kicker">继续工作</Text>
+                      <h3 className="section-title">从最近的有效结果继续</h3>
+                    </div>
+                  </div>
+                  <div className="workspace-home-continue-grid">
+                    {showRecentRequest ? (
+                      <div className="workspace-home-side-card">
+                        <div className="workspace-home-mini-head">
+                          <Text className="workspace-home-mini-title">最近请求</Text>
+                          <Button size="xs" variant="subtle" rightSection={<IconArrowRight size={12} />} onClick={props.onOpenHistory}>
+                            History
+                          </Button>
+                        </div>
+                        {props.recentSuccess ? (
+                          <>
+                            <Group gap="xs">
+                              <Badge color="teal" variant="light">
+                                {props.recentSuccess.status}
+                              </Badge>
+                              <Badge color="gray" variant="light">
+                                {props.recentSuccess.durationMs} ms
+                              </Badge>
+                            </Group>
+                            <Text fw={700}>{props.recentSuccess.requestName}</Text>
+                            <Text size="sm" c="dimmed">
+                              {displayLabel(props.recentSuccess.timestamp)}
+                            </Text>
+                            <Button size="xs" variant="default" onClick={props.onOpenLastSuccessfulRequest}>
+                              打开请求
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Text size="sm" c="dimmed">
+                              还没有成功请求记录。
+                            </Text>
+                            <Button size="xs" variant="default" onClick={props.onOpenFirstRunnable}>
+                              打开可运行请求
+                            </Button>
+                          </>
+                        )}
                       </div>
-                    </Group>
-                    <Badge color={risk.severity === 'danger' ? 'red' : 'orange'} variant="light">
-                      {risk.severity}
+                    ) : null}
+
+                    {showCollections ? (
+                      <div className="workspace-home-side-card">
+                        <div className="workspace-home-mini-head">
+                          <Text className="workspace-home-mini-title">最近 Collection</Text>
+                          <Button size="xs" variant="subtle" rightSection={<IconArrowRight size={12} />} onClick={props.onOpenCollections}>
+                            Collections
+                          </Button>
+                        </div>
+                        {props.lastCollectionRun ? (
+                          <>
+                            <Group gap="xs">
+                              <Badge color={props.lastCollectionRun.failedSteps > 0 ? 'orange' : 'teal'} variant="light">
+                                {props.lastCollectionRun.status}
+                              </Badge>
+                              <Badge color="gray" variant="light">
+                                {props.lastCollectionRun.failedSteps} failed
+                              </Badge>
+                            </Group>
+                            <Text fw={700}>{props.lastCollectionRun.collectionName}</Text>
+                            <Text size="sm" c="dimmed">
+                              {displayLabel(props.lastCollectionRun.finishedAt)}
+                            </Text>
+                            <Button size="xs" variant="default" onClick={props.onRunLastCollection}>
+                              再跑一次
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Text size="sm" c="dimmed">
+                              {counts.collections > 0
+                                ? `已有 ${counts.collections} 个 Collection，尚未运行。`
+                                : `已有 ${counts.cases} 个 Case，尚未组成 Collection。`}
+                            </Text>
+                            <Button size="xs" variant="default" onClick={props.onOpenCollections}>
+                              打开 Collections
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {showSync ? (
+                <div className="workspace-home-panel">
+                  <div className="workspace-home-panel-head">
+                    <div>
+                      <Text className="section-kicker">同步提醒</Text>
+                      <h3 className="section-title">需要同步前再看一眼</h3>
+                    </div>
+                    <Badge color={gitStatusTone(props.gitStatus)} variant="light">
+                      {props.gitStatus?.branch || 'detached'}
                     </Badge>
                   </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="workspace-home-card workspace-home-card-wide">
-            <div className="workspace-home-card-head">
-              <div>
-                <Text className="section-kicker">Recommended Flow</Text>
-                <h3 className="section-title">What to do next</h3>
-              </div>
-              <Badge color="indigo" variant="light">
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <IconSparkles size={12} />
-                  <span>main path</span>
-                </span>
-              </Badge>
-            </div>
-            <div className="workspace-home-step-list">
-              <div className="workspace-home-step">
-                <IconUpload size={16} />
-                <span>Import a spec and open Repair Center.</span>
-              </div>
-              <div className="workspace-home-step">
-                <IconLifebuoy size={16} />
-                <span>Fix auth, baseUrl, and missing variables until at least one Request becomes runnable.</span>
-              </div>
-              <div className="workspace-home-step">
-                <IconPlayerPlay size={16} />
-                <span>Send a Request, then save the response as a reusable Case or Example.</span>
-              </div>
-              <div className="workspace-home-step">
-                <IconFolders size={16} />
-                <span>Add the Request or Case into a Collection and run the regression flow locally.</span>
-              </div>
-              <div className="workspace-home-step">
-                <IconGitBranch size={16} />
-                <span>Review Git changes, keep secrets local, then sync with the team through Git.</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="workspace-home-card">
-            <div className="workspace-home-card-head">
-              <div>
-                <Text className="section-kicker">Quick Access</Text>
-                <h3 className="section-title">Jump points</h3>
-              </div>
-            </div>
-            <div className="workspace-home-link-list">
-                <Button variant="subtle" rightSection={<IconArrowRight size={12} />} onClick={props.onOpenRepair}>
-                  Repair Center
-                </Button>
-              <Button variant="subtle" rightSection={<IconArrowRight size={12} />} onClick={props.onOpenEnvironmentCenter}>
-                Environment Center
-              </Button>
-              <Button variant="subtle" rightSection={<IconArrowRight size={12} />} onClick={props.onOpenHistory}>
-                History
-              </Button>
-              <Button variant="subtle" rightSection={<IconArrowRight size={12} />} onClick={props.onOpenCollections}>
-                Collections
-              </Button>
-            </div>
-          </div>
-
-          <div className="workspace-home-card">
-            <div className="workspace-home-card-head">
-              <div>
-                <Text className="section-kicker">Repair Snapshot</Text>
-                <h3 className="section-title">Current blockers</h3>
-              </div>
-            </div>
-            {props.repairSummary ? (
-              <div className="workspace-home-metric-grid compact">
-                <div className="summary-chip">
-                  <span>Blocking</span>
-                  <strong>{props.repairSummary.blockingCount}</strong>
+                  <div className="workspace-home-sync-strip">
+                    <div className="summary-chip">
+                      <span>Dirty</span>
+                      <strong>{props.gitStatus?.dirty ? props.gitStatus.changedFiles.length : 0}</strong>
+                    </div>
+                    <div className="summary-chip">
+                      <span>Ahead / Behind</span>
+                      <strong>{`${props.gitStatus?.ahead || 0} / ${props.gitStatus?.behind || 0}`}</strong>
+                    </div>
+                  </div>
+                  {props.gitRisks.length > 0 ? (
+                    <div className="workspace-home-risk-stack">
+                      {props.gitRisks.slice(0, 2).map(risk => (
+                        <div key={risk.id} className="workspace-home-risk-row">
+                          <Text fw={700} size="sm">
+                            {risk.title}
+                          </Text>
+                          <Text size="sm" c="dimmed">
+                            {risk.description}
+                          </Text>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="workspace-home-task-actions">
+                    <Button size="xs" variant="default" onClick={props.onRefreshGit}>
+                      刷新状态
+                    </Button>
+                    <Button size="xs" variant="subtle" onClick={props.onCopySuggestedCommitMessage}>
+                      复制 commit
+                    </Button>
+                  </div>
                 </div>
-                <div className="summary-chip">
-                  <span>Warnings</span>
-                  <strong>{props.repairSummary.warningCount}</strong>
-                </div>
-                <div className="summary-chip">
-                  <span>Runnable</span>
-                  <strong>{props.repairSummary.runnableCount}</strong>
-                </div>
-              </div>
-            ) : (
-              <div className="empty-tab-state">Import a Request batch to start tracking runnable vs blocked work here.</div>
-            )}
-            {props.importSession ? (
-              <Text size="sm" c="dimmed">
-                Most recent import batch is ready to continue from Repair Center.
-              </Text>
-            ) : null}
-            <Group gap="xs">
-              <Button size="xs" variant="default" onClick={props.onOpenRepair}>
-                Open Repair
-              </Button>
-              <Button size="xs" variant="subtle" onClick={props.onOpenFirstBlocked} disabled={!props.repairSummary || props.repairSummary.blockingCount === 0}>
-                First blocked
-              </Button>
-            </Group>
-          </div>
-
-          <div className="workspace-home-card">
-            <div className="workspace-home-card-head">
-              <div>
-                <Text className="section-kicker">Recent Activity</Text>
-                <h3 className="section-title">Last touchpoints</h3>
-              </div>
-            </div>
-            <div className="workspace-home-activity-list">
-              <div className="workspace-home-activity-item">
-                <IconClockPlay size={14} />
-                <span>{props.importSession ? `Imported ${props.importSession.importedRequestCount} requests` : 'No import activity yet'}</span>
-              </div>
-              <div className="workspace-home-activity-item">
-                <IconHistory size={14} />
-                <span>{props.recentSuccess ? `Last success: ${props.recentSuccess.requestName}` : 'No successful request run yet'}</span>
-              </div>
-              <div className="workspace-home-activity-item">
-                <IconFolders size={14} />
-                <span>{props.lastCollectionRun ? `Last collection: ${props.lastCollectionRun.collectionName}` : 'No collection run yet'}</span>
-              </div>
+              ) : null}
             </div>
           </div>
-        </div>
+        )}
       </div>
     </section>
   );

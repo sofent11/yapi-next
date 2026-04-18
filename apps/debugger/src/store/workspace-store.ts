@@ -39,6 +39,7 @@ export type ResponseTab = 'body' | 'headers' | 'json' | 'cookies' | 'compare' | 
 
 export type WorkspaceUiState = {
   treeWidth: number;
+  isTreeCollapsed: boolean;
   mainSplitRatio: number;
   expandedRequestIds: string[];
   lastSelectedNode: SelectedNode;
@@ -50,6 +51,7 @@ export type WorkspaceUiState = {
 export function defaultWorkspaceUiState(): WorkspaceUiState {
   return {
     treeWidth: 316,
+    isTreeCollapsed: false,
     mainSplitRatio: 0.5,
     expandedRequestIds: [],
     lastSelectedNode: { kind: 'project' },
