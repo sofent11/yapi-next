@@ -95,6 +95,67 @@ const RECENT_STORAGE_KEY = 'yapi-debugger.recent-roots';
 const UI_STORAGE_KEY_PREFIX = 'yapi-debugger.ui';
 const IMPORT_SESSION_STORAGE_KEY_PREFIX = 'yapi-debugger.import-session';
 const LAST_SYNC_STORAGE_KEY_PREFIX = 'yapi-debugger.last-sync';
+type DebuggerSpotlightGroup = {
+  group: string;
+  actions: SpotlightActionData[];
+};
+type DebuggerSpotlightEntry = SpotlightActionData | DebuggerSpotlightGroup;
+
+function spotlightKeywords(value: string | string[] | undefined) {
+  if (Array.isArray(value)) {
+    return value
+      .map(item => item.trim().toLowerCase())
+      .join(' ')
+      .trim();
+  }
+  return typeof value === 'string' ? value.toLowerCase().trim() : '';
+}
+
+function groupSpotlightActions(actions: SpotlightActionData[]): DebuggerSpotlightEntry[] {
+  const groups = new Map<string, SpotlightActionData[]>();
+  const result: DebuggerSpotlightEntry[] = [];
+
+  actions.forEach(action => {
+    if (!action.group) {
+      result.push(action);
+      return;
+    }
+
+    const bucket = groups.get(action.group) || [];
+    bucket.push(action);
+    groups.set(action.group, bucket);
+  });
+
+  groups.forEach((items, group) => {
+    result.push({ group, actions: items });
+  });
+
+  return result;
+}
+
+function filterSpotlightActions(query: string, actions: SpotlightActionData[]): DebuggerSpotlightEntry[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return groupSpotlightActions(actions);
+
+  const primary: SpotlightActionData[] = [];
+  const secondary: SpotlightActionData[] = [];
+
+  actions.forEach(action => {
+    const label = action.label?.toLowerCase() || '';
+    const description = action.description?.toLowerCase() || '';
+    const keywords = spotlightKeywords(action.keywords);
+    if (label.includes(needle)) {
+      primary.push(action);
+      return;
+    }
+
+    if (`${description} ${keywords}`.includes(needle)) {
+      secondary.push(action);
+    }
+  });
+
+  return groupSpotlightActions([...primary, ...secondary]);
+}
 
 function loadRecentRoots() {
   try {
@@ -448,6 +509,7 @@ export function App() {
   const [gitInfo, setGitInfo] = useState<GitStatusPayload | null>(null);
   const [lastImportSession, setLastImportSession] = useState<ImportRepairSession | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [spotlightQuery, setSpotlightQuery] = useState('');
 
   const spotlightActions = useMemo(() => {
     if (!store.workspace) return [];
@@ -457,8 +519,13 @@ export function App() {
       if (node.kind === 'category') {
         actions.push({
           id: `spotlight-cat-${node.path}`,
+          group: '分类',
           label: node.name,
-          description: `Category: ${node.path}`,
+          description: node.path,
+          keywords: [node.path, 'category', '分类'],
+          dimmedSections: false,
+          leftSection: <span className="debugger-spotlight-glyph is-category">C</span>,
+          rightSection: <span className="debugger-spotlight-pill is-category">分类</span>,
           onClick: () => {
             setActiveView('workspace');
             store.selectNode({ kind: 'category', path: node.path });
@@ -467,10 +534,16 @@ export function App() {
       }
 
       if (node.kind === 'request') {
+        const method = node.method.toUpperCase();
         actions.push({
           id: `spotlight-req-${node.requestId}`,
+          group: '接口',
           label: node.name,
-          description: `${node.method} ${node.requestPath}`,
+          description: node.requestPath,
+          keywords: [node.requestPath, node.method, node.name, 'request', '接口'],
+          dimmedSections: false,
+          leftSection: <span className="debugger-spotlight-glyph is-request">R</span>,
+          rightSection: <span className={`debugger-spotlight-pill is-method is-${method.toLowerCase()}`}>{method}</span>,
           onClick: () => {
             setActiveView('workspace');
             store.selectNode({ kind: 'request', requestId: node.requestId });
@@ -486,6 +559,22 @@ export function App() {
     store.workspace.tree.forEach(walk);
     return actions;
   }, [store.workspace]);
+  const filteredSpotlightActions = useMemo(
+    () => filterSpotlightActions(spotlightQuery, spotlightActions),
+    [spotlightActions, spotlightQuery]
+  );
+  const spotlightCounts = useMemo(
+    () =>
+      spotlightActions.reduce(
+        (acc, item) => {
+          if (item.group === '分类') acc.categories += 1;
+          if (item.group === '接口') acc.requests += 1;
+          return acc;
+        },
+        { categories: 0, requests: 0 }
+      ),
+    [spotlightActions]
+  );
 
   const requestId = selectedRequestId(store.selectedNode);
   const caseId = selectedCaseId(store.selectedNode);
@@ -2856,15 +2945,77 @@ export function App() {
         />
       </Drawer>
 
-      <Spotlight
-        actions={spotlightActions}
-        nothingFound="Nothing found..."
-        highlightQuery
-        searchProps={{
-          leftSection: <IconSearch size={18} stroke={1.5} />,
-          placeholder: 'Search requests, categories...',
+      <Spotlight.Root
+        query={spotlightQuery}
+        onQueryChange={setSpotlightQuery}
+        shortcut="mod + K"
+        maxHeight={540}
+        scrollable
+        overlayProps={{ backgroundOpacity: 0.2, blur: 18 }}
+        transitionProps={{ transition: 'fade-down', duration: 160, timingFunction: 'ease' }}
+        classNames={{
+          overlay: 'debugger-spotlight-overlay',
+          content: 'debugger-spotlight-content',
+          body: 'debugger-spotlight-body',
+          search: 'debugger-spotlight-search',
+          actionsList: 'debugger-spotlight-actions',
+          action: 'debugger-spotlight-action',
+          actionBody: 'debugger-spotlight-action-body',
+          actionLabel: 'debugger-spotlight-action-label',
+          actionDescription: 'debugger-spotlight-action-description',
+          actionSection: 'debugger-spotlight-action-section',
+          actionsGroup: 'debugger-spotlight-group',
+          empty: 'debugger-spotlight-empty'
         }}
-      />
+      >
+        <Spotlight.Search
+          leftSection={<IconSearch size={18} stroke={1.6} />}
+          placeholder="搜索接口、分类、路径..."
+          classNames={{
+            input: 'debugger-spotlight-input',
+            section: 'debugger-spotlight-input-section'
+          }}
+        />
+
+        {filteredSpotlightActions.length > 0 ? (
+          <Spotlight.ActionsList>
+            {filteredSpotlightActions.map(item => {
+              if ('actions' in item) {
+                return (
+                  <Spotlight.ActionsGroup key={item.group} label={item.group}>
+                    {item.actions.map(({ id, ...action }) => (
+                      <Spotlight.Action key={id} highlightQuery {...action} />
+                    ))}
+                  </Spotlight.ActionsGroup>
+                );
+              }
+
+              return <Spotlight.Action key={item.id} highlightQuery {...item} />;
+            })}
+          </Spotlight.ActionsList>
+        ) : (
+          <Spotlight.Empty>
+            <div className="debugger-spotlight-empty-copy">
+              <strong>没有找到匹配项</strong>
+              <span>试试接口名、分类名、请求路径或 HTTP 方法。</span>
+            </div>
+          </Spotlight.Empty>
+        )}
+
+        <Spotlight.Footer className="debugger-spotlight-footer">
+          <div className="debugger-spotlight-footer-copy">
+            <strong>{spotlightCounts.requests + spotlightCounts.categories}</strong>
+            <span>
+              已索引 {spotlightCounts.requests} 个接口，{spotlightCounts.categories} 个分类
+            </span>
+          </div>
+          <div className="debugger-spotlight-footer-hints" aria-hidden="true">
+            <span>↑↓ 切换</span>
+            <span>Enter 打开</span>
+            <span>Esc 关闭</span>
+          </div>
+        </Spotlight.Footer>
+      </Spotlight.Root>
     </>
   );
 }

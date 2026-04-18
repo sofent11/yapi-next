@@ -12,7 +12,7 @@ export function StatusBar(props: {
   } | null;
   onRefreshGit?: () => void;
 }) {
-  const statusColor = props.responseInfo ? (props.responseInfo.ok ? 'var(--green)' : 'var(--red)') : 'var(--muted)';
+  const responseTone = props.responseInfo?.ok ? 'is-success' : 'is-error';
 
   return (
     <footer className="app-status-bar">
@@ -49,15 +49,20 @@ export function StatusBar(props: {
         </div>
 
         {props.responseInfo && (
-          <div className="status-item animate-in" style={{ color: statusColor }}>
-            {props.responseInfo.ok ? <IconCheck size={14} /> : <IconX size={14} />}
-            <Text size="xs" fw={700}>
-              {props.responseInfo.status}
-            </Text>
-            <Group gap={4} ml={4}>
+          <div className={`status-response-pill animate-in ${responseTone}`}>
+            <span className="status-response-main">
+              {props.responseInfo.ok ? <IconCheck size={14} /> : <IconX size={14} />}
+              <Text size="xs" fw={800}>
+                {props.responseInfo.status}
+              </Text>
+            </span>
+            <span className="status-response-divider" aria-hidden="true" />
+            <span className="status-response-latency">
               <IconClock size={12} />
-              <Text size="xs">{props.responseInfo.duration}ms</Text>
-            </Group>
+              <Text size="xs" fw={700}>
+                {props.responseInfo.duration}ms
+              </Text>
+            </span>
           </div>
         )}
       </Group>
