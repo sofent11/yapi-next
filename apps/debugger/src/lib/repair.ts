@@ -154,6 +154,15 @@ export function buildImportRepairChecklist(input: {
     warning: 1,
     info: 2
   };
+  if (missingVariables.size > 0) {
+    upsertTask(tasks, {
+      id: 'repair:variables',
+      severity: 'warning',
+      category: 'variables',
+      title: 'Fill missing variables',
+      description: `${missingVariables.size} variables are still unresolved across the imported requests. Seed them into the environment first, then fill in the real values.`
+    });
+  }
   const sortedTasks = [...tasks].sort((left: ImportRepairTask, right: ImportRepairTask) => {
     return severityWeight[left.severity] - severityWeight[right.severity] || left.title.localeCompare(right.title, 'zh-CN');
   });

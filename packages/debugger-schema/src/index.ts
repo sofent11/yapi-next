@@ -70,6 +70,7 @@ export type RequestBody = z.infer<typeof requestBodySchema>;
 
 export const responseExampleSchema = z.object({
   name: z.string(),
+  role: z.enum(['example', 'baseline']).default('example'),
   status: z.number().int().min(100).max(599).optional(),
   mimeType: z.string().optional(),
   text: z.string().default(''),
@@ -338,7 +339,8 @@ export const workspaceIndexSchema = z.object({
   requests: z.array(workspaceRequestRecordSchema).default([]),
   collections: z.array(workspaceCollectionRecordSchema).default([]),
   tree: z.array(workspaceTreeNodeSchema).default([]),
-  gitignorePath: z.string().optional()
+  gitignorePath: z.string().optional(),
+  gitignoreContent: z.string().optional()
 });
 export type WorkspaceIndex = z.infer<typeof workspaceIndexSchema>;
 

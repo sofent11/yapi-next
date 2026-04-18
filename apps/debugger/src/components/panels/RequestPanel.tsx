@@ -81,6 +81,9 @@ export function RequestPanel(props: {
   onRun: () => void;
   cases: CaseDocument[];
   allowCases?: boolean;
+  latestResponseOk?: boolean;
+  onSaveAsCase?: () => void;
+  onAddToCollection?: () => void;
   requestInsight?: ResolvedRequestInsight | null;
   sessionSnapshot?: SessionSnapshot | null;
   onSaveAuthProfile?: (name: string, auth: AuthConfig) => void;
@@ -218,17 +221,6 @@ export function RequestPanel(props: {
     return true;
   }
 
-  async function handleUrlShortcutPaste() {
-    if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) return;
-    try {
-      const text = await navigator.clipboard.readText();
-      if (!text.trim()) return;
-      applyPastedRequest(text);
-    } catch (_error) {
-      return;
-    }
-  }
-
   return (
     <div className="request-panel">
       <div className="request-header-compact">
@@ -257,13 +249,8 @@ export function RequestPanel(props: {
             onPaste={event => {
               const pastedText = event.clipboardData.getData('text');
               if (!pastedText) return;
-              event.preventDefault();
-              applyPastedRequest(pastedText);
-            }}
-            onKeyDown={event => {
-              if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') {
+              if (applyPastedRequest(pastedText)) {
                 event.preventDefault();
-                void handleUrlShortcutPaste();
               }
             }}
             variant="filled"
@@ -278,7 +265,17 @@ export function RequestPanel(props: {
           >
             Case
           </Button>
-          <Button size="sm" leftSection={<IconPlayerPlay size={14} />} loading={props.isRunning} onClick={props.onRun}>
+          {allowCases && props.latestResponseOk ? (
+            <>
+              <Button size="sm" variant="filled" color="indigo" onClick={props.onSaveAsCase}>
+                Save as Case
+              </Button>
+              <Button size="sm" variant="default" onClick={props.onAddToCollection}>
+                Add to Collection
+              </Button>
+            </>
+          ) : null}
+          <Button size="sm" variant={allowCases && props.latestResponseOk ? 'default' : 'filled'} leftSection={<IconPlayerPlay size={14} />} loading={props.isRunning} onClick={props.onRun}>
             Send
           </Button>
         </div>

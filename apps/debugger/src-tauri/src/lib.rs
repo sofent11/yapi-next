@@ -17,7 +17,7 @@ use std::{
     time::Instant,
 };
 use tauri::{
-    menu::{Menu, MenuItemBuilder, SubmenuBuilder},
+    menu::{Menu, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
     AppHandle, Emitter, Manager, Runtime,
 };
 
@@ -362,7 +362,19 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, recent_roots: &[String], has_works
         .build()
         .map_err(|error| error.to_string())?;
 
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .item(&PredefinedMenuItem::undo(app, None).map_err(|error| error.to_string())?)
+        .item(&PredefinedMenuItem::redo(app, None).map_err(|error| error.to_string())?)
+        .separator()
+        .item(&PredefinedMenuItem::cut(app, None).map_err(|error| error.to_string())?)
+        .item(&PredefinedMenuItem::copy(app, None).map_err(|error| error.to_string())?)
+        .item(&PredefinedMenuItem::paste(app, None).map_err(|error| error.to_string())?)
+        .item(&PredefinedMenuItem::select_all(app, None).map_err(|error| error.to_string())?)
+        .build()
+        .map_err(|error| error.to_string())?;
+
     menu.append(&file_menu).map_err(|error| error.to_string())?;
+    menu.append(&edit_menu).map_err(|error| error.to_string())?;
     Ok(menu)
 }
 

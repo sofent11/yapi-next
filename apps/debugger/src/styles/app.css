@@ -112,6 +112,112 @@ mark {
   border-color: var(--accent);
 }
 
+.workspace-home-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+  background:
+    linear-gradient(180deg, rgba(240, 247, 255, 0.9) 0%, rgba(246, 248, 250, 0) 220px),
+    var(--canvas);
+}
+
+.workspace-home-hero {
+  display: grid;
+  gap: 20px;
+  padding: 24px;
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--line));
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(240, 247, 255, 0.94));
+  box-shadow: 0 18px 36px rgba(31, 35, 40, 0.06);
+}
+
+.workspace-home-hero.compact {
+  padding: 20px 24px;
+}
+
+.workspace-home-title {
+  margin: 6px 0 10px;
+  font-size: 1.5rem;
+  line-height: 1.15;
+}
+
+.workspace-home-primary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.workspace-home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+  align-items: start;
+}
+
+.workspace-home-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(27, 31, 36, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 24px rgba(31, 35, 40, 0.04);
+}
+
+.workspace-home-card-wide {
+  grid-column: span 2;
+}
+
+.workspace-home-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.workspace-home-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.workspace-home-metric-grid.compact {
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+}
+
+.workspace-home-risk-list,
+.workspace-home-step-list,
+.workspace-home-link-list,
+.workspace-home-activity-list {
+  display: grid;
+  gap: 10px;
+}
+
+.workspace-home-risk-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-muted) 80%, white);
+}
+
+.workspace-home-step,
+.workspace-home-activity-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted-strong);
+  font-size: 0.9rem;
+}
+
+.workspace-home-link-list .mantine-Button-root {
+  justify-content: space-between;
+  padding-inline: 0;
+}
+
 .app-shell-native {
   height: 100vh;
   padding: 0; /* Remove padding for edge-to-edge IDE look */
@@ -189,6 +295,12 @@ mark {
   border-color: rgba(198, 118, 45, 0.24);
   background: rgba(251, 242, 231, 0.92);
   color: var(--orange);
+}
+
+@media (max-width: 1180px) {
+  .workspace-home-card-wide {
+    grid-column: span 1;
+  }
 }
 
 .workspace-grid {
@@ -349,7 +461,20 @@ mark {
 .tree-panel .mantine-TextInput-input {
   border: none;
   background: transparent !important;
-  padding-left: 0;
+}
+
+.tree-panel-search .mantine-TextInput-root {
+  padding: 0;
+  border-bottom: none;
+}
+
+.tree-panel-search .mantine-Input-section {
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.tree-panel-search .mantine-Input-input {
+  padding-left: 32px;
 }
 
 .tree-contextbar {
@@ -565,12 +690,12 @@ mark {
 }
 
 .panel-toolbar {
-  height: 48px;
   min-height: 48px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 16px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   gap: 12px;
@@ -608,8 +733,17 @@ mark {
 .panel-toolbar-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 12px;
   flex-shrink: 0;
+  min-width: 0;
+}
+
+.panel-toolbar-actions .mantine-InputWrapper-root,
+.panel-toolbar-actions .mantine-Select-root,
+.panel-toolbar-actions .mantine-TextInput-root {
+  max-width: 100%;
 }
 
 .request-panel,
@@ -624,17 +758,22 @@ mark {
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
+  overflow-x: auto;
 }
 
 .method-url-group {
   display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
   gap: 1px;
   background: var(--line);
   padding: 1px;
   border-radius: 4px;
+  min-width: 0;
 }
 
 .method-select-ide {
+  flex: 0 0 96px;
   width: 90px;
 }
 
@@ -646,7 +785,8 @@ mark {
 }
 
 .url-input-ide {
-  flex: 1;
+  flex: 1 1 280px;
+  min-width: 220px;
 }
 
 .url-input-ide .mantine-TextInput-input {
@@ -663,6 +803,14 @@ mark {
 .request-panel .mantine-Button-root[variant="default"] {
   border-radius: 0 3px 3px 0 !important;
   border: none !important;
+}
+
+.method-url-group > * {
+  min-width: 0;
+}
+
+.method-url-group .mantine-Button-root {
+  flex: 0 0 auto;
 }
 
 .request-tabs-ide .mantine-Tabs-list,
@@ -693,12 +841,12 @@ mark {
 }
 
 .response-header-ide {
-  height: 48px;
   min-height: 48px;
-  padding: 0 16px;
+  padding: 8px 16px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--line);
   background: var(--surface-muted);
   gap: 16px;
@@ -707,12 +855,16 @@ mark {
 .response-status-group {
   display: flex;
   align-items: center;
+  flex: 1 1 260px;
+  min-width: 0;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
 .response-metrics {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -724,6 +876,17 @@ mark {
 
 .response-example-select {
   width: 140px;
+}
+
+.response-header-actions {
+  flex: 1 1 420px;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.response-header-actions-secondary {
+  min-width: 0;
+  justify-content: flex-end;
 }
 
 @media (max-width: 1280px) {
@@ -903,9 +1066,16 @@ mark {
 .key-value-editor {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: 4px;
   overflow: hidden;
+}
+
+.kv-body {
+  max-height: min(56vh, 720px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .kv-head,
@@ -917,6 +1087,9 @@ mark {
 }
 
 .kv-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background: var(--surface-muted);
   font-size: 0.65rem;
   font-weight: 700;
@@ -1063,20 +1236,24 @@ mark {
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-muted);
+  overflow-x: auto;
 }
 
 .method-url-group {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: stretch;
   gap: 0;
   border: 1px solid var(--line);
   border-radius: 6px;
-  overflow: hidden;
+  overflow: visible;
   background: var(--surface);
+  min-width: 0;
 }
 
 .method-select-ide {
-  width: 100px;
+  flex: 0 0 96px;
+  width: 96px;
 }
 
 .method-select-ide .mantine-Select-input {
@@ -1089,7 +1266,8 @@ mark {
 }
 
 .url-input-ide {
-  flex: 1;
+  flex: 1 1 280px;
+  min-width: 220px;
 }
 
 .url-input-ide .mantine-Input-input {
@@ -1099,8 +1277,17 @@ mark {
 }
 
 .method-url-group .mantine-Button-root {
+  flex: 0 0 auto;
   border-radius: 0 !important;
   border-left: 1px solid var(--line) !important;
+}
+
+.session-center-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
+  overflow: auto;
 }
 
 .request-tabs-ide .mantine-Tabs-list {

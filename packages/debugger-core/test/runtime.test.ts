@@ -35,7 +35,9 @@ test('resolveRequest interpolates step and data variables with correct priority'
     { region: 'runtime-region' }
   ]);
 
-  assert.equal(resolved.url, 'https://api.example.com/orders/u_1?region=runtime-region&sku=sku-123');
+  assert.equal(resolved.url, 'https://api.example.com/orders/u_1');
+  assert.equal(resolved.query.find(row => row.name === 'region')?.value, 'runtime-region');
+  assert.equal(resolved.query.find(row => row.name === 'sku')?.value, 'sku-123');
 });
 
 test('executeRequestScript records logs and generated script assertions', async () => {
@@ -325,4 +327,74 @@ test('renderCollectionRunReportHtml emits a readable report shell', () => {
   assert.match(html, /Smoke/);
   assert.match(html, /401 Unauthorized/);
   assert.match(html, /Failure Summary/);
+});
+
+test('resolveRequest excludes disabled query overrides even when the raw url already contains them', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Search');
+  request.url = 'https://api.example.com/items?keyword=from-url&keep=yes';
+  request.query = [
+    { name: 'keyword', value: 'from-table', enabled: false, kind: 'text' },
+    { name: 'page', value: '1', enabled: true, kind: 'text' }
+  ];
+
+  const resolved = resolveRequest(project, request, undefined, environment);
+
+  assert.equal(resolved.url, 'https://api.example.com/items');
+  assert.equal(resolved.query.some(row => row.name === 'keep'), false);
+  assert.equal(resolved.query.some(row => row.name === 'keyword'), true);
+  assert.equal(resolved.query.find(row => row.name === 'keyword')?.enabled, false);
+  assert.equal(resolved.query.find(row => row.name === 'page')?.value, '1');
+});
+
+test('resolveRequest keeps base headers when a case adds its own header override', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Profile');
+  request.url = 'https://api.example.com/profile';
+  request.headers = [{ name: 'X-Request', value: 'base', enabled: true, kind: 'text' }];
+  const caseDocument = createEmptyCase(request.id, 'Case 1');
+  caseDocument.overrides.headers = [{ name: 'X-Case', value: 'child', enabled: true, kind: 'text' }];
+
+  const resolved = resolveRequest(project, request, caseDocument, environment);
+
+  assert.equal(resolved.headers.some(row => row.name === 'X-Request' && row.value === 'base'), true);
+  assert.equal(resolved.headers.some(row => row.name === 'X-Case' && row.value === 'child'), true);
+});
+
+test('buildCurlCommand only emits enabled query rows after url query normalization', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Orders');
+  request.url = 'https://api.example.com/orders?pageNum=1&pageSize=10&status=closed';
+  request.query = [
+    { name: 'pageNum', value: '1', enabled: true, kind: 'text' },
+    { name: 'pageSize', value: '10', enabled: true, kind: 'text' },
+    { name: 'status', value: 'closed', enabled: false, kind: 'text' }
+  ];
+
+  const curl = buildCurlCommand(resolveRequest(project, request, undefined, environment));
+
+  assert.match(curl, /pageNum=1/);
+  assert.match(curl, /pageSize=10/);
+  assert.doesNotMatch(curl, /status=closed/);
+});
+
+test('resolveRequest treats structured query rows as the source of truth over hidden url query params', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Orders');
+  request.url = 'https://api.example.com/orders?pageNum=1&pageSize=10&hidden=legacy';
+  request.query = [
+    { name: 'pageNum', value: '1', enabled: true, kind: 'text' },
+    { name: 'pageSize', value: '10', enabled: true, kind: 'text' }
+  ];
+
+  const resolved = resolveRequest(project, request, undefined, environment);
+  const curl = buildCurlCommand(resolved);
+
+  assert.equal(resolved.url, 'https://api.example.com/orders');
+  assert.equal(resolved.query.some(row => row.name === 'hidden'), false);
+  assert.doesNotMatch(curl, /hidden=legacy/);
 });

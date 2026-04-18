@@ -79,6 +79,15 @@ function methodLabel(input: string) {
   return (['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(upper) ? upper : 'GET') as RequestDocument['method'];
 }
 
+function shouldEnableImportedParameter(param: Record<string, any>) {
+  if (param.required === true || param.in === 'path') return true;
+  if (param.example != null) return true;
+  if (param.default != null) return true;
+  if (param.schema?.example != null) return true;
+  if (param.schema?.default != null) return true;
+  return false;
+}
+
 function inferMimeType(contentType: string | undefined, text: string) {
   if (contentType) return contentType;
   if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
@@ -274,14 +283,14 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
       const query = parameters.filter(param => param.in === 'query').map(param => ({
         name: String(param.name || ''),
         value: param.example != null ? String(param.example) : '',
-        enabled: true,
+        enabled: shouldEnableImportedParameter(param),
         description: String(param.description || ''),
         kind: 'text' as const
       }));
       const headers = parameters.filter(param => param.in === 'header').map(param => ({
         name: String(param.name || ''),
         value: param.example != null ? String(param.example) : '',
-        enabled: true,
+        enabled: shouldEnableImportedParameter(param),
         description: String(param.description || ''),
         kind: 'text' as const
       }));
@@ -320,7 +329,7 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
               .map(param => ({
                 name: String(param.name || ''),
                 value: '',
-                enabled: true,
+                enabled: shouldEnableImportedParameter(param),
                 description: String(param.description || ''),
                 kind: param.type === 'file' ? 'file' : 'text'
               }))
@@ -352,6 +361,7 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
 
           return {
             name: `response-${status}`,
+            role: 'example' as const,
             status: Number(status) || undefined,
             mimeType: selected?.mimeType || 'application/json',
             text: prettyText(selected?.example ?? {})
@@ -445,6 +455,7 @@ function importHar(document: Record<string, any>): ImportResult {
       examples: [
         {
           name: 'response',
+          role: 'example' as const,
           status: Number(entry.response?.status || 0) || undefined,
           mimeType: inferMimeType(entry.response?.content?.mimeType, String(entry.response?.content?.text || '')),
           text: String(entry.response?.content?.text || '')

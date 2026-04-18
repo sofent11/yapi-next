@@ -1,7 +1,7 @@
 import { ActionIcon, Stack, Tooltip } from '@mantine/core';
-import { IconApi, IconFolders, IconHistory, IconLifebuoy, IconPencilBolt, IconPlugConnected, IconSettings, IconCookie } from '@tabler/icons-react';
+import { IconApi, IconFolders, IconHistory, IconHome2, IconLifebuoy, IconPencilBolt, IconPlugConnected, IconCookie } from '@tabler/icons-react';
 
-export type AppRailView = 'scratch' | 'workspace' | 'repair' | 'collections' | 'history' | 'environments' | 'sessions' | 'settings';
+export type AppRailView = 'home' | 'scratch' | 'workspace' | 'repair' | 'collections' | 'history' | 'environments' | 'sessions';
 
 function railVariant(active: boolean) {
   return active ? 'filled' : 'subtle';
@@ -20,6 +20,12 @@ export function AppRail(props: {
       </div>
 
       <Stack gap="xs" style={{ flex: 1, alignItems: 'center', marginTop: 12 }}>
+        <Tooltip label="Workspace Home" position="right" withArrow>
+          <ActionIcon variant={railVariant(props.activeView === 'home')} size="lg" radius="md" onClick={() => props.onChangeView('home')}>
+            <IconHome2 size={20} />
+          </ActionIcon>
+        </Tooltip>
+
         <Tooltip label="Scratch" position="right" withArrow>
           <ActionIcon variant={railVariant(props.activeView === 'scratch')} size="lg" radius="md" onClick={() => props.onChangeView('scratch')}>
             <IconPencilBolt size={20} />
@@ -64,12 +70,6 @@ export function AppRail(props: {
       </Stack>
 
       <Stack gap="xs" style={{ alignItems: 'center', marginBottom: 12 }}>
-        <Tooltip label="Settings" position="right" withArrow>
-          <ActionIcon variant={railVariant(props.activeView === 'settings')} size="lg" radius="md" color="gray" onClick={() => props.onChangeView('settings')}>
-            <IconSettings size={20} />
-          </ActionIcon>
-        </Tooltip>
-
         {props.isDirty ? (
           <Tooltip label="Unsaved Changes" position="right" withArrow>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--orange)', margin: '4px 0' }} />

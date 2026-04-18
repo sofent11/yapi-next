@@ -139,3 +139,42 @@ test('OpenAPI import maps oauth2 client credentials to an editable auth profile'
   assert.equal(result.warnings.some(warning => warning.code === 'oauth-client-credentials-mapped'), true);
   assert.equal(result.requests[0]?.request.auth.profileName, 'machineAuth');
 });
+
+test('OpenAPI import disables optional empty query params by default', () => {
+  const openapi = JSON.stringify({
+    openapi: '3.0.0',
+    info: { title: 'Orders API', version: '1.0.0' },
+    paths: {
+      '/orders': {
+        get: {
+          summary: 'List Orders',
+          parameters: [
+            { name: 'pageNum', in: 'query', required: true, schema: { type: 'integer' } },
+            { name: 'pageSize', in: 'query', example: 10, schema: { type: 'integer' } },
+            { name: 'payOrderId', in: 'query', schema: { type: 'string' } },
+            { name: 'targetCurrency', in: 'query', schema: { type: 'string' } }
+          ],
+          responses: {
+            200: {
+              description: 'ok',
+              content: {
+                'application/json': {
+                  example: { items: [] }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  const result = importSourceText(openapi);
+  const query = result.requests[0]?.request.query || [];
+
+  assert.equal(query.find(item => item.name === 'pageNum')?.enabled, true);
+  assert.equal(query.find(item => item.name === 'pageSize')?.enabled, true);
+  assert.equal(query.find(item => item.name === 'pageSize')?.value, '10');
+  assert.equal(query.find(item => item.name === 'payOrderId')?.enabled, false);
+  assert.equal(query.find(item => item.name === 'targetCurrency')?.enabled, false);
+});

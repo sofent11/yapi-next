@@ -395,7 +395,8 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
     requests: requestRecords,
     collections: sortRecords(collectionRecords.map(item => ({ ...item, name: item.document.name }))) as WorkspaceCollectionRecord[],
     tree: [projectNode],
-    gitignorePath: `${input.root}/.gitignore`
+    gitignorePath: `${input.root}/.gitignore`,
+    gitignoreContent: input.fileContents[`${input.root}/.gitignore`] || ''
   };
 }
 
@@ -458,6 +459,32 @@ function cleanRows(rows: ParameterRow[]) {
     name: row.name.trim(),
     value: row.value ?? ''
   }));
+}
+
+function splitUrlAndQueryRows(rawUrl: string) {
+  const hashIndex = rawUrl.indexOf('#');
+  const queryIndex = rawUrl.indexOf('?');
+  if (queryIndex === -1 || (hashIndex !== -1 && hashIndex < queryIndex)) {
+    return {
+      url: rawUrl,
+      query: [] as ParameterRow[]
+    };
+  }
+
+  const base = rawUrl.slice(0, queryIndex);
+  const hash = hashIndex === -1 ? '' : rawUrl.slice(hashIndex);
+  const search = rawUrl.slice(queryIndex + 1, hashIndex === -1 ? undefined : hashIndex);
+  const query = [...new URLSearchParams(search).entries()].map(([name, value]) => ({
+    ...emptyParameterRow(),
+    name,
+    value,
+    enabled: true
+  }));
+
+  return {
+    url: `${base}${hash}`,
+    query
+  };
 }
 
 function normalizeBody(body: RequestBody): RequestBody {
@@ -826,8 +853,25 @@ function collectResolvedField(
 }
 
 function mergeRows(baseRows: ParameterRow[], overrideRows?: ParameterRow[]) {
-  if (!overrideRows || overrideRows.length === 0) return baseRows;
-  return cleanRows(overrideRows);
+  const output: ParameterRow[] = [];
+  const indexByName = new Map<string, number>();
+
+  const applyRows = (rows?: ParameterRow[]) => {
+    cleanRows(rows || []).forEach(row => {
+      const key = row.name.trim().toLowerCase();
+      const existingIndex = indexByName.get(key);
+      if (existingIndex == null) {
+        indexByName.set(key, output.length);
+        output.push(row);
+        return;
+      }
+      output[existingIndex] = row;
+    });
+  };
+
+  applyRows(baseRows);
+  applyRows(overrideRows);
+  return output;
 }
 
 function mergeAuth(baseAuth: AuthConfig, overrideAuth?: AuthConfig, environment?: EnvironmentDocument) {
@@ -1457,19 +1501,27 @@ export function resolveRequest(
   const { auth, authSource, profileName } = mergeAuth(request.auth, caseDocument?.overrides.auth, environment);
   const runtime = mergeRuntime(request, caseDocument);
   const rawUrl = caseDocument?.overrides.url || request.url;
-  const url = applyProjectVariables(rawUrl, project, environment, extraSources);
+  const resolvedUrl = applyProjectVariables(rawUrl, project, environment, extraSources);
+  const urlParts = splitUrlAndQueryRows(resolvedUrl);
   const path = applyProjectVariables(caseDocument?.overrides.path || request.path || '', project, environment, extraSources);
   const baseHeaders = [
     ...project.runtime.headers,
     ...(environment?.headers || []),
     ...request.headers
   ];
+  const explicitQueryRows =
+    caseDocument && caseDocument.overrides.query !== undefined
+      ? caseDocument.overrides.query
+      : request.query;
   const headers = mergeRows(baseHeaders, caseDocument?.overrides.headers).map((row: ParameterRow) => ({
     ...row,
     value: applyProjectVariables(row.value, project, environment, extraSources),
     filePath: row.filePath ? applyProjectVariables(row.filePath, project, environment, extraSources) : row.filePath
   }));
-  const query = mergeRows(request.query, caseDocument?.overrides.query).map((row: ParameterRow) => ({
+  const query = mergeRows(
+    explicitQueryRows.length > 0 ? explicitQueryRows : urlParts.query,
+    undefined
+  ).map((row: ParameterRow) => ({
     ...row,
     value: applyProjectVariables(row.value, project, environment, extraSources)
   }));
@@ -1546,7 +1598,7 @@ export function resolveRequest(
   }
 
   const mergedVariables = mergeVariableSources(project, environment, extraSources);
-  let candidateUrl = url;
+  let candidateUrl = urlParts.url;
   if (!candidateUrl || (!candidateUrl.includes('://') && !rawUrl.startsWith('{{'))) {
     const baseUrl = String(readPathValue(mergedVariables[mergedVariables.length - 1], 'baseUrl') || '');
     candidateUrl = `${baseUrl}${candidateUrl || path || ''}`;

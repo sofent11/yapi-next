@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Badge, Button, Group, Menu, Select, Tabs, Text } from '@mantine/core';
+import { Badge, Button, Group, Select, Tabs, Text } from '@mantine/core';
 import { IconAlertCircle, IconBraces, IconCookie, IconGitCompare, IconPlayerPlay } from '@tabler/icons-react';
 import type {
   CheckResult,
@@ -77,6 +77,10 @@ function compareSummary(left: string, right: string) {
   return `The bodies differ. Live lines: ${leftLines.length}, example lines: ${rightLines.length}, line delta: ${changed}.`;
 }
 
+function exampleOptionLabel(name: string, role?: string) {
+  return role === 'baseline' ? `${name} · Baseline` : name;
+}
+
 export function ResponsePanel(props: {
   response: SendRequestResult | null;
   requestError: string | null;
@@ -93,6 +97,7 @@ export function ResponsePanel(props: {
   onCopyCurl: () => void;
   onSaveExample: () => void;
   onReplaceExample: () => void;
+  onPinBaseline: () => void;
   onSaveAs?: (action: 'example' | 'replace-example' | 'case' | 'status-check') => void;
   onRefreshSession: () => void;
   onClearSession: () => void;
@@ -138,7 +143,7 @@ export function ResponsePanel(props: {
             <Badge color="red" variant="filled" size="xs">ERROR</Badge>
           ) : null}
         </div>
-        <Group gap="xs" style={{ flexShrink: 0 }}>
+        <Group gap="xs" wrap="wrap" className="response-header-actions">
           <Select
             size="xs"
             className="response-example-select"
@@ -146,7 +151,7 @@ export function ResponsePanel(props: {
             value={props.selectedExampleName || '__live__'}
             data={[
               { value: '__live__', label: 'Live Response' },
-              ...examples.map(example => ({ value: example.name, label: example.name }))
+              ...examples.map(example => ({ value: example.name, label: exampleOptionLabel(example.name, example.role) }))
             ]}
             onChange={value => props.onSelectExample(value === '__live__' ? null : value || null)}
           />
@@ -162,29 +167,20 @@ export function ResponsePanel(props: {
           ) : null}
           <Button size="xs" variant="default" onClick={props.onCopyBody} disabled={!displayBody}>Copy</Button>
           <Button size="xs" variant="default" onClick={props.onCopyCurl} disabled={!props.requestPreview}>cURL</Button>
-          <Menu withinPortal position="bottom-end">
-            <Menu.Target>
-              <Button size="xs" variant="default" disabled={!props.response && !selectedExample}>
-                Save As
-              </Button>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item onClick={() => props.onSaveAs?.('example')} disabled={!props.response}>
-                Save Live Response As Example
-              </Menu.Item>
-              <Menu.Item onClick={() => props.onSaveAs?.('replace-example')} disabled={!props.response || !selectedExample}>
-                Replace Selected Example
-              </Menu.Item>
-              <Menu.Item onClick={() => props.onSaveAs?.('case')} disabled={!props.response}>
-                Create Reusable Case
-              </Menu.Item>
-              <Menu.Item onClick={() => props.onSaveAs?.('status-check')} disabled={!props.response}>
-                Create Status Check
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
-          <Button size="xs" variant="default" onClick={props.onSaveExample} disabled={!props.response}>Save</Button>
-          <Button size="xs" variant="filled" color="indigo" onClick={props.onReplaceExample} disabled={!props.response || !selectedExample}>Update</Button>
+          <Group gap={6} wrap="wrap" className="response-header-actions-secondary">
+            <Button size="xs" variant="default" onClick={props.onSaveExample} disabled={!props.response}>
+              Save Example
+            </Button>
+            <Button size="xs" variant="default" onClick={props.onPinBaseline} disabled={!props.response}>
+              Set Baseline
+            </Button>
+            <Button size="xs" variant="default" onClick={() => props.onSaveAs?.('case')} disabled={!props.response}>
+              Save Case
+            </Button>
+            <Button size="xs" variant="filled" color="indigo" onClick={props.onReplaceExample} disabled={!props.response || !selectedExample}>
+              Update Selected
+            </Button>
+          </Group>
         </Group>
       </div>
 
@@ -509,7 +505,7 @@ export function ResponsePanel(props: {
               </Tabs.Panel>
               <Tabs.Panel value="compare">
                 <div className="compare-summary-card">
-                  <Text fw={700}>Live vs Example</Text>
+                  <Text fw={700}>Live vs Saved Output</Text>
                   <Text size="sm" c="dimmed">
                     {selectedExample
                       ? compareSummary(liveBody, selectedExample.text || '')
@@ -522,7 +518,14 @@ export function ResponsePanel(props: {
                     <CodeEditor value={liveBody} readOnly language={responseBodyLanguage(liveBody)} minHeight="320px" />
                   </div>
                   <div className="check-card">
-                    <Text fw={700}>Selected Example</Text>
+                    <Group justify="space-between">
+                      <Text fw={700}>Selected Example</Text>
+                      {selectedExample?.role === 'baseline' ? (
+                        <Badge color="indigo" variant="light">
+                          Baseline
+                        </Badge>
+                      ) : null}
+                    </Group>
                     <CodeEditor
                       value={selectedExample?.text || ''}
                       readOnly

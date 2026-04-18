@@ -9,7 +9,10 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@app/*": ["src/*"]
+      "@app/*": ["src/*"],
+      "@yapi-debugger/core": ["../../packages/debugger-core/src/index.ts"],
+      "@yapi-debugger/importers": ["../../packages/debugger-importers/src/index.ts"],
+      "@yapi-debugger/schema": ["../../packages/debugger-schema/src/index.ts"]
     }
   },
   "include": ["src", "vite.config.ts"]

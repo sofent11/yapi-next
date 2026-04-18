@@ -74,6 +74,7 @@ export function ImportRepairPanel(props: {
   onOpenEnvironmentCenter: () => void;
   onOpenFirstBlocked: () => void;
   onOpenFirstRunnable: () => void;
+  onOpenTaskRequest?: (requestId: string | null) => void;
   onSeedMissingVariables: (scope: 'local' | 'shared') => void;
   onApplyImportedBaseUrl?: () => void;
 }) {
@@ -222,6 +223,28 @@ export function ImportRepairPanel(props: {
                       Request: {task.requestName}
                     </Text>
                   ) : null}
+                  <Group gap={8} mt={12}>
+                    {task.requestId ? (
+                      <Button size="xs" variant="default" onClick={() => props.onOpenTaskRequest?.(task.requestId || null)}>
+                        Open Request
+                      </Button>
+                    ) : null}
+                    {task.category === 'variables' || task.category === 'auth' ? (
+                      <Button size="xs" variant="subtle" onClick={props.onOpenEnvironmentCenter}>
+                        Open Environments
+                      </Button>
+                    ) : null}
+                    {task.category === 'baseUrl' && props.onApplyImportedBaseUrl ? (
+                      <Button size="xs" variant="subtle" onClick={props.onApplyImportedBaseUrl}>
+                        Apply Imported Base URL
+                      </Button>
+                    ) : null}
+                    {task.category === 'variables' ? (
+                      <Button size="xs" variant="subtle" onClick={() => props.onSeedMissingVariables('local')}>
+                        Seed Missing Vars
+                      </Button>
+                    ) : null}
+                  </Group>
                 </div>
               ))}
               {props.checklist.tasks.length === 0 ? (

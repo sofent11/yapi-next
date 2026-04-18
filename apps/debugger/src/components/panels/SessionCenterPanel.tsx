@@ -28,7 +28,7 @@ export function SessionCenterPanel(props: {
         </div>
       </div>
 
-      <div className="environment-layout">
+      <div className="session-center-layout">
         <div className="environment-main">
           <div className="inspector-section">
             <h3 className="section-title">Current Session</h3>

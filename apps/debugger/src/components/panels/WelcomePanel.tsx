@@ -13,11 +13,11 @@ export function WelcomePanel(props: {
     <div className="welcome-shell">
       <div className="launchpad">
         <div className="launchpad-sidebar">
-          <h1 className="launchpad-title">YAPI Next</h1>
+          <h1 className="launchpad-title">YAPI Next Debugger</h1>
           <p className="section-description" style={{ fontSize: '0.9rem', lineHeight: 1.6 }}>
-            Local-first API development workspace.
+            Local-first Request workspace for debugging and regression.
             <br /><br />
-            Everything is stored as plain text files, perfect for Git collaboration.
+            Everything is stored as plain text files so developers and testers can share the same Git-friendly assets.
           </p>
 
           <Stack gap="xs" mt="xl">

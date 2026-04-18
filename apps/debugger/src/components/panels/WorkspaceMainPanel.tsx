@@ -100,11 +100,13 @@ export function WorkspaceMainPanel(props: {
   onCopyCurl: () => void;
   onSaveExample: () => void;
   onReplaceExample: () => void;
+  onPinBaseline: () => void;
   onSaveAs?: (action: 'example' | 'replace-example' | 'case' | 'status-check') => void;
   onRefreshSession: () => void;
   onClearSession: () => void;
   onCreateCheck: (input: any) => void;
   onCreateCaseFromResponse: () => void;
+  onAddToCollection: () => void;
   onMainSplitRatioChange: (ratio: number) => void;
   onSaveAuthProfile?: (name: string, auth: any) => void;
   onRefreshRequestAuth?: () => void;
@@ -373,7 +375,7 @@ export function WorkspaceMainPanel(props: {
             <IconApi size={40} stroke={1.5} />
           </div>
           <div style={{ textAlign: 'center' }}>
-            <h2 className="section-title" style={{ fontSize: '1.2rem', marginBottom: 8 }}>Select an API</h2>
+            <h2 className="section-title" style={{ fontSize: '1.2rem', marginBottom: 8 }}>Select a Request</h2>
             <Text size="sm" style={{ maxWidth: 320 }}>
               Choose a request from the sidebar to start debugging, or create a new one to begin.
             </Text>
@@ -438,6 +440,9 @@ export function WorkspaceMainPanel(props: {
             onCasesChange={props.onCasesChange}
             onAddCase={props.onAddCase}
             onRun={props.onRun}
+            latestResponseOk={Boolean(props.response?.ok)}
+            onSaveAsCase={props.onCreateCaseFromResponse}
+            onAddToCollection={props.onAddToCollection}
             onSaveAuthProfile={props.onSaveAuthProfile}
             onRefreshRequestAuth={props.onRefreshRequestAuth}
             onCopyText={() => undefined}
@@ -468,6 +473,7 @@ export function WorkspaceMainPanel(props: {
             onCopyCurl={props.onCopyCurl}
             onSaveExample={props.onSaveExample}
             onReplaceExample={props.onReplaceExample}
+            onPinBaseline={props.onPinBaseline}
             onSaveAs={props.onSaveAs}
             onRefreshSession={props.onRefreshSession}
             onClearSession={props.onClearSession}

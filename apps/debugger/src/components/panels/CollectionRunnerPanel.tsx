@@ -63,10 +63,17 @@ export function CollectionRunnerPanel(props: {
   reports: CollectionRunReport[];
   selectedReportId: string | null;
   selectedReportStepKey: string | null;
+  currentSelection?: {
+    requestId: string | null;
+    requestName: string | null;
+    caseId?: string | null;
+    caseName?: string | null;
+  } | null;
   onSelectCollection: (id: string | null) => void;
   onCollectionChange: (collection: CollectionDocument) => void;
   onCollectionDataChange: (text: string) => void;
   onCreateCollection: () => void;
+  onAddCurrentSelection?: () => void;
   onDeleteCollection: () => void;
   onSaveCollection: () => void;
   onRunCollection: () => void;
@@ -76,6 +83,7 @@ export function CollectionRunnerPanel(props: {
   onSelectReportStep: (stepKey: string | null) => void;
   onExtractValue?: (target: 'local' | 'runtime' | 'collection', input: { suggestedName: string; value: string }) => void;
   onExportReport?: (format: 'json' | 'html') => void;
+  onCopyText?: (value: string, successMessage: string) => void;
 }) {
   const [reportFilter, setReportFilter] = useState('');
   const requestChoices = useMemo(() => requestOptions(props.workspace), [props.workspace]);
@@ -133,7 +141,10 @@ export function CollectionRunnerPanel(props: {
   const selectedJsonRows = useMemo(() => (selectedJson == null ? [] : flattenJsonLeaves(selectedJson).slice(0, 60)), [selectedJson]);
   const selectedResponseHeaders = selectedStep?.step.response?.headers || [];
   const selectedRequestRecord = selectedStep ? props.workspace.requests.find(record => record.request.id === selectedStep.step.requestId) || null : null;
-  const selectedBaselineExample = selectedRequestRecord?.request.examples.find(example => example.name.toLowerCase().includes('baseline')) || null;
+  const selectedBaselineExample =
+    selectedRequestRecord?.request.examples.find(example => example.role === 'baseline') ||
+    selectedRequestRecord?.request.examples.find(example => example.name.toLowerCase().includes('baseline')) ||
+    null;
   const selectedBaselineSummary = selectedBaselineExample
     ? compareSummary(selectedStep?.step.response?.bodyText || '', selectedBaselineExample.text || '')
     : null;
@@ -378,27 +389,43 @@ export function CollectionRunnerPanel(props: {
               <div className="inspector-section">
                 <div className="checks-head">
                   <h3 className="section-title">Steps</h3>
-                  <Button
-                    size="xs"
-                    variant="default"
-                    onClick={() =>
-                      props.onCollectionChange({
-                        ...draftCollection,
-                        steps: [
-                          ...draftCollection.steps,
-                          {
-                            key: `step_${draftCollection.steps.length + 1}`,
-                            requestId: props.workspace.requests[0]?.request.id || '',
-                            enabled: true,
-                            name: `Step ${draftCollection.steps.length + 1}`
-                          }
-                        ]
-                      })
-                    }
-                  >
-                    Add Step
-                  </Button>
+                  <Group gap={8}>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      onClick={() =>
+                        props.onCollectionChange({
+                          ...draftCollection,
+                          steps: [
+                            ...draftCollection.steps,
+                            {
+                              key: `step_${draftCollection.steps.length + 1}`,
+                              requestId: props.workspace.requests[0]?.request.id || '',
+                              enabled: true,
+                              name: `Step ${draftCollection.steps.length + 1}`
+                            }
+                          ]
+                        })
+                      }
+                    >
+                      Add Step
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      onClick={props.onAddCurrentSelection}
+                      disabled={!props.currentSelection?.requestId}
+                    >
+                      Add Current Request
+                    </Button>
+                  </Group>
                 </div>
+                {props.currentSelection?.requestId ? (
+                  <Text size="sm" c="dimmed" mb={12}>
+                    Current selection: {props.currentSelection.requestName}
+                    {props.currentSelection.caseName ? ` · ${props.currentSelection.caseName}` : ''}
+                  </Text>
+                ) : null}
 
                 <div className="checks-list">
                   {draftCollection.steps.map(step => {
@@ -614,7 +641,18 @@ export function CollectionRunnerPanel(props: {
                     />
                   </div>
                   <div className="check-card">
-                    <Text fw={700}>Step Bindings</Text>
+                    <Group justify="space-between">
+                      <Text fw={700}>Step Bindings</Text>
+                      {previousStepRefs.length > 0 && props.onCopyText ? (
+                        <Button
+                          size="xs"
+                          variant="subtle"
+                          onClick={() => props.onCopyText?.(previousStepRefs.join('\n'), 'Step bindings copied')}
+                        >
+                          Copy Bindings
+                        </Button>
+                      ) : null}
+                    </Group>
                     {previousStepRefs.length > 0 ? (
                       <CodeEditor value={previousStepRefs.join('\n')} readOnly language="text" minHeight="96px" />
                     ) : (

@@ -734,13 +734,15 @@ export async function createCaseForRequest(
 export async function createCollectionInWorkspace(
   root: string,
   workspace: WorkspaceIndex,
-  requestId?: string
+  requestId?: string,
+  caseId?: string
 ) {
   const collection = createEmptyCollection('New Collection');
   if (requestId) {
     collection.steps.push({
       key: 'step_1',
       requestId,
+      caseId,
       enabled: true,
       name: 'Initial Step'
     });

@@ -7,7 +7,7 @@ import { useMutation } from '@tanstack/react-query';
 import { IconRefresh, IconSearch } from '@tabler/icons-react';
 import { createEmptyCheck, createNamedTemplateSource, inspectResolvedRequest } from '@yapi-debugger/core';
 import { save as saveFile } from '@tauri-apps/plugin-dialog';
-import { createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type EnvironmentDocument, type ImportWarning, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
+import { createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type EnvironmentDocument, type ImportWarning, type ResponseExample, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
 import '@mantine/spotlight/styles.css';
 import {
   chooseDirectory,
@@ -57,7 +57,6 @@ import {
   rerunFailedStepKeys,
   runCollection,
   runPreparedRequest,
-  runResolvedRequest,
   saveCollectionRecord,
   saveRunHistory,
   saveEnvironment,
@@ -76,6 +75,7 @@ import { InterfaceTreePanel } from './components/panels/InterfaceTreePanel';
 import { SessionCenterPanel } from './components/panels/SessionCenterPanel';
 import { ScratchPadPanel } from './components/panels/ScratchPadPanel';
 import { WelcomePanel } from './components/panels/WelcomePanel';
+import { WorkspaceHomePanel } from './components/panels/WorkspaceHomePanel';
 import { WorkspaceMainPanel } from './components/panels/WorkspaceMainPanel';
 import { buildImportRepairChecklist } from './lib/repair';
 import { collectionReportHtml, collectionReportJson } from './lib/report-export';
@@ -275,6 +275,29 @@ function normalizeHistoryEntry(entry: RunHistoryEntry): RunHistoryEntry {
   };
 }
 
+function responseMimeType(headers: Array<{ name: string; value: string }>) {
+  return headers.find(header => header.name.toLowerCase() === 'content-type')?.value || 'application/json';
+}
+
+function upsertRequestExample(
+  examples: Array<Partial<ResponseExample> & { name: string; text: string }>,
+  nextExample: { name: string; role: 'example' | 'baseline'; status?: number; mimeType?: string; text: string }
+): ResponseExample[] {
+  return [
+    ...examples
+      .filter(example => example.name !== nextExample.name)
+      .map(example => ({
+        name: example.name,
+        role: example.role || 'example',
+        status: example.status,
+        mimeType: example.mimeType,
+        text: example.text,
+        file: example.file
+      })),
+    nextExample
+  ];
+}
+
 type ImportRepairSession = {
   importedAt: string;
   format: string;
@@ -286,6 +309,65 @@ type ImportRepairSession = {
   strategy: 'append' | 'replace';
 };
 
+type GitRiskItem = {
+  id: string;
+  title: string;
+  description: string;
+  severity: 'warning' | 'danger';
+};
+
+function isSensitiveName(name: string) {
+  return /token|secret|password|passwd|authorization|cookie|api[-_]?key|client[-_]?secret|access[-_]?key/i.test(name);
+}
+
+function isSensitiveValue(value: string) {
+  const normalized = value.trim();
+  if (!normalized) return false;
+  if (normalized.includes('{{')) return false;
+  if (/^(example|placeholder|changeme|replace-me|your-|<)/i.test(normalized)) return false;
+  return normalized.length >= 6;
+}
+
+function collectGitRisks(workspace: WorkspaceIndex | null): GitRiskItem[] {
+  if (!workspace) return [];
+  const risks: GitRiskItem[] = [];
+  const sharedSecrets = workspace.environments.flatMap(item => {
+    const environment = item.document;
+    const sharedVars = environment.sharedVars || environment.vars || {};
+    const sharedHeaders = environment.sharedHeaders || environment.headers || [];
+    const matches = [
+      ...Object.entries(sharedVars)
+        .filter(([name, value]) => isSensitiveName(name) && isSensitiveValue(value))
+        .map(([name]) => `${environment.name}.${name}`),
+      ...sharedHeaders
+        .filter(row => isSensitiveName(row.name) && isSensitiveValue(row.value))
+        .map(row => `${environment.name}.${row.name}`)
+    ];
+    return matches;
+  });
+
+  if (sharedSecrets.length > 0) {
+    risks.push({
+      id: 'shared-secrets',
+      title: 'Shared environments may contain secrets',
+      description: `Potential secret values were found in shared environment fields: ${sharedSecrets.slice(0, 4).join(', ')}${sharedSecrets.length > 4 ? '...' : ''}. Move them into local overlays before syncing through Git.`,
+      severity: 'danger'
+    });
+  }
+
+  const hasLocalIgnore = workspace.gitignoreContent?.split('\n').some(line => line.trim() === 'environments/*.local.yaml');
+  if (!hasLocalIgnore) {
+    risks.push({
+      id: 'local-ignore-missing',
+      title: 'Local overlays are not protected by .gitignore',
+      description: 'This workspace is missing the recommended `environments/*.local.yaml` ignore rule, so local secrets may be committed by mistake.',
+      severity: 'warning'
+    });
+  }
+
+  return risks;
+}
+
 export function App() {
   const store = useWorkspaceStore();
   const gridRef = useRef<HTMLDivElement>(null);
@@ -295,7 +377,7 @@ export function App() {
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState('');
   const [uiState, setUiState] = useState<WorkspaceUiState>(defaultWorkspaceUiState());
-  const [activeView, setActiveView] = useState<AppRailView>('workspace');
+  const [activeView, setActiveView] = useState<AppRailView>('home');
   const [historyEntries, setHistoryEntries] = useState<RunHistoryEntry[]>([]);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [selectedExampleName, setSelectedExampleName] = useState<string | null>(null);
@@ -409,6 +491,52 @@ export function App() {
     });
   }, [store.workspace, lastImportSession, importedRecords, selectedEnvironment]);
 
+  const gitRisks = useMemo(() => collectGitRisks(store.workspace), [store.workspace]);
+  const homeImportSummary = useMemo(() => {
+    if (!lastImportSession) return null;
+    return {
+      format: lastImportSession.format,
+      importedAt: new Date(lastImportSession.importedAt).toLocaleString(),
+      importedRequestCount: lastImportSession.requestIds.length,
+      runnableCount: importRepairChecklist?.runnableRequestIds.length || 0,
+      blockedCount: importRepairChecklist?.blockedRequestIds.length || 0,
+      warningCount: lastImportSession.warnings.length,
+      runnableScore: lastImportSession.previewSummary?.runnableScore || 0
+    };
+  }, [importRepairChecklist, lastImportSession]);
+  const homeRecentSuccess = useMemo(() => {
+    const entry = historyEntries.find(item => item.response?.ok);
+    if (!entry) return null;
+    return {
+      requestId: entry.requestId,
+      requestName: entry.requestName || entry.request.url,
+      status: entry.response.status,
+      durationMs: entry.response.durationMs,
+      timestamp: new Date(entry.response.timestamp).toLocaleString()
+    };
+  }, [historyEntries]);
+  const homeLastCollectionRun = useMemo(() => {
+    const report = collectionReports[0];
+    if (!report) return null;
+    return {
+      collectionId: report.collectionId,
+      collectionName: report.collectionName,
+      status: report.status,
+      failedSteps: report.failedSteps,
+      finishedAt: new Date(report.finishedAt).toLocaleString()
+    };
+  }, [collectionReports]);
+  const currentSelectionSummary = useMemo(() => {
+    const record = requestId ? findRecord(store.workspace, requestId) : null;
+    const selectedCase = caseId ? record?.cases.find(item => item.id === caseId) || null : null;
+    return {
+      requestId,
+      requestName: record?.request.name || null,
+      caseId,
+      caseName: selectedCase?.name || null
+    };
+  }, [caseId, requestId, store.workspace]);
+
   const selectedCollectionRecord = useMemo(() => {
     if (!store.workspace || !selectedCollectionId) return null;
     return store.workspace.collections.find(item => item.document.id === selectedCollectionId) || null;
@@ -509,9 +637,7 @@ export function App() {
     setSelectedCollectionId(workspace.collections[0]?.document.id || null);
     setDraftCollection(workspace.collections[0]?.document || null);
     setCollectionDataText(workspace.collections[0]?.dataText || '');
-    if (workspace.requests.length === 0) {
-      setActiveView('scratch');
-    }
+    setActiveView('home');
     store.setWorkspace(workspace);
     store.setOpenTabs(nextUi.openTabs);
     store.selectNode(nextUi.lastSelectedNode);
@@ -601,11 +727,17 @@ export function App() {
 
   const runMutation = useMutation({
     mutationFn: async () => {
-      if (!store.workspace || !requestId) return;
-      return runResolvedRequest(store.workspace, requestId, caseId || undefined, {
-        state: {
-          variables: runtimeVariables,
-          environment: structuredClone(selectedRuntimeEnvironment || ensureWorkspaceEnvironment(store.activeEnvironmentName, store.workspace))
+      if (!store.workspace || !requestId || !store.draftRequest) return;
+      const environment = ensureWorkspaceEnvironment(store.activeEnvironmentName, store.workspace);
+      return runPreparedRequest(store.workspace, {
+        request: store.draftRequest,
+        caseDocument: store.draftCases.find(item => item.id === caseId),
+        sessionId: store.workspace.root,
+        context: {
+          state: {
+            variables: runtimeVariables,
+            environment: structuredClone(selectedRuntimeEnvironment || environment)
+          }
         }
       });
     },
@@ -762,9 +894,9 @@ export function App() {
   });
 
   const addCollectionMutation = useMutation({
-    mutationFn: (targetRequestId?: string) => {
+    mutationFn: ({ targetRequestId, targetCaseId }: { targetRequestId?: string; targetCaseId?: string } = {}) => {
       if (!store.workspace) throw new Error('No workspace');
-      return createCollectionInWorkspace(store.workspace.root, store.workspace, targetRequestId);
+      return createCollectionInWorkspace(store.workspace.root, store.workspace, targetRequestId, targetCaseId);
     },
     onSuccess: async nextId => {
       await reloadWorkspace();
@@ -775,9 +907,9 @@ export function App() {
   });
 
   const runCollectionMutation = useMutation({
-    mutationFn: async (options?: { stepKeys?: string[]; seedReport?: CollectionRunReport | null }) => {
-      if (!store.workspace || !selectedCollectionId) throw new Error('No collection selected');
-      return runCollection(store.workspace, selectedCollectionId, {
+    mutationFn: async (options?: { stepKeys?: string[]; seedReport?: CollectionRunReport | null; collectionId?: string }) => {
+      if (!store.workspace || !(options?.collectionId || selectedCollectionId)) throw new Error('No collection selected');
+      return runCollection(store.workspace, options?.collectionId || selectedCollectionId!, {
         environmentName: store.activeEnvironmentName,
         stepKeys: options?.stepKeys,
         seedReport: options?.seedReport
@@ -1077,7 +1209,7 @@ export function App() {
     handleSelectCategory(nextPath);
     setCategoryDraft('');
     setCreatingCategory(false);
-    notifications.show({ color: 'teal', message: `Category ${nextPath} is ready. Create an interface inside it.` });
+    notifications.show({ color: 'teal', message: `Category ${nextPath} is ready. Create a request inside it.` });
   }
 
   async function handleAddEnvironment() {
@@ -1297,6 +1429,15 @@ export function App() {
     store.selectNode({ kind: 'request', requestId: record.request.id });
   }
 
+  function handleOpenLastSuccessfulRequest() {
+    const entry = historyEntries.find(item => item.response?.ok);
+    if (!entry) {
+      notifications.show({ color: 'blue', message: 'No successful request run is available yet.' });
+      return;
+    }
+    void handleReplayHistory(entry);
+  }
+
   function handleSeedImportVariables(scope: 'local' | 'shared') {
     if (!selectedEnvironment || !importRepairChecklist || importRepairChecklist.missingVariables.length === 0) return;
     store.updateEnvironment(selectedEnvironment.name, environment => {
@@ -1499,7 +1640,58 @@ export function App() {
   }
 
   function handleCreateCollection() {
-    addCollectionMutation.mutate(requestId || undefined);
+    addCollectionMutation.mutate({
+      targetRequestId: requestId || undefined,
+      targetCaseId: caseId || undefined
+    });
+  }
+
+  async function handleAddCurrentSelectionToCollection() {
+    if (!store.workspace || !requestId) {
+      notifications.show({ color: 'blue', message: 'Select a saved Request or Case first.' });
+      return;
+    }
+
+    const record = findRecord(store.workspace, requestId);
+    if (!record) return;
+    const stepName = caseId
+      ? `${record.request.name} · ${(record.cases.find(item => item.id === caseId)?.name || 'Case')}`
+      : record.request.name;
+
+    if (!selectedCollectionId || !draftCollection) {
+      addCollectionMutation.mutate({
+        targetRequestId: requestId,
+        targetCaseId: caseId || undefined
+      });
+      return;
+    }
+
+    const nextStepIndex = draftCollection.steps.length + 1;
+    const nextCollection = {
+      ...draftCollection,
+      steps: [
+        ...draftCollection.steps,
+        {
+          key: `step_${nextStepIndex}`,
+          requestId,
+          caseId: caseId || undefined,
+          enabled: true,
+          name: stepName
+        }
+      ]
+    };
+    const currentRecord = store.workspace.collections.find(item => item.document.id === draftCollection.id);
+    await saveCollectionRecord(
+      store.workspace.root,
+      nextCollection,
+      collectionDataText,
+      currentRecord?.filePath,
+      currentRecord?.dataFilePath
+    );
+    setDraftCollection(nextCollection);
+    setActiveView('collections');
+    await reloadWorkspace();
+    notifications.show({ color: 'teal', message: `Added ${stepName} to ${draftCollection.name}` });
   }
 
   async function handleDeleteCollection() {
@@ -1528,6 +1720,17 @@ export function App() {
     runCollectionMutation.mutate(undefined);
   }
 
+  function handleRunLatestCollection() {
+    const report = collectionReports[0];
+    if (!report) {
+      notifications.show({ color: 'blue', message: 'No previous collection run is available yet.' });
+      return;
+    }
+    setSelectedCollectionId(report.collectionId);
+    setActiveView('collections');
+    runCollectionMutation.mutate({ collectionId: report.collectionId });
+  }
+
   function handleRerunFailedCollectionSteps() {
     const selectedReport = collectionReports.find(report => report.id === selectedCollectionReportId) || collectionReports[0];
     if (!selectedReport) return;
@@ -1552,18 +1755,22 @@ export function App() {
   }
 
   function handleSelectProject() {
+    setActiveView('workspace');
     store.selectNode({ kind: 'project' });
   }
 
   function handleSelectCategory(path: string) {
+    setActiveView('workspace');
     store.selectNode({ kind: 'category', path });
   }
 
   function handleSelectRequest(requestIdToSelect: string) {
+    setActiveView('workspace');
     store.selectNode({ kind: 'request', requestId: requestIdToSelect });
   }
 
   function handleSelectCase(requestIdOfCase: string, caseIdToSelect: string) {
+    setActiveView('workspace');
     store.selectNode({ kind: 'case', requestId: requestIdOfCase, caseId: caseIdToSelect });
   }
 
@@ -1811,15 +2018,13 @@ export function App() {
     }
     const exampleName = window.prompt('Baseline example name', `${entry.environmentName || 'baseline'}-baseline`)?.trim();
     if (!exampleName) return;
-    const nextExamples = [
-      ...(record.request.examples || []).filter(example => example.name !== exampleName),
-      {
-        name: exampleName,
-        status: entry.response.status,
-        mimeType: entry.response.headers.find(header => header.name.toLowerCase() === 'content-type')?.value || 'application/json',
-        text: entry.response.bodyText
-      }
-    ];
+    const nextExamples = upsertRequestExample(record.request.examples || [], {
+      name: exampleName,
+      role: 'baseline',
+      status: entry.response.status,
+      mimeType: responseMimeType(entry.response.headers),
+      text: entry.response.bodyText
+    });
     await saveRequestRecord(
       store.workspace.root,
       {
@@ -1844,15 +2049,13 @@ export function App() {
     }
     const exampleName = window.prompt('Example name', `${entry.environmentName || 'history'}-${record.request.examples.length + 1}`)?.trim();
     if (!exampleName) return;
-    const nextExamples = [
-      ...(record.request.examples || []).filter(example => example.name !== exampleName),
-      {
-        name: exampleName,
-        status: entry.response.status,
-        mimeType: entry.response.headers.find(header => header.name.toLowerCase() === 'content-type')?.value || 'application/json',
-        text: entry.response.bodyText
-      }
-    ];
+    const nextExamples = upsertRequestExample(record.request.examples || [], {
+      name: exampleName,
+      role: 'example',
+      status: entry.response.status,
+      mimeType: responseMimeType(entry.response.headers),
+      text: entry.response.bodyText
+    });
     await saveRequestRecord(
       store.workspace.root,
       {
@@ -1934,21 +2137,14 @@ export function App() {
           ? currentScratch.selectedExampleName
           : window.prompt('Enter example name', 'Scratch Response');
       if (!nextName) return;
-      const nextExamples = replaceExisting
-        ? (currentScratch.request.examples || []).map(ex =>
-            ex.name === nextName
-              ? { ...ex, status: currentScratch.response!.status, text: currentScratch.response!.bodyText }
-              : ex
-          )
-        : [
-            ...(currentScratch.request.examples || []),
-            {
-              name: nextName,
-              status: currentScratch.response.status,
-              mimeType: 'application/json',
-              text: currentScratch.response.bodyText
-            }
-          ];
+      const previous = (currentScratch.request.examples || []).find(ex => ex.name === nextName);
+      const nextExamples = upsertRequestExample(currentScratch.request.examples || [], {
+        name: nextName,
+        role: previous?.role === 'baseline' ? 'baseline' : 'example',
+        status: currentScratch.response.status,
+        mimeType: responseMimeType(currentScratch.response.headers),
+        text: currentScratch.response.bodyText
+      });
       handleSetScratchResponseState(session => ({
         ...session,
         request: { ...session.request, examples: nextExamples },
@@ -1962,22 +2158,51 @@ export function App() {
     if (!store.draftRequest || !store.response) return;
     const nextName = replaceExisting && selectedExampleName ? selectedExampleName : window.prompt('Enter example name', 'Success Response');
     if (!nextName) return;
+    const previous = (store.draftRequest.examples || []).find(ex => ex.name === nextName);
+    const nextExamples = upsertRequestExample(store.draftRequest.examples || [], {
+      name: nextName,
+      role: previous?.role === 'baseline' ? 'baseline' : 'example',
+      status: store.response.status,
+      mimeType: responseMimeType(store.response.headers),
+      text: store.response.bodyText
+    });
+    store.updateRequest({ ...store.draftRequest, examples: nextExamples });
+    setSelectedExampleName(nextName);
+    saveMutation.mutate();
+  }
 
-    const nextExamples = replaceExisting
-      ? (store.draftRequest.examples || []).map(ex => 
-          ex.name === nextName 
-            ? { ...ex, status: store.response!.status, text: store.response!.bodyText } 
-            : ex
-        )
-      : [
-          ...(store.draftRequest.examples || []),
-          {
-            name: nextName,
-            status: store.response.status,
-            mimeType: 'application/json',
-            text: store.response.bodyText
-          }
-        ];
+  async function handlePinCurrentResponseAsBaseline() {
+    if (activeView === 'scratch') {
+      if (!currentScratch?.response) return;
+      const nextName = window.prompt('Baseline name', currentScratch.selectedExampleName || 'scratch-baseline')?.trim();
+      if (!nextName) return;
+      const nextExamples = upsertRequestExample(currentScratch.request.examples || [], {
+        name: nextName,
+        role: 'baseline',
+        status: currentScratch.response.status,
+        mimeType: responseMimeType(currentScratch.response.headers),
+        text: currentScratch.response.bodyText
+      });
+      handleSetScratchResponseState(session => ({
+        ...session,
+        request: { ...session.request, examples: nextExamples },
+        selectedExampleName: nextName,
+        updatedAt: new Date().toISOString()
+      }));
+      notifications.show({ color: 'teal', message: 'Baseline saved to Scratch tab' });
+      return;
+    }
+
+    if (!store.draftRequest || !store.response) return;
+    const nextName = window.prompt('Baseline name', selectedExampleName || `${store.activeEnvironmentName}-baseline`)?.trim();
+    if (!nextName) return;
+    const nextExamples = upsertRequestExample(store.draftRequest.examples || [], {
+      name: nextName,
+      role: 'baseline',
+      status: store.response.status,
+      mimeType: responseMimeType(store.response.headers),
+      text: store.response.bodyText
+    });
     store.updateRequest({ ...store.draftRequest, examples: nextExamples });
     setSelectedExampleName(nextName);
     saveMutation.mutate();
@@ -2086,7 +2311,7 @@ export function App() {
               activeView={activeView}
               onChangeView={view => {
                 setActiveView(view);
-                if (view === 'settings') {
+                if (view === 'home') {
                   store.selectNode({ kind: 'project' });
                 }
               }}
@@ -2138,7 +2363,38 @@ export function App() {
               max={420}
             />
 
-            {activeView === 'scratch' && currentScratch ? (
+            {activeView === 'home' ? (
+              <WorkspaceHomePanel
+                workspace={store.workspace}
+                gitStatus={gitInfo}
+                gitRisks={gitRisks}
+                importSession={homeImportSummary}
+                repairSummary={
+                  importRepairChecklist
+                    ? {
+                        blockingCount: importRepairChecklist.blockingCount,
+                        warningCount: importRepairChecklist.warningCount,
+                        runnableCount: importRepairChecklist.runnableRequestIds.length
+                      }
+                    : null
+                }
+                recentSuccess={homeRecentSuccess}
+                lastCollectionRun={homeLastCollectionRun}
+                suggestedCommitMessage={suggestedCommitMessage(gitInfo)}
+                onOpenImport={() => setImportOpened(true)}
+                onOpenRepair={() => setActiveView('repair')}
+                onOpenEnvironmentCenter={() => setActiveView('environments')}
+                onOpenFirstBlocked={() => handleOpenImportedRequest(importRepairChecklist?.firstBlockedRequestId || null)}
+                onOpenLastSuccessfulRequest={handleOpenLastSuccessfulRequest}
+                onRunLastCollection={handleRunLatestCollection}
+                onOpenCollections={() => setActiveView('collections')}
+                onOpenHistory={() => setActiveView('history')}
+                onRefreshGit={handleRefreshGitStatus}
+                onCopySuggestedCommitMessage={() =>
+                  copyToClipboard(suggestedCommitMessage(gitInfo), 'Suggested commit message copied')
+                }
+              />
+            ) : activeView === 'scratch' && currentScratch ? (
               <ScratchPadPanel
                 workspace={store.workspace}
                 request={currentScratch.request}
@@ -2170,6 +2426,7 @@ export function App() {
                 }
                 onSaveExample={() => handleSaveResponseAsExample(false)}
                 onReplaceExample={() => handleSaveResponseAsExample(true)}
+                onPinBaseline={handlePinCurrentResponseAsBaseline}
                 onSaveAs={handleSaveAsCurrentResponse}
                 onCopyBody={() => copyToClipboard(currentScratch.response?.bodyText || '', 'Body copied')}
                 onCopyCurl={() => copyToClipboard(currentScratchPreview ? curlForPreview(currentScratchPreview) : '', 'cURL copied')}
@@ -2230,6 +2487,7 @@ export function App() {
                   onOpenEnvironmentCenter={() => setActiveView('environments')}
                   onOpenFirstBlocked={() => handleOpenImportedRequest(importRepairChecklist?.firstBlockedRequestId || null)}
                   onOpenFirstRunnable={() => handleOpenImportedRequest(importRepairChecklist?.firstRunnableRequestId || null)}
+                  onOpenTaskRequest={requestId => handleOpenImportedRequest(requestId)}
                   onSeedMissingVariables={handleSeedImportVariables}
                   onApplyImportedBaseUrl={
                     lastImportSession?.importedBaseUrl &&
@@ -2250,10 +2508,12 @@ export function App() {
                   reports={collectionReports}
                   selectedReportId={selectedCollectionReportId}
                   selectedReportStepKey={selectedCollectionStepKey}
+                  currentSelection={currentSelectionSummary}
                   onSelectCollection={handleSelectCollection}
                   onCollectionChange={collection => setDraftCollection(collection)}
                   onCollectionDataChange={setCollectionDataText}
                   onCreateCollection={handleCreateCollection}
+                  onAddCurrentSelection={handleAddCurrentSelectionToCollection}
                   onDeleteCollection={handleDeleteCollection}
                   onSaveCollection={handleSaveCollection}
                   onRunCollection={handleRunCollection}
@@ -2263,6 +2523,9 @@ export function App() {
                   onSelectReportStep={setSelectedCollectionStepKey}
                   onExtractValue={handleExtractCollectionReportValue}
                   onExportReport={handleExportSelectedCollectionReport}
+                  onCopyText={(value, successMessage) => {
+                    void copyToClipboard(value, successMessage);
+                  }}
                 />
               </section>
             ) : activeView === 'environments' ? (
@@ -2328,11 +2591,13 @@ export function App() {
                 onCopyCurl={() => copyToClipboard(currentRequestPreview ? curlForPreview(currentRequestPreview) : '', 'cURL copied')}
                 onSaveExample={() => handleSaveResponseAsExample(false)}
                 onReplaceExample={() => handleSaveResponseAsExample(true)}
+                onPinBaseline={handlePinCurrentResponseAsBaseline}
                 onSaveAs={handleSaveAsCurrentResponse}
                 onRefreshSession={handleRefreshSession}
                 onClearSession={handleClearSessionCookies}
                 onCreateCheck={handleCreateCheckFromResponse}
                 onCreateCaseFromResponse={handleCreateCaseFromCurrentResponse}
+                onAddToCollection={handleAddCurrentSelectionToCollection}
                 onSaveAuthProfile={handleSaveAuthProfile}
                 onRefreshRequestAuth={handleRefreshRequestAuth}
                 onExtractValue={handleExtractResponseValue}
