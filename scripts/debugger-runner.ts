@@ -1,49 +1,69 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
-  applyCollectionRules,
   buildWorkspaceIndex,
-  createNamedTemplateSource,
-  evaluateChecks,
-  executeRequestScript,
-  inspectResolvedRequest,
-  parseCollectionDataText,
-  renderCollectionRunReportHtml
+  materializeCollectionDocument,
+  materializeEnvironmentDocuments,
+  materializeProjectDocument,
+  materializeRequestDocuments,
+  renderCollectionRunReportHtml,
+  renderCollectionRunReportJunit,
+  rerunFailedStepKeys,
+  runCollection,
+  type CollectionRunFilters
 } from '../packages/debugger-core/src/index';
-import { createDefaultEnvironment, createId, type CollectionRunReport, type EnvironmentDocument, type ResolvedRequestPreview, type SendRequestResult, type WorkspaceIndex } from '../packages/debugger-schema/src/index';
+import {
+  DEFAULT_GITIGNORE,
+  SCHEMA_VERSION,
+  type CollectionRunReport,
+  type ResolvedRequestPreview,
+  type SendRequestInput,
+  type SendRequestResult,
+  type WorkspaceIndex
+} from '../packages/debugger-schema/src/index';
 
 type CliOptions = {
   workspaceRoot: string;
   collectionSelector?: string;
   environmentName?: string;
-  reportPath?: string;
-  reportFormat: 'json' | 'html';
   listOnly: boolean;
+  failFast: boolean;
+  filters: CollectionRunFilters;
+  rerunFailedReportPath?: string;
+  reportPaths: Partial<Record<'json' | 'html' | 'junit', string>>;
 };
 
-type RuntimeState = {
-  variables: Record<string, string>;
-  environment: EnvironmentDocument;
-};
+const EXIT_SUCCESS = 0;
+const EXIT_FAILURE = 1;
+const EXIT_CONFIG = 2;
+const EXIT_RUNTIME = 3;
 
 function printUsage() {
   console.log(`Usage:
-  npm run debugger:run -- --workspace <path> [--collection <id|name>] [--environment <name>] [--report <path>] [--format json|html]
+  npm run debugger:run -- --workspace <path> [--collection <id|name>] [--environment <name>] [--tag smoke] [--step login] [--request req_x] [--case case_x]
+  npm run debugger:run -- --workspace <path> [--report-json file] [--report-html file] [--report-junit file] [--fail-fast]
+  npm run debugger:run -- --workspace <path> --rerun-failed ./reports/last-run.json
   npm run debugger:run -- --workspace <path> --list
 `);
+}
+
+function pushFilterValue(record: Record<string, string[]>, key: keyof CollectionRunFilters, value: string) {
+  record[key] = [...(record[key] || []), value];
 }
 
 function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     workspaceRoot: '',
-    reportFormat: 'json',
-    listOnly: false
+    listOnly: false,
+    failFast: false,
+    filters: {},
+    reportPaths: {}
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     const next = argv[index + 1];
-    if (token === '--workspace' && next) {
+    if ((token === '--workspace' || token === '-w') && next) {
       options.workspaceRoot = next;
       index += 1;
       continue;
@@ -58,14 +78,56 @@ function parseArgs(argv: string[]): CliOptions {
       index += 1;
       continue;
     }
-    if (token === '--report' && next) {
-      options.reportPath = next;
+    if (token === '--tag' && next) {
+      pushFilterValue(options.filters, 'tags', next);
       index += 1;
       continue;
     }
-    if (token === '--format' && next && (next === 'json' || next === 'html')) {
-      options.reportFormat = next;
+    if (token === '--step' && next) {
+      pushFilterValue(options.filters, 'stepKeys', next);
       index += 1;
+      continue;
+    }
+    if (token === '--request' && next) {
+      pushFilterValue(options.filters, 'requestIds', next);
+      index += 1;
+      continue;
+    }
+    if (token === '--case' && next) {
+      pushFilterValue(options.filters, 'caseIds', next);
+      index += 1;
+      continue;
+    }
+    if (token === '--report-json' && next) {
+      options.reportPaths.json = next;
+      index += 1;
+      continue;
+    }
+    if (token === '--report-html' && next) {
+      options.reportPaths.html = next;
+      index += 1;
+      continue;
+    }
+    if (token === '--report-junit' && next) {
+      options.reportPaths.junit = next;
+      index += 1;
+      continue;
+    }
+    if (token === '--report' && next) {
+      const ext = path.extname(next).toLowerCase();
+      if (ext === '.html') options.reportPaths.html = next;
+      else if (ext === '.xml') options.reportPaths.junit = next;
+      else options.reportPaths.json = next;
+      index += 1;
+      continue;
+    }
+    if (token === '--rerun-failed' && next) {
+      options.rerunFailedReportPath = next;
+      index += 1;
+      continue;
+    }
+    if (token === '--fail-fast') {
+      options.failFast = true;
       continue;
     }
     if (token === '--list') {
@@ -74,7 +136,7 @@ function parseArgs(argv: string[]): CliOptions {
     }
     if (token === '--help' || token === '-h') {
       printUsage();
-      process.exit(0);
+      process.exit(EXIT_SUCCESS);
     }
   }
 
@@ -91,6 +153,9 @@ async function walkFiles(root: string, current = root, output: Record<string, st
   for (const entry of entries) {
     const fullPath = path.join(current, entry.name);
     if (entry.isDirectory()) {
+      if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'target') {
+        continue;
+      }
       await walkFiles(root, fullPath, output);
       continue;
     }
@@ -99,8 +164,7 @@ async function walkFiles(root: string, current = root, output: Record<string, st
   return output;
 }
 
-async function openWorkspace(root: string) {
-  const fileContents = await walkFiles(root);
+function fileContentsToWorkspace(root: string, fileContents: Record<string, string>) {
   const projectContent = fileContents[path.join(root, 'project.yaml')] || '';
   return buildWorkspaceIndex({
     root,
@@ -109,10 +173,70 @@ async function openWorkspace(root: string) {
   });
 }
 
-function ensureEnvironment(name: string, workspace: WorkspaceIndex) {
-  return structuredClone(
-    workspace.environments.find(item => item.document.name === name)?.document || createDefaultEnvironment(name)
+function needsMigration(fileContents: Record<string, string>) {
+  return Object.entries(fileContents).some(([filePath, content]) =>
+    (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) && content.includes('schemaVersion: 1')
   );
+}
+
+async function ensureWorkspaceMigrated(root: string, fileContents: Record<string, string>) {
+  if (!needsMigration(fileContents)) {
+    return fileContents;
+  }
+
+  const backupRoot = path.join(root, '.yapi-debugger-cache', 'migrations', new Date().toISOString().replace(/[:.]/g, '-'));
+  for (const [fullPath, content] of Object.entries(fileContents)) {
+    const relative = path.relative(root, fullPath);
+    const target = path.join(backupRoot, relative);
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, content, 'utf8');
+  }
+
+  const workspace = fileContentsToWorkspace(root, fileContents);
+  const projectWrite = materializeProjectDocument({ ...workspace.project, schemaVersion: SCHEMA_VERSION }, root);
+  await fs.writeFile(projectWrite.path, projectWrite.content, 'utf8');
+
+  for (const environment of workspace.environments) {
+    for (const write of materializeEnvironmentDocuments({ ...environment.document, schemaVersion: SCHEMA_VERSION }, root)) {
+      await fs.mkdir(path.dirname(write.path), { recursive: true });
+      await fs.writeFile(write.path, write.content, 'utf8');
+    }
+  }
+
+  for (const record of workspace.requests) {
+    const writes = materializeRequestDocuments([{
+      folderSegments: record.folderSegments,
+      request: { ...record.request, schemaVersion: SCHEMA_VERSION },
+      cases: record.cases.map(item => ({ ...item, schemaVersion: SCHEMA_VERSION }))
+    }], root);
+    for (const write of writes) {
+      await fs.mkdir(path.dirname(write.path), { recursive: true });
+      await fs.writeFile(write.path, write.content, 'utf8');
+    }
+  }
+
+  for (const record of workspace.collections) {
+    const writes = materializeCollectionDocument({ ...record.document, schemaVersion: SCHEMA_VERSION }, root, record.dataText);
+    for (const write of writes) {
+      await fs.mkdir(path.dirname(write.path), { recursive: true });
+      await fs.writeFile(write.path, write.content, 'utf8');
+    }
+  }
+
+  const gitignorePath = path.join(root, '.gitignore');
+  const existingGitignore = fileContents[gitignorePath] || '';
+  const gitignoreContent = existingGitignore.includes('.yapi-debugger-cache/')
+    ? existingGitignore
+    : `${existingGitignore.trimEnd()}\n${DEFAULT_GITIGNORE}`.trimStart();
+  await fs.writeFile(gitignorePath, gitignoreContent.endsWith('\n') ? gitignoreContent : `${gitignoreContent}\n`, 'utf8');
+  await fs.writeFile(path.join(root, '.yapi-debugger-cache', 'migration-manifest.json'), JSON.stringify({
+    migratedAt: new Date().toISOString(),
+    fromVersion: 1,
+    toVersion: SCHEMA_VERSION,
+    backupRoot
+  }, null, 2), 'utf8');
+
+  return walkFiles(root);
 }
 
 function buildCookieHeader(jar: Map<string, string>) {
@@ -129,13 +253,26 @@ function updateCookieJar(headers: Headers, jar: Map<string, string>) {
   });
 }
 
-async function sendPreview(preview: ResolvedRequestPreview, jar: Map<string, string>): Promise<SendRequestResult> {
+function normalizeRequestPreview(input: SendRequestInput | ResolvedRequestPreview): ResolvedRequestPreview {
+  if ('name' in input && 'requestPath' in input && 'authSource' in input) {
+    return input;
+  }
+
+  return {
+    ...input,
+    name: input.url,
+    authSource: 'script',
+    requestPath: new URL(input.url).pathname || '/',
+    environmentName: undefined
+  };
+}
+
+async function sendPreview(input: SendRequestInput | ResolvedRequestPreview, jar: Map<string, string>): Promise<SendRequestResult> {
+  const preview = normalizeRequestPreview(input);
   const url = new URL(preview.url);
   preview.query
     .filter(item => item.enabled && item.name.trim())
-    .forEach(item => {
-      url.searchParams.append(item.name, item.value);
-    });
+    .forEach(item => url.searchParams.append(item.name, item.value));
 
   const headers = new Headers();
   preview.headers
@@ -175,276 +312,119 @@ async function sendPreview(preview: ResolvedRequestPreview, jar: Map<string, str
   }
 
   const startedAt = Date.now();
-  const response = await fetch(url, {
-    method: preview.method,
-    headers,
-    body,
-    redirect: preview.followRedirects ? 'follow' : 'manual'
-  });
-  const bodyText = await response.text();
-  updateCookieJar(response.headers, jar);
-
-  return {
-    ok: response.ok,
-    status: response.status,
-    statusText: response.statusText,
-    url: response.url,
-    durationMs: Date.now() - startedAt,
-    sizeBytes: new TextEncoder().encode(bodyText).length,
-    headers: [...response.headers.entries()].map(([name, value]) => ({ name, value })),
-    bodyText,
-    timestamp: new Date().toISOString()
-  };
-}
-
-function stepOutputFromRun(preview: ResolvedRequestPreview, response: SendRequestResult) {
-  const headerMap = Object.fromEntries(response.headers.map(item => [item.name.toLowerCase(), item.value]));
-  let parsedBody: unknown = response.bodyText;
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), preview.timeoutMs || 30_000);
   try {
-    parsedBody = JSON.parse(response.bodyText);
-  } catch (_error) {
-    parsedBody = response.bodyText;
-  }
-
-  return {
-    request: {
+    const response = await fetch(url, {
       method: preview.method,
-      url: preview.url,
-      headers: Object.fromEntries(preview.headers.filter(item => item.enabled).map(item => [item.name.toLowerCase(), item.value])),
-      query: Object.fromEntries(preview.query.filter(item => item.enabled).map(item => [item.name, item.value])),
-      body: preview.body.text
-    },
-    response: {
+      headers,
+      body,
+      redirect: preview.followRedirects ? 'follow' : 'manual',
+      signal: controller.signal
+    });
+    const bodyText = await response.text();
+    updateCookieJar(response.headers, jar);
+    return {
+      ok: response.ok,
       status: response.status,
-      durationMs: response.durationMs,
-      headers: headerMap,
-      body: parsedBody,
-      rawBody: response.bodyText
+      statusText: response.statusText,
+      url: response.url,
+      durationMs: Date.now() - startedAt,
+      sizeBytes: new TextEncoder().encode(bodyText).length,
+      headers: [...response.headers.entries()].map(([name, value]) => ({ name, value })),
+      bodyText,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      throw new Error(`Request timed out after ${preview.timeoutMs || 30_000}ms`);
     }
-  };
+    throw error;
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
 }
 
-async function runCollectionCli(workspace: WorkspaceIndex, collectionId: string, environmentName?: string) {
-  const collectionRecord = workspace.collections.find(item => item.document.id === collectionId);
-  if (!collectionRecord) {
-    throw new Error(`Collection ${collectionId} was not found`);
-  }
+async function openWorkspace(root: string) {
+  const initialContents = await walkFiles(root);
+  const migratedContents = await ensureWorkspaceMigrated(root, initialContents);
+  return fileContentsToWorkspace(root, migratedContents);
+}
 
-  const collection = collectionRecord.document;
-  const envName = environmentName || collection.defaultEnvironment || workspace.project.defaultEnvironment;
-  const baseEnvironment = ensureEnvironment(envName, workspace);
-  const dataRows = parseCollectionDataText(collectionRecord.dataText || '');
-  const iterations = dataRows.length > 0 ? dataRows : Array.from({ length: Math.max(collection.iterationCount || 1, 1) }, () => ({}));
-  const cookieJar = new Map<string, string>();
-  const reportIterations: CollectionRunReport['iterations'] = [];
-  let passedSteps = 0;
-  let failedSteps = 0;
-  let skippedSteps = 0;
+async function writeReport(pathValue: string, content: string) {
+  const outputPath = path.resolve(pathValue);
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await fs.writeFile(outputPath, content, 'utf8');
+}
 
-  for (let index = 0; index < iterations.length; index += 1) {
-    const runtimeState: RuntimeState = {
-      variables: { ...collection.vars },
-      environment: structuredClone(baseEnvironment)
-    };
-    const dataVars = iterations[index] as Record<string, unknown>;
-    const seededOutputs: Record<string, unknown> = {};
-    const stepRuns: CollectionRunReport['iterations'][number]['stepRuns'] = [];
-    let shouldStop = false;
+async function readReport(pathValue: string) {
+  return JSON.parse(await fs.readFile(path.resolve(pathValue), 'utf8')) as CollectionRunReport;
+}
 
-    for (const step of collection.steps.filter(item => item.enabled)) {
-      const requestRecord = workspace.requests.find(item => item.request.id === step.requestId);
-      const caseDocument = requestRecord?.cases.find(item => item.id === step.caseId);
-      if (!requestRecord) {
-        failedSteps += 1;
-        stepRuns.push({
-          stepKey: step.key,
-          stepName: step.name || step.key,
-          requestId: step.requestId,
-          caseId: step.caseId,
-          ok: false,
-          skipped: false,
-          checkResults: [],
-          scriptLogs: [],
-          error: `Request ${step.requestId} was not found`
-        });
-        if (collection.stopOnFailure) shouldStop = true;
-        continue;
-      }
-
-      if (shouldStop) {
-        skippedSteps += 1;
-        stepRuns.push({
-          stepKey: step.key,
-          stepName: step.name || step.key,
-          requestId: step.requestId,
-          caseId: step.caseId,
-          ok: false,
-          skipped: true,
-          checkResults: [],
-          scriptLogs: [],
-          error: 'Skipped after previous failure'
-        });
-        continue;
-      }
-
-      try {
-        const beforeSources = [
-          createNamedTemplateSource('runtime variables', runtimeState.variables, 'runtime'),
-          createNamedTemplateSource('collection vars', collection.vars, 'collection'),
-          createNamedTemplateSource(`data row ${index + 1}`, dataVars, 'data-row'),
-          createNamedTemplateSource('step outputs', { steps: seededOutputs }, 'step-output')
-        ];
-
-        const previewBeforeScripts = inspectResolvedRequest(
-          workspace.project,
-          requestRecord.request,
-          caseDocument,
-          runtimeState.environment,
-          beforeSources
-        ).preview;
-        const preScript = executeRequestScript({
-          phase: 'pre-request',
-          script: caseDocument?.scripts?.preRequest || '',
-          state: runtimeState,
-          request: previewBeforeScripts
-        });
-        const resolved = inspectResolvedRequest(
-          workspace.project,
-          requestRecord.request,
-          caseDocument,
-          preScript.state.environment,
-          [
-            createNamedTemplateSource('runtime variables', preScript.state.variables, 'script'),
-            createNamedTemplateSource('collection vars', collection.vars, 'collection'),
-            createNamedTemplateSource(`data row ${index + 1}`, dataVars, 'data-row'),
-            createNamedTemplateSource('step outputs', { steps: seededOutputs }, 'step-output')
-          ]
-        );
-        const blockingDiagnostics = resolved.diagnostics.filter(item => item.blocking);
-        if (blockingDiagnostics.length > 0) {
-          throw new Error(blockingDiagnostics.map(item => item.message).join(' '));
-        }
-
-        const response = await sendPreview(resolved.preview, cookieJar);
-        const builtinChecks = caseDocument ? evaluateChecks(response, caseDocument.checks || []) : [];
-        const collectionChecks = applyCollectionRules({ ...collection.rules, response });
-        const caseChecks = caseDocument ? executeRequestScript({
-          phase: 'post-response',
-          script: caseDocument.scripts?.postResponse || '',
-          state: preScript.state,
-          request: resolved.preview,
-          response
-        }) : executeRequestScript({
-          phase: 'post-response',
-          script: '',
-          state: preScript.state,
-          request: resolved.preview,
-          response
-        });
-        const ok = [...builtinChecks, ...collectionChecks, ...caseChecks.testResults].every(item => item.ok);
-
-        seededOutputs[step.key] = stepOutputFromRun(resolved.preview, response);
-        stepRuns.push({
-          stepKey: step.key,
-          stepName: step.name || step.key,
-          requestId: step.requestId,
-          caseId: step.caseId,
-          ok,
-          skipped: false,
-          request: resolved.preview,
-          response,
-          checkResults: [...builtinChecks, ...collectionChecks, ...caseChecks.testResults],
-          scriptLogs: [...preScript.logs, ...caseChecks.logs]
-        });
-        runtimeState.variables = caseChecks.state.variables;
-        runtimeState.environment = caseChecks.state.environment;
-
-        if (ok) {
-          passedSteps += 1;
-        } else {
-          failedSteps += 1;
-          if (collection.stopOnFailure) shouldStop = true;
-        }
-      } catch (error) {
-        failedSteps += 1;
-        stepRuns.push({
-          stepKey: step.key,
-          stepName: step.name || step.key,
-          requestId: step.requestId,
-          caseId: step.caseId,
-          ok: false,
-          skipped: false,
-          checkResults: [],
-          scriptLogs: [],
-          error: (error as Error).message || 'Collection step failed'
-        });
-        if (collection.stopOnFailure) shouldStop = true;
-      }
-    }
-
-    reportIterations.push({
-      index,
-      dataLabel: dataRows.length > 0 ? `Row ${index + 1}` : undefined,
-      dataVars: Object.fromEntries(Object.entries(dataVars).map(([key, value]) => [key, String(value ?? '')])),
-      stepRuns
-    });
-  }
-
-  return {
-    id: createId('colrun'),
-    workspaceRoot: workspace.root,
-    collectionId: collection.id,
-    collectionName: collection.name,
-    environmentName: envName,
-    status: failedSteps === 0 ? 'passed' : passedSteps > 0 ? 'partial' : 'failed',
-    startedAt: new Date().toISOString(),
-    finishedAt: new Date().toISOString(),
-    iterationCount: reportIterations.length || 1,
-    passedSteps,
-    failedSteps,
-    skippedSteps,
-    iterations: reportIterations
-  } satisfies CollectionRunReport;
+function matchesCollection(workspace: WorkspaceIndex, selector?: string) {
+  if (!selector) return workspace.collections[0];
+  return workspace.collections.find(item => item.document.id === selector || item.document.name === selector);
 }
 
 async function main() {
-  const options = parseArgs(process.argv.slice(2));
-  const workspace = await openWorkspace(path.resolve(options.workspaceRoot));
+  try {
+    const options = parseArgs(process.argv.slice(2));
+    const workspace = await openWorkspace(path.resolve(options.workspaceRoot));
 
-  if (options.listOnly) {
-    workspace.collections.forEach(record => {
-      console.log(`${record.document.id}\t${record.document.name}`);
+    if (options.listOnly) {
+      workspace.collections.forEach(record => console.log(`${record.document.id}\t${record.document.name}`));
+      process.exitCode = EXIT_SUCCESS;
+      return;
+    }
+
+    const collection = matchesCollection(workspace, options.collectionSelector);
+    if (!collection) {
+      throw new Error('No collections were found in the workspace');
+    }
+
+    const seedReport = options.rerunFailedReportPath ? await readReport(options.rerunFailedReportPath) : null;
+    const stepKeys = seedReport ? rerunFailedStepKeys(seedReport) : options.filters.stepKeys;
+    const cookieJar = new Map<string, string>();
+    const report = await runCollection({
+      workspace,
+      collectionId: collection.document.id,
+      options: {
+        environmentName: options.environmentName,
+        filters: options.filters,
+        stepKeys,
+        seedReport,
+        failFast: options.failFast
+      },
+      sendRequest: preview => sendPreview(preview, cookieJar)
     });
-    return;
-  }
 
-  const collection =
-    workspace.collections.find(item => item.document.id === options.collectionSelector || item.document.name === options.collectionSelector) ||
-    workspace.collections[0];
-  if (!collection) {
-    throw new Error('No collections were found in the workspace');
-  }
+    console.log(`Collection: ${report.collectionName}`);
+    console.log(`Environment: ${report.environmentName || 'shared'}`);
+    console.log(`Matrix: ${report.matrixEnvironments.join(', ') || 'single'}`);
+    console.log(`Status: ${report.status}`);
+    console.log(`Passed: ${report.passedSteps}  Failed: ${report.failedSteps}  Skipped: ${report.skippedSteps}`);
 
-  const report = await runCollectionCli(workspace, collection.document.id, options.environmentName);
-  console.log(`Collection: ${report.collectionName}`);
-  console.log(`Environment: ${report.environmentName || 'shared'}`);
-  console.log(`Status: ${report.status}`);
-  console.log(`Passed: ${report.passedSteps}  Failed: ${report.failedSteps}  Skipped: ${report.skippedSteps}`);
+    if (options.reportPaths.json) {
+      await writeReport(options.reportPaths.json, JSON.stringify(report, null, 2));
+      console.log(`JSON report written to ${path.resolve(options.reportPaths.json)}`);
+    }
+    if (options.reportPaths.html) {
+      await writeReport(options.reportPaths.html, renderCollectionRunReportHtml(report));
+      console.log(`HTML report written to ${path.resolve(options.reportPaths.html)}`);
+    }
+    if (options.reportPaths.junit) {
+      await writeReport(options.reportPaths.junit, renderCollectionRunReportJunit(report));
+      console.log(`JUnit report written to ${path.resolve(options.reportPaths.junit)}`);
+    }
 
-  if (options.reportPath) {
-    const outputPath = path.resolve(options.reportPath);
-    const content = options.reportFormat === 'json' ? JSON.stringify(report, null, 2) : renderCollectionRunReportHtml(report);
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, content, 'utf8');
-    console.log(`Report written to ${outputPath}`);
-  }
-
-  if (report.failedSteps > 0) {
-    process.exitCode = 1;
+    process.exitCode = report.failedSteps > 0 ? EXIT_FAILURE : EXIT_SUCCESS;
+  } catch (error) {
+    console.error((error as Error).message || error);
+    process.exitCode =
+      (error as Error).message?.includes('workspace') || (error as Error).message?.includes('Collection')
+        ? EXIT_CONFIG
+        : EXIT_RUNTIME;
   }
 }
 
-main().catch(error => {
-  console.error((error as Error).message || error);
-  process.exitCode = 1;
-});
+void main();

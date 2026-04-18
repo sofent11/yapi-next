@@ -59,10 +59,26 @@ function checkOptions() {
     { value: 'header-equals', label: 'Header Equals' },
     { value: 'header-includes', label: 'Header Includes' },
     { value: 'json-exists', label: 'JSON Path Exists' },
+    { value: 'json-not-exists', label: 'JSON Path Missing' },
     { value: 'json-equals', label: 'JSON Path Equals' },
+    { value: 'json-type', label: 'JSON Path Type' },
+    { value: 'json-length', label: 'JSON Path Length' },
     { value: 'body-contains', label: 'Body Contains' },
     { value: 'body-regex', label: 'Body Regex' },
-    { value: 'response-time-lt', label: 'Response Time <' }
+    { value: 'response-time-lt', label: 'Response Time <' },
+    { value: 'number-gt', label: 'Number >' },
+    { value: 'number-lt', label: 'Number <' },
+    { value: 'number-between', label: 'Number Between' },
+    { value: 'schema-match', label: 'JSON Schema Match' },
+    { value: 'snapshot-match', label: 'Snapshot Match' }
+  ];
+}
+
+function retryWhenOptions() {
+  return [
+    { value: 'network-error', label: 'network-error' },
+    { value: '5xx', label: '5xx' },
+    { value: 'assertion-failed', label: 'assertion-failed' }
   ];
 }
 
@@ -825,7 +841,7 @@ export function RequestPanel(props: {
                               )
                             }
                           />
-                          {check.type === 'status-equals' || check.type === 'body-contains' || check.type === 'body-regex' || check.type === 'response-time-lt' ? null : (
+                          {check.type === 'status-equals' || check.type === 'body-contains' || check.type === 'body-regex' || check.type === 'response-time-lt' || check.type === 'snapshot-match' ? null : (
                             <TextInput
                               label={check.type === 'header-includes' || check.type === 'header-equals' ? 'Header Name' : 'JSON Path'}
                               value={check.path}
@@ -838,7 +854,23 @@ export function RequestPanel(props: {
                               }
                             />
                           )}
-                          {check.type === 'json-exists' ? null : (
+                          {check.type === 'json-exists' || check.type === 'json-not-exists' ? null : check.type === 'snapshot-match' ? (
+                            <Select
+                              label="Baseline / Snapshot"
+                              value={check.expected}
+                              data={(requestDocument.examples || []).map(example => ({
+                                value: example.name,
+                                label: `${example.name}${example.role === 'baseline' ? ' · baseline' : ''}`
+                              }))}
+                              onChange={value =>
+                                updateChecks(
+                                  (selectedCase.checks || []).map(item =>
+                                    item.id === check.id ? { ...item, expected: value || '' } : item
+                                  )
+                                )
+                              }
+                            />
+                          ) : (
                             <TextInput
                               label="Expected"
                               value={check.expected}
@@ -944,6 +976,132 @@ export function RequestPanel(props: {
                 onChange={event => props.onRequestChange({ ...requestDocument, description: event.currentTarget.value })}
                 minRows={3}
               />
+              {selectedCase ? (
+                <>
+                  <Select
+                    label="Test Mode"
+                    value={selectedCase.testMode}
+                    data={[
+                      { value: 'automation', label: 'automation' },
+                      { value: 'debug', label: 'debug' }
+                    ]}
+                    onChange={value =>
+                      updateSelectedCase(current => ({
+                        ...current,
+                        testMode: (value as CaseDocument['testMode']) || 'automation'
+                      }))
+                    }
+                  />
+                  <TextInput
+                    label="Tags"
+                    placeholder="smoke, regression"
+                    value={(selectedCase.tags || []).join(', ')}
+                    onChange={event =>
+                      updateSelectedCase(current => ({
+                        ...current,
+                        tags: event.currentTarget.value.split(',').map(item => item.trim()).filter(Boolean)
+                      }))
+                    }
+                  />
+                  <TextInput
+                    label="Baseline Ref"
+                    placeholder="shared-baseline"
+                    value={selectedCase.baselineRef || ''}
+                    onChange={event =>
+                      updateSelectedCase(current => ({
+                        ...current,
+                        baselineRef: event.currentTarget.value
+                      }))
+                    }
+                  />
+                  <NumberInput
+                    label="Retry Count"
+                    value={selectedCase.retry?.count || 0}
+                    min={0}
+                    onChange={value =>
+                      updateSelectedCase(current => ({
+                        ...current,
+                        retry: {
+                          ...current.retry,
+                          count: Number(value) || 0
+                        }
+                      }))
+                    }
+                  />
+                  <NumberInput
+                    label="Retry Delay (ms)"
+                    value={selectedCase.retry?.delayMs || 0}
+                    min={0}
+                    step={100}
+                    onChange={value =>
+                      updateSelectedCase(current => ({
+                        ...current,
+                        retry: {
+                          ...current.retry,
+                          delayMs: Number(value) || 0
+                        }
+                      }))
+                    }
+                  />
+                  <Select
+                    label="Retry When"
+                    value={(selectedCase.retry?.when || []).join(',')}
+                    data={retryWhenOptions().map(option => ({
+                      value: option.value,
+                      label: option.label
+                    }))}
+                    onChange={value =>
+                      updateSelectedCase(current => ({
+                        ...current,
+                        retry: {
+                          ...current.retry,
+                          when: value ? [value as any] : []
+                        }
+                      }))
+                    }
+                  />
+                  <Checkbox
+                    label="Skip This Case"
+                    checked={selectedCase.skip?.enabled || false}
+                    onChange={event =>
+                      updateSelectedCase(current => ({
+                        ...current,
+                        skip: {
+                          ...current.skip,
+                          enabled: event.currentTarget.checked
+                        }
+                      }))
+                    }
+                  />
+                  <TextInput
+                    label="Skip Reason"
+                    value={selectedCase.skip?.reason || ''}
+                    onChange={event =>
+                      updateSelectedCase(current => ({
+                        ...current,
+                        skip: {
+                          ...current.skip,
+                          reason: event.currentTarget.value
+                        }
+                      }))
+                    }
+                  />
+                  <TextInput
+                    label="Skip Condition"
+                    placeholder="{{runMode}} == dryrun"
+                    value={selectedCase.skip?.when || ''}
+                    onChange={event =>
+                      updateSelectedCase(current => ({
+                        ...current,
+                        skip: {
+                          ...current.skip,
+                          when: event.currentTarget.value
+                        }
+                      }))
+                    }
+                  />
+                </>
+              ) : null}
             </div>
           </Tabs.Panel>
         </div>

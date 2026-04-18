@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
-export const SCHEMA_VERSION = 1;
+export const LEGACY_SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+export const schemaVersionSchema = z.union([z.literal(LEGACY_SCHEMA_VERSION), z.literal(SCHEMA_VERSION)]);
 export const REQUEST_SUFFIX = '.request.yaml';
 export const CASE_SUFFIX = '.case.yaml';
 export const COLLECTION_SUFFIX = '.collection.yaml';
@@ -23,6 +25,26 @@ export type ParameterRow = z.infer<typeof parameterRowSchema>;
 
 export const authTypeSchema = z.enum(['inherit', 'none', 'bearer', 'basic', 'apikey', 'profile', 'oauth2']);
 export type AuthType = z.infer<typeof authTypeSchema>;
+
+export const testModeSchema = z.enum(['debug', 'automation']);
+export type TestMode = z.infer<typeof testModeSchema>;
+
+export const retryWhenSchema = z.enum(['network-error', '5xx', 'assertion-failed']);
+export type RetryWhen = z.infer<typeof retryWhenSchema>;
+
+export const retryPolicySchema = z.object({
+  count: z.number().int().min(0).default(0),
+  delayMs: z.number().int().min(0).default(0),
+  when: z.array(retryWhenSchema).default(['network-error', '5xx', 'assertion-failed'])
+});
+export type RetryPolicy = z.infer<typeof retryPolicySchema>;
+
+export const skipConditionSchema = z.object({
+  enabled: z.boolean().default(false),
+  reason: z.string().default(''),
+  when: z.string().default('')
+});
+export type SkipCondition = z.infer<typeof skipConditionSchema>;
 
 export const authConfigSchema = z.object({
   type: authTypeSchema.default('inherit'),
@@ -87,7 +109,7 @@ export const projectRuntimeConfigSchema = z.object({
 export type ProjectRuntimeConfig = z.infer<typeof projectRuntimeConfigSchema>;
 
 export const projectDocumentSchema = z.object({
-  schemaVersion: z.literal(SCHEMA_VERSION).default(SCHEMA_VERSION),
+  schemaVersion: schemaVersionSchema.default(SCHEMA_VERSION),
   name: z.string().min(1),
   defaultEnvironment: z.string().default('shared'),
   labels: z.array(z.string()).default([]),
@@ -101,7 +123,7 @@ export const projectDocumentSchema = z.object({
 export type ProjectDocument = z.infer<typeof projectDocumentSchema>;
 
 export const environmentDocumentSchema = z.object({
-  schemaVersion: z.literal(SCHEMA_VERSION).default(SCHEMA_VERSION),
+  schemaVersion: schemaVersionSchema.default(SCHEMA_VERSION),
   name: z.string().min(1),
   vars: z.record(z.string(), z.string()).default({}),
   headers: z.array(parameterRowSchema).default([]),
@@ -120,7 +142,7 @@ export const environmentDocumentSchema = z.object({
 export type EnvironmentDocument = z.infer<typeof environmentDocumentSchema>;
 
 export const requestDocumentSchema = z.object({
-  schemaVersion: z.literal(SCHEMA_VERSION).default(SCHEMA_VERSION),
+  schemaVersion: schemaVersionSchema.default(SCHEMA_VERSION),
   id: z.string().min(1),
   name: z.string().min(1),
   method: httpMethodSchema.default('GET'),
@@ -157,10 +179,18 @@ export const caseCheckTypeSchema = z.enum([
   'header-equals',
   'header-includes',
   'json-exists',
+  'json-not-exists',
   'json-equals',
+  'json-type',
+  'json-length',
   'body-contains',
   'body-regex',
-  'response-time-lt'
+  'response-time-lt',
+  'number-gt',
+  'number-lt',
+  'number-between',
+  'schema-match',
+  'snapshot-match'
 ]);
 export type CaseCheckType = z.infer<typeof caseCheckTypeSchema>;
 
@@ -189,7 +219,7 @@ export const caseOriginSchema = z.object({
 export type CaseOrigin = z.infer<typeof caseOriginSchema>;
 
 export const caseDocumentSchema = z.object({
-  schemaVersion: z.literal(SCHEMA_VERSION).default(SCHEMA_VERSION),
+  schemaVersion: schemaVersionSchema.default(SCHEMA_VERSION),
   id: z.string().min(1),
   name: z.string().min(1),
   extendsRequest: z.string().min(1),
@@ -198,7 +228,20 @@ export const caseDocumentSchema = z.object({
   overrides: caseOverridesSchema.default({}),
   checks: z.array(caseCheckSchema).default([]),
   scripts: caseScriptsSchema.optional(),
-  origin: caseOriginSchema.optional()
+  origin: caseOriginSchema.optional(),
+  tags: z.array(z.string()).default([]),
+  retry: retryPolicySchema.default({
+    count: 0,
+    delayMs: 0,
+    when: ['network-error', '5xx', 'assertion-failed']
+  }),
+  skip: skipConditionSchema.default({
+    enabled: false,
+    reason: '',
+    when: ''
+  }),
+  testMode: testModeSchema.default('automation'),
+  baselineRef: z.string().default('')
 });
 export type CaseDocument = z.infer<typeof caseDocumentSchema>;
 
@@ -207,7 +250,12 @@ export const collectionStepSchema = z.object({
   requestId: z.string().min(1),
   caseId: z.string().optional(),
   enabled: z.boolean().default(true),
-  name: z.string().optional()
+  name: z.string().optional(),
+  retry: retryPolicySchema.optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  continueOnFailure: z.boolean().optional(),
+  tags: z.array(z.string()).default([]),
+  skipIf: z.string().default('')
 });
 export type CollectionStep = z.infer<typeof collectionStepSchema>;
 
@@ -219,7 +267,7 @@ export const collectionRulesSchema = z.object({
 export type CollectionRules = z.infer<typeof collectionRulesSchema>;
 
 export const collectionDocumentSchema = z.object({
-  schemaVersion: z.literal(SCHEMA_VERSION).default(SCHEMA_VERSION),
+  schemaVersion: schemaVersionSchema.default(SCHEMA_VERSION),
   id: z.string().min(1),
   name: z.string().min(1),
   defaultEnvironment: z.string().default('shared'),
@@ -231,7 +279,18 @@ export const collectionDocumentSchema = z.object({
     requireSuccessStatus: false,
     requiredJsonPaths: []
   }),
-  steps: z.array(collectionStepSchema).default([])
+  steps: z.array(collectionStepSchema).default([]),
+  tags: z.array(z.string()).default([]),
+  setupSteps: z.array(collectionStepSchema).default([]),
+  teardownSteps: z.array(collectionStepSchema).default([]),
+  envMatrix: z.array(z.string()).default([]),
+  defaultRetry: retryPolicySchema.default({
+    count: 0,
+    delayMs: 0,
+    when: ['network-error', '5xx', 'assertion-failed']
+  }),
+  continueOnFailure: z.boolean().default(false),
+  reporters: z.array(z.enum(['json', 'html', 'junit'])).default(['json', 'html'])
 });
 export type CollectionDocument = z.infer<typeof collectionDocumentSchema>;
 
@@ -516,7 +575,7 @@ export const checkResultSchema = z.object({
   message: z.string(),
   expected: z.string().optional(),
   actual: z.string().optional(),
-  source: z.enum(['builtin', 'script', 'collection-rule']).default('builtin')
+  source: z.enum(['builtin', 'script', 'collection-rule', 'baseline']).default('builtin')
 });
 export type CheckResult = z.infer<typeof checkResultSchema>;
 
@@ -556,7 +615,17 @@ export const collectionStepRunSchema = z.object({
   response: sendRequestResultSchema.optional(),
   checkResults: z.array(checkResultSchema).default([]),
   scriptLogs: z.array(scriptLogSchema).default([]),
-  error: z.string().optional()
+  error: z.string().optional(),
+  failureType: z.enum(['network-error', 'assertion-failed', 'blocking-diagnostic', 'skipped']).optional(),
+  baselineName: z.string().optional(),
+  attempts: z.array(z.object({
+    attempt: z.number().int().positive(),
+    ok: z.boolean(),
+    response: sendRequestResultSchema.optional(),
+    checkResults: z.array(checkResultSchema).default([]),
+    error: z.string().optional(),
+    failureType: z.enum(['network-error', 'assertion-failed', 'blocking-diagnostic']).optional()
+  })).default([])
 });
 export type CollectionStepRun = z.infer<typeof collectionStepRunSchema>;
 
@@ -564,7 +633,9 @@ export const collectionIterationReportSchema = z.object({
   index: z.number().int().nonnegative(),
   dataLabel: z.string().optional(),
   dataVars: z.record(z.string(), z.string()).default({}),
-  stepRuns: z.array(collectionStepRunSchema).default([])
+  stepRuns: z.array(collectionStepRunSchema).default([]),
+  environmentName: z.string().optional(),
+  matrixLabel: z.string().optional()
 });
 export type CollectionIterationReport = z.infer<typeof collectionIterationReportSchema>;
 
@@ -581,7 +652,19 @@ export const collectionRunReportSchema = z.object({
   passedSteps: z.number().int().nonnegative().default(0),
   failedSteps: z.number().int().nonnegative().default(0),
   skippedSteps: z.number().int().nonnegative().default(0),
-  iterations: z.array(collectionIterationReportSchema).default([])
+  iterations: z.array(collectionIterationReportSchema).default([]),
+  matrixEnvironments: z.array(z.string()).default([]),
+  filters: z.object({
+    tags: z.array(z.string()).default([]),
+    stepKeys: z.array(z.string()).default([]),
+    requestIds: z.array(z.string()).default([]),
+    caseIds: z.array(z.string()).default([])
+  }).default({
+    tags: [],
+    stepKeys: [],
+    requestIds: [],
+    caseIds: []
+  })
 });
 export type CollectionRunReport = z.infer<typeof collectionRunReportSchema>;
 
@@ -636,7 +719,20 @@ export function createEmptyCase(requestId: string, name = 'Smoke'): CaseDocument
     scripts: {
       preRequest: '',
       postResponse: ''
-    }
+    },
+    tags: [],
+    retry: {
+      count: 0,
+      delayMs: 0,
+      when: ['network-error', '5xx', 'assertion-failed']
+    },
+    skip: {
+      enabled: false,
+      reason: '',
+      when: ''
+    },
+    testMode: 'automation',
+    baselineRef: ''
   });
 }
 
@@ -653,7 +749,38 @@ export function createEmptyCollection(name = 'New Collection'): CollectionDocume
       requireSuccessStatus: false,
       requiredJsonPaths: []
     },
-    steps: []
+    steps: [],
+    tags: [],
+    setupSteps: [],
+    teardownSteps: [],
+    envMatrix: [],
+    defaultRetry: {
+      count: 0,
+      delayMs: 0,
+      when: ['network-error', '5xx', 'assertion-failed']
+    },
+    continueOnFailure: false,
+    reporters: ['json', 'html']
+  });
+}
+
+export function createCollectionStep(input: {
+  requestId: string;
+  caseId?: string;
+  key?: string;
+  name?: string;
+}): CollectionStep {
+  return collectionStepSchema.parse({
+    key: input.key || createId('step'),
+    requestId: input.requestId,
+    caseId: input.caseId,
+    enabled: true,
+    name: input.name,
+    retry: undefined,
+    timeoutMs: undefined,
+    continueOnFailure: undefined,
+    tags: [],
+    skipIf: ''
   });
 }
 

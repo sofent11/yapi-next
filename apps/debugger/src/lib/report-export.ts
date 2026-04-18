@@ -1,4 +1,4 @@
-import { renderCollectionRunReportHtml } from '@yapi-debugger/core';
+import { renderCollectionRunReportHtml, renderCollectionRunReportJunit } from '@yapi-debugger/core';
 import type { CollectionRunReport } from '@yapi-debugger/schema';
 
 export function collectionReportJson(report: CollectionRunReport) {
@@ -7,4 +7,8 @@ export function collectionReportJson(report: CollectionRunReport) {
 
 export function collectionReportHtml(report: CollectionRunReport) {
   return renderCollectionRunReportHtml(report);
+}
+
+export function collectionReportJunit(report: CollectionRunReport) {
+  return renderCollectionRunReportJunit(report);
 }

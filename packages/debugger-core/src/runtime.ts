@@ -1,3 +1,4 @@
+import Ajv from 'ajv';
 import {
   caseCheckSchema,
   checkResultSchema,
@@ -13,6 +14,7 @@ import {
   type ParameterRow,
   type ProjectDocument,
   type ResolvedRequestPreview,
+  type ResponseExample,
   type ScriptLog,
   type SendRequestResult
 } from '@yapi-debugger/schema';
@@ -160,6 +162,8 @@ function stringifyValue(input: unknown) {
 function buildResponseHeaderMap(response: SendRequestResult) {
   return new Map(response.headers.map(item => [item.name.toLowerCase(), item.value]));
 }
+
+const ajv = new Ajv({ strict: false, allErrors: true });
 
 function createScriptLog(phase: ScriptLog['phase'], level: ScriptLog['level'], message: string): ScriptLog {
   return scriptLogSchema.parse({ phase, level, message });
@@ -472,7 +476,47 @@ export async function executeRequestScript(input: {
   }
 }
 
-export function evaluateChecks(response: SendRequestResult, checks: CaseCheck[]): CheckResult[] {
+function parseExpectedJsonValue(input: string) {
+  try {
+    return JSON.parse(input);
+  } catch (_error) {
+    return input;
+  }
+}
+
+function inferJsonValueType(input: unknown) {
+  if (Array.isArray(input)) return 'array';
+  if (input === null) return 'null';
+  return typeof input;
+}
+
+function normalizeLength(input: unknown) {
+  if (Array.isArray(input) || typeof input === 'string') {
+    return input.length;
+  }
+  if (input && typeof input === 'object') {
+    return Object.keys(input).length;
+  }
+  return Number.NaN;
+}
+
+function normalizeNumberRange(expected: string) {
+  const parsed = parseExpectedJsonValue(expected);
+  if (Array.isArray(parsed) && parsed.length >= 2) {
+    return {
+      min: Number(parsed[0]),
+      max: Number(parsed[1])
+    };
+  }
+  const [min, max] = expected.split(',').map(item => Number(item.trim()));
+  return { min, max };
+}
+
+export function evaluateChecks(
+  response: SendRequestResult,
+  checks: CaseCheck[],
+  context?: { examples?: ResponseExample[] }
+): CheckResult[] {
   const parsedResponse = sendRequestResultSchema.parse(response);
   const jsonPayload = safeJsonParse(parsedResponse.bodyText);
   const headerMap = buildResponseHeaderMap(parsedResponse);
@@ -543,14 +587,22 @@ export function evaluateChecks(response: SendRequestResult, checks: CaseCheck[])
         };
       }
 
+      if (normalized.type === 'json-not-exists') {
+        const actualValue = readPathValue(jsonPayload, normalized.path);
+        return {
+          id: normalized.id,
+          label,
+          ok: actualValue === undefined,
+          message:
+            actualValue === undefined ? `JSON path ${normalized.path} is absent` : `JSON path ${normalized.path} should be absent`,
+          actual: stringifyValue(actualValue),
+          source: 'builtin' as const
+        };
+      }
+
       if (normalized.type === 'json-equals') {
         const actualValue = readPathValue(jsonPayload, normalized.path);
-        let expectedValue: unknown = normalized.expected;
-        try {
-          expectedValue = JSON.parse(normalized.expected);
-        } catch (_error) {
-          expectedValue = normalized.expected;
-        }
+        const expectedValue = parseExpectedJsonValue(normalized.expected);
         const actual = stringifyValue(actualValue);
         const expected = stringifyValue(expectedValue);
         const ok = actual === expected;
@@ -560,6 +612,43 @@ export function evaluateChecks(response: SendRequestResult, checks: CaseCheck[])
           ok,
           message: ok ? `JSON path ${normalized.path} matches expected value` : `JSON path ${normalized.path} does not match`,
           expected,
+          actual,
+          source: 'builtin' as const
+        };
+      }
+
+      if (normalized.type === 'json-type') {
+        const actualValue = readPathValue(jsonPayload, normalized.path);
+        const actual = inferJsonValueType(actualValue);
+        const expected = normalized.expected.trim().toLowerCase();
+        return {
+          id: normalized.id,
+          label,
+          ok: actualValue !== undefined && actual === expected,
+          message:
+            actualValue !== undefined && actual === expected
+              ? `JSON path ${normalized.path} has type ${expected}`
+              : `JSON path ${normalized.path} expected type ${expected}, got ${actual}`,
+          expected,
+          actual,
+          source: 'builtin' as const
+        };
+      }
+
+      if (normalized.type === 'json-length') {
+        const actualValue = readPathValue(jsonPayload, normalized.path);
+        const actualLength = normalizeLength(actualValue);
+        const expected = Number(normalized.expected || '0');
+        const actual = Number.isFinite(actualLength) ? String(actualLength) : 'NaN';
+        return {
+          id: normalized.id,
+          label,
+          ok: Number.isFinite(actualLength) && actualLength === expected,
+          message:
+            Number.isFinite(actualLength) && actualLength === expected
+              ? `JSON path ${normalized.path} length is ${expected}`
+              : `JSON path ${normalized.path} expected length ${expected}, got ${actual}`,
+          expected: String(expected),
           actual,
           source: 'builtin' as const
         };
@@ -600,6 +689,106 @@ export function evaluateChecks(response: SendRequestResult, checks: CaseCheck[])
           expected,
           actual,
           source: 'builtin' as const
+        };
+      }
+
+      if (normalized.type === 'number-gt' || normalized.type === 'number-lt') {
+        const actualValue = readPathValue(jsonPayload, normalized.path);
+        const actualNumber = Number(actualValue);
+        const expectedNumber = Number(normalized.expected || '0');
+        const ok =
+          Number.isFinite(actualNumber) &&
+          Number.isFinite(expectedNumber) &&
+          (normalized.type === 'number-gt' ? actualNumber > expectedNumber : actualNumber < expectedNumber);
+        return {
+          id: normalized.id,
+          label,
+          ok,
+          message: ok
+            ? `JSON path ${normalized.path} satisfies ${normalized.type === 'number-gt' ? '>' : '<'} ${expectedNumber}`
+            : `JSON path ${normalized.path} expected ${normalized.type === 'number-gt' ? '>' : '<'} ${expectedNumber}, got ${stringifyValue(actualValue)}`,
+          expected: String(expectedNumber),
+          actual: stringifyValue(actualValue),
+          source: 'builtin' as const
+        };
+      }
+
+      if (normalized.type === 'number-between') {
+        const actualValue = readPathValue(jsonPayload, normalized.path);
+        const actualNumber = Number(actualValue);
+        const range = normalizeNumberRange(normalized.expected);
+        const ok =
+          Number.isFinite(actualNumber) &&
+          Number.isFinite(range.min) &&
+          Number.isFinite(range.max) &&
+          actualNumber >= range.min &&
+          actualNumber <= range.max;
+        return {
+          id: normalized.id,
+          label,
+          ok,
+          message: ok
+            ? `JSON path ${normalized.path} is between ${range.min} and ${range.max}`
+            : `JSON path ${normalized.path} expected between ${range.min} and ${range.max}, got ${stringifyValue(actualValue)}`,
+          expected: `${range.min},${range.max}`,
+          actual: stringifyValue(actualValue),
+          source: 'builtin' as const
+        };
+      }
+
+      if (normalized.type === 'schema-match') {
+        let schema: unknown;
+        try {
+          schema = JSON.parse(normalized.expected || '{}');
+        } catch (error) {
+          return {
+            id: normalized.id,
+            label,
+            ok: false,
+            message: (error as Error).message || 'Schema JSON parse failed',
+            expected: normalized.expected,
+            actual: '',
+            source: 'builtin' as const
+          };
+        }
+
+        const validator = ajv.compile(schema as object);
+        const ok = validator(jsonPayload);
+        const actual = ok ? '' : ajv.errorsText(validator.errors, { separator: '; ' });
+        return {
+          id: normalized.id,
+          label,
+          ok: Boolean(ok),
+          message: ok ? 'Response matches JSON schema' : actual || 'Response does not match JSON schema',
+          expected: normalized.expected,
+          actual,
+          source: 'builtin' as const
+        };
+      }
+
+      if (normalized.type === 'snapshot-match') {
+        const snapshotName = normalized.expected || '';
+        const snapshot = (context?.examples || []).find(example => example.name === snapshotName || `${example.role}:${example.name}` === snapshotName);
+        if (!snapshot) {
+          return {
+            id: normalized.id,
+            label,
+            ok: false,
+            message: `Snapshot ${snapshotName || '(empty)'} was not found`,
+            expected: snapshotName,
+            actual: parsedResponse.bodyText,
+            source: 'baseline' as const
+          };
+        }
+        const ok = snapshot.text === parsedResponse.bodyText;
+        return {
+          id: normalized.id,
+          label,
+          ok,
+          message: ok ? `Snapshot ${snapshot.name} matches` : `Snapshot ${snapshot.name} does not match`,
+          expected: snapshot.text,
+          actual: parsedResponse.bodyText,
+          source: 'baseline' as const
         };
       }
 

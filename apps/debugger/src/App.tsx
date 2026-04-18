@@ -7,7 +7,7 @@ import { useMutation } from '@tanstack/react-query';
 import { IconRefresh, IconSearch } from '@tabler/icons-react';
 import { createEmptyCheck, createNamedTemplateSource, evaluateSyncGuard, inspectResolvedRequest } from '@yapi-debugger/core';
 import { save as saveFile } from '@tauri-apps/plugin-dialog';
-import { createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type EnvironmentDocument, type ImportWarning, type ResponseExample, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
+import { SCHEMA_VERSION, createCollectionStep, createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type EnvironmentDocument, type ImportWarning, type ResponseExample, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
 import '@mantine/spotlight/styles.css';
 import {
   chooseDirectory,
@@ -79,7 +79,7 @@ import { WorkspaceHomePanel } from './components/panels/WorkspaceHomePanel';
 import { WorkspaceMainPanel } from './components/panels/WorkspaceMainPanel';
 import { buildImportRepairChecklist } from './lib/repair';
 import { confirmAction, promptForSaveAs, promptForText } from './lib/dialogs';
-import { collectionReportHtml, collectionReportJson } from './lib/report-export';
+import { collectionReportHtml, collectionReportJson, collectionReportJunit } from './lib/report-export';
 import { Resizer } from './components/primitives/Resizer';
 import { StatusBar } from './components/layout/StatusBar';
 import { createScratchSession, loadScratchSessions, normalizeScratchTitle, saveScratchSessions, type ScratchSession } from './lib/scratch';
@@ -1285,7 +1285,7 @@ export function App() {
     });
     if (!nextName) return;
     await saveEnvironment(store.workspace.root, {
-      schemaVersion: 1,
+      schemaVersion: SCHEMA_VERSION,
       name: nextName,
       vars: {},
       headers: [],
@@ -1575,7 +1575,7 @@ export function App() {
     notifications.show({ color: 'teal', message: `Workspace baseUrl updated to ${lastImportSession.importedBaseUrl}` });
   }
 
-  async function handleExportSelectedCollectionReport(format: 'json' | 'html') {
+  async function handleExportSelectedCollectionReport(format: 'json' | 'html' | 'junit') {
     const report = collectionReports.find(item => item.id === selectedCollectionReportId) || collectionReports[0];
     if (!report) {
       notifications.show({ color: 'blue', message: 'Select a collection report first.' });
@@ -1584,17 +1584,22 @@ export function App() {
 
     const targetPath = await saveFile({
       title: 'Export Collection Report',
-      defaultPath: `${slugify(report.collectionName || 'collection-report')}.${format}`,
+      defaultPath: `${slugify(report.collectionName || 'collection-report')}.${format === 'junit' ? 'xml' : format}`,
       filters: [
         {
           name: format.toUpperCase(),
-          extensions: [format]
+          extensions: [format === 'junit' ? 'xml' : format]
         }
       ]
     });
     if (!targetPath) return;
 
-    const content = format === 'json' ? collectionReportJson(report) : collectionReportHtml(report);
+    const content =
+      format === 'json'
+        ? collectionReportJson(report)
+        : format === 'junit'
+          ? collectionReportJunit(report)
+          : collectionReportHtml(report);
     await writeDocument(targetPath, content);
     notifications.show({ color: 'teal', message: `Collection report exported as ${format.toUpperCase()}` });
   }
@@ -1774,13 +1779,12 @@ export function App() {
       ...draftCollection,
       steps: [
         ...draftCollection.steps,
-        {
+        createCollectionStep({
           key: `step_${nextStepIndex}`,
           requestId,
           caseId: caseId || undefined,
-          enabled: true,
           name: stepName
-        }
+        })
       ]
     };
     const currentRecord = store.workspace.collections.find(item => item.document.id === draftCollection.id);
@@ -2248,6 +2252,15 @@ export function App() {
       stepKey: selectedEntry.sourceStepKey
     };
     nextCase.checks = nextChecks;
+    const baselineCandidate = record.request.examples.find(example => example.role === 'baseline');
+    if (baselineCandidate) {
+      nextCase.baselineRef = baselineCandidate.name;
+      nextCase.checks.push({
+        ...createEmptyCheck('snapshot-match'),
+        label: `Snapshot matches ${baselineCandidate.name}`,
+        expected: baselineCandidate.name
+      });
+    }
     await saveRequestRecord(
       store.workspace.root,
       record.request,

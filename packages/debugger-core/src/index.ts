@@ -7,6 +7,8 @@ import {
   DEFAULT_GITIGNORE,
   LOCAL_ENV_SUFFIX,
   REQUEST_SUFFIX,
+  SCHEMA_VERSION,
+  collectionRunReportSchema,
   collectionDocumentSchema,
   collectionStepSchema,
   authConfigSchema,
@@ -19,19 +21,24 @@ import {
   emptyParameterRow,
   environmentDocumentSchema,
   projectDocumentSchema,
+  retryPolicySchema,
   resolvedAuthPreviewItemSchema,
   resolvedFieldValueSchema,
   resolvedRequestInsightSchema,
   resolvedRequestPreviewSchema,
   runtimeSettingsSchema,
+  sendRequestInputSchema,
   requestBodySchema,
   requestDocumentSchema,
   slugify,
   type AuthConfig,
   type CaseCheck,
   type CaseDocument,
+  type CheckResult,
   type CollectionDocument,
   type CollectionRunReport,
+  type CollectionStep,
+  type CollectionStepRun,
   type EnvironmentDocument,
   type ParameterRow,
   type ProjectDocument,
@@ -41,8 +48,10 @@ import {
   type ResolvedFieldValue,
   type ResolvedRequestInsight,
   type ResolvedRequestPreview,
+  type RetryPolicy,
   type ResponseExample,
   type ScriptLog,
+  type SendRequestInput,
   type SendRequestResult,
   type WorkspaceCollectionRecord,
   type WorkspaceEnvironmentRecord,
@@ -405,7 +414,7 @@ export function createProjectSeed(input: ProjectSeed) {
   const project = createDefaultProject(input.projectName);
   const sharedEnvironment = createDefaultEnvironment('shared');
   const localEnvironment = environmentDocumentSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: SCHEMA_VERSION,
     name: 'local',
     vars: {
       token: ''
@@ -1630,7 +1639,7 @@ export function createEmptyCheck(type: CaseCheck['type'] = 'status-equals'): Cas
     path:
       type === 'header-includes' || type === 'header-equals'
         ? 'content-type'
-        : type.startsWith('json-')
+        : type.startsWith('json-') || type.startsWith('number-')
           ? '$.data'
           : '',
     expected:
@@ -1638,8 +1647,594 @@ export function createEmptyCheck(type: CaseCheck['type'] = 'status-equals'): Cas
         ? '200'
         : type === 'response-time-lt'
           ? '1000'
+          : type === 'json-type'
+            ? 'string'
+            : type === 'json-length'
+              ? '1'
+              : type === 'number-between'
+                ? '0,1'
           : ''
   });
+}
+
+export type RuntimeSendRequest = (request: SendRequestInput | ResolvedRequestPreview) => Promise<SendRequestResult>;
+
+export type RequestRunContext = {
+  extraSources?: Array<Record<string, unknown>>;
+  state?: {
+    variables: Record<string, string>;
+    environment: EnvironmentDocument;
+  };
+  collectionRules?: {
+    requireSuccessStatus: boolean;
+    maxDurationMs?: number;
+    requiredJsonPaths?: string[];
+  };
+  sourceCollection?: {
+    id: string;
+    name: string;
+    stepKey: string;
+  };
+};
+
+export type PreparedRequestRunInput = {
+  workspace: WorkspaceIndex;
+  request: RequestDocument;
+  caseDocument?: CaseDocument;
+  sendRequest: RuntimeSendRequest;
+  sessionId?: string;
+  context?: RequestRunContext;
+};
+
+export type PreparedRequestRunResult = {
+  preview: ResolvedRequestPreview;
+  response: SendRequestResult;
+  checkResults: CheckResult[];
+  scriptLogs: ScriptLog[];
+  state: {
+    variables: Record<string, string>;
+    environment: EnvironmentDocument;
+  };
+};
+
+export type CollectionRunFilters = {
+  tags?: string[];
+  stepKeys?: string[];
+  requestIds?: string[];
+  caseIds?: string[];
+};
+
+export type CollectionRunOptions = {
+  environmentName?: string;
+  stepKeys?: string[];
+  seedReport?: CollectionRunReport | null;
+  filters?: CollectionRunFilters;
+  failFast?: boolean;
+};
+
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function buildStepOutput(preview: ResolvedRequestPreview, response: SendRequestResult) {
+  const headerMap = Object.fromEntries(response.headers.map(item => [item.name.toLowerCase(), item.value]));
+  let parsedBody: unknown = response.bodyText;
+  try {
+    parsedBody = JSON.parse(response.bodyText);
+  } catch (_error) {
+    parsedBody = response.bodyText;
+  }
+
+  return {
+    request: {
+      method: preview.method,
+      url: preview.url,
+      query: Object.fromEntries(preview.query.filter(item => item.enabled && item.name.trim()).map(item => [item.name, item.value])),
+      headers: Object.fromEntries(preview.headers.filter(item => item.enabled && item.name.trim()).map(item => [item.name.toLowerCase(), item.value])),
+      body: preview.body.text
+    },
+    response: {
+      status: response.status,
+      durationMs: response.durationMs,
+      headers: headerMap,
+      body: parsedBody,
+      rawBody: response.bodyText
+    }
+  };
+}
+
+function seededStepOutputsFromReport(report: CollectionRunReport | null) {
+  if (!report) return {} as Record<string, unknown>;
+  const output: Record<string, unknown> = {};
+  report.iterations[0]?.stepRuns.forEach(stepRun => {
+    if (stepRun.request && stepRun.response) {
+      output[stepRun.stepKey] = buildStepOutput(stepRun.request, stepRun.response);
+    }
+  });
+  return output;
+}
+
+function resolveCollectionEnvironments(workspace: WorkspaceIndex, collection: CollectionDocument, environmentName?: string) {
+  if (environmentName) return [environmentName];
+  if (collection.envMatrix.length > 0) return collection.envMatrix;
+  return [collection.defaultEnvironment || workspace.project.defaultEnvironment];
+}
+
+function shouldRunCollectionStep(input: {
+  step: CollectionStep;
+  requestRecord: WorkspaceRequestRecord | undefined;
+  filters?: CollectionRunFilters;
+  explicitStepKeys?: string[];
+}) {
+  const { step, requestRecord, filters, explicitStepKeys } = input;
+  if (!step.enabled) return false;
+  if (explicitStepKeys && explicitStepKeys.length > 0 && !explicitStepKeys.includes(step.key)) return false;
+  if (!filters) return true;
+  if (filters.stepKeys && filters.stepKeys.length > 0 && !filters.stepKeys.includes(step.key)) return false;
+  if (filters.requestIds && filters.requestIds.length > 0 && !filters.requestIds.includes(step.requestId)) return false;
+  if (filters.caseIds && filters.caseIds.length > 0 && (!step.caseId || !filters.caseIds.includes(step.caseId))) return false;
+  if (filters.tags && filters.tags.length > 0) {
+    const caseDocument = requestRecord?.cases.find(item => item.id === step.caseId);
+    const tags = new Set([...(step.tags || []), ...(caseDocument?.tags || [])]);
+    if (!filters.tags.some(tag => tags.has(tag))) return false;
+  }
+  return true;
+}
+
+function shouldRetryAttempt(
+  policy: RetryPolicy | undefined,
+  failureType: 'network-error' | 'assertion-failed' | 'blocking-diagnostic',
+  response?: SendRequestResult
+) {
+  if (!policy || policy.count <= 0) return false;
+  if (response?.status && response.status >= 500 && policy.when.includes('5xx')) return true;
+  if (failureType === 'blocking-diagnostic') return false;
+  return policy.when.includes(failureType);
+}
+
+function normalizeStepRetry(step: CollectionStep, collection: CollectionDocument, caseDocument?: CaseDocument) {
+  const fallback = {
+    count: 0,
+    delayMs: 0,
+    when: ['network-error', '5xx', 'assertion-failed']
+  } satisfies RetryPolicy;
+  const candidates = [step.retry, caseDocument?.retry, collection.defaultRetry].filter(Boolean) as RetryPolicy[];
+  const enabled = candidates.find(policy => policy.count > 0);
+  return retryPolicySchema.parse(enabled || step.retry || caseDocument?.retry || collection.defaultRetry || fallback);
+}
+
+function applyStepOverrides(request: RequestDocument, caseDocument: CaseDocument | undefined, step: CollectionStep) {
+  if (!step.timeoutMs) return { request, caseDocument };
+  if (caseDocument) {
+    return {
+      request,
+      caseDocument: caseDocumentSchema.parse({
+        ...caseDocument,
+        overrides: {
+          ...caseDocument.overrides,
+          runtime: {
+            ...caseDocument.overrides.runtime,
+            timeoutMs: step.timeoutMs
+          }
+        }
+      })
+    };
+  }
+  return {
+    request: requestDocumentSchema.parse({
+      ...request,
+      runtime: {
+        ...request.runtime,
+        timeoutMs: step.timeoutMs
+      }
+    }),
+    caseDocument
+  };
+}
+
+export async function runPreparedRequest(input: PreparedRequestRunInput): Promise<PreparedRequestRunResult> {
+  const context = input.context || {};
+  const envName =
+    input.caseDocument?.environment || context.state?.environment.name || input.workspace.project.defaultEnvironment;
+  const sourceEnvironment =
+    input.workspace.environments.find(item => item.document.name === envName)?.document || createDefaultEnvironment(envName);
+  const initialEnvironment =
+    context.state?.environment && context.state.environment.name === envName
+      ? context.state.environment
+      : structuredClone(sourceEnvironment);
+  const state = context.state || {
+    variables: {},
+    environment: initialEnvironment
+  };
+  state.environment = initialEnvironment;
+
+  const beforeSources = [
+    createNamedTemplateSource('runtime variables', state.variables, 'runtime'),
+    ...(context.extraSources || [])
+  ];
+  const previewBeforeScripts = resolveRequest(
+    input.workspace.project,
+    input.request,
+    input.caseDocument,
+    state.environment,
+    beforeSources
+  );
+  const preScript = await executeRequestScript({
+    phase: 'pre-request',
+    script: input.caseDocument?.scripts?.preRequest || '',
+    state,
+    request: previewBeforeScripts,
+    sendRequest: request => input.sendRequest(sendRequestInputSchema.parse({
+      ...request,
+      sessionId: input.sessionId || previewBeforeScripts.sessionId
+    }))
+  });
+  const runtimeSources = [
+    createNamedTemplateSource('runtime variables', preScript.state.variables, 'script'),
+    ...(context.extraSources || [])
+  ];
+  const insight = inspectResolvedRequest(
+    input.workspace.project,
+    input.request,
+    input.caseDocument,
+    preScript.state.environment || initialEnvironment,
+    runtimeSources
+  );
+  const blockingDiagnostics = insight.diagnostics.filter(item => item.blocking);
+  if (blockingDiagnostics.length > 0) {
+    throw Object.assign(new Error(blockingDiagnostics.map(item => item.message).join(' ')), {
+      failureType: 'blocking-diagnostic' as const
+    });
+  }
+
+  const preview = resolvedRequestPreviewSchema.parse({
+    ...insight.preview,
+    sessionId: input.sessionId || input.workspace.root
+  });
+  const response = await input.sendRequest(preview);
+  const builtinChecks = input.caseDocument ? evaluateChecks(response, input.caseDocument.checks || [], { examples: input.request.examples }) : [];
+  const collectionChecks = context.collectionRules
+    ? applyCollectionRules({
+        ...context.collectionRules,
+        response
+      })
+    : [];
+  const postScript = await executeRequestScript({
+    phase: 'post-response',
+    script: input.caseDocument?.scripts?.postResponse || '',
+    state: preScript.state,
+    request: preview,
+    response
+  });
+  const baselineChecks =
+    input.caseDocument?.baselineRef
+      ? evaluateChecks(response, [
+          caseCheckSchema.parse({
+            id: createId('check'),
+            type: 'snapshot-match',
+            label: `Snapshot ${input.caseDocument.baselineRef}`,
+            enabled: true,
+            path: '',
+            expected: input.caseDocument.baselineRef
+          })
+        ], { examples: input.request.examples })
+      : [];
+
+  return {
+    preview,
+    response,
+    checkResults: [...builtinChecks, ...collectionChecks, ...baselineChecks, ...postScript.testResults],
+    scriptLogs: [...preScript.logs, ...postScript.logs],
+    state: {
+      variables: { ...postScript.state.variables },
+      environment: structuredClone(postScript.state.environment || initialEnvironment)
+    }
+  };
+}
+
+async function runCollectionStepWithRetry(input: {
+  workspace: WorkspaceIndex;
+  collection: CollectionDocument;
+  step: CollectionStep;
+  requestRecord: WorkspaceRequestRecord;
+  runtimeState: { variables: Record<string, string>; environment: EnvironmentDocument };
+  dataVars: Record<string, unknown>;
+  seeded: Record<string, unknown>;
+  sendRequest: RuntimeSendRequest;
+}) {
+  const caseDocument = input.requestRecord.cases.find(item => item.id === input.step.caseId);
+  const retry = normalizeStepRetry(input.step, input.collection, caseDocument);
+  const attempts: CollectionStepRun['attempts'] = [];
+  const extraSources = [
+    createNamedTemplateSource('collection vars', input.collection.vars, 'collection'),
+    createNamedTemplateSource('step outputs', { steps: input.seeded }, 'step-output'),
+    createNamedTemplateSource('data row', input.dataVars, 'data-row')
+  ];
+
+  const skipExpression = interpolateString(input.step.skipIf || caseDocument?.skip.when || '', [
+    input.runtimeState.variables,
+    input.dataVars as Record<string, unknown>,
+    { steps: input.seeded },
+    input.runtimeState.environment.vars
+  ]);
+  if (caseDocument?.skip.enabled || ['true', '1', 'yes'].includes(skipExpression.trim().toLowerCase())) {
+    return {
+      stepRun: {
+        stepKey: input.step.key,
+        stepName: input.step.name || input.step.key,
+        requestId: input.step.requestId,
+        caseId: input.step.caseId,
+        ok: false,
+        skipped: true,
+        checkResults: [],
+        scriptLogs: [],
+        error: caseDocument?.skip.reason || 'Skipped by condition',
+        failureType: 'skipped',
+        attempts: []
+      } satisfies CollectionStepRun,
+      nextState: input.runtimeState
+    };
+  }
+
+  for (let attempt = 1; attempt <= retry.count + 1; attempt += 1) {
+    try {
+      const overridden = applyStepOverrides(input.requestRecord.request, caseDocument, input.step);
+      const result = await runPreparedRequest({
+        workspace: input.workspace,
+        request: overridden.request,
+        caseDocument: overridden.caseDocument,
+        sendRequest: input.sendRequest,
+        sessionId: input.workspace.root,
+        context: {
+          extraSources,
+          state: input.runtimeState,
+          collectionRules: input.collection.rules,
+          sourceCollection: {
+            id: input.collection.id,
+            name: input.collection.name,
+            stepKey: input.step.key
+          }
+        }
+      });
+      const ok = result.checkResults.every(check => check.ok);
+      attempts.push({
+        attempt,
+        ok,
+        response: result.response,
+        checkResults: result.checkResults,
+        failureType: ok ? undefined : 'assertion-failed'
+      });
+      if (ok || attempt > retry.count || !shouldRetryAttempt(retry, 'assertion-failed', result.response)) {
+        return {
+          stepRun: {
+            stepKey: input.step.key,
+            stepName: input.step.name || input.step.key,
+            requestId: input.step.requestId,
+            caseId: input.step.caseId,
+            ok,
+            skipped: false,
+            request: result.preview,
+            response: result.response,
+            checkResults: result.checkResults,
+            scriptLogs: result.scriptLogs,
+            failureType: ok ? undefined : 'assertion-failed',
+            baselineName: caseDocument?.baselineRef || undefined,
+            attempts
+          } satisfies CollectionStepRun,
+          nextState: result.state,
+          output: buildStepOutput(result.preview, result.response)
+        };
+      }
+    } catch (error) {
+      const failureType = ((error as { failureType?: 'network-error' | 'blocking-diagnostic' }).failureType || 'network-error');
+      attempts.push({
+        attempt,
+        ok: false,
+        checkResults: [],
+        error: (error as Error).message || 'Collection step failed',
+        failureType
+      });
+      if (attempt > retry.count || !shouldRetryAttempt(retry, failureType)) {
+        return {
+          stepRun: {
+            stepKey: input.step.key,
+            stepName: input.step.name || input.step.key,
+            requestId: input.step.requestId,
+            caseId: input.step.caseId,
+            ok: false,
+            skipped: false,
+            checkResults: [],
+            scriptLogs: [],
+            error: (error as Error).message || 'Collection step failed',
+            failureType,
+            baselineName: caseDocument?.baselineRef || undefined,
+            attempts
+          } satisfies CollectionStepRun,
+          nextState: input.runtimeState
+        };
+      }
+    }
+
+    if (retry.delayMs > 0) {
+      await delay(retry.delayMs);
+    }
+  }
+
+  return {
+    stepRun: {
+      stepKey: input.step.key,
+      stepName: input.step.name || input.step.key,
+      requestId: input.step.requestId,
+      caseId: input.step.caseId,
+      ok: false,
+      skipped: false,
+      checkResults: [],
+      scriptLogs: [],
+      error: 'Collection step failed',
+      failureType: 'network-error',
+      attempts
+    } satisfies CollectionStepRun,
+    nextState: input.runtimeState
+  };
+}
+
+export async function runCollection(input: {
+  workspace: WorkspaceIndex;
+  collectionId: string;
+  sendRequest: RuntimeSendRequest;
+  options?: CollectionRunOptions;
+}) {
+  const record = input.workspace.collections.find(item => item.document.id === input.collectionId);
+  if (!record) throw new Error('Collection not found');
+  const collection = record.document;
+  const matrixEnvironments = resolveCollectionEnvironments(input.workspace, collection, input.options?.environmentName);
+  const parsedDataRows = parseCollectionDataText(record.dataText || '');
+  const baseRows =
+    parsedDataRows.length > 0
+      ? parsedDataRows
+      : Array.from({ length: Math.max(collection.iterationCount || 1, 1) }, () => ({} as Record<string, unknown>));
+
+  const reportIterations: CollectionRunReport['iterations'] = [];
+  let passedSteps = 0;
+  let failedSteps = 0;
+  let skippedSteps = 0;
+
+  for (const matrixEnvironment of matrixEnvironments) {
+    const sourceEnvironment =
+      input.workspace.environments.find(item => item.document.name === matrixEnvironment)?.document || createDefaultEnvironment(matrixEnvironment);
+    for (let index = 0; index < baseRows.length; index += 1) {
+      const dataVars = baseRows[index] || {};
+      let runtimeState = {
+        variables: { ...collection.vars },
+        environment: structuredClone(sourceEnvironment)
+      };
+      const seeded = seededStepOutputsFromReport(input.options?.seedReport || null);
+      const stepRuns: CollectionStepRun[] = [];
+      const phases = [
+        ...(collection.setupSteps || []).map(step => ({ ...step, key: `setup:${step.key}`, name: step.name || step.key })),
+        ...collection.steps,
+        ...(collection.teardownSteps || []).map(step => ({ ...step, key: `teardown:${step.key}`, name: step.name || step.key }))
+      ];
+      let stop = false;
+
+      for (const step of phases) {
+        const requestRecord = input.workspace.requests.find(item => item.request.id === step.requestId);
+        if (!requestRecord || !shouldRunCollectionStep({
+          step,
+          requestRecord,
+          filters: input.options?.filters,
+          explicitStepKeys: input.options?.stepKeys
+        })) {
+          continue;
+        }
+        if (stop) {
+          stepRuns.push({
+            stepKey: step.key,
+            stepName: step.name || step.key,
+            requestId: step.requestId,
+            caseId: step.caseId,
+            ok: false,
+            skipped: true,
+            checkResults: [],
+            scriptLogs: [],
+            error: 'Skipped after previous failure',
+            failureType: 'skipped',
+            attempts: []
+          });
+          skippedSteps += 1;
+          continue;
+        }
+
+        const executed = await runCollectionStepWithRetry({
+          workspace: input.workspace,
+          collection,
+          step,
+          requestRecord,
+          runtimeState,
+          dataVars,
+          seeded,
+          sendRequest: input.sendRequest
+        });
+        runtimeState = executed.nextState;
+        if (executed.output) {
+          seeded[step.key.replace(/^(setup:|teardown:)/, '')] = executed.output;
+        }
+        stepRuns.push(executed.stepRun);
+        if (executed.stepRun.ok) {
+          passedSteps += 1;
+        } else if (executed.stepRun.skipped) {
+          skippedSteps += 1;
+        } else {
+          failedSteps += 1;
+          if (input.options?.failFast || (!step.continueOnFailure && !collection.continueOnFailure && collection.stopOnFailure)) {
+            stop = true;
+          }
+        }
+      }
+
+      reportIterations.push({
+        index,
+        dataLabel: baseRows.length > 0 ? `Row ${index + 1}` : undefined,
+        dataVars: Object.fromEntries(Object.entries(dataVars).map(([key, value]) => [key, String(value ?? '')])),
+        stepRuns,
+        environmentName: matrixEnvironment,
+        matrixLabel: matrixEnvironment
+      });
+    }
+  }
+
+  return collectionRunReportSchema.parse({
+    id: createId('colrun'),
+    workspaceRoot: input.workspace.root,
+    collectionId: collection.id,
+    collectionName: collection.name,
+    environmentName: input.options?.environmentName || collection.defaultEnvironment || input.workspace.project.defaultEnvironment,
+    status: failedSteps === 0 ? 'passed' : passedSteps > 0 ? 'partial' : 'failed',
+    startedAt: new Date().toISOString(),
+    finishedAt: new Date().toISOString(),
+    iterationCount: reportIterations.length || 1,
+    passedSteps,
+    failedSteps,
+    skippedSteps,
+    iterations: reportIterations,
+    matrixEnvironments,
+    filters: {
+      tags: input.options?.filters?.tags || [],
+      stepKeys: input.options?.filters?.stepKeys || input.options?.stepKeys || [],
+      requestIds: input.options?.filters?.requestIds || [],
+      caseIds: input.options?.filters?.caseIds || []
+    }
+  });
+}
+
+export function rerunFailedStepKeys(report: CollectionRunReport) {
+  return [...new Set(
+    report.iterations
+      .flatMap(iteration => iteration.stepRuns)
+      .filter(step => !step.ok && !step.skipped && !step.stepKey.startsWith('teardown:'))
+      .map(step => step.stepKey.replace(/^(setup:|teardown:)/, ''))
+  )];
+}
+
+export function renderCollectionRunReportJunit(report: CollectionRunReport) {
+  const testcases = report.iterations.flatMap(iteration =>
+    iteration.stepRuns.map(step => {
+      const name = `${iteration.matrixLabel || iteration.environmentName || report.environmentName || 'default'} / ${iteration.dataLabel || `Iteration ${iteration.index + 1}`} / ${step.stepName}`;
+      const failure = step.ok || step.skipped
+        ? ''
+        : `<failure message="${escapeHtml(step.error || step.checkResults.find(check => !check.ok)?.message || 'Step failed')}">${escapeHtml(JSON.stringify({
+            failureType: step.failureType,
+            attempts: step.attempts,
+            checks: step.checkResults
+          }, null, 2))}</failure>`;
+      const skipped = step.skipped ? `<skipped message="${escapeHtml(step.error || 'Skipped')}" />` : '';
+      return `<testcase classname="${escapeHtml(report.collectionName)}" name="${escapeHtml(name)}" time="${((step.response?.durationMs || 0) / 1000).toFixed(3)}">${failure}${skipped}</testcase>`;
+    })
+  ).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="${escapeHtml(report.collectionName)}" tests="${report.iterations.flatMap(item => item.stepRuns).length}" failures="${report.failedSteps}" skipped="${report.skippedSteps}">
+${testcases}
+</testsuite>`;
 }
 
 export function inferFolderSegmentsFromPath(filePath: string, root: string) {
@@ -1838,12 +2433,18 @@ export function renderCollectionRunReportHtml(report: CollectionRunReport) {
     .map(iteration => {
       const stepRows = iteration.stepRuns
         .map(step => {
-          const summary = step.error || step.checkResults.find(check => !check.ok)?.message || `${step.checkResults.length} checks`;
+          const attemptCount = step.attempts?.length || 1;
+          const summary =
+            step.error ||
+            step.checkResults.find(check => !check.ok)?.message ||
+            `${step.checkResults.length} checks / ${attemptCount} attempt(s)`;
           return `
             <tr>
               <td>${escapeHtml(step.stepName)}</td>
               <td>${escapeHtml(step.stepKey)}</td>
               <td>${escapeHtml(step.skipped ? 'SKIPPED' : step.ok ? 'PASS' : 'FAIL')}</td>
+              <td>${escapeHtml(iteration.environmentName || report.environmentName || 'shared')}</td>
+              <td>${escapeHtml(String(attemptCount))}</td>
               <td>${escapeHtml(summary)}</td>
             </tr>
           `;
@@ -1852,10 +2453,10 @@ export function renderCollectionRunReportHtml(report: CollectionRunReport) {
 
       return `
         <section class="iteration">
-          <h2>${escapeHtml(iteration.dataLabel || `Iteration ${iteration.index + 1}`)}</h2>
+          <h2>${escapeHtml(iteration.matrixLabel || iteration.environmentName || report.environmentName || 'shared')} · ${escapeHtml(iteration.dataLabel || `Iteration ${iteration.index + 1}`)}</h2>
           <table>
             <thead>
-              <tr><th>Step</th><th>Key</th><th>Status</th><th>Summary</th></tr>
+              <tr><th>Step</th><th>Key</th><th>Status</th><th>Env</th><th>Attempts</th><th>Summary</th></tr>
             </thead>
             <tbody>${stepRows}</tbody>
           </table>
@@ -1916,7 +2517,7 @@ export function renderCollectionRunReportHtml(report: CollectionRunReport) {
   <body>
     <section class="hero">
       <h1>${escapeHtml(report.collectionName)}</h1>
-      <p>Environment: ${escapeHtml(report.environmentName || 'shared')} · Status: ${escapeHtml(report.status)}</p>
+      <p>Environment: ${escapeHtml(report.environmentName || 'shared')} · Matrix: ${escapeHtml(report.matrixEnvironments?.join(', ') || 'single')} · Status: ${escapeHtml(report.status)}</p>
       <div class="meta">
         <div><span>Iterations</span><strong>${report.iterationCount}</strong></div>
         <div><span>Passed Steps</span><strong>${report.passedSteps}</strong></div>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, Group, NumberInput, Select, Text, TextInput } from '@mantine/core';
 import { inspectCollectionDataText } from '@yapi-debugger/core';
-import type { CollectionDocument, CollectionRunReport, WorkspaceIndex } from '@yapi-debugger/schema';
+import { createCollectionStep, type CollectionDocument, type CollectionRunReport, type WorkspaceIndex } from '@yapi-debugger/schema';
 import { CodeEditor } from '../editors/CodeEditor';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
 
@@ -82,7 +82,7 @@ export function CollectionRunnerPanel(props: {
   onSelectReport: (id: string | null) => void;
   onSelectReportStep: (stepKey: string | null) => void;
   onExtractValue?: (target: 'local' | 'runtime' | 'collection', input: { suggestedName: string; value: string }) => void;
-  onExportReport?: (format: 'json' | 'html') => void;
+  onExportReport?: (format: 'json' | 'html' | 'junit') => void;
   onCopyText?: (value: string, successMessage: string) => void;
 }) {
   const [reportFilter, setReportFilter] = useState('');
@@ -229,6 +229,9 @@ export function CollectionRunnerPanel(props: {
                 <Button size="xs" variant="subtle" onClick={() => props.onExportReport?.('html')} disabled={!selectedReport}>
                   HTML
                 </Button>
+                <Button size="xs" variant="subtle" onClick={() => props.onExportReport?.('junit')} disabled={!selectedReport}>
+                  JUnit
+                </Button>
                 <Button size="xs" variant="subtle" color="red" onClick={props.onClearReports}>
                   Clear
                 </Button>
@@ -365,6 +368,67 @@ export function CollectionRunnerPanel(props: {
                       })
                     }
                   />
+                  <TextInput
+                    label="Tags"
+                    placeholder="smoke, nightly"
+                    value={(draftCollection.tags || []).join(', ')}
+                    onChange={event =>
+                      props.onCollectionChange({
+                        ...draftCollection,
+                        tags: event.currentTarget.value.split(',').map(item => item.trim()).filter(Boolean)
+                      })
+                    }
+                  />
+                  <TextInput
+                    label="Environment Matrix"
+                    placeholder="shared, staging"
+                    value={(draftCollection.envMatrix || []).join(', ')}
+                    onChange={event =>
+                      props.onCollectionChange({
+                        ...draftCollection,
+                        envMatrix: event.currentTarget.value.split(',').map(item => item.trim()).filter(Boolean)
+                      })
+                    }
+                  />
+                  <NumberInput
+                    label="Default Retry Count"
+                    value={draftCollection.defaultRetry?.count || 0}
+                    min={0}
+                    onChange={value =>
+                      props.onCollectionChange({
+                        ...draftCollection,
+                        defaultRetry: {
+                          ...draftCollection.defaultRetry,
+                          count: Number(value) || 0
+                        }
+                      })
+                    }
+                  />
+                  <NumberInput
+                    label="Default Retry Delay (ms)"
+                    value={draftCollection.defaultRetry?.delayMs || 0}
+                    min={0}
+                    step={100}
+                    onChange={value =>
+                      props.onCollectionChange({
+                        ...draftCollection,
+                        defaultRetry: {
+                          ...draftCollection.defaultRetry,
+                          delayMs: Number(value) || 0
+                        }
+                      })
+                    }
+                  />
+                  <Checkbox
+                    label="Continue On Failure"
+                    checked={draftCollection.continueOnFailure}
+                    onChange={event =>
+                      props.onCollectionChange({
+                        ...draftCollection,
+                        continueOnFailure: event.currentTarget.checked
+                      })
+                    }
+                  />
                 </div>
               </div>
 
@@ -398,12 +462,11 @@ export function CollectionRunnerPanel(props: {
                           ...draftCollection,
                           steps: [
                             ...draftCollection.steps,
-                            {
+                            createCollectionStep({
                               key: `step_${draftCollection.steps.length + 1}`,
                               requestId: props.workspace.requests[0]?.request.id || '',
-                              enabled: true,
                               name: `Step ${draftCollection.steps.length + 1}`
-                            }
+                            })
                           ]
                         })
                       }
@@ -492,6 +555,87 @@ export function CollectionRunnerPanel(props: {
                                 ...draftCollection,
                                 steps: draftCollection.steps.map(item =>
                                   item.key === step.key ? { ...item, enabled: event.currentTarget.checked } : item
+                                )
+                              })
+                            }
+                          />
+                          <TextInput
+                            label="Tags"
+                            placeholder="login, smoke"
+                            value={(step.tags || []).join(', ')}
+                            onChange={event =>
+                              props.onCollectionChange({
+                                ...draftCollection,
+                                steps: draftCollection.steps.map(item =>
+                                  item.key === step.key
+                                    ? {
+                                        ...item,
+                                        tags: event.currentTarget.value.split(',').map(tag => tag.trim()).filter(Boolean)
+                                      }
+                                    : item
+                                )
+                              })
+                            }
+                          />
+                          <NumberInput
+                            label="Timeout Override (ms)"
+                            value={step.timeoutMs || ''}
+                            min={0}
+                            onChange={value =>
+                              props.onCollectionChange({
+                                ...draftCollection,
+                                steps: draftCollection.steps.map(item =>
+                                  item.key === step.key
+                                    ? { ...item, timeoutMs: Number(value) > 0 ? Number(value) : undefined }
+                                    : item
+                                )
+                              })
+                            }
+                          />
+                          <NumberInput
+                            label="Retry Count"
+                            value={step.retry?.count || 0}
+                            min={0}
+                            onChange={value =>
+                              props.onCollectionChange({
+                                ...draftCollection,
+                                steps: draftCollection.steps.map(item =>
+                                  item.key === step.key
+                                    ? {
+                                        ...item,
+                                        retry: {
+                                          ...item.retry,
+                                          count: Number(value) || 0,
+                                          delayMs: item.retry?.delayMs || 0,
+                                          when: item.retry?.when || ['network-error', '5xx', 'assertion-failed']
+                                        }
+                                      }
+                                    : item
+                                )
+                              })
+                            }
+                          />
+                          <Checkbox
+                            label="Continue On Failure"
+                            checked={step.continueOnFailure || false}
+                            onChange={event =>
+                              props.onCollectionChange({
+                                ...draftCollection,
+                                steps: draftCollection.steps.map(item =>
+                                  item.key === step.key ? { ...item, continueOnFailure: event.currentTarget.checked } : item
+                                )
+                              })
+                            }
+                          />
+                          <TextInput
+                            label="Skip If"
+                            placeholder="{{skipLogin}}"
+                            value={step.skipIf || ''}
+                            onChange={event =>
+                              props.onCollectionChange({
+                                ...draftCollection,
+                                steps: draftCollection.steps.map(item =>
+                                  item.key === step.key ? { ...item, skipIf: event.currentTarget.value } : item
                                 )
                               })
                             }
@@ -638,6 +782,21 @@ export function CollectionRunnerPanel(props: {
                       readOnly
                       language="text"
                       minHeight="120px"
+                    />
+                  </div>
+                  <div className="check-card">
+                    <Text fw={700}>Attempts</Text>
+                    <CodeEditor
+                      value={
+                        selectedStep.step.attempts.length > 0
+                          ? selectedStep.step.attempts
+                              .map(attempt => `#${attempt.attempt} ${attempt.ok ? 'PASS' : 'FAIL'} ${attempt.failureType || ''} ${attempt.error || ''}`.trim())
+                              .join('\n')
+                          : 'No retries were recorded.'
+                      }
+                      readOnly
+                      language="text"
+                      minHeight="96px"
                     />
                   </div>
                   <div className="check-card">

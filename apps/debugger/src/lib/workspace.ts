@@ -1,23 +1,25 @@
 import {
-  applyCollectionRules,
   buildCurlCommand,
   buildWorkspaceIndex,
   createNamedTemplateSource,
   createProjectSeed,
-  evaluateChecks,
-  executeRequestScript,
+  inspectResolvedRequest,
   interpolateString,
   materializeCollectionDocument,
   materializeEnvironmentDocuments,
   materializeProjectDocument,
   materializeRequestDocuments,
   mergeTemplateSources,
-  parseCollectionDataText,
-  resolveRequest,
-  inspectResolvedRequest
+  renderCollectionRunReportJunit,
+  rerunFailedStepKeys as rerunFailedStepKeysCore,
+  runCollection as runCollectionCore,
+  runPreparedRequest as runPreparedRequestCore
 } from '@yapi-debugger/core';
 import {
+  DEFAULT_GITIGNORE,
+  SCHEMA_VERSION,
   authConfigSchema,
+  createCollectionStep,
   createDefaultEnvironment,
   createEmptyCase,
   createEmptyCollection,
@@ -73,6 +75,78 @@ function scanPayloadToIndex(payload: WorkspaceScanPayload) {
     projectContent,
     fileContents: map
   });
+}
+
+function relativeWorkspacePath(root: string, fullPath: string) {
+  return fullPath.replace(`${root}/`, '');
+}
+
+function payloadNeedsMigration(payload: WorkspaceScanPayload) {
+  return payload.files.some(file =>
+    file.content.includes('schemaVersion: 1') &&
+    (file.path.endsWith('.yaml') || file.path.endsWith('.yml'))
+  );
+}
+
+async function ensureWorkspaceMigrated(root: string, payload: WorkspaceScanPayload) {
+  if (!payloadNeedsMigration(payload)) {
+    return payload;
+  }
+
+  const backupRoot = `${root}/.yapi-debugger-cache/migrations/${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  for (const file of payload.files) {
+    await writeDocument(`${backupRoot}/${relativeWorkspacePath(root, file.path)}`, file.content);
+  }
+
+  const index = scanPayloadToIndex(payload);
+  const projectWrite = materializeProjectDocument({ ...index.project, schemaVersion: SCHEMA_VERSION }, root);
+  await writeDocument(projectWrite.path, projectWrite.content);
+
+  for (const environment of index.environments) {
+    const writes = materializeEnvironmentDocuments({ ...environment.document, schemaVersion: SCHEMA_VERSION }, root);
+    for (const write of writes) {
+      await writeDocument(write.path, write.content);
+    }
+  }
+
+  for (const request of index.requests) {
+    const writes = materializeRequestDocuments([
+      {
+        folderSegments: request.folderSegments,
+        request: { ...request.request, schemaVersion: SCHEMA_VERSION },
+        cases: request.cases.map(caseItem => ({ ...caseItem, schemaVersion: SCHEMA_VERSION }))
+      }
+    ], root);
+    for (const write of writes) {
+      await writeDocument(write.path, write.content);
+    }
+  }
+
+  for (const collection of index.collections) {
+    const writes = materializeCollectionDocument(
+      { ...collection.document, schemaVersion: SCHEMA_VERSION },
+      root,
+      collection.dataText
+    );
+    for (const write of writes) {
+      await writeDocument(write.path, write.content);
+    }
+  }
+
+  const existingGitignore = payload.files.find(file => file.path === `${root}/.gitignore`)?.content || '';
+  const gitignoreContent = existingGitignore.includes('.yapi-debugger-cache/')
+    ? existingGitignore
+    : `${existingGitignore.trimEnd()}\n${DEFAULT_GITIGNORE}`.trimStart();
+  await writeDocument(`${root}/.gitignore`, gitignoreContent.endsWith('\n') ? gitignoreContent : `${gitignoreContent}\n`);
+  await writeDocument(`${root}/.yapi-debugger-cache/migration-manifest.json`, JSON.stringify({
+    migratedAt: new Date().toISOString(),
+    fromVersion: 1,
+    toVersion: SCHEMA_VERSION,
+    backupRoot,
+    files: payload.files.map(file => relativeWorkspacePath(root, file.path))
+  }, null, 2));
+
+  return scanWorkspace(root);
 }
 
 function createRuntimeEnvironment(workspace: WorkspaceIndex, name: string) {
@@ -399,7 +473,8 @@ function seededStepOutputsFromReport(report: CollectionRunReport | null) {
 
 export async function openWorkspace(root: string) {
   const payload = await scanWorkspace(root);
-  return scanPayloadToIndex(payload);
+  const migratedPayload = await ensureWorkspaceMigrated(root, payload);
+  return scanPayloadToIndex(migratedPayload);
 }
 
 export type ImportPreviewSummary = {
@@ -739,13 +814,12 @@ export async function createCollectionInWorkspace(
 ) {
   const collection = createEmptyCollection('New Collection');
   if (requestId) {
-    collection.steps.push({
+    collection.steps.push(createCollectionStep({
       key: 'step_1',
       requestId,
       caseId,
-      enabled: true,
       name: 'Initial Step'
-    });
+    }));
   }
   await saveCollectionRecord(root, collection, '');
   return collection.id;
@@ -938,111 +1012,18 @@ export async function runPreparedRequest(
   workspace: WorkspaceIndex,
   input: PreparedRequestRunInput
 ) {
-  const context = input.context || {};
-  const envName =
-    input.caseDocument?.environment || context.state?.environment.name || workspace.project.defaultEnvironment;
-  const initialEnvironment =
-    context.state?.environment && context.state.environment.name === envName
-      ? context.state.environment
-      : createRuntimeEnvironment(workspace, envName);
-  const state = context.state || {
-    variables: {},
-    environment: initialEnvironment
-  };
-  state.environment = initialEnvironment;
-  const beforeSources = [
-    createNamedTemplateSource('runtime variables', state.variables, 'runtime'),
-    ...(context.extraSources || [])
-  ];
-
-  const previewBeforeScripts = resolveRequest(
-    workspace.project,
-    input.request,
-    input.caseDocument,
-    state.environment,
-    beforeSources
-  );
-  const preScript = await executeRequestScript({
-    phase: 'pre-request',
-    script: input.caseDocument?.scripts?.preRequest || '',
-    state,
-    request: previewBeforeScripts,
-    sendRequest: request =>
-      sendRequest({
-        ...request,
-        sessionId: input.sessionId || workspace.root
-      })
-  });
-  const runtimeSources = [
-    createNamedTemplateSource('runtime variables', preScript.state.variables, 'script'),
-    ...(context.extraSources || [])
-  ];
-  let nextRequest = input.request;
-  let nextCaseDocument = input.caseDocument;
-  let runtimeEnvironment = preScript.state.environment || initialEnvironment;
-
-  const oauthRuntime = await refreshOauthClientCredentials({
+  return runPreparedRequestCore({
     workspace,
-    project: workspace.project,
-    request: nextRequest,
-    caseDocument: nextCaseDocument,
-    environment: runtimeEnvironment,
-    extraSources: runtimeSources,
-    sessionId: input.sessionId || workspace.root
-  });
-  runtimeEnvironment = oauthRuntime.environment;
-  preScript.state.environment = runtimeEnvironment;
-  if (oauthRuntime.refreshed && oauthRuntime.auth.type === 'oauth2' && !oauthRuntime.profileName) {
-    const withResolvedAuth = withResolvedOauthAuth(
-      nextRequest,
-      nextCaseDocument,
-      oauthRuntime.auth,
-      oauthRuntime.authComesFromCase
-    );
-    nextRequest = withResolvedAuth.request;
-    nextCaseDocument = withResolvedAuth.caseDocument;
-  }
-
-  const insight = inspectResolvedRequest(
-    workspace.project,
-    nextRequest,
-    nextCaseDocument,
-    runtimeEnvironment,
-    runtimeSources
-  );
-  const blockingDiagnostics = insight.diagnostics.filter(item => item.blocking);
-  if (blockingDiagnostics.length > 0) {
-    throw new Error(blockingDiagnostics.map(item => item.message).join(' '));
-  }
-  const preview: ResolvedRequestPreview = {
-    ...(oauthRuntime.refreshed && oauthRuntime.auth.type === 'oauth2'
-      ? applyOauthTokenToPreview(insight.preview, oauthRuntime.auth, oauthRuntime.authSource, oauthRuntime.profileName)
-      : insight.preview),
-    sessionId: input.sessionId || workspace.root
-  };
-  const response = await sendRequest(preview);
-  const builtinChecks = input.caseDocument ? evaluateChecks(response, input.caseDocument.checks || []) : [];
-  const collectionChecks = context.collectionRules
-    ? applyCollectionRules({
-        ...context.collectionRules,
-        response
+    request: input.request,
+    caseDocument: input.caseDocument,
+    sessionId: input.sessionId || workspace.root,
+    context: input.context,
+    sendRequest: preview =>
+      sendRequest({
+        ...preview,
+        sessionId: preview.sessionId || input.sessionId || workspace.root
       })
-    : [];
-  const postScript = await executeRequestScript({
-    phase: 'post-response',
-    script: input.caseDocument?.scripts?.postResponse || '',
-    state: preScript.state,
-    request: preview,
-    response
   });
-
-  return {
-    preview,
-    response,
-    checkResults: [...builtinChecks, ...collectionChecks, ...postScript.testResults],
-    scriptLogs: [...preScript.logs, ...postScript.logs],
-    state: postScript.state
-  };
 }
 
 export async function runResolvedRequest(
@@ -1192,133 +1173,16 @@ export async function runCollection(
   collectionId: string,
   options: CollectionRunOptions = {}
 ) {
-  const record = workspace.collections.find(item => item.document.id === collectionId);
-  if (!record) throw new Error('Collection not found');
-
-  const collection = record.document;
-  const environmentName = options.environmentName || collection.defaultEnvironment || workspace.project.defaultEnvironment;
-  const baseEnvironment = createRuntimeEnvironment(workspace, environmentName);
-  const parsedDataRows = parseCollectionDataText(record.dataText || '');
-  const iterations =
-    parsedDataRows.length > 0
-      ? parsedDataRows
-      : Array.from({ length: Math.max(collection.iterationCount || 1, 1) }, () => ({} as Record<string, unknown>));
-
-  const reportIterations: CollectionRunReport['iterations'] = [];
-  let passedSteps = 0;
-  let failedSteps = 0;
-  let skippedSteps = 0;
-
-  for (let index = 0; index < iterations.length; index += 1) {
-    const dataVars = iterations[index] || {};
-    const runtimeEnvironment = structuredClone(baseEnvironment);
-    const runtimeState = {
-      variables: { ...collection.vars },
-      environment: runtimeEnvironment
-    };
-    const seeded = seededStepOutputsFromReport(options.seedReport || null);
-    const stepRuns: CollectionStepRun[] = [];
-
-    const activeSteps = collection.steps.filter(step => step.enabled && (!options.stepKeys || options.stepKeys.includes(step.key)));
-    let stop = false;
-    for (const step of activeSteps) {
-      if (stop) {
-        stepRuns.push({
-          stepKey: step.key,
-          stepName: step.name || step.key,
-          requestId: step.requestId,
-          caseId: step.caseId,
-          ok: false,
-          skipped: true,
-          checkResults: [],
-          scriptLogs: [],
-          error: 'Skipped after previous failure'
-        });
-        skippedSteps += 1;
-        continue;
-      }
-
-      try {
-        const run = await runResolvedRequest(workspace, step.requestId, step.caseId, {
-          extraSources: [
-            createNamedTemplateSource('collection vars', collection.vars, 'collection'),
-            createNamedTemplateSource(`data row ${index + 1}`, dataVars, 'data-row'),
-            createNamedTemplateSource('step outputs', { steps: seeded }, 'step-output')
-          ],
-          state: runtimeState,
-          collectionRules: collection.rules,
-          sourceCollection: {
-            id: collection.id,
-            name: collection.name,
-            stepKey: step.key
-          }
-        });
-
-        seeded[step.key] = stepOutputFromRun(run.preview, run.response);
-        const ok = run.checkResults.every(result => result.ok);
-        stepRuns.push({
-          stepKey: step.key,
-          stepName: step.name || step.key,
-          requestId: step.requestId,
-          caseId: step.caseId,
-          ok,
-          skipped: false,
-          request: run.preview,
-          response: run.response,
-          checkResults: run.checkResults,
-          scriptLogs: run.scriptLogs
-        });
-
-        if (ok) {
-          passedSteps += 1;
-        } else {
-          failedSteps += 1;
-          if (collection.stopOnFailure) {
-            stop = true;
-          }
-        }
-      } catch (error) {
-        failedSteps += 1;
-        stepRuns.push({
-          stepKey: step.key,
-          stepName: step.name || step.key,
-          requestId: step.requestId,
-          caseId: step.caseId,
-          ok: false,
-          skipped: false,
-          checkResults: [],
-          scriptLogs: [],
-          error: (error as Error).message || 'Collection step failed'
-        });
-        if (collection.stopOnFailure) {
-          stop = true;
-        }
-      }
-    }
-
-    reportIterations.push({
-      index,
-      dataLabel: parsedDataRows.length > 0 ? `Row ${index + 1}` : undefined,
-      dataVars: Object.fromEntries(Object.entries(dataVars).map(([key, value]) => [key, String(value ?? '')])),
-      stepRuns
-    });
-  }
-
-  const report: CollectionRunReport = {
-    id: createId('colrun'),
-    workspaceRoot: workspace.root,
-    collectionId: collection.id,
-    collectionName: collection.name,
-    environmentName,
-    status: failedSteps === 0 ? 'passed' : passedSteps > 0 ? 'partial' : 'failed',
-    startedAt: new Date().toISOString(),
-    finishedAt: new Date().toISOString(),
-    iterationCount: reportIterations.length || 1,
-    passedSteps,
-    failedSteps,
-    skippedSteps,
-    iterations: reportIterations
-  };
+  const report = await runCollectionCore({
+    workspace,
+    collectionId,
+    options,
+    sendRequest: preview =>
+      sendRequest({
+        ...preview,
+        sessionId: preview.sessionId || workspace.root
+      })
+  });
   await appendCollectionReport(report);
   return report;
 }
@@ -1332,10 +1196,7 @@ export async function clearCollectionRunReports(root: string) {
 }
 
 export function rerunFailedStepKeys(report: CollectionRunReport) {
-  return report.iterations
-    .flatMap(iteration => iteration.stepRuns)
-    .filter(step => !step.ok && !step.skipped)
-    .map(step => step.stepKey);
+  return rerunFailedStepKeysCore(report);
 }
 
 export function collectionReportSeed(report: CollectionRunReport) {

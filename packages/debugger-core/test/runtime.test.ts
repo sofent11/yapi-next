@@ -4,13 +4,18 @@ import {
   applyCollectionRules,
   buildWorkspaceIndex,
   buildCurlCommand,
+  evaluateChecks,
   executeRequestScript,
   inspectCollectionDataText,
   inspectResolvedRequest,
   renderCollectionRunReportHtml,
+  renderCollectionRunReportJunit,
+  rerunFailedStepKeys,
+  runCollection,
   resolveRequest
 } from '../src/index';
 import {
+  createCollectionStep,
   createEmptyCollection,
   createDefaultEnvironment,
   createDefaultProject,
@@ -327,6 +332,240 @@ test('renderCollectionRunReportHtml emits a readable report shell', () => {
   assert.match(html, /Smoke/);
   assert.match(html, /401 Unauthorized/);
   assert.match(html, /Failure Summary/);
+});
+
+test('evaluateChecks supports automation assertions and baseline snapshots', () => {
+  const responseBody = JSON.stringify({
+    meta: { count: 3 },
+    items: ['a', 'b'],
+    kind: 'order'
+  });
+  const results = evaluateChecks({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    url: 'https://api.example.com/orders/1',
+    durationMs: 32,
+    sizeBytes: responseBody.length,
+    headers: [{ name: 'content-type', value: 'application/json' }],
+    bodyText: responseBody,
+    timestamp: new Date().toISOString()
+  }, [
+    { id: 'check_1', type: 'json-not-exists', label: 'no error', enabled: true, path: '$.error', expected: '' },
+    { id: 'check_2', type: 'json-type', label: 'count type', enabled: true, path: '$.meta.count', expected: 'number' },
+    { id: 'check_3', type: 'json-length', label: 'item count', enabled: true, path: '$.items', expected: '2' },
+    { id: 'check_4', type: 'number-between', label: 'count range', enabled: true, path: '$.meta.count', expected: '2,5' },
+    {
+      id: 'check_5',
+      type: 'schema-match',
+      label: 'schema ok',
+      enabled: true,
+      path: '',
+      expected: JSON.stringify({
+        type: 'object',
+        required: ['meta', 'items', 'kind'],
+        properties: {
+          meta: {
+            type: 'object',
+            required: ['count'],
+            properties: { count: { type: 'number' } }
+          },
+          items: { type: 'array', minItems: 2 },
+          kind: { type: 'string' }
+        }
+      })
+    },
+    { id: 'check_6', type: 'snapshot-match', label: 'baseline ok', enabled: true, path: '', expected: 'baseline-order' }
+  ], {
+    examples: [
+      {
+        name: 'baseline-order',
+        role: 'baseline',
+        text: responseBody
+      }
+    ]
+  });
+
+  assert.equal(results.every(result => result.ok), true);
+  assert.equal(results.find(result => result.id === 'check_6')?.source, 'baseline');
+});
+
+test('runCollection executes serial env matrix with retry and baseline checks', async () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+
+  const shared = createDefaultEnvironment('shared');
+  const staging = createDefaultEnvironment('staging');
+
+  const request = createEmptyRequest('Health');
+  request.url = '{{baseUrl}}/health';
+  request.examples = [
+    {
+      name: 'health-baseline',
+      role: 'baseline',
+      text: '{"ok":true}'
+    }
+  ];
+
+  const caseDocument = createEmptyCase(request.id, 'smoke');
+  caseDocument.baselineRef = 'health-baseline';
+  caseDocument.checks = [
+    { id: 'status_1', type: 'status-equals', label: 'status ok', enabled: true, path: '', expected: '200' }
+  ];
+
+  const collection = createEmptyCollection('Smoke Suite');
+  collection.envMatrix = ['shared', 'staging'];
+  collection.defaultRetry = {
+    count: 1,
+    delayMs: 0,
+    when: ['network-error', '5xx', 'assertion-failed']
+  };
+  collection.steps = [
+    createCollectionStep({
+      key: 'health',
+      requestId: request.id,
+      caseId: caseDocument.id,
+      name: 'Health'
+    })
+  ];
+
+  const workspace = {
+    root: '/tmp/debugger-suite',
+    project,
+    environments: [
+      { document: shared, filePath: '/tmp/debugger-suite/environments/shared.yaml' },
+      { document: staging, filePath: '/tmp/debugger-suite/environments/staging.yaml' }
+    ],
+    requests: [
+      {
+        request,
+        cases: [caseDocument],
+        folderSegments: [],
+        requestFilePath: '/tmp/debugger-suite/requests/health.request.yaml',
+        resourceDirPath: '/tmp/debugger-suite/requests/health'
+      }
+    ],
+    collections: [
+      {
+        document: collection,
+        filePath: '/tmp/debugger-suite/collections/smoke.collection.yaml',
+        dataText: ''
+      }
+    ],
+    tree: []
+  };
+
+  const attemptsByEnv = new Map<string, number>();
+  const report = await runCollection({
+    workspace,
+    collectionId: collection.id,
+    sendRequest: async preview => {
+      const envName = 'environmentName' in preview ? preview.environmentName || 'shared' : 'shared';
+      const attempt = (attemptsByEnv.get(envName) || 0) + 1;
+      attemptsByEnv.set(envName, attempt);
+
+      if (envName === 'shared' && attempt === 1) {
+        return {
+          ok: false,
+          status: 503,
+          statusText: 'Service Unavailable',
+          url: preview.url,
+          durationMs: 20,
+          sizeBytes: 0,
+          headers: [],
+          bodyText: '{"ok":false}',
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: preview.url,
+        durationMs: 15,
+        sizeBytes: 11,
+        headers: [{ name: 'content-type', value: 'application/json' }],
+        bodyText: '{"ok":true}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.equal(report.status, 'passed');
+  assert.deepEqual(report.matrixEnvironments, ['shared', 'staging']);
+  assert.equal(report.iterationCount, 2);
+  assert.equal(report.passedSteps, 2);
+  assert.equal(report.failedSteps, 0);
+  assert.equal(report.iterations[0]?.stepRuns[0]?.attempts?.length, 2);
+  assert.equal(report.iterations[0]?.stepRuns[0]?.baselineName, 'health-baseline');
+  assert.equal(report.iterations[0]?.stepRuns[0]?.checkResults.some(result => result.source === 'baseline'), true);
+});
+
+test('renderCollectionRunReportJunit and rerunFailedStepKeys encode failures for CI', () => {
+  const report = {
+    id: 'colrun_ci',
+    workspaceRoot: '/tmp/demo',
+    collectionId: 'col_smoke',
+    collectionName: 'Smoke Suite',
+    environmentName: 'shared',
+    status: 'failed' as const,
+    startedAt: '1',
+    finishedAt: '2',
+    iterationCount: 1,
+    passedSteps: 0,
+    failedSteps: 1,
+    skippedSteps: 1,
+    matrixEnvironments: ['shared'],
+    filters: {
+      tags: ['smoke'],
+      stepKeys: [],
+      requestIds: [],
+      caseIds: []
+    },
+    iterations: [
+      {
+        index: 0,
+        dataLabel: 'Row 1',
+        dataVars: {},
+        environmentName: 'shared',
+        matrixLabel: 'shared',
+        stepRuns: [
+          {
+            stepKey: 'login',
+            stepName: 'Login',
+            requestId: 'req_login',
+            ok: false,
+            skipped: false,
+            checkResults: [],
+            scriptLogs: [],
+            error: '401 Unauthorized',
+            failureType: 'assertion-failed' as const,
+            attempts: [{ attempt: 1, ok: false, checkResults: [], error: '401 Unauthorized', failureType: 'assertion-failed' as const }]
+          },
+          {
+            stepKey: 'teardown:cleanup',
+            stepName: 'Cleanup',
+            requestId: 'req_cleanup',
+            ok: false,
+            skipped: true,
+            checkResults: [],
+            scriptLogs: [],
+            error: 'Skipped after previous failure',
+            failureType: 'skipped' as const,
+            attempts: []
+          }
+        ]
+      }
+    ]
+  };
+
+  const junit = renderCollectionRunReportJunit(report);
+
+  assert.deepEqual(rerunFailedStepKeys(report), ['login']);
+  assert.match(junit, /testsuite name="Smoke Suite"/);
+  assert.match(junit, /failure message="401 Unauthorized"/);
+  assert.match(junit, /<skipped message="Skipped after previous failure" \/>/);
 });
 
 test('resolveRequest excludes disabled query overrides even when the raw url already contains them', () => {

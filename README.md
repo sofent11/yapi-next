@@ -70,7 +70,10 @@ npm run debugger:bundle
 npm run debugger:test
 
 # 在命令行运行本地 debugger collection
-npm run debugger:run -- --workspace ./my-api-project --collection smoke-suite --report ./reports/smoke.html --format html
+npm run debugger:run -- --workspace ./my-api-project --collection smoke-suite --environment shared --report-html ./reports/smoke.html --report-junit ./reports/smoke.xml
+
+# 按标签筛选并只重跑失败步骤
+npm run debugger:run -- --workspace ./my-api-project --collection smoke-suite --tag smoke --rerun-failed ./reports/last-run.json --fail-fast
 
 # 仅检查 Web TypeScript 类型
 npm run next:web:typecheck
@@ -135,6 +138,7 @@ npm run perf:roundtrip
 - `apps/debugger` 默认在 `http://localhost:1420` 提供前端开发服务器，并由 Tauri 2 载入
 - 独立调试器不依赖 `apps/api` 运行，不直接与 YApi 后台交互
 - 远程规范导入仅支持通过 URL 拉取文本内容，可按 Bearer、自定义 Header 或 Query 参数携带 token
+- `debugger:run` 固定退出码：`0` 全通过，`1` 有测试失败，`2` workspace/配置/迁移错误，`3` 运行时异常
 
 ### Docker 构建相关
 - 根目录 `.env` 中的 `VITE_APP_BASE` 会传入 Docker 构建阶段，用于生成前端静态资源路径
@@ -170,8 +174,10 @@ docker compose up -d --build
 - 支持从 OpenAPI 3.x、Swagger 2.0、HAR、Postman Collection v2.1 导入到本地项目
 - 支持接口下多个 Case、前后置脚本、环境切换、workspace 级会话复用、原生桌面请求发送与响应查看
 - 支持 Import Repair Center、导入后下一步向导、统一 Save As 沉淀动作，以及从 History 回写 Example / Baseline / Case
-- 支持多步骤 Collection Runner、JSON/CSV 数据文件驱动、集合级通用校验、本地报告缓存与 JSON/HTML 导出
-- 支持 Headless Runner：直接读取现有 workspace 在命令行执行 collection，便于本地回归与脚本化集成
+- 工作区已升级到 `schemaVersion: 2`，首次打开旧工作区会自动备份并迁移到 V2，迁移记录落在 `.yapi-debugger-cache/`
+- 支持多步骤 Collection Runner、JSON/YAML/CSV 数据驱动、串行环境矩阵、setup/teardown、step/case/collection 统一 retry、本地报告缓存与 JSON/HTML/JUnit 导出
+- 支持断言 2.0：新增 `json-not-exists`、`json-type`、`json-length`、`number-gt`、`number-lt`、`number-between`、`schema-match`、`snapshot-match`
+- 支持 Headless Runner：直接读取现有 workspace 在命令行执行 collection，支持 `--tag`、`--step`、`--request`、`--case`、`--environment`、`--fail-fast`、`--rerun-failed`
 - 一期不依赖 YApi API，不做云同步和团队实时协同
 
 工作区格式与目录约定见：
