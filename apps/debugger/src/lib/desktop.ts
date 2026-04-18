@@ -2,6 +2,13 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import type { CollectionRunReport, SendRequestResult, SessionSnapshot } from '@yapi-debugger/schema';
+import type {
+  BrowserTargetSummary,
+  CaptureBrowserState,
+  CaptureMode,
+  CaptureRuntimeState,
+  CapturedNetworkEntry
+} from './capture';
 
 export type GitStatusPayload = {
   branch: string;
@@ -147,6 +154,46 @@ export async function gitPush(root: string): Promise<string> {
 
 export async function openTerminal(root: string) {
   await invoke('open_terminal', { root });
+}
+
+export async function launchCaptureBrowser(): Promise<CaptureBrowserState> {
+  return invoke('capture_browser_launch');
+}
+
+export async function listCaptureTargets(): Promise<BrowserTargetSummary[]> {
+  return invoke('capture_target_list');
+}
+
+export async function startBrowserCapture(input: {
+  mode: CaptureMode;
+  targetId?: string | null;
+}): Promise<CaptureRuntimeState> {
+  return invoke('capture_start', { input });
+}
+
+export async function stopBrowserCapture(): Promise<CaptureRuntimeState> {
+  return invoke('capture_stop');
+}
+
+export async function clearBrowserCaptureSession(): Promise<CaptureRuntimeState> {
+  return invoke('capture_clear');
+}
+
+export function listenCaptureEvents(handlers: {
+  onState?: (state: CaptureRuntimeState) => void;
+  onEntry?: (entry: CapturedNetworkEntry) => void;
+}) {
+  return Promise.all([
+    listen<CaptureRuntimeState>('capture://state', event => {
+      handlers.onState?.(event.payload);
+    }),
+    listen<CapturedNetworkEntry>('capture://entry', event => {
+      handlers.onEntry?.(event.payload);
+    })
+  ]).then(([unlistenState, unlistenEntry]) => () => {
+    unlistenState();
+    unlistenEntry();
+  });
 }
 
 export function listenMenuActions(handler: (action: MenuAction) => void) {

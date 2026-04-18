@@ -1,3 +1,5 @@
+mod capture;
+
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use reqwest::{
     cookie::{CookieStore, Jar},
@@ -1113,7 +1115,12 @@ pub fn run() {
             git_pull,
             git_push,
             open_terminal,
-            request_send
+            request_send,
+            capture::capture_browser_launch,
+            capture::capture_target_list,
+            capture::capture_start,
+            capture::capture_stop,
+            capture::capture_clear
         ])
         .run(tauri::generate_context!())
         .expect("error while running yapi debugger");

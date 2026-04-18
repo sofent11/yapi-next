@@ -7,19 +7,25 @@ import { useMutation } from '@tanstack/react-query';
 import { IconRefresh, IconSearch } from '@tabler/icons-react';
 import { createEmptyCheck, createNamedTemplateSource, evaluateSyncGuard, inspectResolvedRequest } from '@yapi-debugger/core';
 import { save as saveFile } from '@tauri-apps/plugin-dialog';
-import { SCHEMA_VERSION, createCollectionStep, createEmptyCase, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type EnvironmentDocument, type ImportWarning, type ResponseExample, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
+import { SCHEMA_VERSION, createCollectionStep, createEmptyCase, createEmptyCollection, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type EnvironmentDocument, type ImportWarning, type ResponseExample, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
 import '@mantine/spotlight/styles.css';
 import {
   chooseDirectory,
   chooseImportFile,
+  clearBrowserCaptureSession,
   clearSession,
   deleteEntry,
   gitPull,
   gitPush,
   gitStatus,
   inspectSession,
+  launchCaptureBrowser,
+  listCaptureTargets,
+  listenCaptureEvents,
   listenMenuActions,
   openTerminal,
+  startBrowserCapture,
+  stopBrowserCapture,
   syncMenuState,
   unwatchWorkspace,
   watchWorkspace,
@@ -67,6 +73,7 @@ import {
 import { AppRail, type AppRailView } from './components/panels/AppRail';
 import { TabHeader } from './components/layout/TabHeader';
 import { CollectionRunnerPanel } from './components/panels/CollectionRunnerPanel';
+import { CapturePanel } from './components/panels/CapturePanel';
 import { EnvironmentCenterPanel } from './components/panels/EnvironmentCenterPanel';
 import { HistoryPanel } from './components/panels/HistoryPanel';
 import { ImportPanel } from './components/panels/ImportPanel';
@@ -83,6 +90,17 @@ import { collectionReportHtml, collectionReportJson, collectionReportJunit } fro
 import { Resizer } from './components/primitives/Resizer';
 import { StatusBar } from './components/layout/StatusBar';
 import { createScratchSession, loadScratchSessions, normalizeScratchTitle, saveScratchSessions, type ScratchSession } from './lib/scratch';
+import {
+  captureEntriesToImportResult,
+  formatCaptureStepName,
+  matchCaptureHostFilter,
+  normalizeCaptureHostFilters,
+  type BrowserTargetSummary,
+  type CaptureBrowserState,
+  type CaptureMode,
+  type CaptureRuntimeState,
+  type CapturedNetworkEntry
+} from './lib/capture';
 import {
   defaultWorkspaceUiState,
   ensureWorkspaceEnvironment,
@@ -438,6 +456,23 @@ function saveLastSyncAt(root: string, timestamp: string | null) {
   savePersistedJson(lastSyncStorageKey(root), timestamp);
 }
 
+function upsertCapturedEntry(entries: CapturedNetworkEntry[], nextEntry: CapturedNetworkEntry) {
+  const existingIndex = entries.findIndex(entry => entry.id === nextEntry.id);
+  if (existingIndex === -1) {
+    return [nextEntry, ...entries].sort((a, b) => b.startedAtMs - a.startedAtMs);
+  }
+  const nextEntries = [...entries];
+  nextEntries[existingIndex] = nextEntry;
+  return nextEntries.sort((a, b) => b.startedAtMs - a.startedAtMs);
+}
+
+function selectedCapturedEntries(entries: CapturedNetworkEntry[], selectedIds: string[]) {
+  const selectedSet = new Set(selectedIds);
+  return entries
+    .filter(entry => selectedSet.has(entry.id))
+    .sort((a, b) => a.startedAtMs - b.startedAtMs);
+}
+
 type GitRiskItem = {
   id: string;
   title: string;
@@ -532,6 +567,19 @@ export function App() {
   const [lastImportSession, setLastImportSession] = useState<ImportRepairSession | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [spotlightQuery, setSpotlightQuery] = useState('');
+  const [captureBrowser, setCaptureBrowser] = useState<CaptureBrowserState | null>(null);
+  const [captureRuntime, setCaptureRuntime] = useState<CaptureRuntimeState | null>(null);
+  const [captureMode, setCaptureMode] = useState<CaptureMode>('target');
+  const [captureTargets, setCaptureTargets] = useState<BrowserTargetSummary[]>([]);
+  const [selectedCaptureTargetId, setSelectedCaptureTargetId] = useState<string | null>(null);
+  const [captureFilterText, setCaptureFilterText] = useState('');
+  const [captureEntries, setCaptureEntries] = useState<CapturedNetworkEntry[]>([]);
+  const [selectedCaptureEntryId, setSelectedCaptureEntryId] = useState<string | null>(null);
+  const [selectedCaptureIds, setSelectedCaptureIds] = useState<string[]>([]);
+  const [captureExportStrategy, setCaptureExportStrategy] = useState<'append' | 'replace'>('append');
+  const [captureCollectionTargetMode, setCaptureCollectionTargetMode] = useState<'existing' | 'new'>('existing');
+  const [captureCollectionId, setCaptureCollectionId] = useState<string | null>(null);
+  const [captureNewCollectionName, setCaptureNewCollectionName] = useState('Captured Flow');
 
   const spotlightActions = useMemo(() => {
     if (!store.workspace) return [];
@@ -706,6 +754,21 @@ export function App() {
     };
   }, [caseId, requestId, store.workspace]);
 
+  const captureFilters = useMemo(() => normalizeCaptureHostFilters(captureFilterText), [captureFilterText]);
+  const visibleCaptureEntries = useMemo(
+    () => captureEntries.filter(entry => matchCaptureHostFilter(entry.host, captureFilters)),
+    [captureEntries, captureFilters]
+  );
+  const selectedCaptureEntry = useMemo(
+    () => captureEntries.find(entry => entry.id === selectedCaptureEntryId) || visibleCaptureEntries[0] || null,
+    [captureEntries, selectedCaptureEntryId, visibleCaptureEntries]
+  );
+  const selectedVisibleCaptureCount = useMemo(() => {
+    const visibleIds = new Set(visibleCaptureEntries.map(entry => entry.id));
+    return selectedCaptureIds.filter(id => visibleIds.has(id)).length;
+  }, [selectedCaptureIds, visibleCaptureEntries]);
+  const isAllVisibleCaptureSelected = visibleCaptureEntries.length > 0 && selectedVisibleCaptureCount === visibleCaptureEntries.length;
+
   const selectedCollectionRecord = useMemo(() => {
     if (!store.workspace || !selectedCollectionId) return null;
     return store.workspace.collections.find(item => item.document.id === selectedCollectionId) || null;
@@ -826,6 +889,12 @@ export function App() {
     setSelectedCollectionId(workspace.collections[0]?.document.id || null);
     setDraftCollection(workspace.collections[0]?.document || null);
     setCollectionDataText(workspace.collections[0]?.dataText || '');
+    setCaptureCollectionId(workspace.collections[0]?.document.id || null);
+    setCaptureCollectionTargetMode(workspace.collections.length > 0 ? 'existing' : 'new');
+    setCaptureNewCollectionName('Captured Flow');
+    setCaptureEntries([]);
+    setSelectedCaptureEntryId(null);
+    setSelectedCaptureIds([]);
     setCollectionPanelTabHint(null);
     setActiveView('workspace');
     setActiveWorkbenchPane('overview');
@@ -1104,6 +1173,152 @@ export function App() {
     }
   });
 
+  const launchCaptureBrowserMutation = useMutation({
+    mutationFn: async () => {
+      const browser = await launchCaptureBrowser();
+      const targets = await listCaptureTargets().catch(() => [] as BrowserTargetSummary[]);
+      return { browser, targets };
+    },
+    onSuccess: ({ browser, targets }) => {
+      setCaptureBrowser(browser);
+      setCaptureTargets(targets);
+      setSelectedCaptureTargetId(current => current || targets[0]?.targetId || null);
+      notifications.show({ color: 'teal', message: `Chrome launched on port ${browser.port}` });
+    },
+    onError: error => {
+      notifications.show({ color: 'red', message: `Failed to launch capture browser: ${(error as Error).message}` });
+    }
+  });
+
+  const refreshCaptureTargetsMutation = useMutation({
+    mutationFn: () => listCaptureTargets(),
+    onSuccess: targets => {
+      setCaptureTargets(targets);
+      setSelectedCaptureTargetId(current => current || targets[0]?.targetId || null);
+    },
+    onError: error => {
+      notifications.show({ color: 'red', message: `Failed to load browser targets: ${(error as Error).message}` });
+    }
+  });
+
+  const startCaptureMutation = useMutation({
+    mutationFn: () => startBrowserCapture({ mode: captureMode, targetId: selectedCaptureTargetId }),
+    onSuccess: state => {
+      setCaptureRuntime(state);
+      notifications.show({ color: 'teal', message: state.mode === 'browser' ? 'Listening to browser targets' : 'Listening to selected target' });
+    },
+    onError: error => {
+      notifications.show({ color: 'red', message: `Failed to start capture: ${(error as Error).message}` });
+    }
+  });
+
+  const stopCaptureMutation = useMutation({
+    mutationFn: () => stopBrowserCapture(),
+    onSuccess: state => {
+      setCaptureRuntime(state);
+      notifications.show({ color: 'teal', message: 'Capture stopped' });
+    },
+    onError: error => {
+      notifications.show({ color: 'red', message: `Failed to stop capture: ${(error as Error).message}` });
+    }
+  });
+
+  const clearCaptureMutation = useMutation({
+    mutationFn: () => clearBrowserCaptureSession(),
+    onSuccess: state => {
+      setCaptureRuntime(state);
+      setCaptureEntries([]);
+      setSelectedCaptureEntryId(null);
+      setSelectedCaptureIds([]);
+      notifications.show({ color: 'teal', message: 'Capture list cleared' });
+    },
+    onError: error => {
+      notifications.show({ color: 'red', message: `Failed to clear capture session: ${(error as Error).message}` });
+    }
+  });
+
+  const exportCaptureMutation = useMutation({
+    mutationFn: async (mode: 'requests' | 'collection') => {
+      if (!store.workspace) throw new Error('No workspace');
+      const entries = selectedCapturedEntries(captureEntries, selectedCaptureIds);
+      if (entries.length === 0) throw new Error('Select at least one captured request');
+      const importResult = captureEntriesToImportResult(entries);
+      const outcome = await importIntoWorkspace(store.workspace, importResult, captureExportStrategy);
+
+      if (mode === 'requests') {
+        return {
+          mode,
+          requestCount: outcome.requestIds.length,
+          collectionId: null as string | null
+        };
+      }
+
+      let nextCollection: CollectionDocument;
+      let previousFilePath: string | undefined;
+      let previousDataFilePath: string | undefined;
+      if (captureCollectionTargetMode === 'existing') {
+        const existing = store.workspace.collections.find(item => item.document.id === captureCollectionId);
+        if (!existing) throw new Error('Choose an existing collection first');
+        nextCollection = structuredClone(existing.document);
+        previousFilePath = existing.filePath;
+        previousDataFilePath = existing.dataFilePath;
+      } else {
+        const nextName = captureNewCollectionName.trim();
+        if (!nextName) throw new Error('Provide a collection name first');
+        if (store.workspace.collections.some(item => item.document.name === nextName)) {
+          throw new Error('A collection with the same name already exists');
+        }
+        nextCollection = createEmptyCollection(nextName);
+      }
+
+      nextCollection.steps = [
+        ...nextCollection.steps,
+        ...entries.map((entry, index) =>
+          createCollectionStep({
+            key: `step_${nextCollection.steps.length + index + 1}`,
+            requestId: outcome.requestIds[index],
+            name: formatCaptureStepName(entry)
+          })
+        )
+      ];
+
+      await saveCollectionRecord(
+        store.workspace.root,
+        nextCollection,
+        captureCollectionTargetMode === 'existing'
+          ? store.workspace.collections.find(item => item.document.id === nextCollection.id)?.dataText || ''
+          : '',
+        previousFilePath,
+        previousDataFilePath
+      );
+
+      return {
+        mode,
+        requestCount: outcome.requestIds.length,
+        collectionId: nextCollection.id
+      };
+    },
+    onSuccess: async result => {
+      await reloadWorkspace();
+      if (result.mode === 'collection' && result.collectionId) {
+        setSelectedCollectionId(result.collectionId);
+        setCaptureCollectionId(result.collectionId);
+        setCollectionPanelTabHint('design');
+        setActiveView('collections');
+      }
+      notifications.show({
+        color: 'teal',
+        message:
+          result.mode === 'collection'
+            ? `Added ${result.requestCount} captured requests to a collection`
+            : `Saved ${result.requestCount} captured requests into the workspace`
+      });
+    },
+    onError: error => {
+      notifications.show({ color: 'red', message: `Failed to export capture: ${(error as Error).message}` });
+    }
+  });
+
   const runCollectionMutation = useMutation({
     mutationFn: async (options?: { stepKeys?: string[]; seedReport?: CollectionRunReport | null; collectionId?: string }) => {
       if (!store.workspace || !(options?.collectionId || selectedCollectionId)) throw new Error('No collection selected');
@@ -1343,6 +1558,44 @@ export function App() {
     setDraftCollection(nextCollection?.document || null);
     setCollectionDataText(nextCollection?.dataText || '');
   }, [store.workspace, selectedCollectionId]);
+
+  useEffect(() => {
+    if (!store.workspace) {
+      setCaptureCollectionId(null);
+      return;
+    }
+    const nextCollection =
+      store.workspace.collections.find(item => item.document.id === captureCollectionId) ||
+      store.workspace.collections[0] ||
+      null;
+    setCaptureCollectionId(nextCollection?.document.id || null);
+    if (!nextCollection) {
+      setCaptureCollectionTargetMode('new');
+    }
+  }, [captureCollectionId, store.workspace]);
+
+  useEffect(() => {
+    const unlistenPromise = listenCaptureEvents({
+      onState: state => {
+        setCaptureRuntime(state);
+      },
+      onEntry: entry => {
+        startTransition(() => {
+          setCaptureEntries(current => upsertCapturedEntry(current, entry));
+          setSelectedCaptureEntryId(current => current || entry.id);
+        });
+      }
+    });
+
+    return () => {
+      unlistenPromise.then(unlisten => unlisten()).catch(() => undefined);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeView !== 'capture' || !captureBrowser || captureTargets.length > 0 || refreshCaptureTargetsMutation.isPending) return;
+    refreshCaptureTargetsMutation.mutate();
+  }, [activeView, captureBrowser, captureTargets.length, refreshCaptureTargetsMutation]);
 
   useEffect(() => {
     const unlistenPromise = listenMenuActions(payload => {
@@ -1906,6 +2159,28 @@ export function App() {
       targetRequestId: requestId || undefined,
       targetCaseId: caseId || undefined
     });
+  }
+
+  function handleRefreshCaptureTargets() {
+    refreshCaptureTargetsMutation.mutate();
+  }
+
+  function handleToggleCaptureEntry(entryId: string) {
+    setSelectedCaptureIds(current => (current.includes(entryId) ? current.filter(id => id !== entryId) : [...current, entryId]));
+    setSelectedCaptureEntryId(entryId);
+  }
+
+  function handleToggleAllVisibleCaptureEntries() {
+    const visibleIds = visibleCaptureEntries.map(entry => entry.id);
+    if (visibleIds.length === 0) return;
+    setSelectedCaptureIds(current => {
+      const allVisibleSelected = visibleIds.every(id => current.includes(id));
+      if (allVisibleSelected) {
+        return current.filter(id => !visibleIds.includes(id));
+      }
+      return Array.from(new Set([...current, ...visibleIds]));
+    });
+    setSelectedCaptureEntryId(current => current || visibleIds[0] || null);
   }
 
   async function handleAddCurrentSelectionToCollection() {
@@ -2839,6 +3114,54 @@ export function App() {
                 onSaveAuthProfile={handleSaveAuthProfile}
                 onExtractValue={handleExtractResponseValue}
                 onMainSplitRatioChange={setScratchMainSplitRatio}
+              />
+            ) : activeView === 'capture' ? (
+              <CapturePanel
+                workspace={store.workspace}
+                browser={captureBrowser}
+                runtime={captureRuntime}
+                mode={captureMode}
+                targets={captureTargets}
+                selectedTargetId={selectedCaptureTargetId}
+                filterText={captureFilterText}
+                entries={captureEntries}
+                visibleEntries={visibleCaptureEntries}
+                selectedEntryId={selectedCaptureEntryId}
+                selectedEntryIds={selectedCaptureIds}
+                selectedEntry={selectedCaptureEntry}
+                selectedVisibleCount={selectedVisibleCaptureCount}
+                exportStrategy={captureExportStrategy}
+                collectionTargetMode={captureCollectionTargetMode}
+                selectedCollectionId={captureCollectionId}
+                newCollectionName={captureNewCollectionName}
+                isAllVisibleSelected={isAllVisibleCaptureSelected}
+                isLaunching={launchCaptureBrowserMutation.isPending}
+                isRefreshingTargets={refreshCaptureTargetsMutation.isPending}
+                isStarting={startCaptureMutation.isPending}
+                isStopping={stopCaptureMutation.isPending}
+                isExporting={exportCaptureMutation.isPending}
+                onLaunch={() => launchCaptureBrowserMutation.mutate()}
+                onRefreshTargets={handleRefreshCaptureTargets}
+                onModeChange={mode => {
+                  setCaptureMode(mode);
+                  if (mode === 'target' && !selectedCaptureTargetId) {
+                    setSelectedCaptureTargetId(captureTargets[0]?.targetId || null);
+                  }
+                }}
+                onSelectTarget={setSelectedCaptureTargetId}
+                onFilterTextChange={setCaptureFilterText}
+                onStart={() => startCaptureMutation.mutate()}
+                onStop={() => stopCaptureMutation.mutate()}
+                onClear={() => clearCaptureMutation.mutate()}
+                onSelectEntry={setSelectedCaptureEntryId}
+                onToggleEntry={handleToggleCaptureEntry}
+                onToggleAllVisible={handleToggleAllVisibleCaptureEntries}
+                onExportStrategyChange={setCaptureExportStrategy}
+                onCollectionTargetModeChange={mode => setCaptureCollectionTargetMode(mode)}
+                onSelectCollection={setCaptureCollectionId}
+                onNewCollectionNameChange={setCaptureNewCollectionName}
+                onSaveRequests={() => exportCaptureMutation.mutate('requests')}
+                onAddToCollection={() => exportCaptureMutation.mutate('collection')}
               />
             ) : activeView === 'history' ? (
               <section className="workspace-main" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
