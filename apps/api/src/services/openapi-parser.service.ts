@@ -1,5 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { URL } from 'node:url';
+import {
+  JSON_SCHEMA_DRAFT4_URI,
+  getSchemaRefName,
+  normalizeSchemaDocument,
+  normalizeSchemaNode,
+  sanitizeSchemaDefinitionName,
+  toSchemaObject
+} from '@yapi-next/shared-types';
 
 const swagger2openapi = require('swagger2openapi');
 const SwaggerParser = require('@apidevtools/swagger-parser');
@@ -191,8 +199,8 @@ export class OpenapiParserService {
         };
 
         this.handleParameters(mergedDereferencedOperation, api, spec);
-        this.handleRequestBody(mergedDereferencedOperation, api, spec);
-        this.handleResponse(mergedDereferencedOperation, api, spec);
+        this.handleRequestBody(mergedOperation, api, spec);
+        this.handleResponse(mergedOperation, api, spec);
 
         if (api.catname && !cats.find(item => item.name === api.catname)) {
           cats.push({
@@ -316,7 +324,7 @@ export class OpenapiParserService {
     const mediaType = pickMediaType(operation.requestBody.content);
     if (!mediaType) return;
     const media = operation.requestBody.content[mediaType] || {};
-    const schema = this.resolveSchema(media.schema || {}, spec);
+    const schema = this.buildStoredSchemaDocument(media.schema || {}, spec);
     if (mediaType === 'application/json' || mediaType.includes('+json')) {
       api.req_body_type = 'json';
       api.req_body_is_json_schema = true;
@@ -324,9 +332,10 @@ export class OpenapiParserService {
       return;
     }
     if (mediaType === 'multipart/form-data' || mediaType === 'application/x-www-form-urlencoded') {
+      const expandedSchema = this.resolveSchema(media.schema || {}, spec);
       api.req_body_type = 'form';
-      const required = Array.isArray(schema.required) ? schema.required : [];
-      const properties = schema.properties || {};
+      const required = Array.isArray(expandedSchema.required) ? expandedSchema.required : [];
+      const properties = expandedSchema.properties || {};
       for (const name of Object.keys(properties)) {
         const property = properties[name] || {};
         const isFile = property.format === 'binary' || property.contentEncoding === 'binary';
@@ -360,7 +369,7 @@ export class OpenapiParserService {
     if (mediaType && response.content[mediaType]) {
       const media = response.content[mediaType];
       if (media.schema) {
-        api.res_body = JSON.stringify(this.resolveSchema(media.schema, spec), null, 2);
+        api.res_body = JSON.stringify(this.buildStoredSchemaDocument(media.schema, spec), null, 2);
         api.res_body_type = 'json';
         api.res_body_is_json_schema = true;
         return;
@@ -375,6 +384,217 @@ export class OpenapiParserService {
     api.res_body = response.description || '';
     api.res_body_type = 'raw';
     api.res_body_is_json_schema = false;
+  }
+
+  private buildStoredSchemaDocument(schema: any, spec: any): Record<string, unknown> {
+    const context = {
+      definitions: {} as Record<string, Record<string, unknown>>,
+      refNameByRef: new Map<string, string>(),
+      inlineNameByKey: new Map<string, string>(),
+      usedNames: new Set<string>(),
+      inProgress: new Set<string>()
+    };
+    const root = this.toStoredSchemaNode(schema, spec, context, this.collectSchemaDefinitions(schema));
+    const document = normalizeSchemaDocument(root);
+    document.$schema = JSON_SCHEMA_DRAFT4_URI;
+    if (Object.keys(context.definitions).length > 0) {
+      document.definitions = context.definitions;
+    } else {
+      delete document.definitions;
+    }
+    return document;
+  }
+
+  private toStoredSchemaNode(
+    schema: any,
+    spec: any,
+    context: {
+      definitions: Record<string, Record<string, unknown>>;
+      refNameByRef: Map<string, string>;
+      inlineNameByKey: Map<string, string>;
+      usedNames: Set<string>;
+      inProgress: Set<string>;
+    },
+    localDefinitions: Record<string, unknown>
+  ): any {
+    if (!schema || typeof schema !== 'object') {
+      return schema;
+    }
+    if (Array.isArray(schema)) {
+      return schema.map(item => this.toStoredSchemaNode(item, spec, context, localDefinitions));
+    }
+
+    const node = normalizeSchemaNode(schema);
+    const nextLocalDefinitions = {
+      ...localDefinitions,
+      ...this.collectSchemaDefinitions(node)
+    };
+
+    Object.entries(this.collectSchemaDefinitions(node)).forEach(([name, value]) => {
+      this.registerInlineDefinition(name, value, spec, context, nextLocalDefinitions);
+    });
+
+    if (typeof node.$ref === 'string' && node.$ref.trim()) {
+      const definitionRef = this.registerDefinitionRef(node.$ref, spec, context, nextLocalDefinitions);
+      const rest = { ...node };
+      delete rest.$ref;
+      delete rest.definitions;
+      delete rest.$defs;
+      const resolvedRest = this.toStoredSchemaNode(rest, spec, context, nextLocalDefinitions);
+      if (!resolvedRest || typeof resolvedRest !== 'object' || Array.isArray(resolvedRest) || Object.keys(resolvedRest).length === 0) {
+        return { $ref: definitionRef };
+      }
+      return {
+        ...resolvedRest,
+        $ref: definitionRef
+      };
+    }
+
+    const result: Record<string, unknown> = {};
+    Object.entries(node).forEach(([key, value]) => {
+      if (key === 'definitions' || key === '$defs') {
+        return;
+      }
+      if (key === 'properties' || key === 'patternProperties') {
+        const next: Record<string, unknown> = {};
+        Object.entries(toSchemaObject(value)).forEach(([innerKey, innerValue]) => {
+          next[innerKey] = this.toStoredSchemaNode(innerValue, spec, context, nextLocalDefinitions);
+        });
+        result[key] = next;
+        return;
+      }
+      if (key === 'items' || key === 'additionalProperties' || key === 'not') {
+        if (value === true || value === false) {
+          result[key] = value;
+        } else {
+          result[key] = this.toStoredSchemaNode(value, spec, context, nextLocalDefinitions);
+        }
+        return;
+      }
+      if (key === 'allOf' || key === 'anyOf' || key === 'oneOf' || key === 'prefixItems') {
+        result[key] = Array.isArray(value)
+          ? value.map(item => this.toStoredSchemaNode(item, spec, context, nextLocalDefinitions))
+          : value;
+        return;
+      }
+      result[key] = value;
+    });
+
+    return result;
+  }
+
+  private registerDefinitionRef(
+    ref: string,
+    spec: any,
+    context: {
+      definitions: Record<string, Record<string, unknown>>;
+      refNameByRef: Map<string, string>;
+      inlineNameByKey: Map<string, string>;
+      usedNames: Set<string>;
+      inProgress: Set<string>;
+    },
+    localDefinitions: Record<string, unknown>
+  ): string {
+    const localName = this.extractLocalDefinitionName(ref);
+    if (localName) {
+      const rawName = getSchemaRefName(ref) || localName;
+      const mappedName = this.registerInlineDefinition(rawName, localDefinitions[localName], spec, context, localDefinitions);
+      return `#/definitions/${mappedName}`;
+    }
+
+    if (context.refNameByRef.has(ref)) {
+      return `#/definitions/${context.refNameByRef.get(ref)}`;
+    }
+
+    const target = this.getRefValue(spec, ref);
+    if (!target || typeof target !== 'object') {
+      return ref;
+    }
+
+    const definitionName = this.ensureUniqueDefinitionName(getSchemaRefName(ref), context);
+    context.refNameByRef.set(ref, definitionName);
+    if (!context.definitions[definitionName] && !context.inProgress.has(definitionName)) {
+      context.inProgress.add(definitionName);
+      context.definitions[definitionName] = this.toStoredSchemaNode(
+        target,
+        spec,
+        context,
+        this.collectSchemaDefinitions(target)
+      ) as Record<string, unknown>;
+      context.inProgress.delete(definitionName);
+    }
+    return `#/definitions/${definitionName}`;
+  }
+
+  private registerInlineDefinition(
+    rawName: string,
+    schema: unknown,
+    spec: any,
+    context: {
+      definitions: Record<string, Record<string, unknown>>;
+      refNameByRef: Map<string, string>;
+      inlineNameByKey: Map<string, string>;
+      usedNames: Set<string>;
+      inProgress: Set<string>;
+    },
+    localDefinitions: Record<string, unknown>
+  ): string {
+    const nameKey = String(rawName || '').trim();
+    if (context.inlineNameByKey.has(nameKey)) {
+      return context.inlineNameByKey.get(nameKey) as string;
+    }
+    const definitionName = this.ensureUniqueDefinitionName(nameKey, context);
+    context.inlineNameByKey.set(nameKey, definitionName);
+
+    if (!context.definitions[definitionName] && !context.inProgress.has(definitionName)) {
+      context.inProgress.add(definitionName);
+      context.definitions[definitionName] = this.toStoredSchemaNode(
+        schema,
+        spec,
+        context,
+        {
+          ...localDefinitions,
+          ...this.collectSchemaDefinitions(schema)
+        }
+      ) as Record<string, unknown>;
+      context.inProgress.delete(definitionName);
+    }
+    return definitionName;
+  }
+
+  private ensureUniqueDefinitionName(
+    rawName: string,
+    context: {
+      usedNames: Set<string>;
+    }
+  ): string {
+    const baseName = sanitizeSchemaDefinitionName(rawName || 'Definition');
+    let output = baseName;
+    let index = 1;
+    while (context.usedNames.has(output)) {
+      output = `${baseName}_${index}`;
+      index += 1;
+    }
+    context.usedNames.add(output);
+    return output;
+  }
+
+  private collectSchemaDefinitions(schema: unknown): Record<string, unknown> {
+    const node = toSchemaObject(schema);
+    return {
+      ...toSchemaObject(node.definitions),
+      ...toSchemaObject(node.$defs)
+    };
+  }
+
+  private extractLocalDefinitionName(ref: string): string {
+    if (ref.startsWith('#/definitions/')) {
+      return ref.slice('#/definitions/'.length);
+    }
+    if (ref.startsWith('#/$defs/')) {
+      return ref.slice('#/$defs/'.length);
+    }
+    return '';
   }
 
   private resolveSchema(schema: any, spec: any, seenRefs: Set<string> = new Set()): any {

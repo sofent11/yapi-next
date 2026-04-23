@@ -1,12 +1,34 @@
 import json5 from 'json5';
+import {
+  getSchemaRefName,
+  normalizeSchemaDocument,
+  normalizeSchemaNode,
+  resolveSchemaPrimaryType,
+  toSchemaObject
+} from '@yapi-next/shared-types';
 
-function getMockValueForType(type: string, schema: Record<string, any> = {}): any {
+function getMockValueForType(
+  type: string,
+  schema: Record<string, any>,
+  definitions: Record<string, unknown>,
+  visitedRefs: Set<string>,
+  depth: number
+): any {
   if (schema.default !== undefined) return schema.default;
   if (schema.example !== undefined) return schema.example;
   if (schema.mock && schema.mock.mock !== undefined) {
     return schema.mock.mock;
   }
-  
+
+  if (depth > 12) {
+    if (type === 'array') return [];
+    if (type === 'object') return {};
+    if (type === 'null') return null;
+    if (type === 'boolean') return false;
+    if (type === 'number' || type === 'integer') return 0;
+    return '';
+  }
+
   switch (type) {
     case 'string':
       return '';
@@ -17,17 +39,26 @@ function getMockValueForType(type: string, schema: Record<string, any> = {}): an
       return false;
     case 'array':
       if (schema.items) {
-        return [generateMockFromJsonSchema(schema.items)];
+        return [generateMockFromJsonSchema(schema.items, definitions, visitedRefs, depth + 1)];
       }
       return [];
-    case 'object':
+    case 'object': {
       const obj: Record<string, any> = {};
-      if (schema.properties) {
-        for (const [key, value] of Object.entries(schema.properties)) {
-          obj[key] = generateMockFromJsonSchema(value as Record<string, any>);
-        }
+      Object.entries(toSchemaObject(schema.properties)).forEach(([key, value]) => {
+        obj[key] = generateMockFromJsonSchema(value, definitions, visitedRefs, depth + 1);
+      });
+      if (schema.additionalProperties === true) {
+        obj.key = '';
+      } else if (schema.additionalProperties && typeof schema.additionalProperties === 'object') {
+        obj.key = generateMockFromJsonSchema(
+          schema.additionalProperties as Record<string, unknown>,
+          definitions,
+          visitedRefs,
+          depth + 1
+        );
       }
       return obj;
+    }
     case 'null':
       return null;
     default:
@@ -35,30 +66,47 @@ function getMockValueForType(type: string, schema: Record<string, any> = {}): an
   }
 }
 
-export function generateMockFromJsonSchema(schema: unknown): any {
+export function generateMockFromJsonSchema(
+  schema: unknown,
+  definitionsInput?: Record<string, unknown>,
+  visitedRefs: Set<string> = new Set(),
+  depth = 0
+): any {
   if (!schema || typeof schema !== 'object') {
     return '';
   }
-  const s = schema as Record<string, any>;
-  
-  if (s.type) {
-    return getMockValueForType(String(s.type).toLowerCase(), s);
-  } else if (s.properties) {
-    return getMockValueForType('object', s);
-  } else if (s.items) {
-    return getMockValueForType('array', s);
+
+  const node = normalizeSchemaNode(schema) as Record<string, any>;
+  const definitions = definitionsInput || toSchemaObject((schema as Record<string, unknown>).definitions);
+
+  if (typeof node.$ref === 'string') {
+    const refName = getSchemaRefName(node.$ref);
+    if (!refName) {
+      return {};
+    }
+    if (visitedRefs.has(refName)) {
+      return {};
+    }
+    const target = definitions[refName];
+    if (!target || typeof target !== 'object') {
+      return {};
+    }
+    const nextVisitedRefs = new Set(visitedRefs);
+    nextVisitedRefs.add(refName);
+    return generateMockFromJsonSchema(target, definitions, nextVisitedRefs, depth + 1);
   }
-  
-  return '';
+
+  const type = resolveSchemaPrimaryType(node);
+  return getMockValueForType(type, node, definitions, visitedRefs, depth);
 }
 
 export function generateMockStringFromJsonSchema(schemaStr: string): string {
   if (!schemaStr) return '{}';
   try {
-    const parsed = json5.parse(schemaStr);
-    const mockObj = generateMockFromJsonSchema(parsed);
+    const parsed = normalizeSchemaDocument(json5.parse(schemaStr));
+    const mockObj = generateMockFromJsonSchema(parsed, toSchemaObject(parsed.definitions));
     return JSON.stringify(mockObj, null, 2);
-  } catch (err) {
+  } catch (_err) {
     return '{}';
   }
 }

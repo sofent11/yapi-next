@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { Radio, Stack, Textarea, Text } from '@mantine/core';
 import { Field } from 'rc-field-form';
 import { SchemaEditor } from '../../../components/SchemaEditor';
+import { schemaSupportsVisualEditor } from '../../../components/SchemaVisualEditor.utils';
 
 type SchemaModeEditorProps = {
   mode: 'visual' | 'text';
@@ -17,10 +19,25 @@ type SchemaModeEditorProps = {
 };
 
 export function SchemaModeEditor(props: SchemaModeEditorProps) {
+  useEffect(() => {
+    if (props.mode !== 'visual') {
+      return;
+    }
+    const support = schemaSupportsVisualEditor(props.value);
+    if (!support.supported) {
+      props.onModeChange('text');
+    }
+  }, [props.mode, props.onModeChange, props.value]);
+
   return (
     <>
       <Stack gap="xs" className="schema-editor-mode-toolbar">
         <Text fw={600}>编辑模式</Text>
+        {!schemaSupportsVisualEditor(props.value).supported ? (
+          <Text size="sm" c="yellow">
+            当前 schema 包含仅支持文本编辑的高级关键字，已切换为文本模式
+          </Text>
+        ) : null}
         <Radio.Group
           value={props.mode}
           onChange={value => props.onModeChange(value as 'visual' | 'text')}

@@ -1,4 +1,11 @@
 import json5 from 'json5';
+import {
+  getSchemaRefName,
+  normalizeSchemaDocument,
+  normalizeSchemaNode,
+  resolveSchemaPrimaryType,
+  toSchemaObject
+} from '@yapi-next/shared-types';
 import type { InterfaceTreeNode } from '@yapi-next/shared-types';
 import type { InterfaceDTO } from '../../types/interface-dto';
 import type { 
@@ -334,14 +341,7 @@ export function joinDesc(title: unknown, desc: unknown): string {
 }
 
 export function ensureSchemaNodeType(node: Record<string, unknown>): Record<string, unknown> {
-  const next = { ...node };
-  if (!next.type && next.properties && typeof next.properties === 'object') {
-    next.type = 'object';
-  }
-  if (!next.type && next.items && typeof next.items === 'object') {
-    next.type = 'array';
-  }
-  return next;
+  return normalizeSchemaNode(node);
 }
 
 export function stringifyMetaValue(value: unknown): string {
@@ -351,10 +351,13 @@ export function stringifyMetaValue(value: unknown): string {
   return String(value ?? '');
 }
 
-export function buildSchemaOther(node: Record<string, unknown>, itemType?: string): string {
+export function buildSchemaOther(node: Record<string, unknown>, itemType?: string, mapType?: string): string {
   const parts: string[] = [];
   if (itemType) {
     parts.push(`item 类型: ${itemType}`);
+  }
+  if (mapType) {
+    parts.push(`额外字段: ${mapType}`);
   }
   Object.entries(SCHEMA_META_NAME).forEach(([key, label]) => {
     const value = node[key];
@@ -364,6 +367,46 @@ export function buildSchemaOther(node: Record<string, unknown>, itemType?: strin
   return parts.join('\n');
 }
 
+function formatSchemaTypeLabel(nodeInput: Record<string, unknown>): string {
+  const node = ensureSchemaNodeType(nodeInput);
+  const type = resolveSchemaPrimaryType(node);
+  if (type === 'ref') {
+    const refName = getSchemaRefName(node.$ref) || 'Definition';
+    return `ref(${refName})`;
+  }
+  if (type === 'array') {
+    const itemNode = ensureSchemaNodeType(toRecord(node.items));
+    return `array<${formatSchemaTypeLabel(itemNode)}>`;
+  }
+  if (type === 'object') {
+    const properties = toSchemaObject(node.properties);
+    if (Object.keys(properties).length === 0 && Object.prototype.hasOwnProperty.call(node, 'additionalProperties')) {
+      const additionalProperties = node.additionalProperties;
+      if (additionalProperties === true) {
+        return 'map<string, any>';
+      }
+      if (additionalProperties === false) {
+        return 'object';
+      }
+      return `map<string, ${formatSchemaTypeLabel(toRecord(additionalProperties))}>`;
+    }
+  }
+  return type;
+}
+
+function buildAdditionalPropertiesLabel(node: Record<string, unknown>): string {
+  if (!Object.prototype.hasOwnProperty.call(node, 'additionalProperties')) {
+    return '';
+  }
+  if (node.additionalProperties === true) {
+    return 'map<string, any>';
+  }
+  if (node.additionalProperties === false) {
+    return '不允许额外字段';
+  }
+  return `map<string, ${formatSchemaTypeLabel(toRecord(node.additionalProperties))}>`;
+}
+
 export function schemaNodeToRow(
   nodeInput: Record<string, unknown>,
   name: string,
@@ -371,9 +414,20 @@ export function schemaNodeToRow(
   key: string
 ): SchemaRow {
   const node = ensureSchemaNodeType(nodeInput);
-  const type = String(node.type || 'object').toLowerCase();
+  const type = resolveSchemaPrimaryType(node);
   const desc = joinDesc(node.title, node.description);
   const defaultValue = stringifyMetaValue(node.default);
+  if (type === 'ref') {
+    return {
+      key,
+      name,
+      type: formatSchemaTypeLabel(node),
+      required: required ? '必须' : '非必须',
+      defaultValue,
+      desc,
+      other: buildSchemaOther(node)
+    };
+  }
   if (type === 'object') {
     const properties = (node.properties && typeof node.properties === 'object'
       ? (node.properties as Record<string, unknown>)
@@ -389,30 +443,49 @@ export function schemaNodeToRow(
         `${key}-${index}`
       )
     );
+    const additionalPropertiesLabel = buildAdditionalPropertiesLabel(node);
+    if (node.additionalProperties && typeof node.additionalProperties === 'object') {
+      children.push(
+        schemaNodeToRow(
+          ensureSchemaNodeType(toRecord(node.additionalProperties)),
+          '{key}',
+          false,
+          `${key}-map`
+        )
+      );
+    }
+    const typeLabel =
+      Object.keys(properties).length === 0 && node.additionalProperties && typeof node.additionalProperties === 'object'
+        ? formatSchemaTypeLabel(node)
+        : 'object';
     return {
       key,
       name,
-      type: 'object',
+      type: typeLabel,
       required: required ? '必须' : '非必须',
       defaultValue,
       desc,
-      other: buildSchemaOther(node),
+      other: buildSchemaOther(
+        node,
+        undefined,
+        Object.keys(properties).length > 0 ? additionalPropertiesLabel : ''
+      ),
       children
     };
   }
   if (type === 'array') {
     const itemNode = ensureSchemaNodeType(toRecord(node.items));
-    const itemType = String(itemNode.type || 'any').toLowerCase();
+    const itemType = formatSchemaTypeLabel(itemNode);
     const row: SchemaRow = {
       key,
       name,
-      type,
+      type: `array<${itemType}>`,
       required: required ? '必须' : '非必须',
       defaultValue,
       desc,
       other: buildSchemaOther(node, itemType)
     };
-    if (itemType === 'object') {
+    if (resolveSchemaPrimaryType(itemNode) === 'object') {
       row.children = (itemNode.properties && typeof itemNode.properties === 'object'
         ? Object.entries(itemNode.properties as Record<string, unknown>).map(
           ([childName, childNode], index) =>
@@ -426,6 +499,16 @@ export function schemaNodeToRow(
             )
         )
         : []) as SchemaRow[];
+      if (itemNode.additionalProperties && typeof itemNode.additionalProperties === 'object') {
+        row.children.push(
+          schemaNodeToRow(
+            ensureSchemaNodeType(toRecord(itemNode.additionalProperties)),
+            '{key}',
+            false,
+            `${key}-arr-map`
+          )
+        );
+      }
     } else if (Object.keys(itemNode).length > 0) {
       row.children = [schemaNodeToRow(itemNode, 'items', true, `${key}-arr-item`)];
     }
@@ -444,13 +527,13 @@ export function schemaNodeToRow(
 
 export function buildSchemaRows(schemaText: string): SchemaRow[] {
   try {
-    const parsed = ensureSchemaNodeType(toRecord(json5.parse(String(schemaText || ''))));
-    const rootType = String(parsed.type || '').toLowerCase();
+    const parsed = ensureSchemaNodeType(normalizeSchemaDocument(json5.parse(String(schemaText || ''))));
+    const rootType = resolveSchemaPrimaryType(parsed);
     if (rootType === 'object') {
       const properties = (parsed.properties && typeof parsed.properties === 'object'
         ? (parsed.properties as Record<string, unknown>)
         : {}) as Record<string, unknown>;
-      if (Object.keys(properties).length === 0) {
+      if (Object.keys(properties).length === 0 || Object.prototype.hasOwnProperty.call(parsed, 'additionalProperties')) {
         return [schemaNodeToRow(parsed, 'root', true, 'root-0')];
       }
       const requiredSet = new Set(
@@ -470,7 +553,7 @@ export function isJsonSchemaLike(value: unknown): value is Record<string, unknow
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return false;
   }
-  const node = value as Record<string, unknown>;
+  const node = ensureSchemaNodeType(value as Record<string, unknown>);
   return [
     '$schema',
     '$ref',

@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import {
+  getSchemaRefName,
+  normalizeSchemaDocument,
+  normalizeSchemaNode,
+  resolveSchemaPrimaryType,
+  toSchemaObject
+} from '@yapi-next/shared-types';
 import { InterfaceCatEntity } from '../database/schemas/interface-cat.schema';
 import { InterfaceEntity } from '../database/schemas/interface.schema';
 import { ProjectEntity } from '../database/schemas/project.schema';
@@ -450,7 +457,7 @@ export class ProjectApiMarkdownService {
       return [];
     }
 
-    const schema = this.ensureSchemaNodeType(parsed);
+    const schema = normalizeSchemaDocument(parsed);
     const lines: string[] = [];
     const rootType = this.formatSchemaType(schema);
     lines.push(`> 已根据 JSON Schema 自动整理，根类型：\`${rootType}\``);
@@ -474,7 +481,7 @@ export class ProjectApiMarkdownService {
       });
     }
 
-    const example = this.schemaToExample(schema);
+    const example = this.schemaToExample(schema, this.toLooseObject(schema.definitions), new Set(), 0);
     if (typeof example !== 'undefined') {
       lines.push('');
       lines.push('#### 示例 JSON');
@@ -487,10 +494,11 @@ export class ProjectApiMarkdownService {
 
   private buildSchemaRows(schema: LooseObject): SchemaMarkdownRow[] {
     const node = this.ensureSchemaNodeType(schema);
+    const definitions = this.toLooseObject(node.definitions);
     const type = this.resolveSchemaType(node);
 
     if (type === 'object') {
-      const rows = this.buildObjectChildrenRows(node, '');
+      const rows = this.buildObjectChildrenRows(node, '', definitions);
       return rows.length > 0 ? rows : [this.createSchemaRow(node, '$', true)];
     }
 
@@ -503,7 +511,7 @@ export class ProjectApiMarkdownService {
         return rows;
       }
       if (itemType === 'object') {
-        return [...rows, ...this.buildObjectChildrenRows(itemNode, '$[]')];
+        return [...rows, ...this.buildObjectChildrenRows(itemNode, '$[]', definitions)];
       }
       return [...rows, this.createSchemaRow(itemNode, '$[]', true)];
     }
@@ -511,7 +519,11 @@ export class ProjectApiMarkdownService {
     return [this.createSchemaRow(node, '$', true)];
   }
 
-  private buildObjectChildrenRows(node: LooseObject, basePath: string): SchemaMarkdownRow[] {
+  private buildObjectChildrenRows(
+    node: LooseObject,
+    basePath: string,
+    definitions: LooseObject
+  ): SchemaMarkdownRow[] {
     const properties = this.toLooseObject(node.properties);
     const requiredSet = new Set(
       Array.isArray(node.required) ? node.required.map(item => String(item)) : []
@@ -525,7 +537,7 @@ export class ProjectApiMarkdownService {
       rows.push(this.createSchemaRow(childNode, childPath, requiredSet.has(name)));
 
       if (childType === 'object') {
-        rows.push(...this.buildObjectChildrenRows(childNode, childPath));
+        rows.push(...this.buildObjectChildrenRows(childNode, childPath, definitions));
       } else if (childType === 'array') {
         const itemNode = this.ensureSchemaNodeType(this.toLooseObject(childNode.items));
         const itemType = this.resolveSchemaType(itemNode);
@@ -533,12 +545,20 @@ export class ProjectApiMarkdownService {
           return;
         }
         if (itemType === 'object') {
-          rows.push(...this.buildObjectChildrenRows(itemNode, `${childPath}[]`));
+          rows.push(...this.buildObjectChildrenRows(itemNode, `${childPath}[]`, definitions));
         } else {
           rows.push(this.createSchemaRow(itemNode, `${childPath}[]`, true));
         }
       }
     });
+
+    if (node.additionalProperties && typeof node.additionalProperties === 'object') {
+      rows.push(this.createSchemaRow(
+        this.ensureSchemaNodeType(this.toLooseObject(node.additionalProperties)),
+        `${basePath ? `${basePath}.` : ''}{key}`,
+        false
+      ));
+    }
 
     return rows;
   }
@@ -555,46 +575,37 @@ export class ProjectApiMarkdownService {
   }
 
   private ensureSchemaNodeType(nodeInput: LooseObject): LooseObject {
-    const node = { ...nodeInput };
-    if (!node.type && node.properties && typeof node.properties === 'object' && !Array.isArray(node.properties)) {
-      node.type = 'object';
-    }
-    if (!node.type && node.items && typeof node.items === 'object') {
-      node.type = 'array';
-    }
-    return node;
+    return normalizeSchemaNode(nodeInput);
   }
 
   private resolveSchemaType(nodeInput: LooseObject): string {
-    const node = this.ensureSchemaNodeType(nodeInput);
-    const rawType = node.type;
-    if (typeof rawType === 'string' && rawType.trim()) {
-      return rawType.trim().toLowerCase();
-    }
-    if (Array.isArray(rawType)) {
-      const candidates = rawType.map(item => String(item || '').trim().toLowerCase()).filter(Boolean);
-      const primary = candidates.find(item => item !== 'null');
-      if (primary) return primary;
-      if (candidates.length > 0) return candidates[0];
-    }
-    if (node.properties && typeof node.properties === 'object') return 'object';
-    if (node.items && typeof node.items === 'object') return 'array';
-    if (Array.isArray(node.enum) && node.enum.length > 0) {
-      const sample = node.enum[0];
-      if (typeof sample === 'number') return Number.isInteger(sample) ? 'integer' : 'number';
-      if (typeof sample === 'boolean') return 'boolean';
-    }
-    return 'any';
+    return resolveSchemaPrimaryType(this.ensureSchemaNodeType(nodeInput));
   }
 
   private formatSchemaType(nodeInput: LooseObject): string {
     const node = this.ensureSchemaNodeType(nodeInput);
     const type = this.resolveSchemaType(node);
 
+    if (type === 'ref') {
+      return `ref(${getSchemaRefName(node.$ref) || 'Definition'})`;
+    }
+
     if (type === 'array') {
       const itemNode = this.ensureSchemaNodeType(this.toLooseObject(node.items));
       const itemType = Object.keys(itemNode).length > 0 ? this.formatSchemaType(itemNode) : 'any';
       return `array<${itemType}>`;
+    }
+
+    if (type === 'object') {
+      const properties = this.toLooseObject(node.properties);
+      if (Object.keys(properties).length === 0 && Object.prototype.hasOwnProperty.call(node, 'additionalProperties')) {
+        if (node.additionalProperties === true) {
+          return 'object(map<string, any>)';
+        }
+        if (node.additionalProperties && typeof node.additionalProperties === 'object') {
+          return `object(map<string, ${this.formatSchemaType(this.toLooseObject(node.additionalProperties))}>)`;
+        }
+      }
     }
 
     if ((type === 'string' || type === 'integer' || type === 'number') && typeof node.format === 'string' && node.format.trim()) {
@@ -634,6 +645,7 @@ export class ProjectApiMarkdownService {
     if (type === 'array') return '[]';
     if (type === 'object') return '{}';
     if (type === 'null') return 'null';
+    if (type === 'ref') return this.formatSchemaType(node);
     return '-';
   }
 
@@ -659,6 +671,10 @@ export class ProjectApiMarkdownService {
     }
     if (node.additionalProperties === false) {
       constraints.push('不允许额外字段');
+    } else if (node.additionalProperties === true) {
+      constraints.push('允许任意额外字段');
+    } else if (node.additionalProperties && typeof node.additionalProperties === 'object') {
+      constraints.push(`额外字段: map<string, ${this.formatSchemaType(this.toLooseObject(node.additionalProperties))}>`);
     }
     return constraints.join('<br>') || '-';
   }
@@ -681,12 +697,34 @@ export class ProjectApiMarkdownService {
     }
   }
 
-  private schemaToExample(schemaInput: unknown): unknown {
+  private schemaToExample(
+    schemaInput: unknown,
+    definitions: LooseObject,
+    visitedRefs: Set<string>,
+    depth: number
+  ): unknown {
     if (!schemaInput || typeof schemaInput !== 'object') {
       return undefined;
     }
 
+    if (depth > 12) {
+      return {};
+    }
+
     const schema = this.ensureSchemaNodeType(schemaInput as LooseObject);
+    if (typeof schema.$ref === 'string') {
+      const refName = getSchemaRefName(schema.$ref);
+      if (!refName || visitedRefs.has(refName)) {
+        return {};
+      }
+      const target = definitions[refName];
+      if (!target || typeof target !== 'object') {
+        return {};
+      }
+      const nextVisitedRefs = new Set(visitedRefs);
+      nextVisitedRefs.add(refName);
+      return this.schemaToExample(target, definitions, nextVisitedRefs, depth + 1);
+    }
     if (Object.prototype.hasOwnProperty.call(schema, 'example')) {
       return schema.example;
     }
@@ -702,14 +740,19 @@ export class ProjectApiMarkdownService {
       const properties = this.toLooseObject(schema.properties);
       const output: LooseObject = {};
       Object.entries(properties).forEach(([key, value]) => {
-        output[key] = this.schemaToExample(value);
+        output[key] = this.schemaToExample(value, definitions, visitedRefs, depth + 1);
       });
+      if (schema.additionalProperties === true) {
+        output.key = '';
+      } else if (schema.additionalProperties && typeof schema.additionalProperties === 'object') {
+        output.key = this.schemaToExample(schema.additionalProperties, definitions, visitedRefs, depth + 1);
+      }
       return output;
     }
 
     if (type === 'array') {
       const itemNode = this.toLooseObject(schema.items);
-      return Object.keys(itemNode).length > 0 ? [this.schemaToExample(itemNode)] : [];
+      return Object.keys(itemNode).length > 0 ? [this.schemaToExample(itemNode, definitions, visitedRefs, depth + 1)] : [];
     }
 
     if (type === 'integer' || type === 'number') return 0;

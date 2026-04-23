@@ -116,8 +116,7 @@ function flattenSchemaRows(
   return rows.flatMap((row, index) => {
     const key = String(row.key || `${depth}-${index}-${String(row.name || 'row')}`);
     const children = normalizeSchemaChildren(row.children);
-    const rowType = String(row.type || '').toLowerCase();
-    const hasChildren = children.length > 0 && (rowType === 'object' || rowType === 'array');
+    const hasChildren = children.length > 0;
     const current: VisibleSchemaRow = { row, depth, key, hasChildren };
     if (!hasChildren || !expandedKeys.has(key)) {
       return [current];

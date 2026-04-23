@@ -1,7 +1,20 @@
 import json5 from 'json5';
-import type { SchemaFieldRow, SchemaFieldType } from './SchemaVisualEditor.types';
+import {
+  JSON_SCHEMA_DRAFT4_URI,
+  findUnsupportedVisualSchemaKeywords,
+  getSchemaRefName,
+  normalizeSchemaDocument,
+  normalizeSchemaNode,
+  resolveSchemaPrimaryType,
+  toSchemaObject
+} from '@yapi-next/shared-types';
+import type {
+  SchemaDefinitionDraft,
+  SchemaFieldRow,
+  SchemaFieldType
+} from './SchemaVisualEditor.types';
 
-export const DRAFT4_SCHEMA_URI = 'http://json-schema.org/draft-04/schema#';
+export const DRAFT4_SCHEMA_URI = JSON_SCHEMA_DRAFT4_URI;
 export const ROOT_ID = '__root__';
 
 export const FIELD_TYPES: Array<{ label: string; value: SchemaFieldType }> = [
@@ -11,6 +24,7 @@ export const FIELD_TYPES: Array<{ label: string; value: SchemaFieldType }> = [
   { label: 'boolean', value: 'boolean' },
   { label: 'array', value: 'array' },
   { label: 'object', value: 'object' },
+  { label: 'ref', value: 'ref' },
   { label: 'null', value: 'null' }
 ];
 
@@ -19,37 +33,21 @@ export function createId(seed?: string): string {
 }
 
 export function toObject(input: unknown): Record<string, unknown> {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
-  return input as Record<string, unknown>;
+  return toSchemaObject(input);
 }
 
 export function resolveNodeType(record: Record<string, unknown>): SchemaFieldType {
-  const rawType = String(record.type || '').toLowerCase();
-  if (FIELD_TYPES.some(item => item.value === rawType)) {
-    return rawType as SchemaFieldType;
+  const type = resolveSchemaPrimaryType(record);
+  if (FIELD_TYPES.some(item => item.value === type)) {
+    return type as SchemaFieldType;
   }
-  if (record.properties && typeof record.properties === 'object') return 'object';
-  if (record.items && typeof record.items === 'object') return 'array';
   return 'string';
 }
 
 export function normalizeNodeSchema(input: unknown): Record<string, unknown> | null {
-  const node = toObject(input);
+  const node = normalizeSchemaNode(input);
   if (Object.keys(node).length === 0) return null;
-  const next = { ...node };
-  if (!next.type && next.properties && typeof next.properties === 'object') {
-    next.type = 'object';
-  }
-  if (!next.type && next.items && typeof next.items === 'object') {
-    next.type = 'array';
-  }
-  if (!next.type) {
-    next.type = 'string';
-  }
-  const type = String(next.type || '').toLowerCase();
-  if (!FIELD_TYPES.some(item => item.value === type)) return null;
-  next.type = type;
-  return next;
+  return node;
 }
 
 export function parseMaybeJson(input: string): unknown {
@@ -74,11 +72,11 @@ export function mergeInferredSchemas(schemas: Record<string, unknown>[]): Record
   if (schemas.length === 0) return { type: 'string' };
   if (schemas.length === 1) return schemas[0];
 
-  const typeList = schemas.map(schema => String(schema.type || 'string').toLowerCase());
+  const typeList = schemas.map(schema => resolveSchemaPrimaryType(schema));
   const uniqueTypes = Array.from(new Set(typeList));
   if (uniqueTypes.length > 1) {
     if (uniqueTypes.length === 2 && uniqueTypes.includes('null')) {
-      const nonNull = schemas.find(schema => String(schema.type || '') !== 'null');
+      const nonNull = schemas.find(schema => resolveSchemaPrimaryType(schema) !== 'null');
       return nonNull || { type: 'string' };
     }
     return schemas[0];
@@ -167,6 +165,22 @@ export function buildSchemaFromPlainJsonText(input: string): string {
   );
 }
 
+function resolveAdditionalPropertiesMode(node: Record<string, unknown>): SchemaFieldRow['additionalPropertiesMode'] {
+  if (!Object.prototype.hasOwnProperty.call(node, 'additionalProperties')) {
+    return 'none';
+  }
+  if (node.additionalProperties === false) {
+    return 'closed';
+  }
+  if (node.additionalProperties === true) {
+    return 'any';
+  }
+  if (node.additionalProperties && typeof node.additionalProperties === 'object') {
+    return 'schema';
+  }
+  return 'none';
+}
+
 export function nodeToRows(params: {
   node: Record<string, unknown>;
   name: string;
@@ -174,9 +188,11 @@ export function nodeToRows(params: {
   depth: number;
   required: boolean;
   isArrayItem: boolean;
+  isAdditionalProperty?: boolean;
   rows: SchemaFieldRow[];
 }) {
   const { node, name, parentId, depth, required, isArrayItem, rows } = params;
+  const isAdditionalProperty = params.isAdditionalProperty === true;
   const type = resolveNodeType(node);
   const rowId = createId(name || 'field');
   const mockRaw =
@@ -194,7 +210,10 @@ export function nodeToRows(params: {
     description: String(node.description || node.title || ''),
     defaultValue: typeof node.default === 'undefined' ? '' : JSON.stringify(node.default),
     mockValue: mockRaw,
-    isArrayItem
+    isArrayItem,
+    isAdditionalProperty,
+    refName: type === 'ref' ? getSchemaRefName(node.$ref) : '',
+    additionalPropertiesMode: type === 'object' ? resolveAdditionalPropertiesMode(node) : 'none'
   });
 
   if (type === 'object') {
@@ -213,6 +232,19 @@ export function nodeToRows(params: {
         rows
       });
     });
+
+    if (node.additionalProperties && typeof node.additionalProperties === 'object') {
+      nodeToRows({
+        node: toObject(node.additionalProperties),
+        name: '{key}',
+        parentId: rowId,
+        depth: depth + 1,
+        required: false,
+        isArrayItem: false,
+        isAdditionalProperty: true,
+        rows
+      });
+    }
   }
 
   if (type === 'array') {
@@ -231,16 +263,39 @@ export function nodeToRows(params: {
   }
 }
 
-export function parseSchemaRows(schemaText?: string): { rows: SchemaFieldRow[]; rootMeta: Record<string, unknown>; error: string } {
+function parseDefinitions(node: Record<string, unknown>): SchemaDefinitionDraft[] {
+  return Object.entries(toObject(node.definitions)).map(([name, value]) => ({
+    name,
+    schemaText: JSON.stringify(normalizeSchemaNode(value), null, 2)
+  }));
+}
+
+export function parseSchemaRows(schemaText?: string): {
+  rows: SchemaFieldRow[];
+  rootMeta: Record<string, unknown>;
+  definitions: SchemaDefinitionDraft[];
+  error: string;
+  unsupportedKeywords: string[];
+} {
   const text = String(schemaText || '').trim();
-  if (!text) return { rows: [], rootMeta: { $schema: DRAFT4_SCHEMA_URI }, error: '' };
+  if (!text) {
+    return {
+      rows: [],
+      rootMeta: { $schema: DRAFT4_SCHEMA_URI },
+      definitions: [],
+      error: '',
+      unsupportedKeywords: []
+    };
+  }
   try {
     const raw = json5.parse(text) as Record<string, unknown>;
-    const schema = toObject(raw);
+    const schema = normalizeSchemaDocument(raw);
     const rootMeta = { ...schema };
     delete rootMeta.type;
     delete rootMeta.properties;
     delete rootMeta.required;
+    delete rootMeta.definitions;
+    delete rootMeta.$defs;
     if (!rootMeta.$schema) {
       rootMeta.$schema = DRAFT4_SCHEMA_URI;
     }
@@ -264,23 +319,42 @@ export function parseSchemaRows(schemaText?: string): { rows: SchemaFieldRow[]; 
           rows: rootRows
         });
       });
-      return { rows: rootRows, rootMeta, error: '' };
+    } else if (Object.keys(schema).length > 0) {
+      nodeToRows({
+        node: schema,
+        name: 'data',
+        parentId: ROOT_ID,
+        depth: 0,
+        required: false,
+        isArrayItem: false,
+        rows: rootRows
+      });
     }
 
-    nodeToRows({
-      node: schema,
-      name: 'data',
-      parentId: ROOT_ID,
-      depth: 0,
-      required: false,
-      isArrayItem: false,
-      rows: rootRows
-    });
-
-    return { rows: rootRows, rootMeta, error: '' };
+    return {
+      rows: rootRows,
+      rootMeta,
+      definitions: parseDefinitions(schema),
+      error: '',
+      unsupportedKeywords: findUnsupportedVisualSchemaKeywords(schema)
+    };
   } catch (err) {
-    return { rows: [], rootMeta: {}, error: String((err as Error).message || 'schema 解析失败') };
+    return {
+      rows: [],
+      rootMeta: {},
+      definitions: [],
+      error: String((err as Error).message || 'schema 解析失败'),
+      unsupportedKeywords: []
+    };
   }
+}
+
+export function schemaSupportsVisualEditor(schemaText?: string): { supported: boolean; keywords: string[] } {
+  const parsed = parseSchemaRows(schemaText);
+  return {
+    supported: !parsed.error && parsed.unsupportedKeywords.length === 0,
+    keywords: parsed.unsupportedKeywords
+  };
 }
 
 export function buildChildrenMap(rows: SchemaFieldRow[]): Map<string, SchemaFieldRow[]> {
@@ -294,7 +368,13 @@ export function buildChildrenMap(rows: SchemaFieldRow[]): Map<string, SchemaFiel
 }
 
 export function buildNodeFromRow(row: SchemaFieldRow, childrenMap: Map<string, SchemaFieldRow[]>): Record<string, unknown> {
-  const node: Record<string, unknown> = { type: row.type };
+  const node: Record<string, unknown> = {};
+
+  if (row.type === 'ref') {
+    node.$ref = `#/definitions/${String(row.refName || 'Definition').trim() || 'Definition'}`;
+  } else {
+    node.type = row.type;
+  }
 
   if (String(row.description || '').trim()) {
     node.description = String(row.description || '').trim();
@@ -317,7 +397,7 @@ export function buildNodeFromRow(row: SchemaFieldRow, childrenMap: Map<string, S
     const properties: Record<string, unknown> = {};
     const required: string[] = [];
     children
-      .filter(child => !child.isArrayItem)
+      .filter(child => !child.isArrayItem && !child.isAdditionalProperty)
       .forEach(child => {
         const name = String(child.name || '').trim();
         if (!name) return;
@@ -327,6 +407,15 @@ export function buildNodeFromRow(row: SchemaFieldRow, childrenMap: Map<string, S
     node.properties = properties;
     if (required.length > 0) {
       node.required = required;
+    }
+
+    if (row.additionalPropertiesMode === 'closed') {
+      node.additionalProperties = false;
+    } else if (row.additionalPropertiesMode === 'any') {
+      node.additionalProperties = true;
+    } else if (row.additionalPropertiesMode === 'schema') {
+      const mapRow = children.find(child => child.isAdditionalProperty) || null;
+      node.additionalProperties = mapRow ? buildNodeFromRow(mapRow, childrenMap) : { type: 'string' };
     }
   }
 
@@ -338,9 +427,29 @@ export function buildNodeFromRow(row: SchemaFieldRow, childrenMap: Map<string, S
   return node;
 }
 
-export function rowsToSchemaText(rows: SchemaFieldRow[], rootMeta?: Record<string, unknown>): string {
+function buildDefinitionsObject(definitions: SchemaDefinitionDraft[] | undefined): Record<string, unknown> {
+  const output: Record<string, unknown> = {};
+  (definitions || []).forEach(item => {
+    const name = String(item.name || '').trim();
+    if (!name) {
+      return;
+    }
+    try {
+      output[name] = normalizeSchemaNode(json5.parse(String(item.schemaText || '{}')));
+    } catch (_err) {
+      output[name] = { type: 'object' };
+    }
+  });
+  return output;
+}
+
+export function rowsToSchemaText(
+  rows: SchemaFieldRow[],
+  rootMeta?: Record<string, unknown>,
+  definitions?: SchemaDefinitionDraft[]
+): string {
   const childrenMap = buildChildrenMap(rows);
-  const topRows = (childrenMap.get(ROOT_ID) || []).filter(row => !row.isArrayItem);
+  const topRows = (childrenMap.get(ROOT_ID) || []).filter(row => !row.isArrayItem && !row.isAdditionalProperty);
   const rootProperties: Record<string, unknown> = {};
   const rootRequired: string[] = [];
 
@@ -361,6 +470,13 @@ export function rowsToSchemaText(rows: SchemaFieldRow[], rootMeta?: Record<strin
     schema.required = rootRequired;
   } else {
     delete schema.required;
+  }
+
+  const definitionObject = buildDefinitionsObject(definitions);
+  if (Object.keys(definitionObject).length > 0) {
+    schema.definitions = definitionObject;
+  } else {
+    delete schema.definitions;
   }
 
   if (!schema.$schema) {
@@ -395,7 +511,7 @@ export function getParentRow(rows: SchemaFieldRow[], row: SchemaFieldRow): Schem
 }
 
 export function isRequiredEditable(rows: SchemaFieldRow[], row: SchemaFieldRow): boolean {
-  if (row.isArrayItem) return false;
+  if (row.isArrayItem || row.isAdditionalProperty) return false;
   if (row.parentId === ROOT_ID) return true;
   const parent = getParentRow(rows, row);
   if (!parent) return false;
@@ -406,19 +522,24 @@ export function createEmptyRow(params: {
   parentId: string;
   depth: number;
   isArrayItem?: boolean;
+  isAdditionalProperty?: boolean;
   type?: SchemaFieldType;
 }): SchemaFieldRow {
   const isArrayItem = params.isArrayItem === true;
+  const isAdditionalProperty = params.isAdditionalProperty === true;
   return {
     id: createId('new'),
     parentId: params.parentId,
     depth: params.depth,
-    name: isArrayItem ? 'items' : '',
+    name: isArrayItem ? 'items' : isAdditionalProperty ? '{key}' : '',
     type: params.type || 'string',
     required: false,
     description: '',
     defaultValue: '',
     mockValue: '',
-    isArrayItem
+    isArrayItem,
+    isAdditionalProperty,
+    refName: '',
+    additionalPropertiesMode: 'none'
   };
 }

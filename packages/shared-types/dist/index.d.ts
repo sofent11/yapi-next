@@ -3,6 +3,38 @@ export interface ApiResult<T = unknown> {
     errmsg: string;
     data: T;
 }
+export declare const JSON_SCHEMA_DRAFT4_URI = "http://json-schema.org/draft-04/schema#";
+export type SchemaPrimitiveType = 'string' | 'number' | 'integer' | 'boolean' | 'null';
+export type SchemaContainerType = 'object' | 'array';
+export type SchemaFieldType = SchemaPrimitiveType | SchemaContainerType | 'ref';
+export type SchemaNode = Record<string, unknown>;
+export type SchemaDefinition = Record<string, SchemaNode>;
+export interface SchemaRefNode extends Record<string, unknown> {
+    $ref: string;
+}
+export interface SchemaObjectNode extends Record<string, unknown> {
+    type: 'object';
+    properties?: Record<string, SchemaNode>;
+    additionalProperties?: boolean | SchemaNode;
+    required?: string[];
+}
+export interface SchemaArrayNode extends Record<string, unknown> {
+    type: 'array';
+    items?: SchemaNode;
+}
+export interface SchemaDocument extends Record<string, unknown> {
+    $schema?: string;
+    definitions?: Record<string, SchemaNode>;
+}
+export declare function isSchemaObject(input: unknown): input is Record<string, unknown>;
+export declare function toSchemaObject(input: unknown): Record<string, unknown>;
+export declare function sanitizeSchemaDefinitionName(input: string): string;
+export declare function getSchemaRefName(ref: unknown): string;
+export declare function createSchemaDefinitionRef(name: string): string;
+export declare function normalizeSchemaNode(input: unknown): Record<string, unknown>;
+export declare function normalizeSchemaDocument(input: unknown): SchemaDocument;
+export declare function resolveSchemaPrimaryType(input: unknown): string;
+export declare function findUnsupportedVisualSchemaKeywords(input: unknown): string[];
 export type SpecFormat = 'auto' | 'swagger2' | 'openapi3';
 export type SpecSource = 'json' | 'url';
 export type SyncMode = 'normal' | 'good' | 'merge' | 'sync';

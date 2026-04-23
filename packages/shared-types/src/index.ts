@@ -4,6 +4,183 @@ export interface ApiResult<T = unknown> {
   data: T;
 }
 
+export const JSON_SCHEMA_DRAFT4_URI = 'http://json-schema.org/draft-04/schema#';
+
+export type SchemaPrimitiveType = 'string' | 'number' | 'integer' | 'boolean' | 'null';
+export type SchemaContainerType = 'object' | 'array';
+export type SchemaFieldType = SchemaPrimitiveType | SchemaContainerType | 'ref';
+
+export type SchemaNode = Record<string, unknown>;
+export type SchemaDefinition = Record<string, SchemaNode>;
+
+export interface SchemaRefNode extends Record<string, unknown> {
+  $ref: string;
+}
+
+export interface SchemaObjectNode extends Record<string, unknown> {
+  type: 'object';
+  properties?: Record<string, SchemaNode>;
+  additionalProperties?: boolean | SchemaNode;
+  required?: string[];
+}
+
+export interface SchemaArrayNode extends Record<string, unknown> {
+  type: 'array';
+  items?: SchemaNode;
+}
+
+export interface SchemaDocument extends Record<string, unknown> {
+  $schema?: string;
+  definitions?: Record<string, SchemaNode>;
+}
+
+function isPlainObject(input: unknown): input is Record<string, unknown> {
+  return !!input && typeof input === 'object' && !Array.isArray(input);
+}
+
+export function isSchemaObject(input: unknown): input is Record<string, unknown> {
+  return isPlainObject(input);
+}
+
+export function toSchemaObject(input: unknown): Record<string, unknown> {
+  return isPlainObject(input) ? input : {};
+}
+
+export function sanitizeSchemaDefinitionName(input: string): string {
+  const source = String(input || '').trim();
+  const normalized = source.replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  return normalized || 'Definition';
+}
+
+export function getSchemaRefName(ref: unknown): string {
+  const source = typeof ref === 'string' ? ref : '';
+  if (!source) {
+    return '';
+  }
+  const segment = source.split('/').filter(Boolean).pop() || '';
+  return segment.replace(/~1/g, '/').replace(/~0/g, '~');
+}
+
+export function createSchemaDefinitionRef(name: string): string {
+  return `#/definitions/${sanitizeSchemaDefinitionName(name)}`;
+}
+
+export function normalizeSchemaNode(input: unknown): Record<string, unknown> {
+  const source = toSchemaObject(input);
+  if (Object.keys(source).length === 0) {
+    return {};
+  }
+
+  const next: Record<string, unknown> = { ...source };
+  if (!next.type) {
+    if (typeof next.$ref === 'string' && next.$ref.trim()) {
+      next.type = 'ref';
+    } else if (isPlainObject(next.properties)) {
+      next.type = 'object';
+    } else if (isPlainObject(next.items)) {
+      next.type = 'array';
+    }
+  }
+
+  if (isPlainObject(next.$defs)) {
+    next.definitions = {
+      ...toSchemaObject(next.definitions),
+      ...toSchemaObject(next.$defs)
+    };
+    delete next.$defs;
+  }
+
+  return next;
+}
+
+export function normalizeSchemaDocument(input: unknown): SchemaDocument {
+  const node = normalizeSchemaNode(input);
+  const definitions = toSchemaObject(node.definitions);
+  if (Object.keys(definitions).length > 0) {
+    node.definitions = definitions;
+  } else {
+    delete node.definitions;
+  }
+  if (!node.$schema) {
+    node.$schema = JSON_SCHEMA_DRAFT4_URI;
+  }
+  return node;
+}
+
+export function resolveSchemaPrimaryType(input: unknown): string {
+  const node = normalizeSchemaNode(input);
+  const rawType = node.type;
+
+  if (typeof rawType === 'string' && rawType.trim()) {
+    return rawType.trim().toLowerCase();
+  }
+
+  if (Array.isArray(rawType)) {
+    const normalized = rawType.map(item => String(item || '').trim().toLowerCase()).filter(Boolean);
+    const primary = normalized.find(item => item !== 'null');
+    if (primary) {
+      return primary;
+    }
+    if (normalized.length > 0) {
+      return normalized[0];
+    }
+  }
+
+  if (typeof node.$ref === 'string' && node.$ref.trim()) {
+    return 'ref';
+  }
+  if (isPlainObject(node.properties) || Object.prototype.hasOwnProperty.call(node, 'additionalProperties')) {
+    return 'object';
+  }
+  if (isPlainObject(node.items)) {
+    return 'array';
+  }
+  if (Array.isArray(node.enum) && node.enum.length > 0) {
+    const sample = node.enum[0];
+    if (typeof sample === 'number') {
+      return Number.isInteger(sample) ? 'integer' : 'number';
+    }
+    if (typeof sample === 'boolean') {
+      return 'boolean';
+    }
+    if (sample === null) {
+      return 'null';
+    }
+    return 'string';
+  }
+  return 'string';
+}
+
+export function findUnsupportedVisualSchemaKeywords(input: unknown): string[] {
+  const unsupported = new Set<string>();
+
+  function visit(nodeInput: unknown) {
+    const node = toSchemaObject(nodeInput);
+    if (Object.keys(node).length === 0) {
+      return;
+    }
+
+    ['allOf', 'anyOf', 'oneOf', 'not', 'patternProperties', 'prefixItems'].forEach(key => {
+      if (Object.prototype.hasOwnProperty.call(node, key)) {
+        unsupported.add(key);
+      }
+    });
+
+    Object.values(toSchemaObject(node.properties)).forEach(visit);
+    Object.values(toSchemaObject(node.definitions)).forEach(visit);
+
+    if (isPlainObject(node.items)) {
+      visit(node.items);
+    }
+    if (isPlainObject(node.additionalProperties)) {
+      visit(node.additionalProperties);
+    }
+  }
+
+  visit(normalizeSchemaDocument(input));
+  return Array.from(unsupported);
+}
+
 export type SpecFormat = 'auto' | 'swagger2' | 'openapi3';
 export type SpecSource = 'json' | 'url';
 export type SyncMode = 'normal' | 'good' | 'merge' | 'sync';

@@ -1,4 +1,5 @@
-export type SchemaFieldType = 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object' | 'null';
+export type SchemaFieldType = 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object' | 'null' | 'ref';
+export type SchemaAdditionalPropertiesMode = 'none' | 'closed' | 'any' | 'schema';
 
 export type SchemaFieldRow = {
   id: string;
@@ -11,6 +12,14 @@ export type SchemaFieldRow = {
   defaultValue: string;
   mockValue: string;
   isArrayItem: boolean;
+  isAdditionalProperty: boolean;
+  refName: string;
+  additionalPropertiesMode: SchemaAdditionalPropertiesMode;
+};
+
+export type SchemaDefinitionDraft = {
+  name: string;
+  schemaText: string;
 };
 
 export type SchemaVisualEditorProps = {

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { getSchemaRefName, sanitizeSchemaDefinitionName, toSchemaObject } from '@yapi-next/shared-types';
 import { InterfaceEntity } from '../database/schemas/interface.schema';
 import { InterfaceCatEntity } from '../database/schemas/interface-cat.schema';
 import { ProjectEntity } from '../database/schemas/project.schema';
@@ -98,7 +99,10 @@ export class SpecExportService {
         name: cat.name,
         description: cat.desc || cat.name
       })),
-      paths: {}
+      paths: {},
+      components: {
+        schemas: {}
+      }
     };
 
     interfaces.forEach(api => {
@@ -108,8 +112,8 @@ export class SpecExportService {
       const method = String(api.method || 'GET').toLowerCase();
       const cat = tagMap.get(api.catid);
       const rawOperation = this.parseJson(api.operation_oas3, null);
-      const operation = rawOperation && typeof rawOperation === 'object'
-        ? JSON.parse(JSON.stringify(rawOperation))
+      const operation: Record<string, any> = rawOperation && typeof rawOperation === 'object'
+        ? rawOperation
         : {
             tags: cat ? [cat.name] : [],
             summary: api.title,
@@ -134,10 +138,13 @@ export class SpecExportService {
         operation['x-yapi-import-meta'] = this.parseJson(api.import_meta, { raw: api.import_meta });
       }
 
-      this.applyInterfaceDataToOpenApiOperation(operation, api);
+      this.applyInterfaceDataToOpenApiOperation(operation, api, model.components.schemas);
       model.paths[api.path][method] = operation;
     });
 
+    if (Object.keys(model.components.schemas).length === 0) {
+      delete model.components;
+    }
     return model;
   }
 
@@ -148,6 +155,7 @@ export class SpecExportService {
   ): Record<string, unknown> {
     const tagMap = new Map<number, InterfaceCatEntity>();
     cats.forEach(cat => tagMap.set(cat._id, cat));
+    const usedOperationIds = new Set<string>();
     const model: Record<string, any> = {
       swagger: '2.0',
       info: {
@@ -161,7 +169,8 @@ export class SpecExportService {
         name: cat.name,
         description: cat.desc || cat.name
       })),
-      paths: {}
+      paths: {},
+      definitions: {}
     };
 
     interfaces.forEach(api => {
@@ -174,6 +183,7 @@ export class SpecExportService {
         tags: cat ? [cat.name] : [],
         summary: api.title,
         description: api.markdown || api.desc || '',
+        operationId: this.normalizeOperationId(undefined, method, api.path, usedOperationIds),
         parameters: [],
         responses: {
           '200': {
@@ -217,7 +227,12 @@ export class SpecExportService {
         operation.parameters.push({
           name: 'root',
           in: 'body',
-          schema: this.parseJson(api.req_body_other, { type: 'object' })
+          schema: this.prepareSchemaForExport(
+            api.req_body_other,
+            `${operation.operationId}_Request`,
+            'swagger2',
+            model.definitions
+          )
         });
       } else if (api.req_body_type === 'form') {
         (api.req_body_form || []).forEach((item: any) => {
@@ -232,7 +247,12 @@ export class SpecExportService {
       }
 
       if (api.res_body_type === 'json' && api.res_body) {
-        operation.responses['200'].schema = this.parseJson(api.res_body, { type: 'object' });
+        operation.responses['200'].schema = this.prepareSchemaForExport(
+          api.res_body,
+          `${operation.operationId}_Response`,
+          'swagger2',
+          model.definitions
+        );
       } else {
         operation.responses['200'].schema = {
           type: 'string',
@@ -242,111 +262,109 @@ export class SpecExportService {
 
       model.paths[api.path][method] = operation;
     });
+
+    if (Object.keys(model.definitions).length === 0) {
+      delete model.definitions;
+    }
     return model;
   }
 
-  private applyInterfaceDataToOpenApiOperation(operation: Record<string, any>, api: InterfaceEntity): void {
-    const preservedResponses = operation.responses && typeof operation.responses === 'object'
-      ? Object.fromEntries(
-          Object.entries(operation.responses).filter(([code]) => code !== '200')
-        )
+  private applyInterfaceDataToOpenApiOperation(
+    operation: Record<string, any>,
+    api: InterfaceEntity,
+    schemaRegistry: Record<string, unknown>
+  ): void {
+    const originalResponses = operation.responses && typeof operation.responses === 'object'
+      ? operation.responses
       : {};
-    const requestBodyDescription = operation.requestBody?.description;
+    const originalRequestBody = operation.requestBody && typeof operation.requestBody === 'object'
+      ? operation.requestBody
+      : null;
+    const requestBodyDescription = originalRequestBody?.description;
 
-    operation.parameters = [];
-    operation.responses = preservedResponses;
+    operation.parameters = this.buildOpenApiParameters(api);
+    operation.responses = {};
     delete operation.requestBody;
-
-    (api.req_headers || []).forEach((item: any) => {
-      if (item.name === 'Content-Type') return;
-      operation.parameters.push({
-        name: item.name,
-        in: 'header',
-        description: item.desc || '',
-        required: String(item.required) === '1',
-        schema: { type: 'string', default: item.value }
-      });
-    });
-
-    (api.req_params || []).forEach((item: any) => {
-      operation.parameters.push({
-        name: item.name,
-        in: 'path',
-        description: item.desc || '',
-        required: true,
-        schema: { type: 'string' }
-      });
-    });
-
-    (api.req_query || []).forEach((item: any) => {
-      operation.parameters.push({
-        name: item.name,
-        in: 'query',
-        description: item.desc || '',
-        required: String(item.required) === '1',
-        schema: { type: 'string' }
-      });
-    });
 
     const reqBodyLooksLikeSchema = this.isJsonSchemaLikeText(api.req_body_other);
     if ((api.req_body_type === 'json' || (api.req_body_type === 'raw' && reqBodyLooksLikeSchema)) && api.req_body_other) {
+      const requestSchema = this.prepareSchemaForExport(
+        api.req_body_other,
+        `${operation.operationId || 'operation'}_Request`,
+        'openapi3',
+        schemaRegistry
+      );
+      const originalContent = originalRequestBody?.content && typeof originalRequestBody.content === 'object'
+        ? originalRequestBody.content
+        : null;
+      const nextContent = originalContent
+        ? this.replaceOperationContentSchemas(originalContent, requestSchema)
+        : {
+            'application/json': {
+              schema: requestSchema
+            }
+          };
       operation.requestBody = {
-        required: true,
+        ...(originalRequestBody ? { ...originalRequestBody } : {}),
+        required: originalRequestBody?.required ?? true,
         ...(requestBodyDescription ? { description: requestBodyDescription } : {}),
-        content: {
-          'application/json': {
-            schema: this.parseJson(api.req_body_other, { type: 'object' })
-          }
-        }
+        content: nextContent
       };
     } else if (api.req_body_type === 'form') {
       const required: string[] = [];
       const properties: Record<string, any> = {};
+      let hasFile = false;
       (api.req_body_form || []).forEach((item: any) => {
         if (String(item.required) === '1') {
           required.push(item.name);
+        }
+        if (item.type === 'file') {
+          hasFile = true;
         }
         properties[item.name] = item.type === 'file'
           ? { type: 'string', format: 'binary', description: item.desc || '' }
           : { type: 'string', description: item.desc || '' };
       });
+      const formSchema = {
+        type: 'object',
+        properties,
+        required
+      };
+      const mediaTypes = this.getRequestBodyMediaTypes(
+        originalRequestBody,
+        hasFile ? 'multipart/form-data' : 'application/x-www-form-urlencoded'
+      );
       operation.requestBody = {
-        required: required.length > 0,
+        ...(originalRequestBody ? { ...originalRequestBody } : {}),
+        required: originalRequestBody?.required ?? (required.length > 0),
         ...(requestBodyDescription ? { description: requestBodyDescription } : {}),
-        content: {
-          'multipart/form-data': {
-            schema: {
-              type: 'object',
-              properties,
-              required
-            }
-          }
-        }
+        content: this.buildRequestBodyContent(mediaTypes, formSchema)
       };
     } else if (api.req_body_type === 'raw' && api.req_body_other) {
+      const mediaTypes = this.getRequestBodyMediaTypes(originalRequestBody, 'text/plain');
       operation.requestBody = {
-        required: false,
+        ...(originalRequestBody ? { ...originalRequestBody } : {}),
+        required: originalRequestBody?.required ?? false,
         ...(requestBodyDescription ? { description: requestBodyDescription } : {}),
-        content: {
-          'text/plain': {
-            schema: {
-              type: 'string',
-              example: api.req_body_other
-            }
-          }
-        }
+        content: this.buildRequestBodyContent(mediaTypes, {
+          type: 'string',
+          example: api.req_body_other
+        })
       };
+    } else if (originalRequestBody) {
+      operation.requestBody = originalRequestBody;
     }
 
     if (api.res_body_type === 'json' && api.res_body) {
-      operation.responses['200'] = {
-        description: 'successful operation',
-        content: {
-          'application/json': {
-            schema: this.parseJson(api.res_body, { type: 'object' })
-          }
-        }
-      };
+      const responseSchema = this.prepareSchemaForExport(
+        api.res_body,
+        `${operation.operationId || 'operation'}_Response`,
+        'openapi3',
+        schemaRegistry
+      );
+      operation.responses = this.replaceOperationResponses(originalResponses, responseSchema);
+    } else if (Object.keys(originalResponses).length > 0) {
+      operation.responses = originalResponses;
     } else {
       operation.responses['200'] = {
         description: 'successful operation',
@@ -360,6 +378,43 @@ export class SpecExportService {
         }
       };
     }
+  }
+
+  private buildOpenApiParameters(api: InterfaceEntity): Array<Record<string, unknown>> {
+    const parameters: Array<Record<string, unknown>> = [];
+
+    (api.req_headers || []).forEach((item: any) => {
+      if (item.name === 'Content-Type') return;
+      parameters.push({
+        name: item.name,
+        in: 'header',
+        description: item.desc || '',
+        required: String(item.required) === '1',
+        schema: { type: 'string', default: item.value }
+      });
+    });
+
+    (api.req_params || []).forEach((item: any) => {
+      parameters.push({
+        name: item.name,
+        in: 'path',
+        description: item.desc || '',
+        required: true,
+        schema: { type: 'string' }
+      });
+    });
+
+    (api.req_query || []).forEach((item: any) => {
+      parameters.push({
+        name: item.name,
+        in: 'query',
+        description: item.desc || '',
+        required: String(item.required) === '1',
+        schema: { type: 'string' }
+      });
+    });
+
+    return parameters;
   }
 
   private parseJson<T>(text: string, fallback: T): T {
@@ -394,6 +449,266 @@ export class SpecExportService {
       'enum',
       'format'
     ].some(key => Object.prototype.hasOwnProperty.call(parsed, key));
+  }
+
+  private prepareSchemaForExport(
+    input: string,
+    prefix: string,
+    format: 'openapi3' | 'swagger2',
+    registry: Record<string, unknown>
+  ): Record<string, unknown> {
+    const parsed = this.parseJson(input, { type: 'object' } as Record<string, unknown>);
+    if (!this.schemaNeedsDefinitionHoist(input)) {
+      return parsed;
+    }
+    const context = {
+      format,
+      prefix: sanitizeSchemaDefinitionName(prefix || 'Operation'),
+      registry,
+      nameMap: new Map<string, string>(),
+      usedNames: new Set(Object.keys(registry)),
+      inProgress: new Set<string>()
+    };
+    const schema = this.rewriteSchemaForExport(parsed, context, this.collectSchemaDefinitions(parsed));
+    delete schema.definitions;
+    delete schema.$defs;
+    return schema;
+  }
+
+  private rewriteSchemaForExport(
+    input: unknown,
+    context: {
+      format: 'openapi3' | 'swagger2';
+      prefix: string;
+      registry: Record<string, unknown>;
+      nameMap: Map<string, string>;
+      usedNames: Set<string>;
+      inProgress: Set<string>;
+    },
+    localDefinitions: Record<string, unknown>
+  ): any {
+    if (!input || typeof input !== 'object') {
+      return input;
+    }
+    if (Array.isArray(input)) {
+      return input.map(item => this.rewriteSchemaForExport(item, context, localDefinitions));
+    }
+
+    const node = toSchemaObject(input);
+    const nextLocalDefinitions = {
+      ...localDefinitions,
+      ...this.collectSchemaDefinitions(node)
+    };
+
+    Object.entries(this.collectSchemaDefinitions(node)).forEach(([name, value]) => {
+      this.registerSchemaDefinitionForExport(name, value, context, nextLocalDefinitions);
+    });
+
+    const result: Record<string, unknown> = {};
+    Object.entries(node).forEach(([key, value]) => {
+      if (key === 'definitions' || key === '$defs') {
+        return;
+      }
+      if (key === '$ref' && typeof value === 'string') {
+        const localName = this.extractLocalDefinitionName(value);
+        if (localName && nextLocalDefinitions[localName]) {
+          const exportName = this.registerSchemaDefinitionForExport(localName, nextLocalDefinitions[localName], context, nextLocalDefinitions);
+          result.$ref = this.buildDefinitionRef(exportName, context.format);
+        } else {
+          result.$ref = value;
+        }
+        return;
+      }
+      if (key === 'properties' || key === 'patternProperties') {
+        const next: Record<string, unknown> = {};
+        Object.entries(toSchemaObject(value)).forEach(([innerKey, innerValue]) => {
+          next[innerKey] = this.rewriteSchemaForExport(innerValue, context, nextLocalDefinitions);
+        });
+        result[key] = next;
+        return;
+      }
+      if (key === 'items' || key === 'additionalProperties' || key === 'not') {
+        if (value === true || value === false) {
+          result[key] = value;
+        } else {
+          result[key] = this.rewriteSchemaForExport(value, context, nextLocalDefinitions);
+        }
+        return;
+      }
+      if (key === 'allOf' || key === 'anyOf' || key === 'oneOf' || key === 'prefixItems') {
+        result[key] = Array.isArray(value)
+          ? value.map(item => this.rewriteSchemaForExport(item, context, nextLocalDefinitions))
+          : value;
+        return;
+      }
+      result[key] = value;
+    });
+
+    return result;
+  }
+
+  private registerSchemaDefinitionForExport(
+    rawName: string,
+    schema: unknown,
+    context: {
+      format: 'openapi3' | 'swagger2';
+      prefix: string;
+      registry: Record<string, unknown>;
+      nameMap: Map<string, string>;
+      usedNames: Set<string>;
+      inProgress: Set<string>;
+    },
+    localDefinitions: Record<string, unknown>
+  ): string {
+    const key = String(rawName || '').trim();
+    if (context.nameMap.has(key)) {
+      return context.nameMap.get(key) as string;
+    }
+
+    const baseName = `${context.prefix}_${sanitizeSchemaDefinitionName(key || getSchemaRefName(key) || 'Definition')}`;
+    let exportName = baseName;
+    let index = 1;
+    while (context.usedNames.has(exportName)) {
+      exportName = `${baseName}_${index}`;
+      index += 1;
+    }
+    context.usedNames.add(exportName);
+    context.nameMap.set(key, exportName);
+
+    if (!context.registry[exportName] && !context.inProgress.has(exportName)) {
+      context.inProgress.add(exportName);
+      context.registry[exportName] = this.rewriteSchemaForExport(
+        schema,
+        context,
+        {
+          ...localDefinitions,
+          ...this.collectSchemaDefinitions(schema)
+        }
+      );
+      context.inProgress.delete(exportName);
+    }
+
+    return exportName;
+  }
+
+  private collectSchemaDefinitions(input: unknown): Record<string, unknown> {
+    const node = toSchemaObject(input);
+    return {
+      ...toSchemaObject(node.definitions),
+      ...toSchemaObject(node.$defs)
+    };
+  }
+
+  private extractLocalDefinitionName(ref: string): string {
+    if (ref.startsWith('#/definitions/')) {
+      return ref.slice('#/definitions/'.length);
+    }
+    if (ref.startsWith('#/$defs/')) {
+      return ref.slice('#/$defs/'.length);
+    }
+    return '';
+  }
+
+  private buildDefinitionRef(name: string, format: 'openapi3' | 'swagger2'): string {
+    return format === 'openapi3'
+      ? `#/components/schemas/${name}`
+      : `#/definitions/${name}`;
+  }
+
+  private getRequestBodyMediaTypes(
+    requestBody: Record<string, any> | null,
+    fallbackMediaType: string
+  ): string[] {
+    const content = requestBody?.content;
+    if (content && typeof content === 'object') {
+      const mediaTypes = Object.keys(content);
+      if (mediaTypes.length > 0) {
+        return mediaTypes;
+      }
+    }
+    return [fallbackMediaType];
+  }
+
+  private buildRequestBodyContent(
+    mediaTypes: string[],
+    schema: Record<string, unknown>
+  ): Record<string, unknown> {
+    const content: Record<string, unknown> = {};
+    mediaTypes.forEach(mediaType => {
+      content[mediaType] = { schema };
+    });
+    return content;
+  }
+
+  private replaceOperationContentSchemas(
+    contentInput: Record<string, any>,
+    schema: Record<string, unknown>
+  ): Record<string, unknown> {
+    const nextContent: Record<string, unknown> = {};
+    let replaced = false;
+    Object.entries(contentInput).forEach(([mediaType, mediaValue]) => {
+      const media = mediaValue && typeof mediaValue === 'object'
+        ? { ...mediaValue }
+        : {};
+      if (media.schema || mediaType.includes('json')) {
+        media.schema = schema;
+        replaced = true;
+      }
+      nextContent[mediaType] = media;
+    });
+    if (!replaced) {
+      nextContent['application/json'] = { schema };
+    }
+    return nextContent;
+  }
+
+  private replaceOperationResponses(
+    responsesInput: Record<string, any>,
+    schema: Record<string, unknown>
+  ): Record<string, unknown> {
+    const source = responsesInput && typeof responsesInput === 'object' ? responsesInput : {};
+    const nextResponses: Record<string, unknown> = {};
+    let primaryStatusCode = '';
+    let hadSchemaResponse = false;
+
+    Object.entries(source).forEach(([statusCode, responseValue]) => {
+      if (!primaryStatusCode || statusCode === '200' || statusCode === 'default') {
+        primaryStatusCode = statusCode;
+      }
+      const response = responseValue && typeof responseValue === 'object'
+        ? { ...responseValue }
+        : { description: 'successful operation' };
+      if (response.content && typeof response.content === 'object') {
+        response.content = this.replaceOperationContentSchemas(response.content, schema);
+        hadSchemaResponse = true;
+      }
+      nextResponses[statusCode] = response;
+    });
+
+    if (!hadSchemaResponse) {
+      const targetStatusCode = primaryStatusCode || '200';
+      const current = nextResponses[targetStatusCode];
+      const base = current && typeof current === 'object'
+        ? { ...(current as Record<string, unknown>) }
+        : { description: 'successful operation' };
+      nextResponses[targetStatusCode] = {
+        ...base,
+        content: {
+          'application/json': {
+            schema
+          }
+        }
+      };
+    }
+
+    return nextResponses;
+  }
+
+  private schemaNeedsDefinitionHoist(input: string): boolean {
+    const text = String(input || '');
+    return text.includes('"definitions"')
+      || text.includes('"$defs"')
+      || text.includes('"$ref"');
   }
 
   private normalizeOperationId(

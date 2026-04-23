@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { getSchemaRefName, normalizeSchemaDocument, normalizeSchemaNode, resolveSchemaPrimaryType, toSchemaObject } from '@yapi-next/shared-types';
 import { InterfaceEntity } from '../database/schemas/interface.schema';
 import { ProjectEntity } from '../database/schemas/project.schema';
 import { mockExtra } from '../legacy/mock-extra';
@@ -92,8 +93,8 @@ export class MockService {
 
     if (resBodyType === 'json') {
       if (interfaceData.res_body_is_json_schema === true) {
-        const schema = this.parseJsonLoose(interfaceData.res_body, {});
-        output = this.schemaToJson(schema, true);
+        const schema = normalizeSchemaDocument(this.parseJsonLoose(interfaceData.res_body, {}));
+        output = this.schemaToJson(schema, toSchemaObject(schema.definitions), new Set(), true, 0);
       } else {
         const source = this.parseJsonLoose(interfaceData.res_body, interfaceData.res_body || '');
         const context = {
@@ -378,11 +379,35 @@ export class MockService {
     return {};
   }
 
-  private schemaToJson(schema: unknown, alwaysFakeOptionals: boolean): unknown {
+  private schemaToJson(
+    schema: unknown,
+    definitions: LooseObject,
+    visitedRefs: Set<string>,
+    alwaysFakeOptionals: boolean,
+    depth: number
+  ): unknown {
     if (!schema || typeof schema !== 'object') {
       return null;
     }
-    const node = schema as Record<string, unknown>;
+    if (depth > 12) {
+      return {};
+    }
+
+    const node = normalizeSchemaNode(schema as Record<string, unknown>);
+    if (typeof node.$ref === 'string') {
+      const refName = getSchemaRefName(node.$ref);
+      if (!refName || visitedRefs.has(refName)) {
+        return {};
+      }
+      const target = definitions[refName];
+      if (!target || typeof target !== 'object') {
+        return {};
+      }
+      const nextVisitedRefs = new Set(visitedRefs);
+      nextVisitedRefs.add(refName);
+      return this.schemaToJson(target, definitions, nextVisitedRefs, alwaysFakeOptionals, depth + 1);
+    }
+
     if (Object.prototype.hasOwnProperty.call(node, 'example')) {
       return node.example;
     }
@@ -393,12 +418,9 @@ export class MockService {
       return node.default;
     }
 
-    const type = typeof node.type === 'string' ? node.type : undefined;
-    if (type === 'object' || node.properties) {
-      const properties =
-        node.properties && typeof node.properties === 'object'
-          ? (node.properties as Record<string, unknown>)
-          : {};
+    const type = resolveSchemaPrimaryType(node);
+    if (type === 'object') {
+      const properties = toSchemaObject(node.properties);
       const required = Array.isArray(node.required)
         ? new Set(
             node.required
@@ -410,7 +432,18 @@ export class MockService {
       for (const [key, value] of Object.entries(properties)) {
         const isRequired = required.has(key);
         if (!alwaysFakeOptionals && !isRequired) continue;
-        output[key] = this.schemaToJson(value, alwaysFakeOptionals);
+        output[key] = this.schemaToJson(value, definitions, visitedRefs, alwaysFakeOptionals, depth + 1);
+      }
+      if (node.additionalProperties === true) {
+        output.key = '';
+      } else if (node.additionalProperties && typeof node.additionalProperties === 'object') {
+        output.key = this.schemaToJson(
+          node.additionalProperties,
+          definitions,
+          visitedRefs,
+          alwaysFakeOptionals,
+          depth + 1
+        );
       }
       return output;
     }
@@ -418,7 +451,7 @@ export class MockService {
     if (type === 'array' || node.items) {
       const itemSchema = node.items;
       if (!itemSchema) return [];
-      return [this.schemaToJson(itemSchema, alwaysFakeOptionals)];
+      return [this.schemaToJson(itemSchema, definitions, visitedRefs, alwaysFakeOptionals, depth + 1)];
     }
 
     if (type === 'integer' || type === 'number') return 0;

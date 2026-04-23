@@ -394,8 +394,19 @@ assert_ok 'spec/export' "${resp}"
 node -e '
 const obj = JSON.parse(process.argv[1]);
 const schema = obj?.data?.paths?.["/smoke/spec"]?.get?.responses?.["200"]?.content?.["application/json"]?.schema;
-if (!schema || schema.type !== "object") process.exit(1);
-if (!schema.properties || !schema.properties.code || !schema.properties.data) process.exit(1);
+if (!schema) process.exit(1);
+if (schema.type === "object") {
+  if (!schema.properties || !schema.properties.code || !schema.properties.data) process.exit(1);
+  process.exit(0);
+}
+if (typeof schema.$ref === "string") {
+  const refName = schema.$ref.split("/").pop();
+  const hoisted = refName ? obj?.data?.components?.schemas?.[refName] : null;
+  if (!hoisted || hoisted.type !== "object") process.exit(1);
+  if (!hoisted.properties || !hoisted.properties.code || !hoisted.properties.data) process.exit(1);
+  process.exit(0);
+}
+process.exit(1);
 ' "${resp}" || fail 'spec/export content check failed'
 
 log 'compat export swagger2 via /plugin/exportSwagger'

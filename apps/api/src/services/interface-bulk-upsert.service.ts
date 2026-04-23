@@ -12,7 +12,7 @@ import { mergeJsonSchema } from '../legacy/merge-json-schema';
 
 const BULK_WRITE_CHUNK_SIZE = 300;
 const PRESERVED_PARAM_FIELDS = ['desc', 'example'] as const;
-const PRESERVED_SCHEMA_METADATA_FIELDS = ['title', 'description', 'default', 'example', 'examples', 'mock', 'x-mock'] as const;
+const PRESERVED_SCHEMA_METADATA_FIELDS = ['title', 'description', 'default', 'example', 'examples', 'mock', 'x-mock', '$ref'] as const;
 
 export interface BulkUpsertError {
   operationId?: string;
@@ -564,6 +564,8 @@ export class InterfaceBulkUpsertService {
     } else if (nextSchema.type === 'array') {
       result.items = this.syncJsonSchema(existingSchema.items, nextSchema.items);
     }
+    result.definitions = this.syncSchemaProperties(existingSchema.definitions, nextSchema.definitions);
+    result.$defs = this.syncSchemaProperties(existingSchema.$defs, nextSchema.$defs);
     result.additionalProperties = this.syncSchemaNode(existingSchema.additionalProperties, nextSchema.additionalProperties);
     result.not = this.syncSchemaNode(existingSchema.not, nextSchema.not);
     result.oneOf = this.syncSchemaList(existingSchema.oneOf, nextSchema.oneOf);
