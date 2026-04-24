@@ -1098,16 +1098,26 @@ mark {
   overflow-y: hidden;
 }
 
-.method-select-ide {
-  flex: 0 0 96px;
-  width: 90px;
+.request-kind-select-ide {
+  flex: 0 0 116px;
+  width: 116px;
 }
 
+.method-select-ide {
+  flex: 0 0 92px;
+  width: 92px;
+}
+
+.request-kind-select-ide .mantine-Select-input,
 .method-select-ide .mantine-Select-input {
-  border-radius: 9px 0 0 9px !important;
+  border-radius: 0 !important;
   border: none !important;
   font-weight: 700;
   background: var(--surface-muted);
+}
+
+.request-kind-select-ide .mantine-Select-input {
+  border-radius: 9px 0 0 9px !important;
 }
 
 .url-input-ide {
@@ -1876,43 +1886,180 @@ mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--canvas);
+  padding: 32px;
+  background:
+    linear-gradient(180deg, color-mix(in oklch, var(--surface-muted) 72%, var(--canvas)), var(--canvas)),
+    var(--canvas);
 }
 
 .launchpad {
   display: grid;
-  grid-template-columns: 320px 500px;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(520px, 1.1fr);
   gap: 0;
+  width: min(1120px, 100%);
+  min-height: min(720px, calc(100vh - 64px));
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--surface);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 18px 50px rgba(31, 35, 40, 0.08);
   overflow: hidden;
 }
 
-.launchpad-sidebar {
-  padding: 32px;
-  background: var(--surface-muted);
+.launchpad-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 34px;
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--surface-muted) 90%, var(--accent-soft)), var(--surface-muted)),
+    var(--surface-muted);
   border-right: 1px solid var(--line);
 }
 
-.launchpad-title {
-  font-size: 2rem;
+.launchpad-product-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in oklch, var(--accent) 18%, var(--line));
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--surface) 72%, transparent);
+  color: var(--accent);
+  font-size: 0.72rem;
   font-weight: 800;
-  margin-bottom: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.launchpad-title {
+  margin: 0;
+  max-width: 10ch;
+  font-family: var(--font-display);
+  font-size: 2.45rem;
+  font-weight: 800;
+  line-height: 1.04;
   color: var(--accent);
 }
 
+.launchpad-subtitle {
+  margin: 0;
+  max-width: 56ch;
+  color: var(--muted-strong);
+  font-size: 0.92rem;
+  line-height: 1.65;
+}
+
+.launchpad-capability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: auto;
+}
+
+.launchpad-capability {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-height: 132px;
+  padding: 14px;
+  border: 1px solid color-mix(in oklch, var(--line) 82%, white);
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--surface) 72%, var(--surface-muted));
+}
+
+.launchpad-capability svg {
+  color: var(--accent);
+}
+
+.launchpad-capability strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.launchpad-capability span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
 .launchpad-main {
-  padding: 32px;
+  padding: 26px;
+}
+
+.ide-launchpad-main {
+  display: grid;
+  gap: 14px;
+  align-content: start;
 }
 
 .launchpad-section {
-  margin-bottom: 24px;
+  margin: 0;
+  padding: 18px;
+  border: 1px solid color-mix(in oklch, var(--line) 86%, white);
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--surface) 92%, var(--surface-muted));
 }
 
-.launchpad-section:last-child {
-  margin-bottom: 0;
+.launchpad-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.launchpad-form-grid,
+.launchpad-recent-list,
+.launchpad-sequence {
+  display: grid;
+  gap: 10px;
+}
+
+.launchpad-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.launchpad-sequence-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  border-bottom: 1px solid color-mix(in oklch, var(--line) 78%, white);
+}
+
+.launchpad-sequence-row:last-child {
+  border-bottom: 0;
+}
+
+.launchpad-sequence-row span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.launchpad-sequence-row strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.launchpad-recent-list .category-row {
+  padding: 9px 10px;
+}
+
+.launchpad-empty-recent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 12px;
+  border: 1px dashed color-mix(in oklch, var(--line) 76%, white);
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--surface-muted) 58%, white);
 }
 
 .debugger-context-menu {
@@ -1999,11 +2146,17 @@ mark {
   overflow-y: hidden;
 }
 
-.method-select-ide {
-  flex: 0 0 96px;
-  width: 96px;
+.request-kind-select-ide {
+  flex: 0 0 116px;
+  width: 116px;
 }
 
+.method-select-ide {
+  flex: 0 0 92px;
+  width: 92px;
+}
+
+.request-kind-select-ide .mantine-Select-input,
 .method-select-ide .mantine-Select-input {
   border: none !important;
   border-right: 1px solid var(--line) !important;
@@ -2376,7 +2529,7 @@ mark {
   .launchpad {
     grid-template-columns: 1fr;
   }
-  .launchpad-sidebar {
+  .launchpad-hero {
     border-right: none;
     border-bottom: 1px solid var(--line);
   }
@@ -2396,6 +2549,31 @@ mark {
 }
 
 @media (max-width: 800px) {
+  .welcome-shell {
+    align-items: stretch;
+    padding: 16px;
+    overflow: auto;
+  }
+
+  .launchpad {
+    min-height: auto;
+  }
+
+  .launchpad-hero,
+  .launchpad-main {
+    padding: 18px;
+  }
+
+  .launchpad-title {
+    max-width: none;
+    font-size: 2rem;
+  }
+
+  .launchpad-capability-grid,
+  .launchpad-action-grid {
+    grid-template-columns: 1fr;
+  }
+
   .workspace-grid {
     grid-template-columns: 48px 1fr;
   }

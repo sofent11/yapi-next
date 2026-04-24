@@ -34,9 +34,10 @@ type ScriptSendRequestInput = {
   headers: ParameterRow[];
   query: ParameterRow[];
   body: {
-    mode: 'none' | 'json' | 'text' | 'form-urlencoded' | 'multipart';
+    mode: 'none' | 'json' | 'text' | 'xml' | 'graphql' | 'sparql' | 'file' | 'form-urlencoded' | 'multipart';
     mimeType?: string;
     text: string;
+    file?: string;
     fields: ParameterRow[];
   };
   timeoutMs?: number;
@@ -884,9 +885,20 @@ export function buildCurlCommand(preview: ResolvedRequestPreview) {
       lines.push(`  -H ${escapeShellValue(`${item.name}: ${item.value}`)}`);
     });
 
-  if (preview.body.mode === 'json' || preview.body.mode === 'text') {
+  if (
+    preview.body.mode === 'json' ||
+    preview.body.mode === 'text' ||
+    preview.body.mode === 'xml' ||
+    preview.body.mode === 'graphql' ||
+    preview.body.mode === 'sparql'
+  ) {
     if (preview.body.text.trim()) {
       lines.push(`  --data-raw ${escapeShellValue(preview.body.text)}`);
+    }
+  } else if (preview.body.mode === 'file') {
+    const filePath = preview.body.file || preview.body.text;
+    if (filePath.trim()) {
+      lines.push(`  --data-binary ${escapeShellValue(`@${filePath}`)}`);
     }
   } else if (preview.body.mode === 'form-urlencoded') {
     preview.body.fields

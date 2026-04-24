@@ -6,10 +6,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const queryClient = new QueryClient();
 const theme = createTheme({
-  fontFamily: '"Inter", "PingFang SC", sans-serif',
+  fontFamily: '"Public Sans", "PingFang SC", sans-serif',
   fontFamilyMonospace: '"JetBrains Mono", "SF Mono", "Cascadia Mono", monospace',
   headings: {
-    fontFamily: '"Inter", "PingFang SC", sans-serif',
+    fontFamily: '"Sora", "PingFang SC", sans-serif',
     fontWeight: '600'
   },
   primaryColor: 'indigo',

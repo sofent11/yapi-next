@@ -933,7 +933,7 @@ function resolveAuthValue(
 }
 
 function resolveOauthAccessTokenTarget(auth: AuthConfig) {
-  const target = auth.tokenPlacement || 'header';
+  const target = auth.tokenPlacement === 'query' ? 'query' : 'header';
   const name = auth.tokenName || (target === 'query' ? 'access_token' : 'Authorization');
   return { target, name };
 }

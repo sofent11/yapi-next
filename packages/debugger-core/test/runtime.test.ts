@@ -15,6 +15,7 @@ import {
   resolveRequest
 } from '../src/index';
 import {
+  SCHEMA_VERSION,
   createCollectionStep,
   createEmptyCollection,
   createDefaultEnvironment,
@@ -146,6 +147,62 @@ test('buildCurlCommand emits a runnable curl string', () => {
   assert.match(curl, /curl -X POST/);
   assert.match(curl, /Authorization: Bearer token/);
   assert.match(curl, /--data-raw/);
+});
+
+test('schema v3 preserves Bruno parity request metadata', () => {
+  const request = createEmptyRequest('GraphQL Search');
+  request.kind = 'graphql';
+  request.body = {
+    mode: 'graphql',
+    mimeType: 'application/json',
+    text: '{"query":"query Ping { ping }","variables":{}}',
+    fields: [],
+    graphql: {
+      query: 'query Ping { ping }',
+      variables: '{}'
+    }
+  };
+  request.auth = {
+    type: 'awsv4',
+    accessKey: '{{awsAccessKey}}',
+    secretKey: '{{awsSecretKey}}',
+    region: 'ap-southeast-1',
+    service: 'execute-api'
+  };
+
+  assert.equal(request.schemaVersion, SCHEMA_VERSION);
+  assert.equal(request.kind, 'graphql');
+  assert.equal(request.body.mode, 'graphql');
+  assert.equal(request.auth.type, 'awsv4');
+});
+
+test('buildCurlCommand supports Bruno parity body modes', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('XML Upload');
+  request.method = 'POST';
+  request.url = 'https://api.example.com/xml';
+  request.body = {
+    mode: 'xml',
+    mimeType: 'application/xml',
+    text: '<ping />',
+    fields: []
+  };
+
+  const xmlCurl = buildCurlCommand(resolveRequest(project, request, undefined, environment));
+  assert.match(xmlCurl, /--data-raw/);
+  assert.match(xmlCurl, new RegExp('<ping />'));
+
+  request.body = {
+    mode: 'file',
+    mimeType: 'application/octet-stream',
+    text: '/tmp/body.bin',
+    file: '/tmp/body.bin',
+    fields: []
+  };
+  const fileCurl = buildCurlCommand(resolveRequest(project, request, undefined, environment));
+  assert.match(fileCurl, /--data-binary/);
+  assert.match(fileCurl, new RegExp('@/tmp/body\\.bin'));
 });
 
 test('applyCollectionRules produces collection-level checks', () => {

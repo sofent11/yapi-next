@@ -8,7 +8,12 @@ function authTypeOptions() {
     { value: 'bearer', label: 'bearer' },
     { value: 'basic', label: 'basic' },
     { value: 'apikey', label: 'api key' },
-    { value: 'oauth2', label: 'oauth2 client credentials' }
+    { value: 'oauth2', label: 'oauth2' },
+    { value: 'oauth1', label: 'oauth1' },
+    { value: 'awsv4', label: 'aws signature v4' },
+    { value: 'digest', label: 'digest' },
+    { value: 'ntlm', label: 'ntlm' },
+    { value: 'wsse', label: 'wsse' }
   ];
 }
 
@@ -505,7 +510,12 @@ export function EnvironmentCenterPanel(props: {
                               <Select
                                 label="OAuth Flow"
                                 value={profile.auth.oauthFlow || 'client_credentials'}
-                                data={[{ value: 'client_credentials', label: 'client_credentials' }]}
+                                data={[
+                                  { value: 'client_credentials', label: 'client_credentials' },
+                                  { value: 'authorization_code', label: 'authorization_code' },
+                                  { value: 'password', label: 'password' },
+                                  { value: 'implicit', label: 'implicit' }
+                                ]}
                                 onChange={value =>
                                   props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
                                     ...environment,
@@ -517,6 +527,38 @@ export function EnvironmentCenterPanel(props: {
                                   }))
                                 }
                               />
+                              {profile.auth.oauthFlow === 'authorization_code' || profile.auth.oauthFlow === 'implicit' ? (
+                                <>
+                                  <TextInput
+                                    label="Authorization URL"
+                                    value={profile.auth.authorizationUrl || ''}
+                                    onChange={event =>
+                                      props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                        ...environment,
+                                        authProfiles: environment.authProfiles.map(item =>
+                                          item.name === profile.name
+                                            ? { ...item, auth: { ...item.auth, authorizationUrl: event.currentTarget.value } }
+                                            : item
+                                        )
+                                      }))
+                                    }
+                                  />
+                                  <TextInput
+                                    label="Callback URL"
+                                    value={profile.auth.callbackUrl || ''}
+                                    onChange={event =>
+                                      props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                        ...environment,
+                                        authProfiles: environment.authProfiles.map(item =>
+                                          item.name === profile.name
+                                            ? { ...item, auth: { ...item.auth, callbackUrl: event.currentTarget.value } }
+                                            : item
+                                        )
+                                      }))
+                                    }
+                                  />
+                                </>
+                              ) : null}
                               <TextInput
                                 label="Token URL"
                                 value={profile.auth.tokenUrl || ''}
@@ -649,6 +691,82 @@ export function EnvironmentCenterPanel(props: {
                               />
                               <TextInput label="Cached Token" value={profile.auth.accessToken || ''} readOnly />
                               <TextInput label="Cache Expires At" value={profile.auth.expiresAt || ''} readOnly />
+                            </>
+                          ) : null}
+                          {profile.auth.type === 'oauth1' ? (
+                            <>
+                              <TextInput label="Consumer Key" value={profile.auth.consumerKey || ''} onChange={event =>
+                                props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                  ...environment,
+                                  authProfiles: environment.authProfiles.map(item =>
+                                    item.name === profile.name ? { ...item, auth: { ...item.auth, consumerKey: event.currentTarget.value } } : item
+                                  )
+                                }))
+                              } />
+                              <TextInput label="Consumer Secret" value={profile.auth.consumerSecret || ''} onChange={event =>
+                                props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                  ...environment,
+                                  authProfiles: environment.authProfiles.map(item =>
+                                    item.name === profile.name ? { ...item, auth: { ...item.auth, consumerSecret: event.currentTarget.value } } : item
+                                  )
+                                }))
+                              } />
+                            </>
+                          ) : null}
+                          {profile.auth.type === 'awsv4' ? (
+                            <>
+                              <TextInput label="Access Key" value={profile.auth.accessKey || ''} onChange={event =>
+                                props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                  ...environment,
+                                  authProfiles: environment.authProfiles.map(item =>
+                                    item.name === profile.name ? { ...item, auth: { ...item.auth, accessKey: event.currentTarget.value } } : item
+                                  )
+                                }))
+                              } />
+                              <TextInput label="Secret Key" value={profile.auth.secretKey || ''} onChange={event =>
+                                props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                  ...environment,
+                                  authProfiles: environment.authProfiles.map(item =>
+                                    item.name === profile.name ? { ...item, auth: { ...item.auth, secretKey: event.currentTarget.value } } : item
+                                  )
+                                }))
+                              } />
+                              <TextInput label="Region" value={profile.auth.region || ''} onChange={event =>
+                                props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                  ...environment,
+                                  authProfiles: environment.authProfiles.map(item =>
+                                    item.name === profile.name ? { ...item, auth: { ...item.auth, region: event.currentTarget.value } } : item
+                                  )
+                                }))
+                              } />
+                              <TextInput label="Service" value={profile.auth.service || ''} onChange={event =>
+                                props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                  ...environment,
+                                  authProfiles: environment.authProfiles.map(item =>
+                                    item.name === profile.name ? { ...item, auth: { ...item.auth, service: event.currentTarget.value } } : item
+                                  )
+                                }))
+                              } />
+                            </>
+                          ) : null}
+                          {profile.auth.type === 'digest' || profile.auth.type === 'ntlm' || profile.auth.type === 'wsse' ? (
+                            <>
+                              <TextInput label="Username" value={profile.auth.username || ''} onChange={event =>
+                                props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                  ...environment,
+                                  authProfiles: environment.authProfiles.map(item =>
+                                    item.name === profile.name ? { ...item, auth: { ...item.auth, username: event.currentTarget.value } } : item
+                                  )
+                                }))
+                              } />
+                              <TextInput label="Password" value={profile.auth.password || ''} onChange={event =>
+                                props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                  ...environment,
+                                  authProfiles: environment.authProfiles.map(item =>
+                                    item.name === profile.name ? { ...item, auth: { ...item.auth, password: event.currentTarget.value } } : item
+                                  )
+                                }))
+                              } />
                             </>
                           ) : null}
                         </div>

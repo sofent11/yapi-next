@@ -1,5 +1,5 @@
-import { Button, Text, TextInput, Paper, Group, Stack, Badge } from '@mantine/core';
-import { IconFolderOpen, IconPlus, IconHistory, IconRocket, IconBolt, IconGitBranch } from '@tabler/icons-react';
+import { Button, Text, TextInput, Group, Badge } from '@mantine/core';
+import { IconApi, IconBrandGithub, IconBug, IconFolderOpen, IconGitBranch, IconHistory, IconPlus, IconPlayerPlay, IconSettingsAutomation } from '@tabler/icons-react';
 
 export function WelcomePanel(props: {
   projectName: string;
@@ -11,43 +11,50 @@ export function WelcomePanel(props: {
 }) {
   return (
     <div className="welcome-shell">
-      <div className="launchpad">
-        <div className="launchpad-sidebar">
+      <div className="launchpad ide-launchpad">
+        <section className="launchpad-hero">
+          <div className="launchpad-product-mark">
+            <IconApi size={22} />
+            <span>Local API IDE</span>
+          </div>
           <h1 className="launchpad-title">YAPI Next Debugger</h1>
-          <p className="section-description" style={{ fontSize: '0.9rem', lineHeight: 1.6 }}>
-            面向开发与测试协作的本地优先 API 工作台。
-            <br /><br />
-            先建立工作区，再导入 API 规范、修复阻塞项、发送请求，并把有效结果沉淀为 Case 与 Collection。
+          <p className="launchpad-subtitle">
+            A calm local workbench for importing specs, sending requests, capturing browser traffic, saving cases, and replaying collections with Git-visible files.
           </p>
+          <div className="launchpad-capability-grid">
+            <div className="launchpad-capability">
+              <IconFolderOpen size={16} />
+              <strong>File workspace</strong>
+              <span>YAML requests, environments, cases, and reports stay reviewable.</span>
+            </div>
+            <div className="launchpad-capability">
+              <IconSettingsAutomation size={16} />
+              <strong>Case runner</strong>
+              <span>Turn successful debugging into repeatable collection checks.</span>
+            </div>
+            <div className="launchpad-capability">
+              <IconBug size={16} />
+              <strong>Browser capture</strong>
+              <span>Promote real network calls into durable workspace assets.</span>
+            </div>
+            <div className="launchpad-capability">
+              <IconGitBranch size={16} />
+              <strong>Git aware</strong>
+              <span>Pull, push, inspect status, and keep local secrets out of commits.</span>
+            </div>
+          </div>
+        </section>
 
-          <Stack gap="xs" mt="xl">
-            <Paper p="sm" withBorder style={{ background: 'var(--surface-muted)' }}>
-              <Group gap="xs" mb={4}>
-                <IconRocket size={16} color="var(--accent)" />
-                <Text size="xs" fw={700}>开始路径</Text>
-              </Group>
-              <Stack gap={6}>
-                <Group gap={6}>
-                  <Badge variant="outline" size="xs" color="gray">1</Badge>
-                  <Text size="xs" c="dimmed">打开已有工作区，或先新建一个本地目录</Text>
-                </Group>
-                <Group gap={6}>
-                  <Badge variant="outline" size="xs" color="gray">2</Badge>
-                  <Text size="xs" c="dimmed">进入工作台后导入 OpenAPI / HAR / Postman</Text>
-                </Group>
-                <Group gap={6}>
-                  <Badge variant="outline" size="xs" color="gray">3</Badge>
-                  <Text size="xs" c="dimmed">把调试结果保存为 Case，再加入 Collection 复跑</Text>
-                </Group>
-              </Stack>
-            </Paper>
-          </Stack>
-        </div>
-
-        <div className="launchpad-main">
-          <div className="launchpad-section">
-            <h2 className="section-title">开始使用</h2>
-            <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
+        <section className="launchpad-main ide-launchpad-main">
+          <div className="launchpad-section launchpad-start-panel">
+            <div className="launchpad-section-head">
+              <div>
+                <p className="section-kicker">Workspace</p>
+                <h2 className="section-title">Start a debugging session</h2>
+              </div>
+              <Badge variant="light" color="indigo">Bruno parity track</Badge>
+            </div>
+            <div className="launchpad-form-grid">
               <TextInput
                 size="sm"
                 label="新建本地工作区"
@@ -55,7 +62,7 @@ export function WelcomePanel(props: {
                 value={props.projectName}
                 onChange={event => props.onProjectNameChange(event.currentTarget.value)}
               />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="launchpad-action-grid">
                 <Button
                   variant="outline"
                   leftSection={<IconFolderOpen size={16} />}
@@ -78,16 +85,39 @@ export function WelcomePanel(props: {
             </div>
           </div>
 
-          <div className="launchpad-section">
-            <h2 className="section-title">最近使用</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 12 }}>
+          <div className="launchpad-section launchpad-sequence-panel">
+            <div className="launchpad-section-head">
+              <div>
+                <p className="section-kicker">Flow</p>
+                <h2 className="section-title">Operational path</h2>
+              </div>
+              <IconPlayerPlay size={16} />
+            </div>
+            <div className="launchpad-sequence">
+              {['Open or create a workspace', 'Import OpenAPI / HAR / Postman', 'Repair blockers and send requests', 'Save response as Case', 'Add to Collection and sync'].map((item, index) => (
+                <div key={item} className="launchpad-sequence-row">
+                  <span>{String(index + 1).padStart(2, '0')}</span>
+                  <strong>{item}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="launchpad-section launchpad-recent-panel">
+            <div className="launchpad-section-head">
+              <div>
+                <p className="section-kicker">Recent</p>
+                <h2 className="section-title">Recent workspaces</h2>
+              </div>
+              <IconHistory size={16} />
+            </div>
+            <div className="launchpad-recent-list">
               {props.recentRoots.length > 0 ? (
                 props.recentRoots.map(root => (
                   <button
                     key={root}
                     className="category-row"
                     onClick={() => props.onSelectRecent(root)}
-                    style={{ padding: '8px 12px' }}
                   >
                     <IconHistory size={14} style={{ color: 'var(--muted)' }} />
                     <Text size="sm" className="recent-root-label">
@@ -99,13 +129,16 @@ export function WelcomePanel(props: {
                   </button>
                 ))
               ) : (
-                <Text size="sm" c="dimmed" style={{ padding: '12px', textAlign: 'center', border: '1px dashed var(--line)', borderRadius: 4 }}>
-                  还没有最近工作区。先打开已有目录，或创建一个新的本地调试项目。
-                </Text>
+                <div className="launchpad-empty-recent">
+                  <IconBrandGithub size={18} />
+                  <Text size="sm" c="dimmed">
+                    No recent workspace yet. Open an existing directory or create a local API project to begin.
+                  </Text>
+                </div>
               )}
             </div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );

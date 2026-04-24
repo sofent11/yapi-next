@@ -31,12 +31,17 @@ import { CodeEditor } from '../editors/CodeEditor';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
 
 const REQUEST_METHODS: RequestDocument['method'][] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+const REQUEST_KINDS: RequestDocument['kind'][] = ['http', 'graphql', 'grpc', 'websocket', 'script'];
 
 function bodyModeOptions() {
   return [
     { value: 'none', label: 'none' },
     { value: 'json', label: 'json' },
     { value: 'text', label: 'raw' },
+    { value: 'xml', label: 'xml' },
+    { value: 'graphql', label: 'graphql' },
+    { value: 'sparql', label: 'sparql' },
+    { value: 'file', label: 'file' },
     { value: 'form-urlencoded', label: 'x-www-form-urlencoded' },
     { value: 'multipart', label: 'multipart/form-data' }
   ];
@@ -49,7 +54,12 @@ function authTypeOptions() {
     { value: 'bearer', label: 'bearer' },
     { value: 'basic', label: 'basic' },
     { value: 'apikey', label: 'api key' },
-    { value: 'oauth2', label: 'oauth2 client credentials' },
+    { value: 'oauth2', label: 'oauth2' },
+    { value: 'oauth1', label: 'oauth1' },
+    { value: 'awsv4', label: 'aws signature v4' },
+    { value: 'digest', label: 'digest' },
+    { value: 'ntlm', label: 'ntlm' },
+    { value: 'wsse', label: 'wsse' },
     { value: 'profile', label: 'environment profile' }
   ];
 }
@@ -131,6 +141,7 @@ export function RequestPanel(props: {
   const { request: requestDocument, selectedCase, selectedEnvironment, workspace } = props;
   const allowCases = props.allowCases ?? true;
   const effectiveMethod = selectedCase?.overrides.method || requestDocument.method;
+  const effectiveKind = selectedCase?.overrides.kind || requestDocument.kind || 'http';
   const effectiveUrl = selectedCase?.overrides.url || requestDocument.url;
   const effectivePath = selectedCase?.overrides.path || requestDocument.path;
   const queryRows = selectedCase?.overrides.query ?? requestDocument.query;
@@ -212,6 +223,12 @@ export function RequestPanel(props: {
       value: selectedPath
     };
     updateBody({ ...body, fields: nextFields });
+  }
+
+  async function handlePickRawBodyFile() {
+    const selectedPath = await chooseRequestBodyFile();
+    if (!selectedPath) return;
+    updateBody({ ...body, mode: 'file', file: selectedPath, text: selectedPath });
   }
 
   function applyUrlChange(nextUrl: string) {
@@ -315,6 +332,21 @@ export function RequestPanel(props: {
         ) : null}
 
         <div className="method-url-group">
+          <Select
+            size="sm"
+            className="request-kind-select-ide"
+            value={effectiveKind}
+            data={REQUEST_KINDS.map(kind => ({ value: kind, label: kind.toUpperCase() }))}
+            onChange={value => {
+              const nextKind = (value as RequestDocument['kind']) || 'http';
+              if (selectedCase) {
+                updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, kind: nextKind } }));
+              } else {
+                props.onRequestChange({ ...requestDocument, kind: nextKind });
+              }
+            }}
+            variant="filled"
+          />
           <Select
             size="sm"
             className="method-select-ide"
@@ -454,7 +486,11 @@ export function RequestPanel(props: {
                         )
                   }
                   readOnly
-                  language={resolvedPreview.body.mode === 'json' ? 'json' : 'text'}
+                  language={
+                    resolvedPreview.body.mode === 'json' || resolvedPreview.body.mode === 'graphql'
+                      ? 'json'
+                      : 'text'
+                  }
                   minHeight="140px"
                 />
               </div>
@@ -647,6 +683,12 @@ export function RequestPanel(props: {
                     mimeType:
                       nextMode === 'json'
                         ? 'application/json'
+                        : nextMode === 'graphql'
+                          ? 'application/json'
+                          : nextMode === 'xml'
+                            ? 'application/xml'
+                            : nextMode === 'sparql'
+                              ? 'application/sparql-query'
                         : nextMode === 'form-urlencoded'
                           ? 'application/x-www-form-urlencoded'
                           : nextMode === 'multipart'
@@ -665,10 +707,24 @@ export function RequestPanel(props: {
                 onPickFile={handlePickBodyFile}
                 onChange={rows => updateBody({ ...body, fields: rows })}
               />
+            ) : body.mode === 'file' ? (
+              <div className="settings-grid">
+                <TextInput
+                  label="Body File"
+                  value={body.file || body.text || ''}
+                  placeholder="/path/to/request-body.bin"
+                  onChange={event => updateBody({ ...body, file: event.currentTarget.value, text: event.currentTarget.value })}
+                />
+                <div className="preview-note">
+                  <Button size="xs" variant="default" onClick={handlePickRawBodyFile}>
+                    Choose File
+                  </Button>
+                </div>
+              </div>
             ) : body.mode !== 'none' ? (
               <CodeEditor
                 value={body.text || ''}
-                language={body.mode === 'json' ? 'json' : 'text'}
+                language={body.mode === 'json' || body.mode === 'graphql' ? 'json' : 'text'}
                 onChange={value => updateBody({ ...body, text: value })}
                 minHeight="300px"
               />
@@ -760,9 +816,28 @@ export function RequestPanel(props: {
                   <Select
                     label="OAuth Flow"
                     value={auth.oauthFlow || 'client_credentials'}
-                    data={[{ value: 'client_credentials', label: 'client_credentials' }]}
+                    data={[
+                      { value: 'client_credentials', label: 'client_credentials' },
+                      { value: 'authorization_code', label: 'authorization_code' },
+                      { value: 'password', label: 'password' },
+                      { value: 'implicit', label: 'implicit' }
+                    ]}
                     onChange={value => updateAuth({ ...auth, oauthFlow: (value as AuthConfig['oauthFlow']) || 'client_credentials' })}
                   />
+                  {auth.oauthFlow === 'authorization_code' || auth.oauthFlow === 'implicit' ? (
+                    <>
+                      <TextInput
+                        label="Authorization URL"
+                        value={auth.authorizationUrl || ''}
+                        onChange={event => updateAuth({ ...auth, authorizationUrl: event.currentTarget.value })}
+                      />
+                      <TextInput
+                        label="Callback URL"
+                        value={auth.callbackUrl || ''}
+                        onChange={event => updateAuth({ ...auth, callbackUrl: event.currentTarget.value })}
+                      />
+                    </>
+                  ) : null}
                   <TextInput
                     label="Token URL"
                     placeholder="https://auth.example.com/oauth/token"
@@ -832,6 +907,35 @@ export function RequestPanel(props: {
                         Refresh OAuth Token
                       </Button>
                     </div>
+                  ) : null}
+                </>
+              ) : null}
+              {auth.type === 'oauth1' ? (
+                <>
+                  <TextInput label="Consumer Key" value={auth.consumerKey || ''} onChange={event => updateAuth({ ...auth, consumerKey: event.currentTarget.value })} />
+                  <TextInput label="Consumer Secret" value={auth.consumerSecret || ''} onChange={event => updateAuth({ ...auth, consumerSecret: event.currentTarget.value })} />
+                  <TextInput label="Token" value={auth.token || ''} onChange={event => updateAuth({ ...auth, token: event.currentTarget.value })} />
+                  <TextInput label="Token Secret" value={auth.clientSecret || ''} onChange={event => updateAuth({ ...auth, clientSecret: event.currentTarget.value })} />
+                </>
+              ) : null}
+              {auth.type === 'awsv4' ? (
+                <>
+                  <TextInput label="Access Key" value={auth.accessKey || ''} onChange={event => updateAuth({ ...auth, accessKey: event.currentTarget.value })} />
+                  <TextInput label="Secret Key" value={auth.secretKey || ''} onChange={event => updateAuth({ ...auth, secretKey: event.currentTarget.value })} />
+                  <TextInput label="Region" value={auth.region || ''} onChange={event => updateAuth({ ...auth, region: event.currentTarget.value })} />
+                  <TextInput label="Service" value={auth.service || ''} onChange={event => updateAuth({ ...auth, service: event.currentTarget.value })} />
+                  <TextInput label="Session Token" value={auth.sessionToken || ''} onChange={event => updateAuth({ ...auth, sessionToken: event.currentTarget.value })} />
+                </>
+              ) : null}
+              {auth.type === 'digest' || auth.type === 'ntlm' || auth.type === 'wsse' ? (
+                <>
+                  <TextInput label="Username" value={auth.username || ''} onChange={event => updateAuth({ ...auth, username: event.currentTarget.value })} />
+                  <TextInput label="Password" value={auth.password || ''} onChange={event => updateAuth({ ...auth, password: event.currentTarget.value })} />
+                  {auth.type === 'ntlm' ? (
+                    <>
+                      <TextInput label="Domain" value={auth.domain || ''} onChange={event => updateAuth({ ...auth, domain: event.currentTarget.value })} />
+                      <TextInput label="Workstation" value={auth.workstation || ''} onChange={event => updateAuth({ ...auth, workstation: event.currentTarget.value })} />
+                    </>
                   ) : null}
                 </>
               ) : null}

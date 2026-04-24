@@ -102,6 +102,7 @@ struct RequestBody {
     mode: String,
     mime_type: Option<String>,
     text: String,
+    file: Option<String>,
     fields: Vec<ParameterRow>,
 }
 
@@ -914,6 +915,18 @@ fn header_map(rows: &[ParameterRow], body: &RequestBody) -> Result<HeaderMap, St
             "json" => {
                 headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
             }
+            "graphql" => {
+                headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+            }
+            "xml" => {
+                headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/xml"));
+            }
+            "sparql" => {
+                headers.insert(
+                    CONTENT_TYPE,
+                    HeaderValue::from_static("application/sparql-query"),
+                );
+            }
             "form-urlencoded" => {
                 headers.insert(
                     CONTENT_TYPE,
@@ -998,10 +1011,20 @@ async fn request_send(input: SendRequestInput) -> Result<SendRequestResult, Stri
     }
 
     match input.body.mode.as_str() {
-        "json" | "text" => {
+        "json" | "text" | "xml" | "graphql" | "sparql" => {
             if !input.body.text.is_empty() {
                 request = request.body(input.body.text.clone());
             }
+        }
+        "file" => {
+            let file_path = input
+                .body
+                .file
+                .clone()
+                .or_else(|| (!input.body.text.trim().is_empty()).then(|| input.body.text.clone()))
+                .ok_or_else(|| "File body mode requires a file path".to_string())?;
+            let bytes = fs::read(&file_path).map_err(|error| error.to_string())?;
+            request = request.body(bytes);
         }
         "form-urlencoded" => {
             let form: Vec<(String, String)> = input

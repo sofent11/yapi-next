@@ -1,8 +1,13 @@
 import { z } from 'zod';
 
 export const LEGACY_SCHEMA_VERSION = 1;
-export const SCHEMA_VERSION = 2;
-export const schemaVersionSchema = z.union([z.literal(LEGACY_SCHEMA_VERSION), z.literal(SCHEMA_VERSION)]);
+export const PREVIOUS_SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
+export const schemaVersionSchema = z.union([
+  z.literal(LEGACY_SCHEMA_VERSION),
+  z.literal(PREVIOUS_SCHEMA_VERSION),
+  z.literal(SCHEMA_VERSION)
+]);
 export const REQUEST_SUFFIX = '.request.yaml';
 export const CASE_SUFFIX = '.case.yaml';
 export const COLLECTION_SUFFIX = '.collection.yaml';
@@ -12,6 +17,9 @@ export const BODY_SIDECAR_THRESHOLD = 1800;
 
 export const httpMethodSchema = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
 export type HttpMethod = z.infer<typeof httpMethodSchema>;
+
+export const requestKindSchema = z.enum(['http', 'graphql', 'grpc', 'websocket', 'script']);
+export type RequestKind = z.infer<typeof requestKindSchema>;
 
 export const parameterRowSchema = z.object({
   name: z.string().default(''),
@@ -23,8 +31,30 @@ export const parameterRowSchema = z.object({
 });
 export type ParameterRow = z.infer<typeof parameterRowSchema>;
 
-export const authTypeSchema = z.enum(['inherit', 'none', 'bearer', 'basic', 'apikey', 'profile', 'oauth2']);
+export const authTypeSchema = z.enum([
+  'inherit',
+  'none',
+  'bearer',
+  'basic',
+  'apikey',
+  'profile',
+  'oauth2',
+  'oauth1',
+  'awsv4',
+  'digest',
+  'ntlm',
+  'wsse'
+]);
 export type AuthType = z.infer<typeof authTypeSchema>;
+
+export const variableScopeSchema = z.enum(['collection', 'folder', 'request', 'response', 'runtime', 'prompt']);
+export type VariableScope = z.infer<typeof variableScopeSchema>;
+
+export const scopedVariableRowSchema = parameterRowSchema.extend({
+  scope: variableScopeSchema.default('request'),
+  secret: z.boolean().default(false)
+});
+export type ScopedVariableRow = z.infer<typeof scopedVariableRowSchema>;
 
 export const testModeSchema = z.enum(['debug', 'automation']);
 export type TestMode = z.infer<typeof testModeSchema>;
@@ -59,14 +89,33 @@ export const authConfigSchema = z.object({
   valueFromVar: z.string().optional(),
   addTo: z.enum(['header', 'query']).optional(),
   profileName: z.string().optional(),
-  oauthFlow: z.enum(['client_credentials']).optional(),
+  oauthFlow: z.enum(['client_credentials', 'password', 'authorization_code', 'implicit']).optional(),
+  authorizationUrl: z.string().optional(),
+  callbackUrl: z.string().optional(),
+  grantType: z.string().optional(),
   tokenUrl: z.string().optional(),
   clientId: z.string().optional(),
   clientIdFromVar: z.string().optional(),
   clientSecret: z.string().optional(),
   clientSecretFromVar: z.string().optional(),
+  accessKey: z.string().optional(),
+  secretKey: z.string().optional(),
+  sessionToken: z.string().optional(),
+  service: z.string().optional(),
+  region: z.string().optional(),
+  consumerKey: z.string().optional(),
+  consumerSecret: z.string().optional(),
+  signatureMethod: z.string().optional(),
+  version: z.string().optional(),
+  realm: z.string().optional(),
+  nonce: z.string().optional(),
+  algorithm: z.string().optional(),
+  workstation: z.string().optional(),
+  domain: z.string().optional(),
+  passwordDigest: z.string().optional(),
+  created: z.string().optional(),
   scope: z.string().optional(),
-  tokenPlacement: z.enum(['header', 'query']).optional(),
+  tokenPlacement: z.enum(['header', 'query', 'body', 'url']).optional(),
   tokenName: z.string().optional(),
   tokenPrefix: z.string().optional(),
   tokenType: z.string().optional(),
@@ -77,16 +126,40 @@ export type AuthConfig = z.infer<typeof authConfigSchema>;
 
 export const runtimeSettingsSchema = z.object({
   timeoutMs: z.number().int().positive().default(30000),
-  followRedirects: z.boolean().default(true)
+  followRedirects: z.boolean().default(true),
+  proxyUrl: z.string().optional(),
+  clientCertificatePath: z.string().optional(),
+  clientCertificateKeyPath: z.string().optional(),
+  caCertificatePath: z.string().optional()
 });
 export type RuntimeSettings = z.infer<typeof runtimeSettingsSchema>;
 
 export const requestBodySchema = z.object({
-  mode: z.enum(['none', 'json', 'text', 'form-urlencoded', 'multipart']).default('none'),
+  mode: z.enum(['none', 'json', 'text', 'xml', 'graphql', 'sparql', 'file', 'form-urlencoded', 'multipart']).default('none'),
   mimeType: z.string().optional(),
   text: z.string().default(''),
   file: z.string().optional(),
-  fields: z.array(parameterRowSchema).default([])
+  fields: z.array(parameterRowSchema).default([]),
+  graphql: z.object({
+    query: z.string().default(''),
+    variables: z.string().default(''),
+    operationName: z.string().optional(),
+    schemaUrl: z.string().optional()
+  }).optional(),
+  grpc: z.object({
+    protoFile: z.string().optional(),
+    importPaths: z.array(z.string()).default([]),
+    service: z.string().optional(),
+    method: z.string().optional(),
+    message: z.string().default('')
+  }).optional(),
+  websocket: z.object({
+    messages: z.array(z.object({
+      name: z.string().default('Message'),
+      body: z.string().default(''),
+      enabled: z.boolean().default(true)
+    })).default([])
+  }).optional()
 });
 export type RequestBody = z.infer<typeof requestBodySchema>;
 
@@ -95,6 +168,7 @@ export const responseExampleSchema = z.object({
   role: z.enum(['example', 'baseline']).default('example'),
   status: z.number().int().min(100).max(599).optional(),
   mimeType: z.string().optional(),
+  contentType: z.enum(['json', 'text', 'xml', 'html', 'binary', 'image', 'video', 'pdf']).optional(),
   text: z.string().default(''),
   file: z.string().optional()
 });
@@ -141,9 +215,17 @@ export const environmentDocumentSchema = z.object({
 });
 export type EnvironmentDocument = z.infer<typeof environmentDocumentSchema>;
 
+export const requestScriptsSchema = z.object({
+  preRequest: z.string().default(''),
+  postResponse: z.string().default(''),
+  tests: z.string().default('')
+});
+export type RequestScripts = z.infer<typeof requestScriptsSchema>;
+
 export const requestDocumentSchema = z.object({
   schemaVersion: schemaVersionSchema.default(SCHEMA_VERSION),
   id: z.string().min(1),
+  kind: requestKindSchema.default('http'),
   name: z.string().min(1),
   method: httpMethodSchema.default('GET'),
   url: z.string().default(''),
@@ -156,12 +238,19 @@ export const requestDocumentSchema = z.object({
   body: requestBodySchema.default({ mode: 'none', text: '', fields: [] }),
   auth: authConfigSchema.default({ type: 'inherit' }),
   runtime: runtimeSettingsSchema.default({ timeoutMs: 30000, followRedirects: true }),
+  vars: z.object({
+    req: z.array(scopedVariableRowSchema).default([]),
+    res: z.array(scopedVariableRowSchema).default([])
+  }).default({ req: [], res: [] }),
+  scripts: requestScriptsSchema.default({ preRequest: '', postResponse: '', tests: '' }),
+  docs: z.string().default(''),
   examples: z.array(responseExampleSchema).default([]),
   order: z.number().int().default(0)
 });
 export type RequestDocument = z.infer<typeof requestDocumentSchema>;
 
 export const caseOverridesSchema = z.object({
+  kind: requestKindSchema.optional(),
   method: httpMethodSchema.optional(),
   url: z.string().optional(),
   path: z.string().optional(),
@@ -274,6 +363,11 @@ export const collectionDocumentSchema = z.object({
   stopOnFailure: z.boolean().default(true),
   iterationCount: z.number().int().positive().default(1),
   vars: z.record(z.string(), z.string()).default({}),
+  variableRows: z.array(scopedVariableRowSchema).default([]),
+  headers: z.array(parameterRowSchema).default([]),
+  auth: authConfigSchema.default({ type: 'inherit' }),
+  scripts: requestScriptsSchema.default({ preRequest: '', postResponse: '', tests: '' }),
+  docs: z.string().default(''),
   dataFile: z.string().optional(),
   rules: collectionRulesSchema.default({
     requireSuccessStatus: false,
@@ -284,13 +378,16 @@ export const collectionDocumentSchema = z.object({
   setupSteps: z.array(collectionStepSchema).default([]),
   teardownSteps: z.array(collectionStepSchema).default([]),
   envMatrix: z.array(z.string()).default([]),
+  runnerTags: z.array(z.string()).default([]),
   defaultRetry: retryPolicySchema.default({
     count: 0,
     delayMs: 0,
     when: ['network-error', '5xx', 'assertion-failed']
   }),
   continueOnFailure: z.boolean().default(false),
-  reporters: z.array(z.enum(['json', 'html', 'junit'])).default(['json', 'html'])
+  reporters: z.array(z.enum(['json', 'html', 'junit'])).default(['json', 'html']),
+  proxyUrl: z.string().optional(),
+  clientCertificatePath: z.string().optional()
 });
 export type CollectionDocument = z.infer<typeof collectionDocumentSchema>;
 
@@ -429,7 +526,7 @@ export const importSourceSchema = z.object({
 export type ImportSource = z.infer<typeof importSourceSchema>;
 
 export const importResultSchema = z.object({
-  detectedFormat: z.enum(['openapi3', 'swagger2', 'postman', 'har', 'unknown']),
+  detectedFormat: z.enum(['openapi3', 'swagger2', 'postman', 'har', 'bruno', 'insomnia', 'opencollection', 'wsdl', 'unknown']),
   summary: z.object({
     requests: z.number().int().default(0),
     folders: z.number().int().default(0),
@@ -690,6 +787,7 @@ export function createEmptyRequest(name = 'New Request'): RequestDocument {
   return requestDocumentSchema.parse({
     schemaVersion: SCHEMA_VERSION,
     id: createId('req'),
+    kind: 'http',
     name,
     method: 'GET',
     url: '',
@@ -702,6 +800,9 @@ export function createEmptyRequest(name = 'New Request'): RequestDocument {
     body: { mode: 'none', text: '', fields: [] },
     auth: { type: 'inherit' },
     runtime: { timeoutMs: 30000, followRedirects: true },
+    vars: { req: [], res: [] },
+    scripts: { preRequest: '', postResponse: '', tests: '' },
+    docs: '',
     examples: [],
     order: 0
   });
@@ -745,6 +846,11 @@ export function createEmptyCollection(name = 'New Collection'): CollectionDocume
     stopOnFailure: true,
     iterationCount: 1,
     vars: {},
+    variableRows: [],
+    headers: [],
+    auth: { type: 'inherit' },
+    scripts: { preRequest: '', postResponse: '', tests: '' },
+    docs: '',
     rules: {
       requireSuccessStatus: false,
       requiredJsonPaths: []
@@ -754,6 +860,7 @@ export function createEmptyCollection(name = 'New Collection'): CollectionDocume
     setupSteps: [],
     teardownSteps: [],
     envMatrix: [],
+    runnerTags: [],
     defaultRetry: {
       count: 0,
       delayMs: 0,
