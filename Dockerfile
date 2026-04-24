@@ -35,6 +35,12 @@ WORKDIR /app
 
 COPY --from=api-prod-deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=api-builder /app/apps/api/dist ./apps/api/dist
+COPY --from=api-builder /app/packages/shared-types ./packages/shared-types
+
+RUN rm ./apps/api/node_modules/@yapi-next/shared-types \
+ && mkdir -p ./apps/api/node_modules/@yapi-next \
+ && cp -R ./packages/shared-types ./apps/api/node_modules/@yapi-next/shared-types \
+ && node -e "const fs=require('fs'); const file='./apps/api/node_modules/@yapi-next/shared-types/package.json'; const pkg=JSON.parse(fs.readFileSync(file,'utf8')); pkg.main='dist/index.js'; pkg.types='dist/index.d.ts'; fs.writeFileSync(file, JSON.stringify(pkg, null, 2));"
 
 ENV PORT=3300
 ENV NODE_ENV=production
