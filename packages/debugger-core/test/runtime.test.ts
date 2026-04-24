@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   applyCollectionRules,
+  buildGraphqlIntrospectionRequest,
   buildWorkspaceIndex,
   buildCurlCommand,
   evaluateChecks,
@@ -12,7 +13,8 @@ import {
   renderCollectionRunReportJunit,
   rerunFailedStepKeys,
   runCollection,
-  resolveRequest
+  resolveRequest,
+  summarizeGraphqlSchema
 } from '../src/index';
 import {
   SCHEMA_VERSION,
@@ -174,6 +176,136 @@ test('schema v3 preserves Bruno parity request metadata', () => {
   assert.equal(request.kind, 'graphql');
   assert.equal(request.body.mode, 'graphql');
   assert.equal(request.auth.type, 'awsv4');
+});
+
+test('resolveRequest materializes GraphQL editor fields into JSON body', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  const environment = createDefaultEnvironment('shared');
+  environment.vars.userId = 'u_1';
+  const request = createEmptyRequest('GraphQL Profile');
+  request.kind = 'graphql';
+  request.method = 'POST';
+  request.url = '{{baseUrl}}/graphql';
+  request.body = {
+    mode: 'graphql',
+    mimeType: 'application/json',
+    text: '',
+    fields: [],
+    graphql: {
+      query: 'query Profile($id: ID!) { user(id: $id) { id } }',
+      variables: '{"id":"{{userId}}"}',
+      operationName: 'Profile'
+    }
+  };
+
+  const preview = resolveRequest(project, request, undefined, environment);
+  const payload = JSON.parse(preview.body.text);
+
+  assert.equal(preview.body.mode, 'graphql');
+  assert.equal(payload.operationName, 'Profile');
+  assert.equal(payload.variables.id, 'u_1');
+  assert.match(payload.query, /query Profile/);
+});
+
+test('inspectResolvedRequest blocks invalid GraphQL variables JSON', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  const request = createEmptyRequest('Broken GraphQL');
+  request.kind = 'graphql';
+  request.method = 'POST';
+  request.url = '{{baseUrl}}/graphql';
+  request.body = {
+    mode: 'graphql',
+    mimeType: 'application/json',
+    text: '',
+    fields: [],
+    graphql: {
+      query: 'query { ping }',
+      variables: '{broken'
+    }
+  };
+
+  const insight = inspectResolvedRequest(project, request, undefined, createDefaultEnvironment('shared'));
+  assert.equal(insight.diagnostics.some(item => item.code === 'invalid-graphql-variables' && item.blocking), true);
+});
+
+test('buildGraphqlIntrospectionRequest targets schemaUrl and preserves auth headers', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('GraphQL Profile');
+  request.kind = 'graphql';
+  request.method = 'POST';
+  request.url = 'https://api.example.com/graphql';
+  request.headers = [{ name: 'Authorization', value: 'Bearer token', enabled: true, kind: 'text' }];
+  request.query = [{ name: 'tenant', value: 'acme', enabled: true, kind: 'text' }];
+  request.body = {
+    mode: 'graphql',
+    mimeType: 'application/json',
+    text: '',
+    fields: [],
+    graphql: {
+      query: 'query { viewer { id } }',
+      variables: '{}',
+      schemaUrl: 'https://schema.example.com/graphql'
+    }
+  };
+
+  const preview = resolveRequest(project, request, undefined, environment);
+  const introspection = buildGraphqlIntrospectionRequest(preview);
+
+  assert.equal(introspection.method, 'POST');
+  assert.equal(introspection.url, 'https://schema.example.com/graphql');
+  assert.equal(introspection.query.length, 0);
+  assert.equal(introspection.headers.some(row => row.name === 'Authorization'), true);
+  assert.equal(introspection.headers.some(row => row.name === 'Content-Type' && row.value === 'application/json'), true);
+  assert.match(JSON.parse(introspection.body.text).query, /__schema/);
+});
+
+test('summarizeGraphqlSchema extracts root operation fields', () => {
+  const summary = summarizeGraphqlSchema(JSON.stringify({
+    data: {
+      __schema: {
+        queryType: { name: 'Query' },
+        mutationType: { name: 'Mutation' },
+        subscriptionType: null,
+        types: [
+          { kind: 'OBJECT', name: 'Query', fields: [{ name: 'viewer' }, { name: 'search' }] },
+          { kind: 'OBJECT', name: 'Mutation', fields: [{ name: 'login' }] },
+          { kind: 'SCALAR', name: 'String', fields: null }
+        ]
+      }
+    }
+  }));
+
+  assert.equal(summary.ok, true);
+  assert.equal(summary.typeCount, 3);
+  assert.deepEqual(summary.queries, ['viewer', 'search']);
+  assert.deepEqual(summary.mutations, ['login']);
+});
+
+test('resolveRequest interpolates WebSocket message drafts', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  environment.vars.token = 'secret';
+  const request = createEmptyRequest('Live Feed');
+  request.kind = 'websocket';
+  request.url = 'wss://example.com/socket';
+  request.body = {
+    mode: 'none',
+    text: '',
+    fields: [],
+    websocket: {
+      messages: [
+        { name: 'auth {{token}}', body: '{"type":"auth","token":"{{token}}"}', enabled: true }
+      ]
+    }
+  };
+
+  const preview = resolveRequest(project, request, undefined, environment);
+
+  assert.equal(preview.body.websocket?.messages[0]?.name, 'auth secret');
+  assert.equal(preview.body.websocket?.messages[0]?.body, '{"type":"auth","token":"secret"}');
 });
 
 test('buildCurlCommand supports Bruno parity body modes', () => {

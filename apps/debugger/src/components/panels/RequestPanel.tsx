@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, Group, NumberInput, Select, Tabs, Text, TextInput, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { 
@@ -12,7 +12,13 @@ import {
   IconSettings,
   IconVariable
 } from '@tabler/icons-react';
-import { createEmptyCheck, inspectResolvedRequest } from '@yapi-debugger/core';
+import {
+  buildGraphqlIntrospectionRequest,
+  createEmptyCheck,
+  inspectResolvedRequest,
+  summarizeGraphqlSchema,
+  type GraphqlSchemaSummary
+} from '@yapi-debugger/core';
 import type {
   AuthConfig,
   CaseCheck,
@@ -26,7 +32,7 @@ import type {
 } from '@yapi-debugger/schema';
 import type { RequestTab } from '../../store/workspace-store';
 import { parseCurlCommand } from '../../lib/curl';
-import { chooseRequestBodyFile } from '../../lib/desktop';
+import { chooseRequestBodyFile, runWebSocketSession, sendRequest, type WebSocketRunResult } from '../../lib/desktop';
 import { CodeEditor } from '../editors/CodeEditor';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
 
@@ -95,6 +101,20 @@ function retryWhenOptions() {
 
 type RequestSection = 'request' | 'validation' | 'automation';
 
+type GraphqlIntrospectionState = {
+  loading: boolean;
+  endpoint?: string;
+  checkedAt?: string;
+  summary?: GraphqlSchemaSummary;
+  error?: string;
+};
+
+type WebSocketRunState = {
+  loading: boolean;
+  result?: WebSocketRunResult;
+  error?: string;
+};
+
 function requestSectionForTab(tab: RequestTab): RequestSection {
   if (tab === 'checks') return 'validation';
   if (tab === 'scripts' || tab === 'settings') return 'automation';
@@ -109,6 +129,14 @@ function tabOptionsForSection(section: RequestSection) {
     return ['scripts', 'settings'] satisfies RequestTab[];
   }
   return ['query', 'headers', 'body', 'auth', 'preview'] satisfies RequestTab[];
+}
+
+function appendEnabledQueryRows(url: string, rows: Array<{ name: string; value: string; enabled: boolean }>) {
+  const enabledRows = rows.filter(row => row.enabled && row.name.trim());
+  if (enabledRows.length === 0) return url;
+  const params = new URLSearchParams();
+  enabledRows.forEach(row => params.append(row.name, row.value));
+  return `${url}${url.includes('?') ? '&' : '?'}${params.toString()}`;
 }
 
 export function RequestPanel(props: {
@@ -148,6 +176,10 @@ export function RequestPanel(props: {
   const pathRows = selectedCase?.overrides.pathParams ?? requestDocument.pathParams;
   const headerRows = selectedCase?.overrides.headers ?? requestDocument.headers;
   const body = selectedCase?.overrides.body || requestDocument.body;
+  const graphqlBody = body.graphql || { query: '', variables: '{}', operationName: '', schemaUrl: '' };
+  const websocketMessages = body.websocket?.messages?.length
+    ? body.websocket.messages
+    : [{ name: 'Message 1', body: '', enabled: true }];
   const auth = selectedCase?.overrides.auth || requestDocument.auth;
   const runtime = {
     ...requestDocument.runtime,
@@ -161,10 +193,13 @@ export function RequestPanel(props: {
     [props.requestInsight, workspace.project, requestDocument, selectedCase, selectedEnvironment]
   );
   const resolvedPreview = resolvedInsight.preview;
+  const resolvedWebSocketUrl = appendEnabledQueryRows(resolvedPreview.url, resolvedPreview.query);
   const blockingDiagnostics = resolvedInsight.diagnostics.filter(item => item.blocking);
   const attentionDiagnostics = resolvedInsight.diagnostics.filter(item => !item.blocking);
   const activeSection = requestSectionForTab(props.activeTab);
   const visibleTabs = new Set<RequestTab>(tabOptionsForSection(activeSection));
+  const [graphqlIntrospection, setGraphqlIntrospection] = useState<GraphqlIntrospectionState>({ loading: false });
+  const [websocketRun, setWebsocketRun] = useState<WebSocketRunState>({ loading: false });
 
   function updateSelectedCase(updater: (current: CaseDocument) => CaseDocument) {
     if (!selectedCase) return;
@@ -229,6 +264,67 @@ export function RequestPanel(props: {
     const selectedPath = await chooseRequestBodyFile();
     if (!selectedPath) return;
     updateBody({ ...body, mode: 'file', file: selectedPath, text: selectedPath });
+  }
+
+  async function handleGraphqlIntrospection() {
+    try {
+      const introspectionRequest = buildGraphqlIntrospectionRequest(resolvedPreview);
+      setGraphqlIntrospection({
+        loading: true,
+        endpoint: introspectionRequest.url
+      });
+      const response = await sendRequest(introspectionRequest);
+      const summary = summarizeGraphqlSchema(response.bodyText);
+      const nextState = {
+        loading: false,
+        endpoint: introspectionRequest.url,
+        checkedAt: new Date().toLocaleTimeString(),
+        summary,
+        error: response.ok ? undefined : `${response.status} ${response.statusText || 'GraphQL introspection failed'}`
+      };
+      setGraphqlIntrospection(nextState);
+      if (response.ok && summary.ok) {
+        notifications.show({ color: 'teal', message: `GraphQL schema loaded: ${summary.typeCount} types` });
+      } else {
+        notifications.show({ color: 'orange', message: summary.warnings[0] || nextState.error || 'GraphQL schema response needs review' });
+      }
+    } catch (error) {
+      const message = (error as Error).message || 'GraphQL introspection failed';
+      setGraphqlIntrospection({
+        loading: false,
+        endpoint: resolvedPreview.body.graphql?.schemaUrl || resolvedPreview.url,
+        error: message
+      });
+      notifications.show({ color: 'red', message });
+    }
+  }
+
+  function updateWebSocketMessages(messages: NonNullable<RequestBody['websocket']>['messages']) {
+    updateBody({
+      ...body,
+      websocket: {
+        ...(body.websocket || {}),
+        messages
+      }
+    });
+  }
+
+  async function handleWebSocketRun() {
+    try {
+      setWebsocketRun({ loading: true });
+      const result = await runWebSocketSession({
+        url: resolvedWebSocketUrl,
+        headers: resolvedPreview.headers.filter(row => row.enabled),
+        messages: resolvedPreview.body.websocket?.messages || websocketMessages,
+        timeoutMs: resolvedPreview.timeoutMs
+      });
+      setWebsocketRun({ loading: false, result });
+      notifications.show({ color: 'teal', message: `WebSocket session captured ${result.events.length} events` });
+    } catch (error) {
+      const message = (error as Error).message || 'WebSocket session failed';
+      setWebsocketRun({ loading: false, error: message });
+      notifications.show({ color: 'red', message });
+    }
   }
 
   function applyUrlChange(nextUrl: string) {
@@ -339,10 +435,26 @@ export function RequestPanel(props: {
             data={REQUEST_KINDS.map(kind => ({ value: kind, label: kind.toUpperCase() }))}
             onChange={value => {
               const nextKind = (value as RequestDocument['kind']) || 'http';
+              const nextBody =
+                nextKind === 'graphql' && body.mode !== 'graphql'
+                  ? {
+                      ...body,
+                      mode: 'graphql' as const,
+                      mimeType: 'application/json',
+                      graphql: body.graphql || { query: '', variables: '{}', operationName: '', schemaUrl: '' }
+                    }
+                  : nextKind === 'websocket'
+                    ? {
+                        ...body,
+                        mode: 'none' as const,
+                        websocket: body.websocket || { messages: [{ name: 'Message 1', body: '', enabled: true }] }
+                      }
+                  : body;
+              const nextMethod = nextKind === 'graphql' ? 'POST' : nextKind === 'websocket' ? 'GET' : effectiveMethod;
               if (selectedCase) {
-                updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, kind: nextKind } }));
+                updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, kind: nextKind, method: nextMethod, body: nextBody } }));
               } else {
-                props.onRequestChange({ ...requestDocument, kind: nextKind });
+                props.onRequestChange({ ...requestDocument, kind: nextKind, method: nextMethod, body: nextBody });
               }
             }}
             variant="filled"
@@ -670,6 +782,103 @@ export function RequestPanel(props: {
           </Tabs.Panel>
 
           <Tabs.Panel value="body">
+            {effectiveKind === 'websocket' ? (
+              <div className="websocket-body-grid">
+                <div className="websocket-toolbar">
+                  <div>
+                    <Text size="xs" fw={700} c="dimmed">WebSocket Session</Text>
+                    <Text size="xs" c="dimmed">{resolvedWebSocketUrl || 'Enter a ws:// or wss:// endpoint'}</Text>
+                  </div>
+                  <Group gap="xs">
+                    <Button
+                      size="xs"
+                      variant="default"
+                      leftSection={<IconPlus size={14} />}
+                      onClick={() =>
+                        updateWebSocketMessages([
+                          ...websocketMessages,
+                          { name: `Message ${websocketMessages.length + 1}`, body: '', enabled: true }
+                        ])
+                      }
+                    >
+                      Add Message
+                    </Button>
+                    <Button size="xs" leftSection={<IconPlayerPlay size={14} />} loading={websocketRun.loading} onClick={handleWebSocketRun}>
+                      Run Session
+                    </Button>
+                  </Group>
+                </div>
+                <div className="websocket-message-list">
+                  {websocketMessages.map((message, index) => (
+                    <div className="websocket-message-row" key={`${index}:${message.name}`}>
+                      <div className="websocket-message-head">
+                        <Checkbox
+                          checked={message.enabled}
+                          onChange={event => {
+                            const next = [...websocketMessages];
+                            next[index] = { ...message, enabled: event.currentTarget.checked };
+                            updateWebSocketMessages(next);
+                          }}
+                        />
+                        <TextInput
+                          value={message.name}
+                          placeholder="Message name"
+                          onChange={event => {
+                            const next = [...websocketMessages];
+                            next[index] = { ...message, name: event.currentTarget.value };
+                            updateWebSocketMessages(next);
+                          }}
+                        />
+                        <Button
+                          size="xs"
+                          variant="subtle"
+                          color="red"
+                          onClick={() => updateWebSocketMessages(websocketMessages.filter((_, messageIndex) => messageIndex !== index))}
+                          disabled={websocketMessages.length === 1}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                      <CodeEditor
+                        value={message.body}
+                        language="json"
+                        onChange={value => {
+                          const next = [...websocketMessages];
+                          next[index] = { ...message, body: value };
+                          updateWebSocketMessages(next);
+                        }}
+                        minHeight="120px"
+                      />
+                    </div>
+                  ))}
+                </div>
+                {websocketRun.error || websocketRun.result ? (
+                  <div className="websocket-timeline">
+                    <div className="websocket-timeline-head">
+                      <Text size="xs" fw={700} c="dimmed">Timeline</Text>
+                      {websocketRun.result ? (
+                        <Badge variant="light" color="teal">{websocketRun.result.durationMs} ms</Badge>
+                      ) : null}
+                    </div>
+                    {websocketRun.error ? (
+                      <div className="request-preview-warning">
+                        <strong>websocket</strong>
+                        <span>{websocketRun.error}</span>
+                      </div>
+                    ) : null}
+                    {websocketRun.result?.events.map((event, index) => (
+                      <div className={`websocket-timeline-event is-${event.direction}`} key={`${event.elapsedMs}:${index}`}>
+                        <span>{event.elapsedMs} ms</span>
+                        <strong>{event.direction}</strong>
+                        <em>{event.label}</em>
+                        <code>{event.body}</code>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <>
             <div className="body-config-row">
               <Select
                 size="xs"
@@ -680,6 +889,10 @@ export function RequestPanel(props: {
                   updateBody({
                     ...body,
                     mode: nextMode,
+                    graphql:
+                      nextMode === 'graphql'
+                        ? body.graphql || { query: body.text || '', variables: '{}', operationName: '', schemaUrl: '' }
+                        : body.graphql,
                     mimeType:
                       nextMode === 'json'
                         ? 'application/json'
@@ -721,15 +934,122 @@ export function RequestPanel(props: {
                   </Button>
                 </div>
               </div>
+            ) : body.mode === 'graphql' ? (
+              <div className="graphql-body-grid">
+                <div className="settings-grid">
+                  <TextInput
+                    label="Operation Name"
+                    value={graphqlBody.operationName || ''}
+                    placeholder="Optional"
+                    onChange={event => updateBody({ ...body, graphql: { ...graphqlBody, operationName: event.currentTarget.value } })}
+                  />
+                  <TextInput
+                    label="Schema URL"
+                    value={graphqlBody.schemaUrl || ''}
+                    placeholder="Optional introspection endpoint"
+                    onChange={event => updateBody({ ...body, graphql: { ...graphqlBody, schemaUrl: event.currentTarget.value } })}
+                  />
+                  <div className="graphql-schema-actions">
+                    <Text size="xs" fw={700} c="dimmed">Schema</Text>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      leftSection={<IconPlayerPlay size={14} />}
+                      loading={graphqlIntrospection.loading}
+                      onClick={handleGraphqlIntrospection}
+                    >
+                      Fetch Schema
+                    </Button>
+                  </div>
+                </div>
+                <div className="graphql-editor-stack">
+                  <div>
+                    <Text size="xs" fw={700} c="dimmed">Query</Text>
+                    <CodeEditor
+                      value={graphqlBody.query || ''}
+                      language="text"
+                      onChange={value => updateBody({ ...body, graphql: { ...graphqlBody, query: value } })}
+                      minHeight="220px"
+                    />
+                  </div>
+                  <div>
+                    <Text size="xs" fw={700} c="dimmed">Variables JSON</Text>
+                    <CodeEditor
+                      value={graphqlBody.variables || '{}'}
+                      language="json"
+                      onChange={value => updateBody({ ...body, graphql: { ...graphqlBody, variables: value } })}
+                      minHeight="140px"
+                    />
+                  </div>
+                </div>
+                {graphqlIntrospection.summary || graphqlIntrospection.error ? (
+                  <div className="graphql-schema-panel">
+                    <div className="graphql-schema-panel-head">
+                      <div>
+                        <Text size="xs" fw={700} c="dimmed">Introspection</Text>
+                        <Text size="xs" c="dimmed">
+                          {graphqlIntrospection.endpoint || graphqlBody.schemaUrl || resolvedPreview.url}
+                        </Text>
+                      </div>
+                      {graphqlIntrospection.checkedAt ? (
+                        <Badge variant="light" color={graphqlIntrospection.summary?.ok ? 'teal' : 'orange'}>
+                          {graphqlIntrospection.checkedAt}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    {graphqlIntrospection.error ? (
+                      <div className="request-preview-warning">
+                        <strong>network</strong>
+                        <span>{graphqlIntrospection.error}</span>
+                      </div>
+                    ) : null}
+                    {graphqlIntrospection.summary ? (
+                      <>
+                        <div className="graphql-schema-stats">
+                          <span><strong>{graphqlIntrospection.summary.typeCount}</strong> types</span>
+                          <span><strong>{graphqlIntrospection.summary.queries.length}</strong> queries</span>
+                          <span><strong>{graphqlIntrospection.summary.mutations.length}</strong> mutations</span>
+                          <span><strong>{graphqlIntrospection.summary.subscriptions.length}</strong> subscriptions</span>
+                        </div>
+                        {graphqlIntrospection.summary.warnings.length > 0 ? (
+                          <div className="request-preview-warning">
+                            <strong>schema</strong>
+                            <span>{graphqlIntrospection.summary.warnings[0]}</span>
+                          </div>
+                        ) : null}
+                        <div className="graphql-schema-fields">
+                          {graphqlIntrospection.summary.queries.slice(0, 12).map(name => (
+                            <Badge key={`query:${name}`} variant="light" color="blue">
+                              {name}
+                            </Badge>
+                          ))}
+                          {graphqlIntrospection.summary.mutations.slice(0, 8).map(name => (
+                            <Badge key={`mutation:${name}`} variant="light" color="orange">
+                              {name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="preview-note">
+                  <Text size="xs" c="dimmed">
+                    The runtime sends this as a standard GraphQL JSON payload. Schema fetch reuses resolved auth headers and the optional Schema URL.
+                  </Text>
+                </div>
+              </div>
             ) : body.mode !== 'none' ? (
               <CodeEditor
                 value={body.text || ''}
-                language={body.mode === 'json' || body.mode === 'graphql' ? 'json' : 'text'}
+                language={body.mode === 'json' ? 'json' : 'text'}
                 onChange={value => updateBody({ ...body, text: value })}
                 minHeight="300px"
               />
             ) : (
               <div className="empty-body-msg">This request does not have a body.</div>
+            )}
+              </>
             )}
           </Tabs.Panel>
 

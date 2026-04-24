@@ -1880,6 +1880,168 @@ mark {
   font-size: 13px;
 }
 
+.graphql-body-grid,
+.graphql-editor-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.graphql-editor-stack > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.graphql-schema-actions {
+  display: grid;
+  align-content: end;
+  gap: 6px;
+}
+
+.graphql-schema-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--surface-muted) 68%, var(--surface));
+}
+
+.graphql-schema-panel-head,
+.graphql-schema-stats,
+.graphql-schema-fields {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.graphql-schema-panel-head {
+  justify-content: space-between;
+}
+
+.graphql-schema-panel-head > div {
+  min-width: 0;
+}
+
+.graphql-schema-panel-head .mantine-Text-root {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graphql-schema-stats,
+.graphql-schema-fields {
+  flex-wrap: wrap;
+}
+
+.graphql-schema-stats span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 11px;
+}
+
+.graphql-schema-stats strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.websocket-body-grid,
+.websocket-message-list,
+.websocket-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.websocket-toolbar,
+.websocket-message-head,
+.websocket-timeline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.websocket-toolbar {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--surface-muted) 72%, var(--surface));
+}
+
+.websocket-toolbar > div {
+  min-width: 0;
+}
+
+.websocket-toolbar .mantine-Text-root {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.websocket-message-row,
+.websocket-timeline {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.websocket-message-head {
+  margin-bottom: 8px;
+}
+
+.websocket-message-head .mantine-TextInput-root {
+  flex: 1;
+}
+
+.websocket-timeline-event {
+  display: grid;
+  grid-template-columns: 62px 44px 110px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--surface-muted) 55%, var(--surface));
+  font-size: 12px;
+}
+
+.websocket-timeline-event span,
+.websocket-timeline-event em {
+  color: var(--muted);
+  font-style: normal;
+}
+
+.websocket-timeline-event strong {
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.websocket-timeline-event.is-in strong {
+  color: var(--success);
+}
+
+.websocket-timeline-event.is-out strong {
+  color: var(--accent);
+}
+
+.websocket-timeline-event code {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-family: var(--mono-font);
+}
+
 /* Welcome Screen */
 .welcome-shell {
   height: 100vh;

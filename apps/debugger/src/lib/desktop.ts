@@ -26,6 +26,20 @@ export type MenuAction =
   | { action: 'close-workspace' }
   | { action: 'open-recent'; root: string };
 
+export type WebSocketTimelineEvent = {
+  direction: 'runtime' | 'in' | 'out';
+  label: string;
+  body: string;
+  elapsedMs: number;
+};
+
+export type WebSocketRunResult = {
+  ok: boolean;
+  url: string;
+  durationMs: number;
+  events: WebSocketTimelineEvent[];
+};
+
 export interface WorkspaceScanPayload {
   root: string;
   files: { path: string; content: string }[];
@@ -106,6 +120,15 @@ export async function fetchImportUrl(url: string, auth: any): Promise<ImportSour
 
 export async function sendRequest(input: any): Promise<SendRequestResult> {
   return invoke('request_send', { input });
+}
+
+export async function runWebSocketSession(input: {
+  url: string;
+  headers: Array<{ name: string; value: string; enabled: boolean; kind?: string; filePath?: string }>;
+  messages: Array<{ name: string; body: string; enabled: boolean }>;
+  timeoutMs?: number;
+}): Promise<WebSocketRunResult> {
+  return invoke('websocket_run', { input });
 }
 
 export async function loadHistory(workspaceRoot?: string): Promise<any[]> {

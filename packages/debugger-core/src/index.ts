@@ -228,6 +228,143 @@ type ScanFilesInput = {
   fileContents: Record<string, string>;
 };
 
+export const GRAPHQL_INTROSPECTION_QUERY = `
+query IntrospectionQuery {
+  __schema {
+    queryType { name }
+    mutationType { name }
+    subscriptionType { name }
+    types {
+      kind
+      name
+      fields(includeDeprecated: true) {
+        name
+      }
+    }
+  }
+}
+`.trim();
+
+export type GraphqlSchemaSummary = {
+  ok: boolean;
+  typeCount: number;
+  queryType?: string;
+  mutationType?: string;
+  subscriptionType?: string;
+  queries: string[];
+  mutations: string[];
+  subscriptions: string[];
+  warnings: string[];
+};
+
+function ensureHeader(rows: ParameterRow[], name: string, value: string) {
+  if (rows.some(row => row.enabled && row.name.trim().toLowerCase() === name.toLowerCase())) {
+    return rows;
+  }
+  return [...rows, { name, value, enabled: true, kind: 'text' as const }];
+}
+
+function fieldNames(schemaType: unknown) {
+  const fields = (schemaType as { fields?: unknown })?.fields;
+  if (!Array.isArray(fields)) return [];
+  return fields
+    .map(field => (field as { name?: unknown })?.name)
+    .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+    .slice(0, 48);
+}
+
+export function summarizeGraphqlSchema(bodyText: string): GraphqlSchemaSummary {
+  const fallback: GraphqlSchemaSummary = {
+    ok: false,
+    typeCount: 0,
+    queries: [],
+    mutations: [],
+    subscriptions: [],
+    warnings: []
+  };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bodyText);
+  } catch (_error) {
+    return {
+      ...fallback,
+      warnings: ['The introspection response is not valid JSON.']
+    };
+  }
+
+  const root = parsed as { data?: { __schema?: unknown }; errors?: unknown };
+  const schema = root.data?.__schema as
+    | {
+        queryType?: { name?: string } | null;
+        mutationType?: { name?: string } | null;
+        subscriptionType?: { name?: string } | null;
+        types?: unknown[];
+      }
+    | undefined;
+  const warnings = Array.isArray(root.errors) && root.errors.length > 0
+    ? [`GraphQL returned ${root.errors.length} error${root.errors.length === 1 ? '' : 's'}.`]
+    : [];
+  if (!schema) {
+    return {
+      ...fallback,
+      warnings: warnings.length > 0 ? warnings : ['The response does not contain data.__schema.']
+    };
+  }
+
+  const types = Array.isArray(schema.types) ? schema.types : [];
+  const byName = new Map(
+    types
+      .map(type => [String((type as { name?: unknown })?.name || ''), type] as const)
+      .filter(([name]) => name.length > 0)
+  );
+  const queryType = schema.queryType?.name;
+  const mutationType = schema.mutationType?.name;
+  const subscriptionType = schema.subscriptionType?.name;
+
+  return {
+    ok: true,
+    typeCount: types.length,
+    queryType,
+    mutationType,
+    subscriptionType,
+    queries: queryType ? fieldNames(byName.get(queryType)) : [],
+    mutations: mutationType ? fieldNames(byName.get(mutationType)) : [],
+    subscriptions: subscriptionType ? fieldNames(byName.get(subscriptionType)) : [],
+    warnings
+  };
+}
+
+export function buildGraphqlIntrospectionRequest(preview: ResolvedRequestPreview): SendRequestInput {
+  const schemaUrl = preview.body.graphql?.schemaUrl?.trim();
+  const targetUrl = schemaUrl || preview.url;
+  const headers = ensureHeader(
+    ensureHeader(preview.headers.map(row => ({ ...row })), 'Accept', 'application/json'),
+    'Content-Type',
+    'application/json'
+  );
+
+  return sendRequestInputSchema.parse({
+    method: 'POST',
+    url: targetUrl,
+    headers,
+    query: schemaUrl ? [] : preview.query.map(row => ({ ...row })),
+    body: {
+      mode: 'graphql',
+      mimeType: 'application/json',
+      text: JSON.stringify({ query: GRAPHQL_INTROSPECTION_QUERY }, null, 2),
+      fields: [],
+      graphql: {
+        query: GRAPHQL_INTROSPECTION_QUERY,
+        variables: '{}'
+      }
+    },
+    sessionId: preview.sessionId,
+    timeoutMs: preview.timeoutMs,
+    followRedirects: preview.followRedirects
+  });
+}
+
 export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
   const project = projectDocumentSchema.parse(parseYamlDocument<unknown>(input.projectContent));
   const environmentRecords: WorkspaceEnvironmentRecord[] = [];
@@ -506,6 +643,47 @@ function normalizeBody(body: RequestBody): RequestBody {
     };
   }
   return next;
+}
+
+function parseGraphqlVariables(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch (_error) {
+    return trimmed;
+  }
+}
+
+function hasInvalidGraphqlVariables(body: RequestBody) {
+  if (body.mode !== 'graphql') return false;
+  const variables = body.graphql?.variables || '';
+  if (!variables.trim()) return false;
+  try {
+    JSON.parse(variables);
+    return false;
+  } catch (_error) {
+    return true;
+  }
+}
+
+function materializeGraphqlBody(body: RequestBody): RequestBody {
+  if (body.mode !== 'graphql' || !body.graphql) return body;
+  const payload: Record<string, unknown> = {
+    query: body.graphql.query
+  };
+  const variables = parseGraphqlVariables(body.graphql.variables || '');
+  if (variables !== undefined) {
+    payload.variables = variables;
+  }
+  if (body.graphql.operationName?.trim()) {
+    payload.operationName = body.graphql.operationName.trim();
+  }
+  return {
+    ...body,
+    mimeType: body.mimeType || 'application/json',
+    text: JSON.stringify(payload, null, 2)
+  };
 }
 
 function resolveSidecarPath(basePath: string, kind: 'body' | 'example', name: string, mimeType?: string) {
@@ -1242,6 +1420,16 @@ function buildPreflightDiagnostics(
     }
   }
 
+  if (hasInvalidGraphqlVariables(body)) {
+    diagnostics.push({
+      code: 'invalid-graphql-variables',
+      level: 'error',
+      blocking: true,
+      message: 'GraphQL variables must be valid JSON before the request can be sent.',
+      field: 'body'
+    });
+  }
+
   return diagnostics;
 }
 
@@ -1372,6 +1560,39 @@ export function inspectResolvedRequest(
         variables
       )
     );
+  }
+
+  if (body.mode === 'graphql' && body.graphql) {
+    fields.push(
+      collectResolvedField(
+        {
+          location: 'body',
+          label: 'GraphQL Query',
+          rawValue: body.graphql.query || '',
+          resolvedValue: preview.body.graphql?.query || ''
+        },
+        project,
+        environment,
+        extraSources,
+        variables
+      )
+    );
+    if (body.graphql.variables) {
+      fields.push(
+        collectResolvedField(
+          {
+            location: 'body',
+            label: 'GraphQL Variables',
+            rawValue: body.graphql.variables,
+            resolvedValue: preview.body.graphql?.variables || ''
+          },
+          project,
+          environment,
+          extraSources,
+          variables
+        )
+      );
+    }
   }
 
   body.fields.forEach((row, index) => {
@@ -1537,15 +1758,40 @@ export function resolveRequest(
   }));
 
   const resolvedBody = normalizeBody(body);
-  const mergedBody = {
+  const interpolatedBody = {
     ...resolvedBody,
     text: applyProjectVariables(resolvedBody.text, project, environment, extraSources),
+    file: resolvedBody.file ? applyProjectVariables(resolvedBody.file, project, environment, extraSources) : resolvedBody.file,
+    graphql: resolvedBody.graphql
+      ? {
+          ...resolvedBody.graphql,
+          query: applyProjectVariables(resolvedBody.graphql.query || '', project, environment, extraSources),
+          variables: applyProjectVariables(resolvedBody.graphql.variables || '', project, environment, extraSources),
+          operationName: resolvedBody.graphql.operationName
+            ? applyProjectVariables(resolvedBody.graphql.operationName, project, environment, extraSources)
+            : resolvedBody.graphql.operationName,
+          schemaUrl: resolvedBody.graphql.schemaUrl
+            ? applyProjectVariables(resolvedBody.graphql.schemaUrl, project, environment, extraSources)
+            : resolvedBody.graphql.schemaUrl
+        }
+      : resolvedBody.graphql,
+    websocket: resolvedBody.websocket
+      ? {
+          ...resolvedBody.websocket,
+          messages: resolvedBody.websocket.messages.map(message => ({
+            ...message,
+            name: applyProjectVariables(message.name || '', project, environment, extraSources),
+            body: applyProjectVariables(message.body || '', project, environment, extraSources)
+          }))
+        }
+      : resolvedBody.websocket,
     fields: resolvedBody.fields.map((row: ParameterRow) => ({
       ...row,
       value: applyProjectVariables(row.value, project, environment, extraSources),
       filePath: row.filePath ? applyProjectVariables(row.filePath, project, environment, extraSources) : row.filePath
     }))
   };
+  const mergedBody = materializeGraphqlBody(requestBodySchema.parse(interpolatedBody));
 
   const authHeaders = [...headers];
   const authQuery = [...query];

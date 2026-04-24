@@ -1,26 +1,31 @@
 mod capture;
 
+use futures_util::{SinkExt, StreamExt};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use reqwest::{
     cookie::{CookieStore, Jar},
     header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE},
     multipart::{Form, Part},
     redirect::Policy,
-    Client,
-    Url,
+    Client, Url,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs,
-    process::Command,
     path::{Path, PathBuf},
+    process::Command,
     sync::{Arc, Mutex, OnceLock},
     time::Instant,
 };
 use tauri::{
     menu::{Menu, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
     AppHandle, Emitter, Manager, Runtime,
+};
+use tokio_tungstenite::tungstenite::{
+    client::IntoClientRequest,
+    http::header::{HeaderName as WsHeaderName, HeaderValue as WsHeaderValue},
+    Message,
 };
 
 static WATCHERS: OnceLock<Mutex<HashMap<String, RecommendedWatcher>>> = OnceLock::new();
@@ -137,6 +142,41 @@ struct SendRequestResult {
     headers: Vec<ResponseHeader>,
     body_text: String,
     timestamp: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSocketMessageInput {
+    name: String,
+    body: String,
+    enabled: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSocketRunInput {
+    url: String,
+    headers: Vec<ParameterRow>,
+    messages: Vec<WebSocketMessageInput>,
+    timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSocketTimelineEvent {
+    direction: String,
+    label: String,
+    body: String,
+    elapsed_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSocketRunResult {
+    ok: bool,
+    url: String,
+    duration_ms: u64,
+    events: Vec<WebSocketTimelineEvent>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -280,7 +320,9 @@ fn collection_report_file_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf
     Ok(cache_dir.join("collection-reports.json"))
 }
 
-fn load_collection_reports<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<serde_json::Value>, String> {
+fn load_collection_reports<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<Vec<serde_json::Value>, String> {
     let file_path = collection_report_file_path(app)?;
     if !file_path.exists() {
         return Ok(Vec::new());
@@ -321,15 +363,24 @@ fn should_skip_dir(path: &Path) -> bool {
     let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
         return false;
     };
-    matches!(name, ".git" | "node_modules" | "target" | "dist" | ".yapi-debugger-cache")
+    matches!(
+        name,
+        ".git" | "node_modules" | "target" | "dist" | ".yapi-debugger-cache"
+    )
 }
 
-fn build_menu<R: Runtime>(app: &AppHandle<R>, recent_roots: &[String], has_workspace: bool) -> Result<Menu<R>, String> {
+fn build_menu<R: Runtime>(
+    app: &AppHandle<R>,
+    recent_roots: &[String],
+    has_workspace: bool,
+) -> Result<Menu<R>, String> {
     let menu = Menu::new(app).map_err(|error| error.to_string())?;
 
     let mut recent_builder = SubmenuBuilder::new(app, "Recent Workspaces");
     if recent_roots.is_empty() {
-        recent_builder = recent_builder.text("menu://file/open-recent/empty", "No Recent Workspaces").enabled(false);
+        recent_builder = recent_builder
+            .text("menu://file/open-recent/empty", "No Recent Workspaces")
+            .enabled(false);
     } else {
         for (index, root) in recent_roots.iter().enumerate() {
             let label = root
@@ -338,8 +389,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, recent_roots: &[String], has_works
                 .filter(|item| !item.is_empty())
                 .map(|item| format!("{item}  ({root})"))
                 .unwrap_or_else(|| root.clone());
-            recent_builder =
-                recent_builder.text(format!("menu://file/open-recent/{index}"), label);
+            recent_builder = recent_builder.text(format!("menu://file/open-recent/{index}"), label);
         }
     }
     let recent_menu = recent_builder.build().map_err(|error| error.to_string())?;
@@ -573,17 +623,26 @@ fn workspace_unwatch(root: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn menu_sync_state(app: AppHandle, recent_roots: Vec<String>, has_workspace: bool) -> Result<(), String> {
+fn menu_sync_state(
+    app: AppHandle,
+    recent_roots: Vec<String>,
+    has_workspace: bool,
+) -> Result<(), String> {
     *recent_root_store()
         .lock()
         .map_err(|_| "recent root store poisoned".to_string())? = recent_roots.clone();
-    app.set_menu(build_menu(&app, &recent_roots, has_workspace).map_err(|error| error.to_string())?)
-        .map_err(|error| error.to_string())?;
+    app.set_menu(
+        build_menu(&app, &recent_roots, has_workspace).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-fn history_load(app: AppHandle, workspace_root: Option<String>) -> Result<Vec<RunHistoryEntry>, String> {
+fn history_load(
+    app: AppHandle,
+    workspace_root: Option<String>,
+) -> Result<Vec<RunHistoryEntry>, String> {
     let entries = load_history_entries(&app)?;
     if let Some(root) = workspace_root {
         let normalized = normalize_path(&root);
@@ -671,7 +730,11 @@ fn collection_report_clear(app: AppHandle, workspace_root: Option<String>) -> Re
     save_collection_reports(&app, &[])
 }
 
-fn build_http_client(jar: Arc<Jar>, timeout_ms: u64, follow_redirects: bool) -> Result<Client, String> {
+fn build_http_client(
+    jar: Arc<Jar>,
+    timeout_ms: u64,
+    follow_redirects: bool,
+) -> Result<Client, String> {
     reqwest::Client::builder()
         .cookie_provider(jar)
         .timeout(std::time::Duration::from_millis(timeout_ms))
@@ -821,10 +884,19 @@ fn open_terminal(root: String) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         let launchers = [
-            ("x-terminal-emulator", vec![format!("--working-directory={root}")]),
-            ("gnome-terminal", vec![format!("--working-directory={root}")]),
+            (
+                "x-terminal-emulator",
+                vec![format!("--working-directory={root}")],
+            ),
+            (
+                "gnome-terminal",
+                vec![format!("--working-directory={root}")],
+            ),
             ("konsole", vec!["--workdir".into(), root.clone()]),
-            ("xfce4-terminal", vec!["--working-directory".into(), root.clone()]),
+            (
+                "xfce4-terminal",
+                vec!["--working-directory".into(), root.clone()],
+            ),
         ];
 
         for (program, args) in launchers {
@@ -864,7 +936,8 @@ fn open_terminal(root: String) -> Result<(), String> {
 #[tauri::command]
 fn session_inspect(session_id: String, url: Option<String>) -> Result<SessionSnapshot, String> {
     let normalized = normalize_path(&session_id);
-    let cookie_header = if let Some(raw_url) = url.as_ref().filter(|value| !value.trim().is_empty()) {
+    let cookie_header = if let Some(raw_url) = url.as_ref().filter(|value| !value.trim().is_empty())
+    {
         let parsed = Url::parse(raw_url).map_err(|error| error.to_string())?;
         let jar = session_jar(&normalized)?;
         jar.cookies(&parsed)
@@ -898,15 +971,20 @@ fn session_clear(session_id: String) -> Result<(), String> {
 
 fn header_map(rows: &[ParameterRow], body: &RequestBody) -> Result<HeaderMap, String> {
     let mut headers = HeaderMap::new();
-    for row in rows.iter().filter(|row| row.enabled && !row.name.trim().is_empty()) {
-        let name = HeaderName::from_bytes(row.name.trim().as_bytes()).map_err(|error| error.to_string())?;
+    for row in rows
+        .iter()
+        .filter(|row| row.enabled && !row.name.trim().is_empty())
+    {
+        let name = HeaderName::from_bytes(row.name.trim().as_bytes())
+            .map_err(|error| error.to_string())?;
         let value = HeaderValue::from_str(row.value.trim()).map_err(|error| error.to_string())?;
         headers.append(name, value);
     }
     if !headers.contains_key(CONTENT_TYPE) {
         if let Some(mime_type) = &body.mime_type {
             if !mime_type.trim().is_empty() {
-                let value = HeaderValue::from_str(mime_type.trim()).map_err(|error| error.to_string())?;
+                let value =
+                    HeaderValue::from_str(mime_type.trim()).map_err(|error| error.to_string())?;
                 headers.insert(CONTENT_TYPE, value);
                 return Ok(headers);
             }
@@ -1073,6 +1151,140 @@ async fn request_send(input: SendRequestInput) -> Result<SendRequestResult, Stri
     })
 }
 
+fn websocket_event(
+    direction: &str,
+    label: &str,
+    body: String,
+    start: Instant,
+) -> WebSocketTimelineEvent {
+    WebSocketTimelineEvent {
+        direction: direction.to_string(),
+        label: label.to_string(),
+        body,
+        elapsed_ms: start.elapsed().as_millis() as u64,
+    }
+}
+
+fn websocket_message_body(message: Message) -> Option<(String, String)> {
+    match message {
+        Message::Text(text) => Some(("message".to_string(), text.to_string())),
+        Message::Binary(bytes) => Some((
+            "binary".to_string(),
+            format!("<{} bytes binary message>", bytes.len()),
+        )),
+        Message::Ping(bytes) => Some(("ping".to_string(), format!("<{} bytes ping>", bytes.len()))),
+        Message::Pong(bytes) => Some(("pong".to_string(), format!("<{} bytes pong>", bytes.len()))),
+        Message::Close(frame) => Some((
+            "close".to_string(),
+            frame
+                .map(|value| format!("{} {}", value.code, value.reason))
+                .unwrap_or_else(|| "closed".to_string()),
+        )),
+        Message::Frame(_) => None,
+    }
+}
+
+async fn collect_websocket_messages<S>(
+    socket: &mut S,
+    start: Instant,
+    events: &mut Vec<WebSocketTimelineEvent>,
+    idle_timeout_ms: u64,
+) -> Result<(), String>
+where
+    S: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
+{
+    loop {
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(idle_timeout_ms),
+            socket.next(),
+        )
+        .await
+        {
+            Ok(Some(Ok(message))) => {
+                if let Some((label, body)) = websocket_message_body(message) {
+                    events.push(websocket_event("in", &label, body, start));
+                }
+            }
+            Ok(Some(Err(error))) => return Err(error.to_string()),
+            Ok(None) | Err(_) => break,
+        }
+
+        if events.len() >= 200 {
+            events.push(websocket_event(
+                "runtime",
+                "limit",
+                "Stopped collecting after 200 timeline events.".to_string(),
+                start,
+            ));
+            break;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn websocket_run(input: WebSocketRunInput) -> Result<WebSocketRunResult, String> {
+    let timeout_ms = input.timeout_ms.unwrap_or(30_000).max(250);
+    let start = Instant::now();
+    let mut request = input
+        .url
+        .clone()
+        .into_client_request()
+        .map_err(|error| error.to_string())?;
+
+    for row in input
+        .headers
+        .iter()
+        .filter(|row| row.enabled && !row.name.trim().is_empty())
+    {
+        let name = WsHeaderName::from_bytes(row.name.trim().as_bytes())
+            .map_err(|error| error.to_string())?;
+        let value = WsHeaderValue::from_str(row.value.trim()).map_err(|error| error.to_string())?;
+        request.headers_mut().append(name, value);
+    }
+
+    let mut events = Vec::new();
+    let connect_result = tokio::time::timeout(
+        std::time::Duration::from_millis(timeout_ms),
+        tokio_tungstenite::connect_async(request),
+    )
+    .await
+    .map_err(|_| "WebSocket connection timed out".to_string())?
+    .map_err(|error| error.to_string())?;
+
+    let (mut socket, response) = connect_result;
+    events.push(websocket_event(
+        "runtime",
+        "connected",
+        format!("HTTP {}", response.status()),
+        start,
+    ));
+
+    for message in input.messages.iter().filter(|message| message.enabled) {
+        socket
+            .send(Message::Text(message.body.clone().into()))
+            .await
+            .map_err(|error| error.to_string())?;
+        events.push(websocket_event(
+            "out",
+            &message.name,
+            message.body.clone(),
+            start,
+        ));
+        collect_websocket_messages(&mut socket, start, &mut events, 250).await?;
+    }
+
+    collect_websocket_messages(&mut socket, start, &mut events, 500).await?;
+    let _ = socket.close(None).await;
+
+    Ok(WebSocketRunResult {
+        ok: true,
+        url: input.url,
+        duration_ms: start.elapsed().as_millis() as u64,
+        events,
+    })
+}
+
 fn chrono_timestamp() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let now = SystemTime::now()
@@ -1139,6 +1351,7 @@ pub fn run() {
             git_push,
             open_terminal,
             request_send,
+            websocket_run,
             capture::capture_browser_launch,
             capture::capture_target_list,
             capture::capture_start,
