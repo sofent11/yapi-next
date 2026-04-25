@@ -247,6 +247,32 @@ function parseBrunoProjectName(content: string | undefined) {
   }
 }
 
+function parseBruEnvironmentDocument(name: string, content: string): EnvironmentDocument {
+  const { sections } = parseBruSections(content);
+  const vars = Object.fromEntries(
+    parseBruRows(findBruSection(sections, 'vars')?.content || '')
+      .filter(row => row.enabled !== false)
+      .map(row => [row.name, row.value])
+  );
+  parseBruArrayNames(findBruSection(sections, 'vars:secret')?.content || '').forEach(secretName => {
+    const normalizedName = secretName.startsWith('~') ? secretName.slice(1) : secretName;
+    if (normalizedName && !(normalizedName in vars)) {
+      vars[normalizedName] = '';
+    }
+  });
+
+  return {
+    ...createDefaultEnvironment(name),
+    name,
+    vars,
+    sharedVars: vars,
+    headers: [],
+    sharedHeaders: [],
+    authProfiles: [],
+    overlayMode: 'standalone'
+  };
+}
+
 function parseBruRows(content: string) {
   return content
     .split('\n')
@@ -275,6 +301,15 @@ function parseBruRows(content: string) {
       };
     })
     .filter(row => row.name);
+}
+
+function parseBruArrayNames(content: string) {
+  return content
+    .split(/[\n,]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+    .map(item => item.replace(/^['"]|['"]$/g, ''))
+    .filter(Boolean);
 }
 
 function parseBruAuth(mode: string, authBlock: Record<string, string>) {
@@ -1146,6 +1181,14 @@ export function importBrunoCollectionFiles(files: ImportFileEntry[]): ImportResu
   const collectionFile = normalizedFiles.find(file => basename(file.path).toLowerCase() === 'collection.bru');
   const folderNames = folderNameMap(normalizedFiles);
   const warnings: ImportWarning[] = [];
+  const environments = normalizedFiles
+    .filter(file => {
+      const segments = normalizeImportPath(file.path).split('/').filter(Boolean);
+      return segments.length >= 2 &&
+        segments.at(-2)?.toLowerCase() === 'environments' &&
+        segments.at(-1)?.toLowerCase().endsWith('.bru');
+    })
+    .map(file => parseBruEnvironmentDocument(basename(file.path).replace(/\.bru$/i, ''), file.content));
   const requests = normalizedFiles
     .filter(file => file.path.toLowerCase().endsWith('.bru'))
     .filter(file => {
@@ -1172,6 +1215,9 @@ export function importBrunoCollectionFiles(files: ImportFileEntry[]): ImportResu
     });
 
   const collection = parseBruCollectionDocument(collectionFile?.content || '', projectName);
+  if (environments[0]) {
+    collection.defaultEnvironment = environments[0].name;
+  }
   collection.steps = requests.map((record, index) =>
     createCollectionStep({
       key: `step_${index + 1}`,
@@ -1195,8 +1241,11 @@ export function importBrunoCollectionFiles(files: ImportFileEntry[]): ImportResu
       folders: new Set(requests.map(item => item.folderSegments.join('/')).filter(Boolean)).size,
       environments: 1
     },
-    project: createDefaultProject(projectName),
-    environments: [createDefaultEnvironment('shared')],
+    project: {
+      ...createDefaultProject(projectName),
+      defaultEnvironment: environments[0]?.name || 'shared'
+    },
+    environments: environments.length > 0 ? environments : [createDefaultEnvironment('shared')],
     requests: requests.map(({ sourcePath: _sourcePath, ...record }) => record),
     collections: [
       {

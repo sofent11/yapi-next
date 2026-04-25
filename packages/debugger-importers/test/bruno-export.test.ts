@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { materializeBrunoCollectionExport, serializeRequestToBruno } from '../../debugger-core/src/index';
-import { createCollectionStep, createDefaultProject, createEmptyCollection, createEmptyRequest } from '../../debugger-schema/src/index';
+import { createCollectionStep, createDefaultEnvironment, createDefaultProject, createEmptyCollection, createEmptyRequest } from '../../debugger-schema/src/index';
 import { importBrunoCollectionFiles, importSourceText } from '../src/index';
 
 test('Bruno export writes a modern .bru request and imports it back', () => {
@@ -106,6 +106,11 @@ test('Bruno export uses Bruno body names for form and GraphQL requests', () => {
 
 test('Bruno collection folder import rebuilds requests and a runnable collection', () => {
   const project = createDefaultProject('Demo API');
+  const environment = createDefaultEnvironment('Local');
+  environment.vars = {
+    baseUrl: 'https://api.example.com',
+    token: '{{secretToken}}'
+  };
   const createUser = createEmptyRequest('Create User');
   createUser.id = 'req_create_user';
   createUser.method = 'POST';
@@ -129,6 +134,7 @@ test('Bruno collection folder import rebuilds requests and a runnable collection
   const writes = materializeBrunoCollectionExport({
     project,
     collection,
+    environments: [environment],
     requests: [
       {
         request: createUser,
@@ -152,9 +158,13 @@ test('Bruno collection folder import rebuilds requests and a runnable collection
 
   assert.equal(result.detectedFormat, 'bruno');
   assert.equal(result.project.name, 'Smoke Flow');
+  assert.equal(result.project.defaultEnvironment, 'local');
   assert.equal(result.requests.length, 2);
+  assert.equal(result.environments[0]?.name, 'local');
+  assert.equal(result.environments[0]?.vars.baseUrl, 'https://api.example.com');
   assert.deepEqual(result.requests.map(item => item.folderSegments.join('/')), ['Users', 'Users']);
   assert.equal(importedCollection?.name, 'Smoke Flow');
+  assert.equal(importedCollection?.defaultEnvironment, 'local');
   assert.equal(importedCollection?.headers.find(item => item.name === 'x-suite')?.value, 'smoke');
   assert.equal(importedCollection?.vars.userId, 'u_1');
   assert.equal(importedCollection?.steps.length, 2);

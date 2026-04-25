@@ -1177,6 +1177,16 @@ function brunoJsonDocument(name: string) {
   }, null, 2) + '\n';
 }
 
+function brunoEnvironmentDocument(environment: EnvironmentDocument) {
+  const vars = Object.entries(environment.vars || {}).map(([name, value]) => ({
+    ...emptyParameterRow(),
+    name,
+    value,
+    enabled: true
+  }));
+  return `${bruRowsBlock('vars', vars) || 'vars {\n}'}\n`;
+}
+
 function brunoCollectionBru(collection: CollectionDocument | undefined, project: ProjectDocument) {
   if (!collection) {
     return bruTextBlock('docs', `${project.name} exported from YAPI Debugger.`) + '\n';
@@ -1265,6 +1275,7 @@ function uniqueBrunoPath(used: Set<string>, folderSegments: string[], requestNam
 export function materializeBrunoCollectionExport(input: {
   project: ProjectDocument;
   requests: WorkspaceRequestRecord[];
+  environments?: EnvironmentDocument[];
   collection?: CollectionDocument;
 }) {
   const collection = input.collection ? collectionDocumentSchema.parse(input.collection) : undefined;
@@ -1277,6 +1288,16 @@ export function materializeBrunoCollectionExport(input: {
   ];
   const folders = new Map<string, { name: string; seq: number }>();
   const usedPaths = new Set(writes.map(write => write.path));
+
+  (input.environments || []).forEach(environment => {
+    const parsed = environmentDocumentSchema.parse(environment);
+    const path = `environments/${slugify(parsed.name) || 'environment'}.bru`;
+    usedPaths.add(path);
+    writes.push({
+      path,
+      content: brunoEnvironmentDocument(parsed)
+    });
+  });
 
   ordered.forEach(({ record }) => {
     let currentPath = '';

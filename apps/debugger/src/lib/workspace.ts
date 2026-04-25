@@ -759,6 +759,7 @@ export async function exportBrunoCollection(
   const writes = materializeBrunoCollectionExport({
     project: workspace.project,
     requests: workspace.requests,
+    environments: workspace.environments.map(item => item.document),
     collection
   });
   await Promise.all(writes.map(item => writeDocument(`${targetRoot}/${item.path}`, item.content)));

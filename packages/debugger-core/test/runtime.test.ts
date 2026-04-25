@@ -157,6 +157,11 @@ test('buildCurlCommand emits a runnable curl string', () => {
 
 test('materializeBrunoCollectionExport writes Bruno collection files for ordered steps', () => {
   const project = createDefaultProject('Demo API');
+  const environment = createDefaultEnvironment('Local');
+  environment.vars = {
+    baseUrl: 'https://api.example.com',
+    token: '{{secretToken}}'
+  };
   const first = createEmptyRequest('Create User');
   first.id = 'req_create_user';
   first.method = 'POST';
@@ -182,6 +187,7 @@ test('materializeBrunoCollectionExport writes Bruno collection files for ordered
   const writes = materializeBrunoCollectionExport({
     project,
     collection,
+    environments: [environment],
     requests: [
       {
         request: first,
@@ -205,6 +211,7 @@ test('materializeBrunoCollectionExport writes Bruno collection files for ordered
   assert.equal(JSON.parse(map.get('bruno.json') || '{}').name, 'Smoke Flow');
   assert.match(map.get('collection.bru') || '', /headers \{/);
   assert.match(map.get('collection.bru') || '', /vars:pre-request \{/);
+  assert.match(map.get('environments\/local.bru') || '', /baseUrl: https:\/\/api\.example\.com/);
   assert.match(map.get('users\/folder.bru') || '', /name: users/);
   assert.match(map.get('users\/get-user.bru') || '', /seq: 1/);
   assert.match(map.get('users\/create-user.bru') || '', /seq: 2/);
