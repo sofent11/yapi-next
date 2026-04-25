@@ -1407,7 +1407,8 @@ function openCollectionWebsocketBody(message: any): RequestDocument['body'] {
     text: '',
     fields: [],
     websocket: {
-      messages: messages.length > 0 ? messages : [{ name: 'Message 1', body: '', enabled: true }]
+      messages: messages.length > 0 ? messages : [{ name: 'Message 1', body: '', enabled: true }],
+      examples: []
     }
   };
 }
@@ -2331,7 +2332,8 @@ function brunoJsonBody(body: any): RequestDocument['body'] {
             ? String(message.type).toLowerCase() as 'json' | 'text' | 'binary'
             : 'json',
           enabled: message.enabled !== false
-        }))
+        })),
+        examples: []
       }
     };
   }

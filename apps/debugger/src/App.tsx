@@ -7,7 +7,7 @@ import { useMutation } from '@tanstack/react-query';
 import { IconRefresh, IconSearch } from '@tabler/icons-react';
 import { createEmptyCheck, createNamedTemplateSource, evaluateSyncGuard, inspectResolvedRequest } from '@yapi-debugger/core';
 import { save as saveFile } from '@tauri-apps/plugin-dialog';
-import { SCHEMA_VERSION, createCollectionStep, createEmptyCase, createEmptyCollection, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type EnvironmentDocument, type ImportWarning, type ResponseExample, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
+import { SCHEMA_VERSION, createCollectionStep, createEmptyCase, createEmptyCollection, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type EnvironmentDocument, type ImportWarning, type RequestDocument, type ResponseExample, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
 import '@mantine/spotlight/styles.css';
 import {
   chooseDirectory,
@@ -89,6 +89,7 @@ import { ImportRepairPanel } from './components/panels/ImportRepairPanel';
 import { InterfaceTreePanel } from './components/panels/InterfaceTreePanel';
 import { ScratchPadPanel } from './components/panels/ScratchPadPanel';
 import { SyncCenterPanel } from './components/panels/SyncCenterPanel';
+import { PreferencesCenterPanel, type PreferencesState } from './components/panels/PreferencesCenterPanel';
 import { WelcomePanel } from './components/panels/WelcomePanel';
 import { WorkspaceHomePanel } from './components/panels/WorkspaceHomePanel';
 import { WorkspaceMainPanel } from './components/panels/WorkspaceMainPanel';
@@ -121,6 +122,7 @@ const RECENT_STORAGE_KEY = 'yapi-debugger.recent-roots';
 const UI_STORAGE_KEY_PREFIX = 'yapi-debugger.ui';
 const IMPORT_SESSION_STORAGE_KEY_PREFIX = 'yapi-debugger.import-session';
 const LAST_SYNC_STORAGE_KEY_PREFIX = 'yapi-debugger.last-sync';
+const PREFERENCES_STORAGE_KEY = 'yapi-debugger.preferences';
 type DebuggerSpotlightGroup = {
   group: string;
   actions: SpotlightActionData[];
@@ -240,6 +242,36 @@ function loadPersistedJson<T>(key: string) {
 
 function savePersistedJson(key: string, value: unknown) {
   window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function defaultPreferences(): PreferencesState {
+  return {
+    theme: 'light',
+    uiScale: 1,
+    codeFontSize: 13,
+    keybindingPreset: 'default',
+    commandPaletteShortcut: 'mod + K',
+    runtimeDefaults: {
+      proxyUrl: '',
+      clientCertificatePath: '',
+      clientCertificateKeyPath: '',
+      caCertificatePath: ''
+    }
+  };
+}
+
+function loadPreferences() {
+  return loadPersistedJson<PreferencesState>(PREFERENCES_STORAGE_KEY) || defaultPreferences();
+}
+
+function savePreferences(preferences: PreferencesState) {
+  savePersistedJson(PREFERENCES_STORAGE_KEY, preferences);
+}
+
+function applyPreferencesToDocument(preferences: PreferencesState) {
+  document.documentElement.dataset.debuggerTheme = preferences.theme;
+  document.documentElement.style.setProperty('--ui-scale', String(preferences.uiScale));
+  document.documentElement.style.setProperty('--code-font-size', `${preferences.codeFontSize}px`);
 }
 
 function selectedRequestId(node: SelectedNode) {
@@ -588,6 +620,17 @@ export function App() {
   const [captureCollectionTargetMode, setCaptureCollectionTargetMode] = useState<'existing' | 'new'>('existing');
   const [captureCollectionId, setCaptureCollectionId] = useState<string | null>(null);
   const [captureNewCollectionName, setCaptureNewCollectionName] = useState('Captured Flow');
+  const [preferences, setPreferences] = useState<PreferencesState>(() => loadPreferences());
+
+  function applyRuntimeDefaultsToRequest(request: RequestDocument): RequestDocument {
+    return {
+      ...request,
+      runtime: {
+        ...preferences.runtimeDefaults,
+        ...request.runtime
+      }
+    };
+  }
 
   const spotlightActions = useMemo(() => {
     if (!store.workspace) return [];
@@ -639,6 +682,12 @@ export function App() {
     store.workspace.tree.forEach(walk);
     return actions;
   }, [store.workspace]);
+
+  useEffect(() => {
+    applyPreferencesToDocument(preferences);
+    savePreferences(preferences);
+  }, [preferences]);
+
   const filteredSpotlightActions = useMemo(
     () => filterSpotlightActions(spotlightQuery, spotlightActions),
     [spotlightActions, spotlightQuery]
@@ -820,7 +869,7 @@ export function App() {
     try {
       return inspectResolvedRequest(
         store.workspace.project,
-        store.draftRequest,
+        applyRuntimeDefaultsToRequest(store.draftRequest),
         store.draftCases.find(item => item.id === caseId),
         selectedRuntimeEnvironment || undefined,
         [namedRuntimeSource]
@@ -828,7 +877,7 @@ export function App() {
     } catch (_error) {
       return null;
     }
-  }, [store.workspace, store.draftRequest, store.draftCases, caseId, selectedRuntimeEnvironment, requestId, namedRuntimeSource]);
+  }, [store.workspace, store.draftRequest, store.draftCases, caseId, selectedRuntimeEnvironment, requestId, namedRuntimeSource, preferences.runtimeDefaults]);
 
   const currentRequestPreview = currentRequestInsight?.preview || null;
 
@@ -837,7 +886,7 @@ export function App() {
     try {
       return inspectResolvedRequest(
         store.workspace.project,
-        currentScratch.request,
+        applyRuntimeDefaultsToRequest(currentScratch.request),
         undefined,
         selectedRuntimeEnvironment || undefined,
         [namedRuntimeSource]
@@ -845,7 +894,7 @@ export function App() {
     } catch (_error) {
       return null;
     }
-  }, [store.workspace, currentScratch, selectedRuntimeEnvironment, namedRuntimeSource]);
+  }, [store.workspace, currentScratch, selectedRuntimeEnvironment, namedRuntimeSource, preferences.runtimeDefaults]);
 
   const currentScratchPreview = currentScratchInsight?.preview || null;
   const sessionTargetUrl =
@@ -998,7 +1047,7 @@ export function App() {
       if (!store.workspace || !requestId || !store.draftRequest) return;
       const environment = ensureWorkspaceEnvironment(store.activeEnvironmentName, store.workspace);
       return runPreparedRequest(store.workspace, {
-        request: store.draftRequest,
+        request: applyRuntimeDefaultsToRequest(store.draftRequest),
         caseDocument: store.draftCases.find(item => item.id === caseId),
         sessionId: store.workspace.root,
         context: {
@@ -1038,7 +1087,7 @@ export function App() {
       if (!store.workspace || !currentScratch) return null;
       const environment = ensureWorkspaceEnvironment(store.activeEnvironmentName, store.workspace);
       return runPreparedRequest(store.workspace, {
-        request: currentScratch.request,
+        request: applyRuntimeDefaultsToRequest(currentScratch.request),
         sessionId: store.workspace.root,
         context: {
           state: {
@@ -2957,6 +3006,26 @@ export function App() {
     }
   }
 
+  function handleClearPreferenceCaches() {
+    Object.keys(window.localStorage)
+      .filter(key =>
+        key === RECENT_STORAGE_KEY ||
+        key === PREFERENCES_STORAGE_KEY ||
+        key.startsWith(UI_STORAGE_KEY_PREFIX) ||
+        key.startsWith(IMPORT_SESSION_STORAGE_KEY_PREFIX) ||
+        key.startsWith(LAST_SYNC_STORAGE_KEY_PREFIX)
+      )
+      .forEach(key => window.localStorage.removeItem(key));
+    store.setRecentRoots([]);
+    setRuntimeVariables({});
+    setRuntimeEnvironments({});
+    setHostSessionSnapshots([]);
+    setSessionSnapshot(null);
+    setUiState(defaultWorkspaceUiState());
+    setPreferences(defaultPreferences());
+    notifications.show({ color: 'blue', message: 'Local debugger caches cleared' });
+  }
+
   if (!store.workspace) {
     return (
       <WelcomePanel
@@ -3262,6 +3331,12 @@ export function App() {
                   onClear={handleClearHistory}
                 />
               </section>
+            ) : activeView === 'preferences' ? (
+              <PreferencesCenterPanel
+                preferences={preferences}
+                onChange={setPreferences}
+                onClearCaches={handleClearPreferenceCaches}
+              />
             ) : activeView === 'sync' ? (
               <section className="workspace-main" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 {renderTabHeader()}
@@ -3463,10 +3538,10 @@ export function App() {
         />
       </Drawer>
 
-      <Spotlight.Root
-        query={spotlightQuery}
-        onQueryChange={setSpotlightQuery}
-        shortcut="mod + K"
+        <Spotlight.Root
+          query={spotlightQuery}
+          onQueryChange={setSpotlightQuery}
+          shortcut={preferences.commandPaletteShortcut}
         maxHeight={540}
         scrollable
         overlayProps={{ backgroundOpacity: 0.2, blur: 18 }}
@@ -3528,6 +3603,7 @@ export function App() {
             </span>
           </div>
           <div className="debugger-spotlight-footer-hints" aria-hidden="true">
+            <span>{preferences.commandPaletteShortcut}</span>
             <span>↑↓ 切换</span>
             <span>Enter 打开</span>
             <span>Esc 关闭</span>

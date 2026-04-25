@@ -138,6 +138,13 @@ export const runtimeSettingsSchema = z.object({
 });
 export type RuntimeSettings = z.infer<typeof runtimeSettingsSchema>;
 
+const websocketMessageSchema = z.object({
+  name: z.string().default('Message'),
+  body: z.string().default(''),
+  kind: z.enum(['json', 'text', 'binary']).optional(),
+  enabled: z.boolean().default(true)
+});
+
 export const requestBodySchema = z.object({
   mode: z.enum(['none', 'json', 'text', 'xml', 'graphql', 'sparql', 'file', 'form-urlencoded', 'multipart']).default('none'),
   mimeType: z.string().optional(),
@@ -163,12 +170,8 @@ export const requestBodySchema = z.object({
     message: z.string().default('')
   }).optional(),
   websocket: z.object({
-    messages: z.array(z.object({
-      name: z.string().default('Message'),
-      body: z.string().default(''),
-      kind: z.enum(['json', 'text', 'binary']).optional(),
-      enabled: z.boolean().default(true)
-    })).default([]),
+    messages: z.array(websocketMessageSchema).default([]),
+    examples: z.array(websocketMessageSchema).default([]),
     lastRun: z.object({
       ok: z.boolean(),
       url: z.string(),

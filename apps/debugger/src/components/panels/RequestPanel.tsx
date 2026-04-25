@@ -159,12 +159,48 @@ type WebSocketRunState = {
 
 type WebSocketLiveState = {
   connecting: boolean;
+  reconnecting?: boolean;
   closing: boolean;
   sendingIndex?: number;
   sessionId?: string;
   snapshot?: WebSocketLiveSnapshot;
   error?: string;
 };
+
+type WebSocketMessageDraft = NonNullable<NonNullable<RequestBody['websocket']>['messages']>[number];
+
+function looksLikeBase64Payload(value: string) {
+  const normalized = value.trim();
+  if (!normalized || normalized.length < 12 || normalized.length % 4 !== 0) return false;
+  return /^[A-Za-z0-9+/=\s]+$/.test(normalized);
+}
+
+function describeWebSocketPayload(bodyText: string): { kind: 'json' | 'text' | 'binary'; preview: string; detail: string } {
+  const trimmed = bodyText.trim();
+  if (!trimmed) {
+    return { kind: 'text', preview: '', detail: 'empty payload' };
+  }
+  try {
+    return {
+      kind: 'json',
+      preview: JSON.stringify(JSON.parse(trimmed), null, 2),
+      detail: 'JSON payload'
+    };
+  } catch (_error) {
+    if (looksLikeBase64Payload(trimmed)) {
+      return {
+        kind: 'binary',
+        preview: trimmed,
+        detail: `base64 payload · ${trimmed.length} chars`
+      };
+    }
+    return {
+      kind: 'text',
+      preview: bodyText,
+      detail: `${trimmed.length} chars`
+    };
+  }
+}
 
 function websocketStateFromBody(body: RequestBody): WebSocketRunState {
   return body.websocket?.lastRun
@@ -316,6 +352,7 @@ export function RequestPanel(props: {
   const websocketMessages = body.websocket?.messages?.length
     ? body.websocket.messages
     : [{ name: 'Message 1', body: '', kind: 'json' as const, enabled: true }];
+  const websocketExamples = body.websocket?.examples || [];
   const auth = selectedCase?.overrides.auth || requestDocument.auth;
   const runtime = {
     ...requestDocument.runtime,
@@ -340,6 +377,7 @@ export function RequestPanel(props: {
   );
   const [websocketRun, setWebsocketRun] = useState<WebSocketRunState>(() => websocketStateFromBody(body));
   const [websocketLive, setWebsocketLive] = useState<WebSocketLiveState>({ connecting: false, closing: false });
+  const [selectedWebsocketEventIndex, setSelectedWebsocketEventIndex] = useState(0);
 
   useEffect(() => {
     setGraphqlIntrospection(current => {
@@ -629,9 +667,46 @@ export function RequestPanel(props: {
       ...body,
       websocket: {
         ...(body.websocket || {}),
-        messages
+        messages,
+        examples: body.websocket?.examples || []
       }
     });
+  }
+
+  function updateWebSocketExamples(examples: NonNullable<RequestBody['websocket']>['examples']) {
+    updateBody({
+      ...body,
+      websocket: {
+        ...(body.websocket || {}),
+        messages: websocketMessages,
+        examples
+      }
+    });
+  }
+
+  function saveWebSocketExample(message: WebSocketMessageDraft) {
+    const normalizedName = message.name.trim() || `Example ${websocketExamples.length + 1}`;
+    const deduped = websocketExamples.filter(item => item.name !== normalizedName);
+    updateWebSocketExamples([
+      ...deduped,
+      {
+        ...message,
+        name: normalizedName,
+        enabled: true
+      }
+    ]);
+    notifications.show({ color: 'teal', message: `${normalizedName} saved to examples` });
+  }
+
+  function appendWebSocketExample(example: WebSocketMessageDraft) {
+    updateWebSocketMessages([
+      ...websocketMessages,
+      {
+        ...example,
+        name: example.name || `Message ${websocketMessages.length + 1}`,
+        enabled: true
+      }
+    ]);
   }
 
   function persistWebSocketRun(result: WebSocketRunResult) {
@@ -640,6 +715,7 @@ export function RequestPanel(props: {
       websocket: {
         ...(body.websocket || {}),
         messages: websocketMessages,
+        examples: body.websocket?.examples || [],
         lastRun: {
           ok: result.ok,
           url: result.url,
@@ -691,6 +767,33 @@ export function RequestPanel(props: {
     }
   }
 
+  async function handleWebSocketReconnect() {
+    try {
+      setWebsocketLive(current => ({ ...current, reconnecting: true, error: undefined }));
+      if (websocketLive.sessionId) {
+        await closeWebSocketLive(websocketLive.sessionId).catch(() => undefined);
+      }
+      const snapshot = await connectWebSocketLive({
+        url: resolvedWebSocketUrl,
+        headers: resolvedPreview.headers.filter(row => row.enabled),
+        timeoutMs: resolvedPreview.timeoutMs
+      });
+      setWebsocketLive({
+        connecting: false,
+        reconnecting: false,
+        closing: false,
+        sessionId: snapshot.sessionId,
+        snapshot
+      });
+      setWebsocketRun({ loading: false, result: snapshot });
+      notifications.show({ color: 'teal', message: 'WebSocket reconnected' });
+    } catch (error) {
+      const message = (error as Error).message || 'WebSocket reconnect failed';
+      setWebsocketLive({ connecting: false, reconnecting: false, closing: false, error: message });
+      notifications.show({ color: 'red', message });
+    }
+  }
+
   async function handleWebSocketLiveSend(index: number) {
     if (!websocketLive.sessionId) return;
     try {
@@ -730,7 +833,7 @@ export function RequestPanel(props: {
   }
 
   function clearWebSocketTimeline() {
-    const { lastRun: _lastRun, ...nextWebSocket } = body.websocket || { messages: websocketMessages };
+    const { lastRun: _lastRun, ...nextWebSocket } = body.websocket || { messages: websocketMessages, examples: websocketExamples };
     updateBody({
       ...body,
       websocket: nextWebSocket
@@ -789,6 +892,16 @@ export function RequestPanel(props: {
 
   const websocketTimeline = websocketLive.snapshot || websocketRun.result;
   const isWebSocketLiveConnected = Boolean(websocketLive.sessionId);
+  const selectedWebsocketEvent = websocketTimeline?.events[selectedWebsocketEventIndex] || websocketTimeline?.events[0];
+  const selectedWebsocketEventPreview = selectedWebsocketEvent ? describeWebSocketPayload(selectedWebsocketEvent.body) : null;
+
+  useEffect(() => {
+    if (!websocketTimeline?.events.length) {
+      setSelectedWebsocketEventIndex(0);
+      return;
+    }
+    setSelectedWebsocketEventIndex(current => Math.min(current, websocketTimeline.events.length - 1));
+  }, [websocketTimeline?.events.length, websocketTimeline?.durationMs, websocketTimeline?.url]);
 
   function renderGraphqlExplorerNodes(nodes: GraphqlSelectionFieldSummary[], basePath = '', depth = 0): React.JSX.Element[] {
     return nodes.map(node => {
@@ -918,9 +1031,12 @@ export function RequestPanel(props: {
                     ? {
                         ...body,
                         mode: 'none' as const,
-                        websocket: body.websocket || { messages: [{ name: 'Message 1', body: '', kind: 'json', enabled: true }] }
+                        websocket: body.websocket || {
+                          messages: [{ name: 'Message 1', body: '', kind: 'json', enabled: true }],
+                          examples: []
+                        }
                       }
-                  : body;
+                    : body;
               const nextMethod = nextKind === 'graphql' ? 'POST' : nextKind === 'websocket' ? 'GET' : effectiveMethod;
               if (selectedCase) {
                 updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, kind: nextKind, method: nextMethod, body: nextBody } }));
@@ -1290,6 +1406,15 @@ export function RequestPanel(props: {
                     </Button>
                     <Button
                       size="xs"
+                      variant="light"
+                      loading={websocketLive.reconnecting}
+                      disabled={websocketRun.loading || !resolvedWebSocketUrl}
+                      onClick={handleWebSocketReconnect}
+                    >
+                      Reconnect
+                    </Button>
+                    <Button
+                      size="xs"
                       variant="subtle"
                       color="red"
                       leftSection={<IconPlugConnectedX size={14} />}
@@ -1354,6 +1479,13 @@ export function RequestPanel(props: {
                         <Button
                           size="xs"
                           variant="subtle"
+                          onClick={() => saveWebSocketExample(message)}
+                        >
+                          Save Example
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="subtle"
                           color="red"
                           onClick={() => updateWebSocketMessages(websocketMessages.filter((_, messageIndex) => messageIndex !== index))}
                           disabled={websocketMessages.length === 1}
@@ -1374,6 +1506,40 @@ export function RequestPanel(props: {
                     </div>
                   ))}
                 </div>
+                {websocketExamples.length > 0 ? (
+                  <div className="websocket-examples">
+                    <div className="websocket-timeline-head">
+                      <Text size="xs" fw={700} c="dimmed">Saved Examples</Text>
+                      <Badge variant="light" color="blue">{websocketExamples.length}</Badge>
+                    </div>
+                    <div className="websocket-example-list">
+                      {websocketExamples.map((example, index) => (
+                        <div className="websocket-example-card" key={`${example.name}:${index}`}>
+                          <div className="websocket-example-head">
+                            <div>
+                              <Text size="sm" fw={700}>{example.name}</Text>
+                              <Text size="xs" c="dimmed">{example.kind || 'json'}</Text>
+                            </div>
+                            <Group gap="xs">
+                              <Button size="xs" variant="light" onClick={() => appendWebSocketExample(example)}>
+                                Add to Messages
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="subtle"
+                                color="red"
+                                onClick={() => updateWebSocketExamples(websocketExamples.filter((_, exampleIndex) => exampleIndex !== index))}
+                              >
+                                Remove
+                              </Button>
+                            </Group>
+                          </div>
+                          <pre>{describeWebSocketPayload(example.body).preview}</pre>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {websocketRun.error || websocketLive.error || websocketTimeline ? (
                   <div className="websocket-timeline">
                     <div className="websocket-timeline-head">
@@ -1397,13 +1563,42 @@ export function RequestPanel(props: {
                       </div>
                     ) : null}
                     {websocketTimeline?.events.map((event, index) => (
-                      <div className={`websocket-timeline-event is-${event.direction}`} key={`${event.elapsedMs}:${index}`}>
+                      <button
+                        type="button"
+                        className={`websocket-timeline-event is-${event.direction}${
+                          selectedWebsocketEventIndex === index ? ' is-active' : ''
+                        }`}
+                        key={`${event.elapsedMs}:${index}`}
+                        onClick={() => setSelectedWebsocketEventIndex(index)}
+                      >
                         <span>{event.elapsedMs} ms</span>
                         <strong>{event.direction}</strong>
                         <em>{event.label}</em>
                         <code>{event.body}</code>
-                      </div>
+                      </button>
                     ))}
+                    {selectedWebsocketEvent && selectedWebsocketEventPreview ? (
+                      <div className="websocket-event-preview">
+                        <div className="websocket-example-head">
+                          <div>
+                            <Text size="xs" fw={700} c="dimmed">Event Preview</Text>
+                            <Text size="sm" fw={700}>{selectedWebsocketEvent.label}</Text>
+                          </div>
+                          <Group gap="xs">
+                            <Badge variant="light" color={selectedWebsocketEvent.direction === 'in' ? 'teal' : selectedWebsocketEvent.direction === 'out' ? 'indigo' : 'gray'}>
+                              {selectedWebsocketEvent.direction}
+                            </Badge>
+                            <Badge variant="light" color="gray">
+                              {selectedWebsocketEventPreview.kind}
+                            </Badge>
+                            <Badge variant="light" color="gray">
+                              {selectedWebsocketEventPreview.detail}
+                            </Badge>
+                          </Group>
+                        </div>
+                        <pre>{selectedWebsocketEventPreview.preview}</pre>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

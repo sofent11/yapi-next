@@ -6,6 +6,8 @@
   --font-ui: "Public Sans", "PingFang SC", sans-serif;
   --font-display: "Sora", "PingFang SC", sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Mono", monospace;
+  --ui-scale: 1;
+  --code-font-size: 13px;
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 12px;
@@ -39,6 +41,23 @@
   --shadow-md: 0 3px 6px rgba(140, 149, 159, 0.15);
 }
 
+:root[data-debugger-theme='dark'] {
+  color-scheme: dark;
+  --canvas: oklch(0.18 0.01 248);
+  --surface: oklch(0.22 0.012 248);
+  --surface-raised: oklch(0.25 0.014 248);
+  --surface-panel: oklch(0.24 0.013 248);
+  --surface-muted: oklch(0.28 0.012 248);
+  --line: oklch(0.34 0.015 248);
+  --line-strong: oklch(0.42 0.015 248);
+  --text: oklch(0.92 0.01 248);
+  --muted: oklch(0.72 0.012 248);
+  --muted-strong: oklch(0.82 0.012 248);
+  --accent-soft: oklch(0.28 0.05 249);
+  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.32);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -55,6 +74,7 @@ body {
   background: var(--canvas);
   color: var(--text);
   font-family: var(--font-ui);
+  font-size: calc(16px * var(--ui-scale));
   text-rendering: optimizeLegibility;
 }
 
@@ -1877,7 +1897,7 @@ mark {
 }
 
 .cm-editor {
-  font-size: 13px;
+  font-size: var(--code-font-size);
 }
 
 .graphql-body-grid,
@@ -2108,7 +2128,9 @@ mark {
 
 .websocket-body-grid,
 .websocket-message-list,
-.websocket-timeline {
+.websocket-timeline,
+.websocket-examples,
+.websocket-example-list {
   display: grid;
   gap: 12px;
 }
@@ -2141,7 +2163,8 @@ mark {
 }
 
 .websocket-message-row,
-.websocket-timeline {
+.websocket-timeline,
+.websocket-examples {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -2168,6 +2191,8 @@ mark {
   border-radius: 4px;
   background: color-mix(in oklch, var(--surface-muted) 55%, var(--surface));
   font-size: 12px;
+  text-align: left;
+  cursor: pointer;
 }
 
 .websocket-timeline-event span,
@@ -2179,6 +2204,11 @@ mark {
 .websocket-timeline-event strong {
   text-transform: uppercase;
   font-size: 11px;
+}
+
+.websocket-timeline-event.is-active {
+  border-color: color-mix(in oklch, var(--accent) 42%, var(--line));
+  background: color-mix(in oklch, var(--accent) 8%, var(--surface));
 }
 
 .websocket-timeline-event.is-in strong {
@@ -2195,6 +2225,36 @@ mark {
   overflow-wrap: anywhere;
   color: var(--text);
   font-family: var(--mono-font);
+}
+
+.websocket-example-card,
+.websocket-event-preview {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--surface-muted) 48%, var(--surface));
+}
+
+.websocket-example-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.websocket-example-card pre,
+.websocket-event-preview pre {
+  margin: 0;
+  padding: 10px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12px/1.5 var(--mono-font);
 }
 
 /* Welcome Screen */

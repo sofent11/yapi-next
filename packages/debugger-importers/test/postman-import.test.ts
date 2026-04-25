@@ -422,6 +422,60 @@ items:
   assert.equal(result.warnings.some(warning => warning.code === 'opencollection-item-review'), false);
 });
 
+test('OpenCollection import preserves edge-case websocket rows and XML bodies', () => {
+  const openCollection = `
+opencollection: "1"
+info:
+  name: OpenCollection Edge Cases
+items:
+  - info:
+      name: Streams
+      type: folder
+    items:
+      - info:
+          name: Events
+          type: websocket
+        websocket:
+          url: wss://api.example.com/events
+          message:
+            - title: disabled probe
+              selected: false
+              message:
+                type: text
+                data: ping
+            - title: binary hello
+              message:
+                type: binary
+                data: aGVsbG8=
+      - info:
+          name: XML Ping
+          type: http
+        http:
+          method: POST
+          url: https://api.example.com/xml/ping
+          headers:
+            - name: Content-Type
+              value: application/xml
+          body:
+            type: xml
+            data: |
+              <ping>ok</ping>
+`;
+
+  const result = importSourceText(openCollection);
+  const websocket = result.requests.find(item => item.request.kind === 'websocket')?.request;
+  const xml = result.requests.find(item => item.request.name === 'XML Ping')?.request;
+
+  assert.equal(result.detectedFormat, 'opencollection');
+  assert.deepEqual(result.requests.find(item => item.request.kind === 'websocket')?.folderSegments, ['Streams']);
+  assert.equal(websocket?.body.websocket?.messages.length, 2);
+  assert.equal(websocket?.body.websocket?.messages[0]?.enabled, false);
+  assert.equal(websocket?.body.websocket?.messages[1]?.kind, 'binary');
+  assert.equal(websocket?.body.websocket?.examples.length, 0);
+  assert.equal(xml?.body.mode, 'xml');
+  assert.match(xml?.body.text || '', /<ping>ok<\/ping>/);
+});
+
 test('WSDL import creates SOAP requests from services, bindings, and port types', () => {
   const wsdl = `<?xml version="1.0" encoding="UTF-8"?>
 <wsdl:definitions
@@ -585,6 +639,78 @@ test('WSDL import expands complex type references, extensions, and typed message
   assert.match(submit?.body.text || '', /<!--Optional:--><traceId>string<\/traceId>/);
   assert.match(ping?.body.text || '', /<Ping xmlns="http:\/\/example\.com\/advanced"><sessionId>string<\/sessionId><dryRun>true<\/dryRun><\/Ping>/);
   assert.equal(ping?.headers.find(item => item.name === 'SOAPAction')?.value, 'http://example.com/advanced/Ping');
+});
+
+test('WSDL import resolves inline included and imported schemas in the same definitions file', () => {
+  const wsdl = `<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions
+  name="ImportedSchemaService"
+  targetNamespace="http://example.com/service"
+  xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+  xmlns:tns="http://example.com/service"
+  xmlns:common="http://example.com/common"
+  xmlns:shared="http://example.com/shared"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <wsdl:types>
+    <xsd:schema targetNamespace="http://example.com/service">
+      <xsd:include schemaLocation="shared.xsd"/>
+      <xsd:import namespace="http://example.com/common" schemaLocation="common.xsd"/>
+      <xsd:element name="SubmitRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="shared" type="shared:SharedInfo"/>
+            <xsd:element name="customer" type="common:CustomerInfo"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+    </xsd:schema>
+    <xsd:schema targetNamespace="http://example.com/shared">
+      <xsd:complexType name="SharedInfo">
+        <xsd:sequence>
+          <xsd:element name="traceId" type="xsd:string"/>
+        </xsd:sequence>
+      </xsd:complexType>
+    </xsd:schema>
+    <xsd:schema targetNamespace="http://example.com/common">
+      <xsd:complexType name="CustomerInfo">
+        <xsd:sequence>
+          <xsd:element name="customerId" type="xsd:string"/>
+          <xsd:element name="active" type="xsd:boolean"/>
+        </xsd:sequence>
+      </xsd:complexType>
+    </xsd:schema>
+  </wsdl:types>
+  <wsdl:message name="SubmitRequestMessage">
+    <wsdl:part name="parameters" element="tns:SubmitRequest"/>
+  </wsdl:message>
+  <wsdl:portType name="ImportedPortType">
+    <wsdl:operation name="Submit">
+      <wsdl:input message="tns:SubmitRequestMessage"/>
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="ImportedBinding" type="tns:ImportedPortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="Submit">
+      <soap:operation soapAction="http://example.com/service/Submit"/>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="ImportedService">
+    <wsdl:port name="ImportedPort" binding="tns:ImportedBinding">
+      <soap:address location="https://example.com/service/soap"/>
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>`;
+
+  const result = importSourceText(wsdl);
+  const submit = result.requests.find(item => item.request.name === 'Submit')?.request;
+
+  assert.equal(result.detectedFormat, 'wsdl');
+  assert.equal(result.summary.requests, 1);
+  assert.equal(submit?.url, 'https://example.com/service/soap');
+  assert.match(submit?.body.text || '', /<shared><traceId>string<\/traceId><\/shared>/);
+  assert.match(submit?.body.text || '', /<customer><customerId>string<\/customerId><active>true<\/active><\/customer>/);
+  assert.equal(submit?.headers.find(item => item.name === 'SOAPAction')?.value, 'http://example.com/service/Submit');
 });
 
 test('Bruno JSON collection import maps WSDL converter output into requests and collection steps', () => {

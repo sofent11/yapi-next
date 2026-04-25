@@ -1,7 +1,7 @@
 import { ActionIcon, Indicator, Stack, Tooltip } from '@mantine/core';
-import { IconApi, IconBug, IconFolders, IconGitBranch, IconHistory, IconPlugConnected, IconSandbox } from '@tabler/icons-react';
+import { IconApi, IconBug, IconFolders, IconGitBranch, IconHistory, IconPlugConnected, IconSandbox, IconSettings } from '@tabler/icons-react';
 
-export type AppRailView = 'workspace' | 'scratch' | 'capture' | 'collections' | 'history' | 'environments' | 'sync';
+export type AppRailView = 'workspace' | 'scratch' | 'capture' | 'collections' | 'history' | 'environments' | 'sync' | 'preferences';
 
 function railVariant(active: boolean) {
   return active ? 'filled' : 'subtle';
@@ -68,6 +68,12 @@ export function AppRail(props: {
         <Tooltip label="Sync" position="right" withArrow>
           <ActionIcon variant={railVariant(props.activeView === 'sync')} size="lg" radius="md" color="gray" onClick={() => props.onChangeView('sync')}>
             <IconGitBranch size={20} />
+          </ActionIcon>
+        </Tooltip>
+
+        <Tooltip label="Preferences" position="right" withArrow>
+          <ActionIcon variant={railVariant(props.activeView === 'preferences')} size="lg" radius="md" color="gray" onClick={() => props.onChangeView('preferences')}>
+            <IconSettings size={20} />
           </ActionIcon>
         </Tooltip>
       </Stack>

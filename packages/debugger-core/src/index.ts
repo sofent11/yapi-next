@@ -2780,6 +2780,25 @@ function buildAuthPreview(
     );
   }
 
+  if (auth.type === 'ntlm') {
+    const token = buildNtlmNegotiateHeader({
+      auth,
+      project,
+      environment,
+      extraSources
+    });
+    preview.push(
+      resolvedAuthPreviewItemSchema.parse({
+        target: 'header',
+        name: 'Authorization',
+        value: token.header,
+        sourceLabel: token.sourceLabel,
+        status: token.header ? 'ready' : 'missing',
+        detail: token.header ? 'NTLM negotiate header (Type 1)' : `missing ${token.missing.join(', ')}`
+      })
+    );
+  }
+
   if (auth.type === 'awsv4') {
     const missing = [
       ...(auth.accessKey ? [] : ['accessKey']),
@@ -3167,6 +3186,75 @@ function buildWsseUsernameToken(input: {
 
 function authQuotedValue(input: string) {
   return input.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function utf16leBytes(input: string) {
+  return Array.from(input).flatMap(char => {
+    const code = char.charCodeAt(0);
+    return [code & 0xff, (code >> 8) & 0xff];
+  });
+}
+
+function littleEndian16(value: number) {
+  return [value & 0xff, (value >> 8) & 0xff];
+}
+
+function littleEndian32(value: number) {
+  return [value & 0xff, (value >> 8) & 0xff, (value >> 16) & 0xff, (value >> 24) & 0xff];
+}
+
+function ntlmSecurityBuffer(length: number, offset: number) {
+  return [...littleEndian16(length), ...littleEndian16(length), ...littleEndian32(offset)];
+}
+
+function buildNtlmNegotiateHeader(input: {
+  auth: AuthConfig;
+  project: ProjectDocument;
+  environment: EnvironmentDocument | undefined;
+  extraSources: Array<Record<string, unknown>>;
+}) {
+  const username = resolveAuthValue(input.auth.username, input.auth.usernameFromVar, input.project, input.environment, input.extraSources);
+  const password = resolveAuthValue(input.auth.password || '', input.auth.passwordFromVar, input.project, input.environment, input.extraSources);
+  const domain = applyProjectVariables(input.auth.domain || '', input.project, input.environment, input.extraSources).trim().toUpperCase();
+  const workstation = applyProjectVariables(input.auth.workstation || 'YAPI-DEBUGGER', input.project, input.environment, input.extraSources).trim().toUpperCase();
+  const missing = [
+    ...(username.value.trim() ? [] : [input.auth.usernameFromVar?.trim() || 'username']),
+    ...(password.value.trim() ? [] : [input.auth.passwordFromVar?.trim() || 'password'])
+  ];
+  if (missing.length > 0) {
+    return {
+      header: '',
+      sourceLabel: `${username.sourceLabel}; ${password.sourceLabel}`,
+      missing
+    };
+  }
+
+  const domainBytes = utf16leBytes(domain);
+  const workstationBytes = utf16leBytes(workstation);
+  const payloadOffset = 32;
+  const flags =
+    0x00000001 | // NEGOTIATE_UNICODE
+    0x00000004 | // REQUEST_TARGET
+    0x00000200 | // NEGOTIATE_NTLM
+    0x00008000 | // NEGOTIATE_ALWAYS_SIGN
+    0x00080000; // NEGOTIATE_EXTENDED_SESSIONSECURITY
+  const bytes = [
+    ...utf8Bytes('NTLMSSP\0'),
+    ...littleEndian32(1),
+    ...littleEndian32(flags),
+    ...ntlmSecurityBuffer(domainBytes.length, payloadOffset),
+    ...ntlmSecurityBuffer(workstationBytes.length, payloadOffset + domainBytes.length),
+    ...domainBytes,
+    ...workstationBytes
+  ];
+
+  return {
+    header: `NTLM ${base64Bytes(bytes)}`,
+    sourceLabel: [username.sourceLabel, password.sourceLabel, domain ? 'domain' : '', workstation ? 'workstation' : '']
+      .filter(Boolean)
+      .join('; '),
+    missing
+  };
 }
 
 function normalizeDigestNonceCount(input?: string) {
@@ -3635,6 +3723,16 @@ function buildPreflightDiagnostics(
     });
   }
 
+  if (auth.type === 'ntlm' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')) {
+    diagnostics.push({
+      code: 'incomplete-ntlm-auth',
+      level: 'error',
+      blocking: true,
+      message: 'NTLM auth requires username and password to build the negotiate header.',
+      field: 'auth'
+    });
+  }
+
   if (auth.type === 'wsse' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'x-wsse')) {
     diagnostics.push({
       code: 'incomplete-wsse-auth',
@@ -3948,6 +4046,7 @@ export function inspectResolvedRequest(
     (auth.type === 'oauth1' && (!auth.consumerKey || !auth.consumerSecret)) ||
     (auth.type === 'awsv4' && (!auth.accessKey || !auth.secretKey || !auth.region || !auth.service)) ||
     (auth.type === 'digest' && ((!auth.username && !auth.usernameFromVar) || (!auth.password && !auth.passwordFromVar))) ||
+    (auth.type === 'ntlm' && ((!auth.username && !auth.usernameFromVar) || (!auth.password && !auth.passwordFromVar))) ||
     (auth.type === 'wsse' && ((!auth.username && !auth.usernameFromVar) || (!auth.password && !auth.passwordFromVar && !auth.passwordDigest)))
   ) {
     warnings.push({
@@ -4184,6 +4283,23 @@ export function resolveRequest(
       authHeaders.push({
         name: 'Authorization',
         value: digest.header,
+        enabled: true,
+        kind: 'text',
+        filePath: undefined
+      });
+    }
+  }
+  if (auth.type === 'ntlm') {
+    const token = buildNtlmNegotiateHeader({
+      auth,
+      project,
+      environment,
+      extraSources
+    });
+    if (token.header) {
+      authHeaders.push({
+        name: 'Authorization',
+        value: token.header,
         enabled: true,
         kind: 'text',
         filePath: undefined

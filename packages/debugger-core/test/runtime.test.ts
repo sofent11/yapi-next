@@ -33,6 +33,15 @@ import {
   requestDocumentSchema
 } from '../../debugger-schema/src/index';
 
+function insightResolvedAuthHeader(value: string) {
+  const encoded = value.replace(/^NTLM\s+/i, '');
+  const bytes = Buffer.from(encoded, 'base64');
+  return {
+    signature: bytes.subarray(0, 7).toString('utf8'),
+    messageType: bytes.readUInt32LE(8)
+  };
+}
+
 test('resolveRequest interpolates step and data variables with correct priority', () => {
   const project = createDefaultProject('Demo');
   project.runtime.baseUrl = 'https://api.example.com';
@@ -577,6 +586,46 @@ test('inspectResolvedRequest blocks incomplete WSSE auth', () => {
   const insight = inspectResolvedRequest(project, request, undefined, environment);
   assert.equal(insight.authPreview.some(item => item.name === 'X-WSSE' && item.status === 'missing'), true);
   assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-wsse-auth' && item.blocking), true);
+});
+
+test('resolveRequest builds NTLM negotiate headers', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('NTLM Feed');
+  request.method = 'GET';
+  request.url = 'https://api.example.com/feed';
+  request.auth = {
+    type: 'ntlm',
+    username: 'alice',
+    password: 'secret',
+    domain: 'ACME',
+    workstation: 'WS-01'
+  };
+
+  const preview = resolveRequest(project, request, undefined, environment);
+  const authorization = preview.headers.find(header => header.name === 'Authorization')?.value || '';
+
+  assert.match(authorization, /^NTLM /);
+  assert.equal(insightResolvedAuthHeader(authorization).signature, 'NTLMSSP');
+  assert.equal(insightResolvedAuthHeader(authorization).messageType, 1);
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
+  assert.equal(insight.authPreview.some(item => item.name === 'Authorization' && item.status === 'ready'), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-ntlm-auth'), false);
+});
+
+test('inspectResolvedRequest blocks incomplete NTLM auth', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('NTLM Feed');
+  request.url = 'https://api.example.com/feed';
+  request.auth = {
+    type: 'ntlm',
+    username: 'alice'
+  };
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
+  assert.equal(insight.authPreview.some(item => item.name === 'Authorization' && item.status === 'missing'), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-ntlm-auth' && item.blocking), true);
 });
 
 test('buildGraphqlIntrospectionRequest targets schemaUrl and preserves auth headers', () => {
