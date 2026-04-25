@@ -98,6 +98,7 @@ export function WorkspaceMainPanel(props: {
   onSelectExample: (name: string | null) => void;
   onCopyBody: () => void;
   onCopyCurl: () => void;
+  onCopyBruno: () => void;
   onReplaceExample: () => void;
   onSaveAs?: () => void;
   onRefreshSession: () => void;
@@ -463,6 +464,7 @@ export function WorkspaceMainPanel(props: {
             onSelectExample={props.onSelectExample}
             onCopyBody={props.onCopyBody}
             onCopyCurl={props.onCopyCurl}
+            onCopyBruno={props.onCopyBruno}
             onReplaceExample={props.onReplaceExample}
             onSaveAs={props.onSaveAs}
             onRefreshSession={props.onRefreshSession}

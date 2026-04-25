@@ -11,6 +11,7 @@ import {
   materializeRequestDocuments,
   mergeTemplateSources,
   renderCollectionRunReportJunit,
+  serializeRequestToBruno,
   filtersFromCollectionReport,
   rerunFailedStepKeys as rerunFailedStepKeysCore,
   runCollection as runCollectionCore,
@@ -1212,4 +1213,8 @@ export function collectionReportSeed(report: CollectionRunReport) {
 
 export function curlForPreview(preview: ResolvedRequestPreview) {
   return buildCurlCommand(preview);
+}
+
+export function brunoForRequest(request: RequestDocument) {
+  return serializeRequestToBruno(request);
 }

@@ -992,6 +992,183 @@ function serializeRequestDocument(record: {
   return writes;
 }
 
+function bruScalar(value: unknown) {
+  return String(value ?? '').replace(/\r?\n/g, '\\n');
+}
+
+function bruDictionaryBlock(label: string, entries: Array<[string, unknown]>) {
+  const lines = entries.map(([key, value]) => `  ${key}: ${bruScalar(value)}`);
+  return `${label} {\n${lines.join('\n')}\n}`;
+}
+
+function bruTextBlock(label: string, text: string) {
+  return `${label} {\n${text.replace(/\r\n/g, '\n')}\n}`;
+}
+
+function bruRowsBlock(label: string, rows: ParameterRow[]) {
+  const lines = cleanRows(rows).map(row => {
+    const prefix = row.enabled === false ? '~' : '';
+    const value = row.kind === 'file' ? `@file(${row.filePath || row.value || ''})` : row.value;
+    return `  ${prefix}${row.name}: ${bruScalar(value)}`;
+  });
+  if (lines.length === 0) return '';
+  return `${label} {\n${lines.join('\n')}\n}`;
+}
+
+function bruBodyMode(body: RequestBody) {
+  switch (body.mode) {
+    case 'form-urlencoded':
+      return 'formUrlEncoded';
+    case 'multipart':
+      return 'multipartForm';
+    default:
+      return body.mode;
+  }
+}
+
+function bruBodyBlocks(body: RequestBody) {
+  const normalized = normalizeBody(body);
+  if (normalized.mode === 'none') return [];
+  if (normalized.mode === 'form-urlencoded') {
+    const block = bruRowsBlock('body:form-urlencoded', normalized.fields);
+    return block ? [block] : [];
+  }
+  if (normalized.mode === 'multipart') {
+    const block = bruRowsBlock('body:multipart-form', normalized.fields);
+    return block ? [block] : [];
+  }
+  if (normalized.mode === 'file') {
+    return [
+      bruRowsBlock('body:file', [{
+        ...emptyParameterRow(),
+        name: 'file',
+        value: normalized.file || normalized.text || '',
+        filePath: normalized.file || normalized.text || '',
+        kind: 'file'
+      }])
+    ].filter(Boolean);
+  }
+  if (normalized.mode === 'graphql') {
+    return [
+      bruTextBlock('body:graphql', normalized.graphql?.query || normalized.text),
+      normalized.graphql?.variables?.trim()
+        ? bruTextBlock('body:graphql:vars', normalized.graphql.variables)
+        : ''
+    ].filter(Boolean);
+  }
+  return [bruTextBlock(`body:${normalized.mode}`, normalized.text)];
+}
+
+function bruAuthMode(auth: AuthConfig) {
+  if (auth.type === 'profile') return 'inherit';
+  return auth.type || 'inherit';
+}
+
+function bruAuthBlock(auth: AuthConfig) {
+  switch (auth.type) {
+    case 'bearer':
+      return bruDictionaryBlock('auth:bearer', [['token', auth.token || auth.tokenFromVar ? auth.token || `{{${auth.tokenFromVar}}}` : '']]);
+    case 'basic':
+      return bruDictionaryBlock('auth:basic', [
+        ['username', auth.username || auth.usernameFromVar ? auth.username || `{{${auth.usernameFromVar}}}` : ''],
+        ['password', auth.password || auth.passwordFromVar ? auth.password || `{{${auth.passwordFromVar}}}` : '']
+      ]);
+    case 'apikey':
+      return bruDictionaryBlock('auth:apikey', [
+        ['key', auth.key || 'X-API-Key'],
+        ['value', auth.value || auth.valueFromVar ? auth.value || `{{${auth.valueFromVar}}}` : ''],
+        ['placement', auth.addTo || 'header']
+      ]);
+    case 'oauth2':
+      return bruDictionaryBlock('auth:oauth2', [
+        ['grant_type', auth.grantType || auth.oauthFlow || 'client_credentials'],
+        ['access_token_url', auth.tokenUrl || ''],
+        ['client_id', auth.clientId || auth.clientIdFromVar ? auth.clientId || `{{${auth.clientIdFromVar}}}` : ''],
+        ['client_secret', auth.clientSecret || auth.clientSecretFromVar ? auth.clientSecret || `{{${auth.clientSecretFromVar}}}` : ''],
+        ['scope', auth.scope || ''],
+        ['token_placement', auth.tokenPlacement || 'header'],
+        ['token_header_prefix', auth.tokenPrefix || 'Bearer']
+      ]);
+    case 'oauth1':
+      return bruDictionaryBlock('auth:oauth1', [
+        ['consumer_key', auth.consumerKey || ''],
+        ['consumer_secret', auth.consumerSecret || ''],
+        ['access_token', auth.accessToken || auth.token || ''],
+        ['token_secret', auth.secretKey || ''],
+        ['signature_method', auth.signatureMethod || 'HMAC-SHA1'],
+        ['nonce', auth.nonce || ''],
+        ['version', auth.version || '1.0'],
+        ['realm', auth.realm || '']
+      ]);
+    case 'awsv4':
+      return bruDictionaryBlock('auth:awsv4', [
+        ['accessKeyId', auth.accessKey || ''],
+        ['secretAccessKey', auth.secretKey || ''],
+        ['sessionToken', auth.sessionToken || ''],
+        ['service', auth.service || ''],
+        ['region', auth.region || '']
+      ]);
+    case 'digest':
+      return bruDictionaryBlock('auth:digest', [
+        ['username', auth.username || ''],
+        ['password', auth.password || ''],
+        ['realm', auth.realm || ''],
+        ['nonce', auth.nonce || ''],
+        ['qop', auth.qop || 'auth'],
+        ['algorithm', auth.algorithm || 'MD5']
+      ]);
+    case 'ntlm':
+      return bruDictionaryBlock('auth:ntlm', [
+        ['username', auth.username || ''],
+        ['password', auth.password || ''],
+        ['domain', auth.domain || ''],
+        ['workstation', auth.workstation || '']
+      ]);
+    case 'wsse':
+      return bruDictionaryBlock('auth:wsse', [
+        ['username', auth.username || ''],
+        ['password', auth.password || '']
+      ]);
+    case 'profile':
+      return auth.profileName ? bruDictionaryBlock('auth:profile', [['name', auth.profileName]]) : '';
+    default:
+      return '';
+  }
+}
+
+export function serializeRequestToBruno(input: RequestDocument) {
+  const request = requestDocumentSchema.parse({
+    ...input,
+    headers: cleanRows(input.headers),
+    query: cleanRows(input.query),
+    pathParams: cleanRows(input.pathParams),
+    body: normalizeBody(input.body)
+  });
+  const blocks = [
+    bruDictionaryBlock('meta', [
+      ['name', request.name],
+      ['type', request.kind === 'graphql' ? 'graphql' : request.kind === 'websocket' ? 'websocket' : 'http'],
+      ['seq', request.order || 1]
+    ]),
+    bruDictionaryBlock(request.method.toLowerCase(), [
+      ['url', request.url],
+      ['body', bruBodyMode(request.body)],
+      ['auth', bruAuthMode(request.auth)]
+    ]),
+    bruRowsBlock('headers', request.headers),
+    bruRowsBlock('params:query', request.query),
+    bruRowsBlock('params:path', request.pathParams),
+    ...bruBodyBlocks(request.body),
+    bruAuthBlock(request.auth),
+    request.scripts.preRequest.trim() ? bruTextBlock('script:pre-request', request.scripts.preRequest.trim()) : '',
+    request.scripts.postResponse.trim() ? bruTextBlock('script:post-response', request.scripts.postResponse.trim()) : '',
+    request.scripts.tests.trim() ? bruTextBlock('tests', request.scripts.tests.trim()) : '',
+    request.docs.trim() ? bruTextBlock('docs', request.docs.trim()) : ''
+  ].filter(Boolean);
+
+  return `${blocks.join('\n\n')}\n`;
+}
+
 export function materializeRequestDocuments(
   records: Array<{
     folderSegments: string[];

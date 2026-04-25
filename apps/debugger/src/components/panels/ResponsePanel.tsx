@@ -95,6 +95,7 @@ export function ResponsePanel(props: {
   onSelectExample: (name: string | null) => void;
   onCopyBody: () => void;
   onCopyCurl: () => void;
+  onCopyBruno?: () => void;
   onReplaceExample: () => void;
   onSaveAs?: () => void;
   onRefreshSession: () => void;
@@ -167,6 +168,9 @@ export function ResponsePanel(props: {
             <Group gap={6} wrap="wrap" className="response-header-actions-secondary">
               <Button size="xs" variant="default" onClick={props.onCopyBody} disabled={!displayBody}>复制响应</Button>
               <Button size="xs" variant="default" onClick={props.onCopyCurl} disabled={!props.requestPreview}>复制 cURL</Button>
+              <Button size="xs" variant="default" onClick={props.onCopyBruno} disabled={!props.onCopyBruno || !props.requestDocument}>
+                复制 Bruno
+              </Button>
               <Button size="xs" variant="filled" color="indigo" onClick={props.onSaveAs} disabled={!props.onSaveAs}>
                 Save As
               </Button>

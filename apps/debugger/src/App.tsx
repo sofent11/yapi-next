@@ -39,6 +39,7 @@ import {
   buildImportPreviewSummary,
   type ImportPreviewSummary,
   appendRunHistoryEntry,
+  brunoForRequest,
   clearCollectionRunReports,
   clearRunHistory,
   collectionReportSeed,
@@ -3110,6 +3111,7 @@ export function App() {
                 onSaveAs={handleSaveAsCurrentResponse}
                 onCopyBody={() => copyToClipboard(currentScratch.response?.bodyText || '', 'Body copied')}
                 onCopyCurl={() => copyToClipboard(currentScratchPreview ? curlForPreview(currentScratchPreview) : '', 'cURL copied')}
+                onCopyBruno={() => copyToClipboard(brunoForRequest(currentScratch.request), 'Bruno request copied')}
                 onRefreshSession={handleRefreshSession}
                 onClearSession={handleClearSessionCookies}
                 onCreateCaseFromResponse={handleCreateCaseFromCurrentResponse}
@@ -3318,6 +3320,7 @@ export function App() {
                 onSelectExample={setSelectedExampleName}
                 onCopyBody={() => copyToClipboard(store.response?.bodyText || '', 'Body copied')}
                 onCopyCurl={() => copyToClipboard(currentRequestPreview ? curlForPreview(currentRequestPreview) : '', 'cURL copied')}
+                onCopyBruno={() => store.draftRequest && copyToClipboard(brunoForRequest(store.draftRequest), 'Bruno request copied')}
                 onReplaceExample={() => handleSaveResponseAsExample(true)}
                 onSaveAs={handleSaveAsCurrentResponse}
                 onRefreshSession={handleRefreshSession}

@@ -48,6 +48,7 @@ export function ScratchPadPanel(props: {
   onSaveAs?: () => void;
   onCopyBody: () => void;
   onCopyCurl: () => void;
+  onCopyBruno: () => void;
   onRefreshSession: () => void;
   onClearSession: () => void;
   onCreateCaseFromResponse: () => void;
@@ -141,6 +142,7 @@ export function ScratchPadPanel(props: {
             onSelectExample={props.onSelectExample}
             onCopyBody={props.onCopyBody}
             onCopyCurl={props.onCopyCurl}
+            onCopyBruno={props.onCopyBruno}
             onReplaceExample={props.onReplaceExample}
             onSaveAs={props.onSaveAs}
             onRefreshSession={props.onRefreshSession}

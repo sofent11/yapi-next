@@ -138,11 +138,29 @@ function findBruSection(sections: BruSection[], label: string) {
 }
 
 function findBruBodySection(sections: BruSection[], mode: string) {
-  const normalized = mode.toLowerCase();
+  const normalized = normalizeBruBodyMode(mode);
+  const labels = new Set([
+    `body:${normalized}`,
+    `body(type=${normalized})`
+  ]);
+  if (normalized === 'form-urlencoded') {
+    labels.add('body:formurlencoded');
+  }
+  if (normalized === 'multipart') {
+    labels.add('body:multipart-form');
+    labels.add('body:multipartform');
+  }
   return sections.find(section => {
     const label = section.label.toLowerCase();
-    return label === `body:${normalized}` || label === `body(type=${normalized})`;
+    return labels.has(label);
   });
+}
+
+function normalizeBruBodyMode(mode: string) {
+  const normalized = mode.toLowerCase();
+  if (normalized === 'formurlencoded' || normalized === 'form-urlencoded') return 'form-urlencoded';
+  if (normalized === 'multipartform' || normalized === 'multipart-form') return 'multipart';
+  return normalized;
 }
 
 function parseBruRows(content: string) {
@@ -231,6 +249,36 @@ function parseBruAuth(mode: string, authBlock: Record<string, string>) {
       password: authBlock.password || '',
       domain: authBlock.domain || '',
       workstation: authBlock.workstation || ''
+    };
+  }
+  if (normalized === 'oauth1') {
+    return {
+      type: 'oauth1' as const,
+      consumerKey: authBlock.consumer_key || authBlock.consumerKey || '',
+      consumerSecret: authBlock.consumer_secret || authBlock.consumerSecret || '',
+      token: authBlock.access_token || '',
+      secretKey: authBlock.token_secret || '',
+      signatureMethod: authBlock.signature_method || authBlock.signatureMethod || 'HMAC-SHA1',
+      nonce: authBlock.nonce || '',
+      version: authBlock.version || '1.0',
+      realm: authBlock.realm || ''
+    };
+  }
+  if (normalized === 'awsv4') {
+    return {
+      type: 'awsv4' as const,
+      accessKey: authBlock.accessKeyId || authBlock.access_key || '',
+      secretKey: authBlock.secretAccessKey || authBlock.secret_key || '',
+      sessionToken: authBlock.sessionToken || authBlock.session_token || '',
+      service: authBlock.service || '',
+      region: authBlock.region || ''
+    };
+  }
+  if (normalized === 'wsse') {
+    return {
+      type: 'wsse' as const,
+      username: authBlock.username || '',
+      password: authBlock.password || ''
     };
   }
   return { type: 'inherit' as const };
@@ -862,7 +910,7 @@ function importBruno(content: string): ImportResult {
   const method = methodLabel(methodSection?.label || legacy.method || 'GET');
   const name = metadata.name || legacy.name || methodFields.name || 'Imported Bruno Request';
   const url = methodFields.url || legacy.url || '';
-  const bodyMode = (methodFields.body || legacy['body-mode'] || 'none').toLowerCase();
+  const bodyMode = normalizeBruBodyMode(methodFields.body || legacy['body-mode'] || 'none');
   const authMode = methodFields.auth || legacy.auth || 'inherit';
   const authBlock = parseBruKeyValueBlock(
     findBruSection(sections, `auth:${authMode}`)?.content ||
@@ -870,6 +918,7 @@ function importBruno(content: string): ImportResult {
       ''
   );
   const bodySection = findBruBodySection(sections, bodyMode);
+  const graphqlVariablesSection = findBruSection(sections, 'body:graphql:vars');
   const docs = findBruSection(sections, 'docs')?.content.trim() || '';
   const preRequestScript = findBruSection(sections, 'script:pre-request')?.content.trim() || '';
   const postResponseScript = findBruSection(sections, 'script:post-response')?.content.trim() || '';
@@ -884,7 +933,7 @@ function importBruno(content: string): ImportResult {
   const warnings: ImportWarning[] = [];
   const unsupportedSections = sections
     .map(section => section.label)
-    .filter(label => /^(body:grpc|grpc|body:ws|vars:|settings|auth:oauth1|auth:awsv4)/i.test(label));
+    .filter(label => /^(body:grpc|grpc|body:ws|vars:|settings)/i.test(label));
 
   unsupportedSections.forEach(label => {
     warnings.push({
@@ -921,7 +970,7 @@ function importBruno(content: string): ImportResult {
           graphql: bodyMode === 'graphql'
             ? {
                 query: bodySection?.content.trim() || '',
-                variables: '{}'
+                variables: graphqlVariablesSection?.content.trim() || '{}'
               }
             : undefined
         }
@@ -939,12 +988,20 @@ function importBruno(content: string): ImportResult {
               text: '',
               fields: parseBruRows(bodySection?.content || '')
             }
-          : {
-              mode: 'none' as const,
-              mimeType: '',
-              text: '',
-              fields: []
-            };
+          : bodyMode === 'file'
+            ? {
+                mode: 'file' as const,
+                mimeType: 'application/octet-stream',
+                text: '',
+                file: parseBruRows(bodySection?.content || '')[0]?.value.replace(/^@file\((.*)\)$/, '$1') || '',
+                fields: []
+              }
+            : {
+                mode: 'none' as const,
+                mimeType: '',
+                text: '',
+                fields: []
+              };
 
   const request: RequestDocument = {
     ...createEmptyRequest(name),
