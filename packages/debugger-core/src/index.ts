@@ -3876,7 +3876,13 @@ export function inspectResolvedRequest(
   const preview = resolveRequest(project, request, caseDocument, environment, extraSources);
   const body = caseDocument?.overrides.body ?? request.body;
   const authInput = caseDocument?.overrides.auth || request.auth;
-  const scriptSource = [caseDocument?.scripts?.preRequest || '', caseDocument?.scripts?.postResponse || ''].join('\n').trim();
+  const scriptSource = joinScriptBlocks(
+    request.scripts.preRequest,
+    request.scripts.postResponse,
+    request.scripts.tests,
+    caseDocument?.scripts?.preRequest,
+    caseDocument?.scripts?.postResponse
+  );
   const { auth, authSource, profileName } = mergeAuth(request.auth, caseDocument?.overrides.auth, environment);
   const queryRows = caseDocument?.overrides.query ?? request.query;
   const pathRows = caseDocument?.overrides.pathParams ?? request.pathParams;
@@ -4518,6 +4524,13 @@ export type CollectionRunOptions = {
   failFast?: boolean;
 };
 
+function joinScriptBlocks(...sources: Array<string | undefined>) {
+  return sources
+    .map(source => source?.trim() || '')
+    .filter(Boolean)
+    .join('\n\n');
+}
+
 function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -4738,6 +4751,12 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     environment: initialEnvironment
   };
   state.environment = initialEnvironment;
+  const preRequestScript = joinScriptBlocks(input.request.scripts.preRequest, input.caseDocument?.scripts?.preRequest);
+  const postResponseScript = joinScriptBlocks(
+    input.request.scripts.postResponse,
+    input.request.scripts.tests,
+    input.caseDocument?.scripts?.postResponse
+  );
 
   const beforeSources = [
     createNamedTemplateSource('runtime variables', state.variables, 'runtime'),
@@ -4752,7 +4771,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
   );
   const preScript = await executeRequestScript({
     phase: 'pre-request',
-    script: input.caseDocument?.scripts?.preRequest || '',
+    script: preRequestScript,
     state,
     request: previewBeforeScripts,
     sendRequest: request => input.sendRequest(sendRequestInputSchema.parse({
@@ -4830,7 +4849,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     : [];
   const postScript = await executeRequestScript({
     phase: 'post-response',
-    script: input.caseDocument?.scripts?.postResponse || '',
+    script: postResponseScript,
     state: preScript.state,
     request: finalPreview,
     response

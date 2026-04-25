@@ -2275,44 +2275,89 @@ export function RequestPanel(props: {
           <Tabs.Panel value="scripts">
             {!allowCases ? (
               <div className="empty-tab-state">Scratch requests keep scripts lightweight. Save to workspace first to attach reusable scripts to a case.</div>
-            ) : !selectedCase ? (
-              <div className="empty-tab-state">Scripts are case-scoped. Select or create a case to add pre-request and post-response logic.</div>
             ) : (
               <div className="checks-list">
                 <div className="check-card">
-                  <Text fw={700}>Pre-request Script</Text>
+                  <Text fw={700}>Request Pre-request Script</Text>
                   <CodeEditor
-                    value={selectedCase.scripts?.preRequest || ''}
+                    value={requestDocument.scripts.preRequest || ''}
                     language="text"
-                    onChange={value =>
-                      updateSelectedCase(current => ({
-                        ...current,
-                        scripts: {
-                          preRequest: value,
-                          postResponse: current.scripts?.postResponse || ''
-                        }
-                      }))
-                    }
+                    onChange={value => props.onRequestChange({ ...requestDocument, scripts: { ...requestDocument.scripts, preRequest: value } })}
                     minHeight="180px"
                   />
                 </div>
                 <div className="check-card">
-                  <Text fw={700}>Post-response Script</Text>
+                  <Text fw={700}>Request Post-response Script</Text>
                   <CodeEditor
-                    value={selectedCase.scripts?.postResponse || ''}
+                    value={requestDocument.scripts.postResponse || ''}
                     language="text"
-                    onChange={value =>
-                      updateSelectedCase(current => ({
-                        ...current,
-                        scripts: {
-                          preRequest: current.scripts?.preRequest || '',
-                          postResponse: value
-                        }
-                      }))
-                    }
+                    onChange={value => props.onRequestChange({ ...requestDocument, scripts: { ...requestDocument.scripts, postResponse: value } })}
                     minHeight="220px"
                   />
                 </div>
+                <div className="check-card">
+                  <Text fw={700}>Request Tests</Text>
+                  <Text size="xs" c="dimmed" mt={4}>
+                    Runs after the live response arrives and contributes assertion results to the response panel.
+                  </Text>
+                  <CodeEditor
+                    value={requestDocument.scripts.tests || ''}
+                    language="text"
+                    onChange={value => props.onRequestChange({ ...requestDocument, scripts: { ...requestDocument.scripts, tests: value } })}
+                    minHeight="180px"
+                  />
+                </div>
+                {selectedCase ? (
+                  <>
+                    <div className="check-card">
+                      <Text fw={700}>Case Pre-request Script</Text>
+                      <Text size="xs" c="dimmed" mt={4}>
+                        Runs after the request-level pre-request script for this case only.
+                      </Text>
+                      <CodeEditor
+                        value={selectedCase.scripts?.preRequest || ''}
+                        language="text"
+                        onChange={value =>
+                          updateSelectedCase(current => ({
+                            ...current,
+                            scripts: {
+                              preRequest: value,
+                              postResponse: current.scripts?.postResponse || ''
+                            }
+                          }))
+                        }
+                        minHeight="180px"
+                      />
+                    </div>
+                    <div className="check-card">
+                      <Text fw={700}>Case Post-response Script</Text>
+                      <Text size="xs" c="dimmed" mt={4}>
+                        Runs after the request-level post-response and tests blocks for this case only.
+                      </Text>
+                      <CodeEditor
+                        value={selectedCase.scripts?.postResponse || ''}
+                        language="text"
+                        onChange={value =>
+                          updateSelectedCase(current => ({
+                            ...current,
+                            scripts: {
+                              preRequest: current.scripts?.preRequest || '',
+                              postResponse: value
+                            }
+                          }))
+                        }
+                        minHeight="220px"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className="check-card">
+                    <Text fw={700}>Case Overrides</Text>
+                    <Text size="sm" c="dimmed">
+                      Select or create a case if this request needs extra scenario-specific scripts on top of the reusable request-level blocks.
+                    </Text>
+                  </div>
+                )}
               </div>
             )}
           </Tabs.Panel>

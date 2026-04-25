@@ -146,6 +146,74 @@ test('executeRequestScript supports pm.sendRequest lite during pre-request', asy
   assert.equal(result.testResults.length, 0);
 });
 
+test('runPreparedRequest executes request-level scripts before case-level scripts', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Scripted Request');
+  request.url = 'https://api.example.com/data/{{token}}';
+  request.scripts = {
+    preRequest: 'pm.variables.set("token", "req"); console.log("request-pre");',
+    postResponse: 'console.log("request-post");',
+    tests: 'pm.test("request status", () => pm.expect(pm.response?.code).to.equal(200));'
+  };
+  const caseDocument = createEmptyCase(request.id, 'scripted');
+  caseDocument.scripts = {
+    preRequest: 'pm.variables.set("token", `${pm.variables.get("token")}-case`); console.log("case-pre");',
+    postResponse: 'pm.test("case sees request var", () => pm.expect(pm.variables.get("token")).to.equal("req-case")); console.log("case-post");'
+  };
+  const workspace = {
+    root: '/tmp/scripted-workspace',
+    project,
+    environments: [{ document: environment, filePath: '/tmp/scripted-workspace/environments/shared.yaml' }],
+    requests: [
+      {
+        request,
+        cases: [caseDocument],
+        folderSegments: [],
+        requestFilePath: '/tmp/scripted-workspace/requests/scripted.request.yaml',
+        resourceDirPath: '/tmp/scripted-workspace/requests/scripted'
+      }
+    ],
+    folders: [],
+    collections: [],
+    tree: []
+  };
+  const seenUrls: string[] = [];
+
+  const result = await runPreparedRequest({
+    workspace,
+    request,
+    caseDocument,
+    sendRequest: async preview => {
+      seenUrls.push(preview.url);
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: preview.url,
+        durationMs: 12,
+        sizeBytes: 12,
+        headers: [{ name: 'content-type', value: 'application/json' }],
+        bodyText: '{"ok":true}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.equal(seenUrls[0], 'https://api.example.com/data/req-case');
+  assert.equal(result.state.variables.token, 'req-case');
+  assert.deepEqual(result.checkResults.filter(item => item.source === 'script').map(item => item.label), [
+    'request status',
+    'case sees request var'
+  ]);
+  assert.deepEqual(result.scriptLogs.map(item => item.message), [
+    'request-pre',
+    'case-pre',
+    'request-post',
+    'case-post'
+  ]);
+});
+
 test('buildCurlCommand emits a runnable curl string', () => {
   const project = createDefaultProject('Demo');
   const environment = createDefaultEnvironment('shared');
