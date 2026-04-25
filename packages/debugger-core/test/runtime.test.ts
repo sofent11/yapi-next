@@ -7,6 +7,7 @@ import {
   buildWorkspaceIndex,
   buildCurlCommand,
   evaluateChecks,
+  filtersFromCollectionReport,
   executeRequestScript,
   inspectCollectionDataText,
   inspectResolvedRequest,
@@ -931,7 +932,14 @@ test('renderCollectionRunReportJunit and rerunFailedStepKeys encode failures for
   const junit = renderCollectionRunReportJunit(report);
 
   assert.deepEqual(rerunFailedStepKeys(report), ['login']);
+  assert.deepEqual(filtersFromCollectionReport(report), {
+    tags: ['smoke'],
+    stepKeys: [],
+    requestIds: [],
+    caseIds: []
+  });
   assert.match(junit, /testsuite name="Smoke Suite"/);
+  assert.match(junit, /yapi_filters="tags=smoke"/);
   assert.match(junit, /failure message="401 Unauthorized"/);
   assert.match(junit, /<skipped message="Skipped after previous failure" \/>/);
 });

@@ -2697,6 +2697,26 @@ export function rerunFailedStepKeys(report: CollectionRunReport) {
   )];
 }
 
+export function filtersFromCollectionReport(report: CollectionRunReport): CollectionRunFilters {
+  return {
+    tags: [...(report.filters.tags || [])],
+    stepKeys: [...(report.filters.stepKeys || [])],
+    requestIds: [...(report.filters.requestIds || [])],
+    caseIds: [...(report.filters.caseIds || [])]
+  };
+}
+
+function filterSummary(filters: CollectionRunFilters | undefined) {
+  if (!filters) return 'none';
+  const parts = [
+    filters.tags?.length ? `tags=${filters.tags.join(',')}` : '',
+    filters.stepKeys?.length ? `steps=${filters.stepKeys.join(',')}` : '',
+    filters.requestIds?.length ? `requests=${filters.requestIds.join(',')}` : '',
+    filters.caseIds?.length ? `cases=${filters.caseIds.join(',')}` : ''
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : 'none';
+}
+
 export function renderCollectionRunReportJunit(report: CollectionRunReport) {
   const testcases = report.iterations.flatMap(iteration =>
     iteration.stepRuns.map(step => {
@@ -2713,7 +2733,7 @@ export function renderCollectionRunReportJunit(report: CollectionRunReport) {
     })
   ).join('');
   return `<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="${escapeHtml(report.collectionName)}" tests="${report.iterations.flatMap(item => item.stepRuns).length}" failures="${report.failedSteps}" skipped="${report.skippedSteps}">
+<testsuite name="${escapeHtml(report.collectionName)}" tests="${report.iterations.flatMap(item => item.stepRuns).length}" failures="${report.failedSteps}" skipped="${report.skippedSteps}" yapi_filters="${escapeHtml(filterSummary(report.filters))}">
 ${testcases}
 </testsuite>`;
 }
@@ -3004,6 +3024,7 @@ export function renderCollectionRunReportHtml(report: CollectionRunReport) {
         <div><span>Passed Steps</span><strong>${report.passedSteps}</strong></div>
         <div><span>Failed Steps</span><strong>${report.failedSteps}</strong></div>
         <div><span>Skipped Steps</span><strong>${report.skippedSteps}</strong></div>
+        <div><span>Filters</span><strong>${escapeHtml(filterSummary(report.filters))}</strong></div>
       </div>
     </section>
     ${failureList}

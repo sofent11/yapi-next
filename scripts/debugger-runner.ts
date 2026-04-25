@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
   buildWorkspaceIndex,
+  filtersFromCollectionReport,
   materializeCollectionDocument,
   materializeEnvironmentDocuments,
   materializeProjectDocument,
@@ -49,6 +50,29 @@ function printUsage() {
 
 function pushFilterValue(record: Record<string, string[]>, key: keyof CollectionRunFilters, value: string) {
   record[key] = [...(record[key] || []), value];
+}
+
+function hasFilterValues(filters: CollectionRunFilters) {
+  return Boolean(filters.tags?.length || filters.stepKeys?.length || filters.requestIds?.length || filters.caseIds?.length);
+}
+
+function mergeFilters(base: CollectionRunFilters, override: CollectionRunFilters): CollectionRunFilters {
+  return {
+    tags: override.tags?.length ? override.tags : base.tags,
+    stepKeys: override.stepKeys?.length ? override.stepKeys : base.stepKeys,
+    requestIds: override.requestIds?.length ? override.requestIds : base.requestIds,
+    caseIds: override.caseIds?.length ? override.caseIds : base.caseIds
+  };
+}
+
+function formatFilters(filters: CollectionRunFilters) {
+  const parts = [
+    filters.tags?.length ? `tags=${filters.tags.join(',')}` : '',
+    filters.stepKeys?.length ? `steps=${filters.stepKeys.join(',')}` : '',
+    filters.requestIds?.length ? `requests=${filters.requestIds.join(',')}` : '',
+    filters.caseIds?.length ? `cases=${filters.caseIds.join(',')}` : ''
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : 'none';
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -383,14 +407,18 @@ async function main() {
     }
 
     const seedReport = options.rerunFailedReportPath ? await readReport(options.rerunFailedReportPath) : null;
-    const stepKeys = seedReport ? rerunFailedStepKeys(seedReport) : options.filters.stepKeys;
+    const inheritedFilters = seedReport ? filtersFromCollectionReport(seedReport) : {};
+    const effectiveFilters = seedReport && !hasFilterValues(options.filters)
+      ? inheritedFilters
+      : mergeFilters(inheritedFilters, options.filters);
+    const stepKeys = seedReport ? rerunFailedStepKeys(seedReport) : effectiveFilters.stepKeys;
     const cookieJar = new Map<string, string>();
     const report = await runCollection({
       workspace,
       collectionId: collection.document.id,
       options: {
         environmentName: options.environmentName,
-        filters: options.filters,
+        filters: effectiveFilters,
         stepKeys,
         seedReport,
         failFast: options.failFast
@@ -403,6 +431,7 @@ async function main() {
     console.log(`Matrix: ${report.matrixEnvironments.join(', ') || 'single'}`);
     console.log(`Status: ${report.status}`);
     console.log(`Passed: ${report.passedSteps}  Failed: ${report.failedSteps}  Skipped: ${report.skippedSteps}`);
+    console.log(`Filters: ${formatFilters(report.filters)}`);
 
     if (options.reportPaths.json) {
       await writeReport(options.reportPaths.json, JSON.stringify(report, null, 2));

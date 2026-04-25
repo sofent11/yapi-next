@@ -55,6 +55,7 @@ import {
   importFromFile,
   importFromUrl,
   importIntoWorkspace,
+  filtersFromReport,
   openWorkspace,
   renameCaseInWorkspace,
   renameCategoryInWorkspace,
@@ -2290,7 +2291,8 @@ export function App() {
     }
     runCollectionMutation.mutate({
       stepKeys,
-      seedReport: collectionReportSeed(selectedReport)
+      seedReport: collectionReportSeed(selectedReport),
+      tags: filtersFromReport(selectedReport).tags
     });
   }
 

@@ -11,6 +11,7 @@ import {
   materializeRequestDocuments,
   mergeTemplateSources,
   renderCollectionRunReportJunit,
+  filtersFromCollectionReport,
   rerunFailedStepKeys as rerunFailedStepKeysCore,
   runCollection as runCollectionCore,
   runPreparedRequest as runPreparedRequestCore,
@@ -1199,6 +1200,10 @@ export async function clearCollectionRunReports(root: string) {
 
 export function rerunFailedStepKeys(report: CollectionRunReport) {
   return rerunFailedStepKeysCore(report);
+}
+
+export function filtersFromReport(report: CollectionRunReport) {
+  return filtersFromCollectionReport(report);
 }
 
 export function collectionReportSeed(report: CollectionRunReport) {
