@@ -65,6 +65,7 @@ export function EnvironmentCenterPanel(props: {
   activeEnvironmentName: string;
   selectedEnvironment: EnvironmentDocument | null;
   runtimeVariables: Record<string, string>;
+  promptVariables: Record<string, string>;
   sessionSnapshot: SessionSnapshot | null;
   hostSnapshots: Array<{ host: string; snapshot: SessionSnapshot }>;
   targetUrl: string | null;
@@ -75,11 +76,14 @@ export function EnvironmentCenterPanel(props: {
   onRefreshSession: () => void;
   onClearSession: () => void;
   onClearRuntimeVars: () => void;
+  onPromptVariablesChange: (values: Record<string, string>) => void;
+  onClearPromptVars: () => void;
   onSave: () => void;
 }) {
   const selectedEnvironment = props.selectedEnvironment;
   const project = props.draftProject || props.workspace.project;
   const runtimeEntries = Object.entries(props.runtimeVariables);
+  const promptEntries = Object.entries(props.promptVariables);
   const sharedVarCount = Object.keys(selectedEnvironment?.sharedVars || selectedEnvironment?.vars || {}).length;
   const localVarCount = Object.keys(selectedEnvironment?.localVars || {}).length;
   const sharedHeaderCount = (selectedEnvironment?.sharedHeaders || selectedEnvironment?.headers || []).length;
@@ -872,6 +876,7 @@ export function EnvironmentCenterPanel(props: {
                     <h3 className="section-title">Current session and extracted state</h3>
                   </div>
                   <Group gap="xs">
+                    <Button size="xs" variant="default" onClick={props.onClearPromptVars}>Clear Prompt Vars</Button>
                     <Button size="xs" variant="default" onClick={props.onClearRuntimeVars}>Clear Runtime Vars</Button>
                     <Button size="xs" variant="default" color="red" onClick={props.onClearSession}>Clear Cookie Jar</Button>
                   </Group>
@@ -888,6 +893,10 @@ export function EnvironmentCenterPanel(props: {
                     <strong>{runtimeEntries.length}</strong>
                   </div>
                   <div className="summary-chip">
+                    <span>Prompt Vars</span>
+                    <strong>{promptEntries.length}</strong>
+                  </div>
+                  <div className="summary-chip">
                     <span>Cookies</span>
                     <strong>{props.sessionSnapshot?.cookies.length || 0}</strong>
                   </div>
@@ -898,6 +907,20 @@ export function EnvironmentCenterPanel(props: {
                 </div>
 
                 <div className="environment-layer-grid" style={{ marginTop: 16 }}>
+                  <div className="check-card" style={{ margin: 0 }}>
+                    <Text fw={700}>Remembered Prompt Values</Text>
+                    <Text size="xs" c="dimmed" mt={4}>
+                      Prompt rows still ask before send, but these workspace-scoped values become the default across requests and auth refreshes.
+                    </Text>
+                    <KeyValueEditor
+                      rows={toKeyValueRows(props.promptVariables)}
+                      onChange={rows =>
+                        props.onPromptVariablesChange(
+                          Object.fromEntries(rows.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]))
+                        )
+                      }
+                    />
+                  </div>
                   <div className="check-card" style={{ margin: 0 }}>
                     <Text fw={700}>Runtime Variables</Text>
                     {runtimeEntries.length === 0 ? (

@@ -125,6 +125,7 @@ const RECENT_STORAGE_KEY = 'yapi-debugger.recent-roots';
 const UI_STORAGE_KEY_PREFIX = 'yapi-debugger.ui';
 const IMPORT_SESSION_STORAGE_KEY_PREFIX = 'yapi-debugger.import-session';
 const LAST_SYNC_STORAGE_KEY_PREFIX = 'yapi-debugger.last-sync';
+const PROMPT_VALUES_STORAGE_KEY_PREFIX = 'yapi-debugger.prompt-values';
 const PREFERENCES_STORAGE_KEY = 'yapi-debugger.preferences';
 type DebuggerSpotlightGroup = {
   group: string;
@@ -217,6 +218,18 @@ function importSessionStorageKey(root: string) {
 
 function lastSyncStorageKey(root: string) {
   return `${LAST_SYNC_STORAGE_KEY_PREFIX}:${root}`;
+}
+
+function promptValuesStorageKey(root: string) {
+  return `${PROMPT_VALUES_STORAGE_KEY_PREFIX}:${root}`;
+}
+
+function loadPromptValues(root: string) {
+  return loadPersistedJson<Record<string, string>>(promptValuesStorageKey(root)) || {};
+}
+
+function savePromptValues(root: string, values: Record<string, string>) {
+  savePersistedJson(promptValuesStorageKey(root), values);
 }
 
 function loadWorkspaceUiState(root: string): WorkspaceUiState {
@@ -654,6 +667,7 @@ export function App() {
   const [scratchMainSplitRatio, setScratchMainSplitRatio] = useState(0.5);
   const [sessionSnapshot, setSessionSnapshot] = useState<SessionSnapshot | null>(null);
   const [runtimeVariables, setRuntimeVariables] = useState<Record<string, string>>({});
+  const [promptVariables, setPromptVariables] = useState<Record<string, string>>({});
   const [runtimeEnvironments, setRuntimeEnvironments] = useState<Record<string, EnvironmentDocument>>({});
   const [categoryVariableRows, setCategoryVariableRows] = useState<ParameterRow[]>([]);
   const [hostSessionSnapshots, setHostSessionSnapshots] = useState<Array<{ host: string; snapshot: SessionSnapshot }>>([]);
@@ -794,6 +808,16 @@ export function App() {
       ...current,
       [environment.name]: structuredClone(environment)
     }));
+  }
+
+  function updatePromptVariables(updater: (current: Record<string, string>) => Record<string, string>) {
+    setPromptVariables(current => {
+      const next = updater(current);
+      if (store.workspace?.root) {
+        savePromptValues(store.workspace.root, next);
+      }
+      return next;
+    });
   }
 
   const importedRecords = useMemo(() => {
@@ -956,11 +980,12 @@ export function App() {
     if (promptRows.length === 0) return {};
     const values: Record<string, string> = {};
     for (const row of promptRows) {
+      const rememberedValue = promptVariables[row.name.trim()];
       const value = await promptForText({
         title: `Prompt · ${row.name}`,
         label: row.name,
         description: row.description?.trim() || `Provide a value for {{${row.name}}} before ${actionLabel}.`,
-        defaultValue: row.value || '',
+        defaultValue: rememberedValue ?? (row.value || ''),
         placeholder: `Value for ${row.name}`,
         confirmLabel: 'Use Value'
       });
@@ -969,6 +994,12 @@ export function App() {
         return null;
       }
       values[row.name.trim()] = value;
+    }
+    if (Object.keys(values).length > 0) {
+      updatePromptVariables(current => ({
+        ...current,
+        ...values
+      }));
     }
     return values;
   }
@@ -1047,6 +1078,7 @@ export function App() {
     setUiState(nextUi);
     setSelectedExampleName(null);
     setRuntimeVariables({});
+    setPromptVariables(loadPromptValues(workspace.root));
     setCategoryVariableRows([]);
     setSessionSnapshot(null);
     setHostSessionSnapshots([]);
@@ -3207,11 +3239,13 @@ export function App() {
         key === PREFERENCES_STORAGE_KEY ||
         key.startsWith(UI_STORAGE_KEY_PREFIX) ||
         key.startsWith(IMPORT_SESSION_STORAGE_KEY_PREFIX) ||
-        key.startsWith(LAST_SYNC_STORAGE_KEY_PREFIX)
+        key.startsWith(LAST_SYNC_STORAGE_KEY_PREFIX) ||
+        key.startsWith(PROMPT_VALUES_STORAGE_KEY_PREFIX)
       )
       .forEach(key => window.localStorage.removeItem(key));
     store.setRecentRoots([]);
     setRuntimeVariables({});
+    setPromptVariables({});
     setRuntimeEnvironments({});
     setHostSessionSnapshots([]);
     setSessionSnapshot(null);
@@ -3601,6 +3635,7 @@ export function App() {
                   activeEnvironmentName={store.activeEnvironmentName}
                   selectedEnvironment={selectedEnvironment}
                   runtimeVariables={runtimeVariables}
+                  promptVariables={promptVariables}
                   sessionSnapshot={sessionSnapshot}
                   hostSnapshots={hostSessionSnapshots}
                   targetUrl={sessionTargetUrl}
@@ -3611,6 +3646,8 @@ export function App() {
                   onRefreshSession={handleRefreshSession}
                   onClearSession={handleClearSessionCookies}
                   onClearRuntimeVars={() => setRuntimeVariables({})}
+                  onPromptVariablesChange={values => updatePromptVariables(() => values)}
+                  onClearPromptVars={() => updatePromptVariables(() => ({}))}
                   onSave={() => saveMutation.mutate()}
                 />
               </section>
