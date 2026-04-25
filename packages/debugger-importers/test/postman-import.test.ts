@@ -179,6 +179,78 @@ test('OpenAPI import disables optional empty query params by default', () => {
   assert.equal(query.find(item => item.name === 'targetCurrency')?.enabled, false);
 });
 
+test('Insomnia import maps workspace folders, environments, auth, and body', () => {
+  const insomniaExport = JSON.stringify({
+    _type: 'export',
+    __export_format: 4,
+    resources: [
+      {
+        _id: 'wrk_demo',
+        _type: 'workspace',
+        name: 'Insomnia Demo'
+      },
+      {
+        _id: 'fld_users',
+        _type: 'request_group',
+        parentId: 'wrk_demo',
+        name: 'Users'
+      },
+      {
+        _id: 'env_local',
+        _type: 'environment',
+        parentId: 'wrk_demo',
+        name: 'Local',
+        data: {
+          baseUrl: 'https://api.example.com',
+          token: 'abc123'
+        }
+      },
+      {
+        _id: 'req_create',
+        _type: 'request',
+        parentId: 'fld_users',
+        name: 'Create User',
+        method: 'POST',
+        url: '{{ _.baseUrl }}/users',
+        headers: [
+          { name: 'Content-Type', value: 'application/json' },
+          { name: 'x-disabled', value: 'nope', disabled: true }
+        ],
+        parameters: [
+          { name: 'debug', value: 'true' }
+        ],
+        body: {
+          mimeType: 'application/json',
+          text: '{"name":"Ada"}'
+        },
+        authentication: {
+          type: 'bearer',
+          token: '{{ _.token }}'
+        }
+      }
+    ]
+  });
+
+  const result = importSourceText(insomniaExport);
+  const request = result.requests[0]?.request;
+
+  assert.equal(result.detectedFormat, 'insomnia');
+  assert.equal(result.project.name, 'Insomnia Demo');
+  assert.equal(result.environments[0]?.name, 'Local');
+  assert.equal(result.environments[0]?.vars.baseUrl, 'https://api.example.com');
+  assert.deepEqual(result.requests[0]?.folderSegments, ['Users']);
+  assert.equal(request?.name, 'Create User');
+  assert.equal(request?.method, 'POST');
+  assert.equal(request?.url, '{{baseUrl}}/users');
+  assert.equal(request?.body.mode, 'json');
+  assert.match(request?.body.text || '', /Ada/);
+  assert.equal(request?.auth.type, 'bearer');
+  assert.equal(request?.auth.token, '{{token}}');
+  assert.equal(request?.query.find(item => item.name === 'debug')?.value, 'true');
+  assert.equal(request?.headers.find(item => item.name === 'x-disabled')?.enabled, false);
+  assert.equal(result.warnings.some(warning => warning.code === 'insomnia-import'), true);
+});
+
 test('Bruno import maps a .bru HTTP request into a debugger request', () => {
   const bru = `meta {
   name: create-example

@@ -87,7 +87,7 @@ export async function chooseImportFile() {
     title: 'Select Import File',
     filters: [
       {
-        name: 'API Specs & HAR',
+        name: 'API Specs, Collections & HAR',
         extensions: ['json', 'yaml', 'yml', 'har', 'bru']
       }
     ]

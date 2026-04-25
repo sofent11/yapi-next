@@ -47,7 +47,7 @@ export function ImportPanel(props: {
     <div className="import-panel-shell">
       <div className="inspector-section">
         <h3 className="section-title">导入 API 规范</h3>
-        <p className="section-description">从本地文件或远程 URL 导入 OpenAPI / Swagger / HAR / Postman / Bruno 数据。</p>
+        <p className="section-description">从本地文件或远程 URL 导入 OpenAPI / Swagger / HAR / Postman / Bruno / Insomnia 数据。</p>
 
         <div className="import-actions">
           <Button

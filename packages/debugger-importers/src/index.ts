@@ -64,6 +64,12 @@ function looksLikeBruno(content: string) {
     /^\s*(get|post|put|patch|delete|head|options)\s*\{/mi.test(content);
 }
 
+function looksLikeInsomnia(document: Record<string, any>) {
+  return String(document.__export_format || '').toLowerCase().includes('insomnia') ||
+    String(document.type || '').toLowerCase().includes('insomnia') ||
+    (Array.isArray(document.resources) && document.resources.some((item: any) => String(item?._type || '').startsWith('request')));
+}
+
 function parseBruSections(content: string) {
   const lines = content.replace(/\r\n/g, '\n').split('\n');
   const sections: BruSection[] = [];
@@ -1023,6 +1029,197 @@ function importPostman(document: Record<string, any>): ImportResult {
   };
 }
 
+function insomniaRows(items: unknown, keyName = 'name', valueName = 'value') {
+  return toRows(items, keyName, valueName).map(row => ({
+    ...row,
+    value: insomniaTemplate(row.value),
+    enabled: row.enabled !== false
+  }));
+}
+
+function insomniaTemplate(value: string) {
+  return String(value || '').replace(/\{\{\s*_\.(.+?)\s*\}\}/g, (_match, name: string) => `{{${name.trim()}}}`);
+}
+
+function insomniaFolderSegments(
+  parentId: string | undefined,
+  groupsById: Map<string, any>,
+  workspaceIds: Set<string>
+) {
+  const reversed: string[] = [];
+  let cursor = parentId || '';
+  const visited = new Set<string>();
+  while (cursor && !workspaceIds.has(cursor) && !visited.has(cursor)) {
+    visited.add(cursor);
+    const group = groupsById.get(cursor);
+    if (!group) break;
+    reversed.push(String(group.name || 'Folder'));
+    cursor = String(group.parentId || '');
+  }
+  return reversed.reverse();
+}
+
+function insomniaBody(body: any): RequestDocument['body'] {
+  const mimeType = String(body?.mimeType || '');
+  const text = insomniaTemplate(String(body?.text || ''));
+  const params = Array.isArray(body?.params) ? body.params : [];
+  if (params.length > 0 || mimeType.includes('x-www-form-urlencoded') || mimeType.includes('multipart/form-data')) {
+    const isMultipart = mimeType.includes('multipart/form-data');
+    return {
+      mode: isMultipart ? 'multipart' : 'form-urlencoded',
+      mimeType: isMultipart ? 'multipart/form-data' : 'application/x-www-form-urlencoded',
+      text: '',
+      fields: insomniaRows(params).map(row => ({
+        ...row,
+        kind: isMultipart && row.value.startsWith('@file(') ? 'file' : 'text'
+      }))
+    };
+  }
+  if (!text.trim()) {
+    return {
+      mode: 'none',
+      mimeType: '',
+      text: '',
+      fields: []
+    };
+  }
+  if (mimeType.includes('json') || text.trim().startsWith('{') || text.trim().startsWith('[')) {
+    return {
+      mode: 'json',
+      mimeType: mimeType || 'application/json',
+      text,
+      fields: []
+    };
+  }
+  if (mimeType.includes('xml')) {
+    return {
+      mode: 'xml',
+      mimeType: mimeType || 'application/xml',
+      text,
+      fields: []
+    };
+  }
+  return {
+    mode: 'text',
+    mimeType: mimeType || 'text/plain',
+    text,
+    fields: []
+  };
+}
+
+function insomniaAuth(authentication: any): RequestDocument['auth'] {
+  const type = String(authentication?.type || '').toLowerCase();
+  if (!type || type === 'none') return { type: 'inherit' };
+  if (type === 'bearer') {
+    return {
+      type: 'bearer',
+      token: insomniaTemplate(String(authentication.token || ''))
+    };
+  }
+  if (type === 'basic') {
+    return {
+      type: 'basic',
+      username: insomniaTemplate(String(authentication.username || '')),
+      password: insomniaTemplate(String(authentication.password || ''))
+    };
+  }
+  if (type === 'apikey' || type === 'apiKey'.toLowerCase()) {
+    return {
+      type: 'apikey',
+      key: String(authentication.key || authentication.name || 'X-API-Key'),
+      value: insomniaTemplate(String(authentication.value || '')),
+      addTo: authentication.addTo === 'query' || authentication.in === 'query' ? 'query' : 'header'
+    };
+  }
+  if (type === 'oauth2') {
+    return {
+      type: 'oauth2',
+      oauthFlow: authentication.grantType === 'client_credentials' ? 'client_credentials' : undefined,
+      tokenUrl: insomniaTemplate(String(authentication.accessTokenUrl || authentication.tokenUrl || '')),
+      clientId: insomniaTemplate(String(authentication.clientId || '')),
+      clientSecret: insomniaTemplate(String(authentication.clientSecret || '')),
+      scope: String(authentication.scope || '')
+    };
+  }
+  return { type: 'inherit' };
+}
+
+function importInsomnia(document: Record<string, any>): ImportResult {
+  const resources = Array.isArray(document.resources) ? document.resources : [];
+  const workspaces = resources.filter((item: any) => item?._type === 'workspace');
+  const workspaceIds = new Set(workspaces.map((item: any) => String(item._id || '')));
+  const projectName = String(workspaces[0]?.name || document.name || 'Imported Insomnia Collection');
+  const project = createDefaultProject(projectName);
+  const groupsById = new Map(
+    resources
+      .filter((item: any) => item?._type === 'request_group')
+      .map((item: any) => [String(item._id || ''), item])
+  );
+  const environments = resources
+    .filter((item: any) => item?._type === 'environment')
+    .map((item: any) => {
+      const data = item.data && typeof item.data === 'object' ? item.data : {};
+      return {
+        ...createDefaultEnvironment(String(item.name || 'shared')),
+        name: String(item.name || 'shared'),
+        vars: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, String(value ?? '')])),
+        sharedVars: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, String(value ?? '')])),
+        headers: [],
+        sharedHeaders: [],
+        authProfiles: [],
+        overlayMode: 'standalone' as const
+      };
+    });
+  const warnings: ImportWarning[] = [];
+  const requests: ImportedRequestRecord[] = resources
+    .filter((item: any) => item?._type === 'request')
+    .map((item: any) => {
+      const request = {
+        ...createEmptyRequest(String(item.name || item.url || 'Insomnia Request')),
+        name: String(item.name || normalizePath(String(item.url || ''))),
+        method: methodLabel(String(item.method || 'GET')),
+        url: insomniaTemplate(String(item.url || '')),
+        path: normalizePath(insomniaTemplate(String(item.url || ''))),
+        description: String(item.description || ''),
+        headers: insomniaRows(item.headers),
+        query: insomniaRows(item.parameters),
+        pathParams: [],
+        body: insomniaBody(item.body),
+        auth: insomniaAuth(item.authentication),
+        examples: []
+      };
+      return {
+        folderSegments: insomniaFolderSegments(String(item.parentId || ''), groupsById, workspaceIds),
+        request,
+        cases: []
+      };
+    });
+
+  if (requests.length > 0) {
+    warnings.push({
+      level: 'info',
+      scope: 'project',
+      code: 'insomnia-import',
+      status: 'compatible',
+      message: `${projectName}: Insomnia export imported with ${requests.length} request${requests.length === 1 ? '' : 's'}.`
+    });
+  }
+
+  return {
+    detectedFormat: 'insomnia',
+    summary: {
+      requests: requests.length,
+      folders: new Set(requests.map(item => item.folderSegments.join('/')).filter(Boolean)).size,
+      environments: environments.length || 1
+    },
+    project,
+    environments: environments.length > 0 ? environments : [createDefaultEnvironment('shared')],
+    requests,
+    collections: [],
+    warnings
+  };
+}
+
 function importBruno(content: string): ImportResult {
   const { sections, prelude } = parseBruSections(content);
   const metadata = parseBruKeyValueBlock(findBruSection(sections, 'meta')?.content || '');
@@ -1270,6 +1467,9 @@ export function importSourceText(content: string): ImportResult {
   }
   if (document.log?.entries) {
     return importHar(document);
+  }
+  if (looksLikeInsomnia(document)) {
+    return importInsomnia(document);
   }
   if (document.info?.schema || document.info?.name || document.item) {
     return importPostman(document);
