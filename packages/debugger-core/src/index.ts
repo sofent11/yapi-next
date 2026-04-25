@@ -286,6 +286,7 @@ export type GraphqlFieldArgumentSummary = {
   type: string;
   required: boolean;
   defaultValue?: string;
+  placeholder?: unknown;
 };
 
 export type GraphqlOperationFieldSummary = {
@@ -334,6 +335,12 @@ type GraphqlIntrospectionTypeRef = {
 type GraphqlIntrospectionField = {
   name?: unknown;
   args?: unknown;
+  type?: GraphqlIntrospectionTypeRef | null;
+};
+
+type GraphqlIntrospectionInputValue = {
+  name?: unknown;
+  defaultValue?: unknown;
   type?: GraphqlIntrospectionTypeRef | null;
 };
 
@@ -467,7 +474,17 @@ function operationFields(schemaType: unknown, byName: Map<string, unknown>): Gra
               name: String(source.name || ''),
               type: formatGraphqlType(source.type),
               required: isGraphqlRequired(source.type),
-              defaultValue: typeof source.defaultValue === 'string' ? source.defaultValue : undefined
+              defaultValue: typeof source.defaultValue === 'string' ? source.defaultValue : undefined,
+              placeholder: placeholderForGraphqlTypeRef(
+                source.type,
+                byName,
+                typeof source.defaultValue === 'string' ? source.defaultValue : undefined,
+                {
+                  depth: 3,
+                  path: new Set(),
+                  maxFields: 16
+                }
+              )
             };
           })
           .filter(arg => arg.name.trim().length > 0),
@@ -582,6 +599,65 @@ function placeholderForGraphqlType(type: string, defaultValue?: string): unknown
   return null;
 }
 
+function graphqlEnumPlaceholder(schemaType: unknown) {
+  const enumValues = (schemaType as { enumValues?: unknown })?.enumValues;
+  if (!Array.isArray(enumValues)) return '';
+  const first = enumValues.find(value => typeof (value as { name?: unknown })?.name === 'string');
+  return first ? String((first as { name?: unknown }).name) : '';
+}
+
+function placeholderForGraphqlTypeRef(
+  typeRef: GraphqlIntrospectionTypeRef | null | undefined,
+  byName: Map<string, unknown>,
+  defaultValue: string | undefined,
+  input: {
+    depth: number;
+    path: Set<string>;
+    maxFields: number;
+  }
+): unknown {
+  const parsedDefault = parseGraphqlDefaultValue(defaultValue);
+  if (parsedDefault !== undefined) return parsedDefault;
+  if (!typeRef) return null;
+  if (typeRef.kind === 'NON_NULL') {
+    return placeholderForGraphqlTypeRef(typeRef.ofType, byName, undefined, input);
+  }
+  if (typeRef.kind === 'LIST') {
+    const item = placeholderForGraphqlTypeRef(typeRef.ofType, byName, undefined, input);
+    return item == null ? [] : [item];
+  }
+
+  const namedType = namedGraphqlType(typeRef);
+  const schemaType = byName.get(namedType);
+  const kind = schemaTypeKind(schemaType);
+  if (kind === 'ENUM') return graphqlEnumPlaceholder(schemaType);
+  if (kind !== 'INPUT_OBJECT') return placeholderForGraphqlType(formatGraphqlType(typeRef), defaultValue);
+  if (input.depth <= 0 || input.path.has(namedType)) return {};
+
+  const inputFields = (schemaType as { inputFields?: unknown })?.inputFields;
+  if (!Array.isArray(inputFields)) return {};
+  const nextPath = new Set([...input.path, namedType]);
+  return Object.fromEntries(
+    inputFields
+      .map(field => field as GraphqlIntrospectionInputValue)
+      .filter(field => typeof field.name === 'string' && field.name.trim().length > 0)
+      .slice(0, input.maxFields)
+      .map(field => [
+        String(field.name),
+        placeholderForGraphqlTypeRef(
+          field.type,
+          byName,
+          typeof field.defaultValue === 'string' ? field.defaultValue : undefined,
+          {
+            depth: input.depth - 1,
+            path: nextPath,
+            maxFields: input.maxFields
+          }
+        )
+      ])
+  );
+}
+
 export function buildGraphqlOperationDraft(
   summary: GraphqlSchemaSummary,
   operation: GraphqlOperationKind,
@@ -602,7 +678,12 @@ export function buildGraphqlOperationDraft(
   const selection = field.selection.length > 0
     ? ` {\n${indentGraphqlLines(field.selection, 4)}\n  }`
     : '';
-  const variables = Object.fromEntries(field.args.map(arg => [arg.name, placeholderForGraphqlType(arg.type, arg.defaultValue)]));
+  const variables = Object.fromEntries(
+    field.args.map(arg => [
+      arg.name,
+      arg.placeholder !== undefined ? arg.placeholder : placeholderForGraphqlType(arg.type, arg.defaultValue)
+    ])
+  );
   return {
     operationName,
     query: `${operation} ${operationName}${variableDefinitions ? `(${variableDefinitions})` : ''} {\n  ${field.name}${callArguments ? `(${callArguments})` : ''}${selection}\n}`,

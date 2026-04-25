@@ -706,7 +706,10 @@ test('buildGraphqlOperationDraft creates a query skeleton with variables', () =>
                 name: 'search',
                 args: [
                   { name: 'term', type: { kind: 'NON_NULL', ofType: { kind: 'SCALAR', name: 'String' } } },
-                  { name: 'limit', defaultValue: '20', type: { kind: 'SCALAR', name: 'Int' } }
+                  { name: 'limit', defaultValue: '20', type: { kind: 'SCALAR', name: 'Int' } },
+                  { name: 'filter', type: { kind: 'NON_NULL', ofType: { kind: 'INPUT_OBJECT', name: 'SearchFilter' } } },
+                  { name: 'order', type: { kind: 'ENUM', name: 'SearchOrder' } },
+                  { name: 'ids', type: { kind: 'LIST', ofType: { kind: 'SCALAR', name: 'ID' } } }
                 ],
                 type: { kind: 'LIST', ofType: { kind: 'OBJECT', name: 'User' } }
               }
@@ -728,8 +731,31 @@ test('buildGraphqlOperationDraft creates a query skeleton with variables', () =>
               { name: 'bio', args: [], type: { kind: 'SCALAR', name: 'String' } }
             ]
           },
+          {
+            kind: 'INPUT_OBJECT',
+            name: 'SearchFilter',
+            inputFields: [
+              { name: 'text', type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'active', defaultValue: 'true', type: { kind: 'SCALAR', name: 'Boolean' } },
+              { name: 'range', type: { kind: 'INPUT_OBJECT', name: 'DateRangeInput' } }
+            ]
+          },
+          {
+            kind: 'INPUT_OBJECT',
+            name: 'DateRangeInput',
+            inputFields: [
+              { name: 'from', type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'limit', defaultValue: '10', type: { kind: 'SCALAR', name: 'Int' } }
+            ]
+          },
+          {
+            kind: 'ENUM',
+            name: 'SearchOrder',
+            enumValues: [{ name: 'RELEVANCE' }, { name: 'RECENT' }]
+          },
           { kind: 'SCALAR', name: 'String', fields: null },
           { kind: 'SCALAR', name: 'Int', fields: null },
+          { kind: 'SCALAR', name: 'Boolean', fields: null },
           { kind: 'SCALAR', name: 'ID', fields: null }
         ]
       }
@@ -738,11 +764,24 @@ test('buildGraphqlOperationDraft creates a query skeleton with variables', () =>
 
   const draft = buildGraphqlOperationDraft(summary, 'query', 'search');
 
-  assert.match(draft.query, /query QuerySearch\(\$term: String!, \$limit: Int\)/);
-  assert.match(draft.query, /search\(term: \$term, limit: \$limit\)/);
+  assert.match(draft.query, /query QuerySearch\(\$term: String!, \$limit: Int, \$filter: SearchFilter!, \$order: SearchOrder, \$ids: \[ID\]\)/);
+  assert.match(draft.query, /search\(term: \$term, limit: \$limit, filter: \$filter, order: \$order, ids: \$ids\)/);
   assert.match(draft.query, /id/);
   assert.match(draft.query, /profile \{\n      bio\n    \}/);
-  assert.deepEqual(JSON.parse(draft.variables), { term: '', limit: 20 });
+  assert.deepEqual(JSON.parse(draft.variables), {
+    term: '',
+    limit: 20,
+    filter: {
+      text: '',
+      active: true,
+      range: {
+        from: '',
+        limit: 10
+      }
+    },
+    order: 'RELEVANCE',
+    ids: ['']
+  });
 });
 
 test('resolveRequest interpolates WebSocket message drafts', () => {
