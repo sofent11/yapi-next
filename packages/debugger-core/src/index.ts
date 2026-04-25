@@ -251,6 +251,20 @@ query IntrospectionQuery {
           ...TypeRef
         }
       }
+      inputFields {
+        name
+        defaultValue
+        type {
+          ...TypeRef
+        }
+      }
+      enumValues(includeDeprecated: true) {
+        name
+      }
+      possibleTypes {
+        kind
+        name
+      }
     }
   }
 }
@@ -289,11 +303,28 @@ export type GraphqlFieldArgumentSummary = {
   placeholder?: unknown;
 };
 
+export type GraphqlSelectionKind = 'scalar' | 'enum' | 'object' | 'interface' | 'union';
+
+export type GraphqlSelectionFragmentSummary = {
+  typeName: string;
+  selection: GraphqlSelectionFieldSummary[];
+};
+
+export type GraphqlSelectionFieldSummary = {
+  name: string;
+  returnType: string;
+  kind: GraphqlSelectionKind;
+  children: GraphqlSelectionFieldSummary[];
+  fragments: GraphqlSelectionFragmentSummary[];
+};
+
 export type GraphqlOperationFieldSummary = {
   name: string;
   args: GraphqlFieldArgumentSummary[];
   returnType: string;
   selection: string[];
+  selectionTree: GraphqlSelectionFieldSummary[];
+  selectionFragments: GraphqlSelectionFragmentSummary[];
 };
 
 export type GraphqlSchemaSummary = {
@@ -317,6 +348,11 @@ export type GraphqlOperationDraft = {
   query: string;
   variables: string;
   operationName: string;
+};
+
+export type GraphqlOperationDraftOptions = {
+  selectedFields?: string[];
+  selectedFragments?: string[];
 };
 
 function ensureHeader(rows: ParameterRow[], name: string, value: string) {
@@ -344,6 +380,19 @@ type GraphqlIntrospectionInputValue = {
   type?: GraphqlIntrospectionTypeRef | null;
 };
 
+type GraphqlIntrospectionEnumValue = {
+  name?: unknown;
+};
+
+type GraphqlIntrospectionType = {
+  kind?: unknown;
+  name?: unknown;
+  fields?: unknown;
+  inputFields?: unknown;
+  enumValues?: unknown;
+  possibleTypes?: unknown;
+};
+
 function namedGraphqlType(typeRef: GraphqlIntrospectionTypeRef | null | undefined): string {
   if (!typeRef) return '';
   if (typeRef.name) return typeRef.name;
@@ -365,6 +414,14 @@ function schemaTypeKind(schemaType: unknown) {
   return String((schemaType as { kind?: unknown })?.kind || '');
 }
 
+function selectionKindForSchemaType(kind: string): GraphqlSelectionKind {
+  if (kind === 'ENUM') return 'enum';
+  if (kind === 'INTERFACE') return 'interface';
+  if (kind === 'UNION') return 'union';
+  if (kind === 'OBJECT') return 'object';
+  return 'scalar';
+}
+
 function isGraphqlLeafType(typeRef: GraphqlIntrospectionTypeRef | null | undefined, byName: Map<string, unknown>) {
   const namedType = namedGraphqlType(typeRef);
   const schemaType = byName.get(namedType);
@@ -372,9 +429,7 @@ function isGraphqlLeafType(typeRef: GraphqlIntrospectionTypeRef | null | undefin
   return kind === 'SCALAR' || kind === 'ENUM';
 }
 
-function selectableGraphqlFields(typeRef: GraphqlIntrospectionTypeRef | null | undefined, byName: Map<string, unknown>) {
-  const namedType = namedGraphqlType(typeRef);
-  const schemaType = byName.get(namedType);
+function selectableGraphqlFieldsFromSchemaType(schemaType: unknown) {
   const fields = (schemaType as { fields?: unknown })?.fields;
   if (!Array.isArray(fields)) return [];
   return fields
@@ -385,11 +440,10 @@ function selectableGraphqlFields(typeRef: GraphqlIntrospectionTypeRef | null | u
     });
 }
 
-function leafSelectionsForType(typeRef: GraphqlIntrospectionTypeRef | null | undefined, byName: Map<string, unknown>, limit = 6) {
-  return selectableGraphqlFields(typeRef, byName)
-    .filter(field => isGraphqlLeafType(field.type, byName))
-    .map(field => String(field.name))
-    .slice(0, limit);
+function selectableGraphqlFields(typeRef: GraphqlIntrospectionTypeRef | null | undefined, byName: Map<string, unknown>) {
+  const namedType = namedGraphqlType(typeRef);
+  const schemaType = byName.get(namedType);
+  return selectableGraphqlFieldsFromSchemaType(schemaType);
 }
 
 function indentGraphqlLines(lines: string[], spaces = 2) {
@@ -409,7 +463,26 @@ function fieldNames(schemaType: unknown) {
     .slice(0, 48);
 }
 
-function buildGraphqlSelectionFields(
+function possibleGraphqlTypes(schemaType: unknown, byName: Map<string, unknown>) {
+  const possibleTypes = (schemaType as GraphqlIntrospectionType)?.possibleTypes;
+  if (!Array.isArray(possibleTypes)) return [];
+  return possibleTypes
+    .map(type => String((type as GraphqlIntrospectionTypeRef)?.name || ''))
+    .filter(name => name.length > 0 && byName.has(name))
+    .slice(0, 8);
+}
+
+function graphqlSelectionKindForTypeRef(
+  typeRef: GraphqlIntrospectionTypeRef | null | undefined,
+  byName: Map<string, unknown>
+): GraphqlSelectionKind {
+  const namedType = namedGraphqlType(typeRef);
+  const schemaType = byName.get(namedType);
+  const kind = schemaTypeKind(schemaType);
+  return selectionKindForSchemaType(kind);
+}
+
+function buildGraphqlSelectionTree(
   typeRef: GraphqlIntrospectionTypeRef | null | undefined,
   byName: Map<string, unknown>,
   input: {
@@ -417,44 +490,153 @@ function buildGraphqlSelectionFields(
     path: Set<string>;
     maxFields: number;
   }
-): string[] {
+): {
+  children: GraphqlSelectionFieldSummary[];
+  fragments: GraphqlSelectionFragmentSummary[];
+} {
   const namedType = namedGraphqlType(typeRef);
   const schemaType = byName.get(namedType);
   const kind = schemaTypeKind(schemaType);
-  if (!namedType || kind === 'SCALAR' || kind === 'ENUM') return [];
-
-  const selected = leafSelectionsForType(typeRef, byName, Math.min(6, input.maxFields));
-  if (input.depth <= 0 || selected.length >= input.maxFields) {
-    return selected.length > 0 ? selected : ['__typename'];
+  if (!namedType || kind === 'SCALAR' || kind === 'ENUM') {
+    return { children: [], fragments: [] };
+  }
+  if (input.path.has(namedType) || input.depth <= 0) {
+    const children =
+      kind === 'OBJECT' || kind === 'INTERFACE'
+        ? selectableGraphqlFieldsFromSchemaType(schemaType)
+            .filter(field => isGraphqlLeafType(field.type, byName))
+            .slice(0, input.maxFields)
+            .map(field => ({
+              name: String(field.name),
+              returnType: formatGraphqlType(field.type),
+              kind: graphqlSelectionKindForTypeRef(field.type, byName),
+              children: [],
+              fragments: []
+            }) satisfies GraphqlSelectionFieldSummary)
+        : [];
+    return { children, fragments: [] };
   }
 
   const nextPath = new Set([...input.path, namedType]);
-  const nested = selectableGraphqlFields(typeRef, byName)
-    .filter(field => !isGraphqlLeafType(field.type, byName))
-    .slice(0, Math.max(0, input.maxFields - selected.length))
-    .map(field => {
-      const fieldName = String(field.name);
-      const childType = namedGraphqlType(field.type);
-      const childSelection = nextPath.has(childType)
-        ? leafSelectionsForType(field.type, byName, 4)
-        : buildGraphqlSelectionFields(field.type, byName, {
+  const children =
+    kind === 'OBJECT' || kind === 'INTERFACE'
+      ? selectableGraphqlFieldsFromSchemaType(schemaType)
+          .slice(0, input.maxFields)
+          .map(field => {
+            const nested = buildGraphqlSelectionTree(field.type, byName, {
+              depth: input.depth - 1,
+              path: nextPath,
+              maxFields: 6
+            });
+            return {
+              name: String(field.name),
+              returnType: formatGraphqlType(field.type),
+              kind: graphqlSelectionKindForTypeRef(field.type, byName),
+              children: nested.children,
+              fragments: nested.fragments
+            } satisfies GraphqlSelectionFieldSummary;
+          })
+      : [];
+  const fragments =
+    kind === 'INTERFACE' || kind === 'UNION'
+      ? possibleGraphqlTypes(schemaType, byName).map(typeName => ({
+          typeName,
+          selection: buildGraphqlSelectionTree({ kind: 'OBJECT', name: typeName }, byName, {
             depth: input.depth - 1,
             path: nextPath,
             maxFields: 6
-          });
-      return `${fieldName} {\n${indentGraphqlLines(childSelection.length > 0 ? childSelection : ['__typename'], 2)}\n}`;
-    });
-
-  selected.push(...nested);
-  return selected.length > 0 ? selected : ['__typename'];
+          }).children
+        }))
+      : [];
+  return { children, fragments };
 }
 
-function selectionFieldsForType(typeRef: GraphqlIntrospectionTypeRef | null | undefined, byName: Map<string, unknown>) {
-  return buildGraphqlSelectionFields(typeRef, byName, {
+export function graphqlSelectionPath(basePath: string, fieldName: string) {
+  return basePath ? `${basePath}.${fieldName}` : fieldName;
+}
+
+export function graphqlFragmentPath(basePath: string, typeName: string) {
+  return `${basePath}::${typeName}`;
+}
+
+function renderGraphqlSelectionNode(
+  node: GraphqlSelectionFieldSummary,
+  input: {
+    basePath: string;
+    selectedFields?: Set<string>;
+    selectedFragments?: Set<string>;
+  }
+): string | null {
+  const nodePath = graphqlSelectionPath(input.basePath, node.name);
+  if (input.selectedFields && !input.selectedFields.has(nodePath)) {
+    return null;
+  }
+  const childLines = renderGraphqlSelectionNodes(node.children, {
+    basePath: nodePath,
+    selectedFields: input.selectedFields,
+    selectedFragments: input.selectedFragments
+  });
+  const fragmentLines = renderGraphqlSelectionFragments(node.fragments, {
+    basePath: nodePath,
+    selectedFields: input.selectedFields,
+    selectedFragments: input.selectedFragments
+  });
+  const selectionLines = [...childLines, ...fragmentLines];
+  if (selectionLines.length === 0) {
+    if (node.kind === 'scalar' || node.kind === 'enum') {
+      return node.name;
+    }
+    return `${node.name} {\n  __typename\n}`;
+  }
+  return `${node.name} {\n${indentGraphqlLines(selectionLines, 2)}\n}`;
+}
+
+function renderGraphqlSelectionNodes(
+  nodes: GraphqlSelectionFieldSummary[],
+  input: {
+    basePath: string;
+    selectedFields?: Set<string>;
+    selectedFragments?: Set<string>;
+  }
+) {
+  return nodes
+    .map(node => renderGraphqlSelectionNode(node, input))
+    .filter((line): line is string => Boolean(line));
+}
+
+function renderGraphqlSelectionFragments(
+  fragments: GraphqlSelectionFragmentSummary[],
+  input: {
+    basePath: string;
+    selectedFields?: Set<string>;
+    selectedFragments?: Set<string>;
+  }
+) {
+  return fragments
+    .map(fragment => {
+      const fragmentPath = graphqlFragmentPath(input.basePath, fragment.typeName);
+      if (input.selectedFragments && !input.selectedFragments.has(fragmentPath)) {
+        return null;
+      }
+      const childLines = renderGraphqlSelectionNodes(fragment.selection, {
+        basePath: fragmentPath,
+        selectedFields: input.selectedFields,
+        selectedFragments: input.selectedFragments
+      });
+      return `... on ${fragment.typeName} {\n${indentGraphqlLines(childLines.length > 0 ? childLines : ['__typename'], 2)}\n}`;
+    })
+    .filter((line): line is string => Boolean(line));
+}
+
+function defaultSelectionFieldsForType(typeRef: GraphqlIntrospectionTypeRef | null | undefined, byName: Map<string, unknown>) {
+  const tree = buildGraphqlSelectionTree(typeRef, byName, {
     depth: 2,
     path: new Set(),
     maxFields: 8
   });
+  const childLines = renderGraphqlSelectionNodes(tree.children, { basePath: '' });
+  const fragmentLines = renderGraphqlSelectionFragments(tree.fragments.slice(0, 2), { basePath: '' });
+  return [...childLines, ...fragmentLines];
 }
 
 function operationFields(schemaType: unknown, byName: Map<string, unknown>): GraphqlOperationFieldSummary[] {
@@ -465,6 +647,11 @@ function operationFields(schemaType: unknown, byName: Map<string, unknown>): Gra
     .filter(field => typeof field.name === 'string' && field.name.trim().length > 0)
     .map(field => {
       const args = Array.isArray(field.args) ? field.args : [];
+      const selectionTree = buildGraphqlSelectionTree(field.type, byName, {
+        depth: 3,
+        path: new Set(),
+        maxFields: 8
+      });
       return {
         name: String(field.name),
         args: args
@@ -488,11 +675,13 @@ function operationFields(schemaType: unknown, byName: Map<string, unknown>): Gra
             };
           })
           .filter(arg => arg.name.trim().length > 0),
-        returnType: formatGraphqlType(field.type),
-        selection: selectionFieldsForType(field.type, byName)
-      };
-    })
-    .slice(0, 48);
+          returnType: formatGraphqlType(field.type),
+          selection: defaultSelectionFieldsForType(field.type, byName),
+          selectionTree: selectionTree.children,
+          selectionFragments: selectionTree.fragments
+        };
+      })
+      .slice(0, 48);
 }
 
 export function summarizeGraphqlSchema(bodyText: string): GraphqlSchemaSummary {
@@ -661,7 +850,8 @@ function placeholderForGraphqlTypeRef(
 export function buildGraphqlOperationDraft(
   summary: GraphqlSchemaSummary,
   operation: GraphqlOperationKind,
-  fieldName: string
+  fieldName: string,
+  options: GraphqlOperationDraftOptions = {}
 ): GraphqlOperationDraft {
   const fields =
     operation === 'mutation'
@@ -671,12 +861,36 @@ export function buildGraphqlOperationDraft(
         : summary.queryFields;
   const field =
     fields.find(item => item.name === fieldName) ||
-    ({ name: fieldName, args: [], returnType: 'JSON', selection: [] } satisfies GraphqlOperationFieldSummary);
+    ({
+      name: fieldName,
+      args: [],
+      returnType: 'JSON',
+      selection: [],
+      selectionTree: [],
+      selectionFragments: []
+    } satisfies GraphqlOperationFieldSummary);
   const operationName = `${capitalizeGraphqlName(operation)}${capitalizeGraphqlName(field.name)}`;
   const variableDefinitions = field.args.map(arg => `$${arg.name}: ${arg.type}`).join(', ');
   const callArguments = field.args.map(arg => `${arg.name}: $${arg.name}`).join(', ');
-  const selection = field.selection.length > 0
-    ? ` {\n${indentGraphqlLines(field.selection, 4)}\n  }`
+  const selectedFields = options.selectedFields ? new Set(options.selectedFields) : undefined;
+  const selectedFragments = options.selectedFragments ? new Set(options.selectedFragments) : undefined;
+  const selectionLines =
+    selectedFields || selectedFragments
+      ? [
+          ...renderGraphqlSelectionNodes(field.selectionTree || [], {
+            basePath: '',
+            selectedFields,
+            selectedFragments
+          }),
+          ...renderGraphqlSelectionFragments(field.selectionFragments || [], {
+            basePath: '',
+            selectedFields,
+            selectedFragments
+          })
+        ]
+      : field.selection;
+  const selection = selectionLines.length > 0
+    ? ` {\n${indentGraphqlLines(selectionLines, 4)}\n  }`
     : '';
   const variables = Object.fromEntries(
     field.args.map(arg => [

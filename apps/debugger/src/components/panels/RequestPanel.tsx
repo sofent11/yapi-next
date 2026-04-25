@@ -19,10 +19,14 @@ import {
   buildGraphqlIntrospectionRequest,
   buildGraphqlOperationDraft,
   createEmptyCheck,
+  graphqlFragmentPath,
+  graphqlSelectionPath,
   inspectResolvedRequest,
   summarizeGraphqlSchema,
   type GraphqlOperationFieldSummary,
   type GraphqlOperationKind,
+  type GraphqlSelectionFieldSummary,
+  type GraphqlSelectionFragmentSummary,
   type GraphqlSchemaSummary
 } from '@yapi-debugger/core';
 import type {
@@ -196,16 +200,79 @@ function graphqlFieldsForOperation(summary: GraphqlSchemaSummary, operation: Gra
   if (operation === 'mutation') {
     return summary.mutationFields.length > 0
       ? summary.mutationFields
-      : summary.mutations.map(name => ({ name, args: [], returnType: 'JSON', selection: [] }));
+      : summary.mutations.map(name => ({
+          name,
+          args: [],
+          returnType: 'JSON',
+          selection: [],
+          selectionTree: [],
+          selectionFragments: []
+        }));
   }
   if (operation === 'subscription') {
     return summary.subscriptionFields.length > 0
       ? summary.subscriptionFields
-      : summary.subscriptions.map(name => ({ name, args: [], returnType: 'JSON', selection: [] }));
+      : summary.subscriptions.map(name => ({
+          name,
+          args: [],
+          returnType: 'JSON',
+          selection: [],
+          selectionTree: [],
+          selectionFragments: []
+        }));
   }
   return summary.queryFields.length > 0
     ? summary.queryFields
-    : summary.queries.map(name => ({ name, args: [], returnType: 'JSON', selection: [] }));
+    : summary.queries.map(name => ({
+        name,
+        args: [],
+        returnType: 'JSON',
+        selection: [],
+        selectionTree: [],
+        selectionFragments: []
+      }));
+}
+
+type GraphqlExplorerState = {
+  operation: GraphqlOperationKind;
+  fieldName: string;
+  selectedFields: string[];
+  selectedFragments: string[];
+};
+
+function collectGraphqlFieldPaths(nodes: GraphqlSelectionFieldSummary[], basePath = ''): string[] {
+  return nodes.flatMap(node => {
+    const nodePath = graphqlSelectionPath(basePath, node.name);
+    return [nodePath, ...collectGraphqlFieldPaths(node.children, nodePath)];
+  });
+}
+
+function firstGraphqlExplorerState(summary: GraphqlSchemaSummary): GraphqlExplorerState | null {
+  for (const operation of ['query', 'mutation', 'subscription'] as GraphqlOperationKind[]) {
+    const field = graphqlFieldsForOperation(summary, operation)[0];
+    if (field) {
+      return {
+        operation,
+        fieldName: field.name,
+        selectedFields: collectGraphqlFieldPaths(field.selectionTree || []),
+        selectedFragments: []
+      };
+    }
+  }
+  return null;
+}
+
+function explorerStateForField(operation: GraphqlOperationKind, field: GraphqlOperationFieldSummary): GraphqlExplorerState {
+  return {
+    operation,
+    fieldName: field.name,
+    selectedFields: collectGraphqlFieldPaths(field.selectionTree || []),
+    selectedFragments: []
+  };
+}
+
+function removeGraphqlSelectionBranch(paths: string[], basePath: string) {
+  return paths.filter(path => path !== basePath && !path.startsWith(`${basePath}.`) && !path.startsWith(`${basePath}::`));
 }
 
 export function RequestPanel(props: {
@@ -268,6 +335,9 @@ export function RequestPanel(props: {
   const activeSection = requestSectionForTab(props.activeTab);
   const visibleTabs = new Set<RequestTab>(tabOptionsForSection(activeSection));
   const [graphqlIntrospection, setGraphqlIntrospection] = useState<GraphqlIntrospectionState>(() => graphqlIntrospectionStateFromBody(body));
+  const [graphqlExplorer, setGraphqlExplorer] = useState<GraphqlExplorerState | null>(() =>
+    graphqlIntrospection.summary ? firstGraphqlExplorerState(graphqlIntrospection.summary) : null
+  );
   const [websocketRun, setWebsocketRun] = useState<WebSocketRunState>(() => websocketStateFromBody(body));
   const [websocketLive, setWebsocketLive] = useState<WebSocketLiveState>({ connecting: false, closing: false });
 
@@ -282,6 +352,18 @@ export function RequestPanel(props: {
     body.graphql?.schemaCache?.endpoint,
     body.graphql?.schemaCache?.checkedAt
   ]);
+
+  useEffect(() => {
+    setGraphqlExplorer(current => {
+      if (!graphqlIntrospection.summary) return null;
+      if (!current) return firstGraphqlExplorerState(graphqlIntrospection.summary);
+      const field = graphqlFieldsForOperation(graphqlIntrospection.summary, current.operation).find(
+        item => item.name === current.fieldName
+      );
+      if (!field) return firstGraphqlExplorerState(graphqlIntrospection.summary);
+      return current;
+    });
+  }, [graphqlIntrospection.summary, requestDocument.id, selectedCase?.id]);
 
   useEffect(() => {
     setWebsocketRun(current => {
@@ -333,6 +415,24 @@ export function RequestPanel(props: {
       }
     };
   }, [websocketLive.sessionId]);
+
+  const graphqlExplorerField = useMemo(() => {
+    if (!graphqlExplorer || !graphqlIntrospection.summary) return null;
+    return (
+      graphqlFieldsForOperation(graphqlIntrospection.summary, graphqlExplorer.operation).find(
+        item => item.name === graphqlExplorer.fieldName
+      ) || null
+    );
+  }, [graphqlExplorer, graphqlIntrospection.summary]);
+
+  const graphqlSelectedFieldSet = useMemo(
+    () => new Set(graphqlExplorer?.selectedFields || []),
+    [graphqlExplorer?.selectedFields]
+  );
+  const graphqlSelectedFragmentSet = useMemo(
+    () => new Set(graphqlExplorer?.selectedFragments || []),
+    [graphqlExplorer?.selectedFragments]
+  );
 
   function updateSelectedCase(updater: (current: CaseDocument) => CaseDocument) {
     if (!selectedCase) return;
@@ -445,9 +545,61 @@ export function RequestPanel(props: {
     }
   }
 
+  function selectGraphqlExplorerField(operation: GraphqlOperationKind, field: GraphqlOperationFieldSummary) {
+    setGraphqlExplorer(explorerStateForField(operation, field));
+  }
+
+  function toggleGraphqlExplorerField(path: string, checked: boolean, node: GraphqlSelectionFieldSummary) {
+    setGraphqlExplorer(current => {
+      if (!current) return current;
+      const nextFields = checked
+        ? Array.from(new Set([...current.selectedFields, path, ...collectGraphqlFieldPaths(node.children, path)]))
+        : removeGraphqlSelectionBranch(current.selectedFields, path);
+      const nextFragments = checked
+        ? current.selectedFragments
+        : removeGraphqlSelectionBranch(current.selectedFragments, path);
+      return {
+        ...current,
+        selectedFields: nextFields,
+        selectedFragments: nextFragments
+      };
+    });
+  }
+
+  function toggleGraphqlExplorerFragment(path: string, checked: boolean, fragment: GraphqlSelectionFragmentSummary) {
+    setGraphqlExplorer(current => {
+      if (!current) return current;
+      const nextFragments = checked
+        ? Array.from(new Set([...current.selectedFragments, path]))
+        : removeGraphqlSelectionBranch(current.selectedFragments, path);
+      const nextFields = checked
+        ? Array.from(new Set([...current.selectedFields, ...collectGraphqlFieldPaths(fragment.selection, path)]))
+        : removeGraphqlSelectionBranch(current.selectedFields, path);
+      return {
+        ...current,
+        selectedFields: nextFields,
+        selectedFragments: nextFragments
+      };
+    });
+  }
+
+  function resetGraphqlExplorerSelection() {
+    if (!graphqlExplorerField || !graphqlExplorer) return;
+    setGraphqlExplorer(explorerStateForField(graphqlExplorer.operation, graphqlExplorerField));
+  }
+
   function applyGraphqlOperationDraft(operation: GraphqlOperationKind, fieldName: string) {
     if (!graphqlIntrospection.summary) return;
-    const draft = buildGraphqlOperationDraft(graphqlIntrospection.summary, operation, fieldName);
+    const draft = buildGraphqlOperationDraft(graphqlIntrospection.summary, operation, fieldName, {
+      selectedFields:
+        graphqlExplorer?.operation === operation && graphqlExplorer.fieldName === fieldName
+          ? graphqlExplorer.selectedFields
+          : undefined,
+      selectedFragments:
+        graphqlExplorer?.operation === operation && graphqlExplorer.fieldName === fieldName
+          ? graphqlExplorer.selectedFragments
+          : undefined
+    });
     updateBody({
       ...body,
       mode: 'graphql',
@@ -637,6 +789,61 @@ export function RequestPanel(props: {
 
   const websocketTimeline = websocketLive.snapshot || websocketRun.result;
   const isWebSocketLiveConnected = Boolean(websocketLive.sessionId);
+
+  function renderGraphqlExplorerNodes(nodes: GraphqlSelectionFieldSummary[], basePath = '', depth = 0): React.JSX.Element[] {
+    return nodes.map(node => {
+      const path = graphqlSelectionPath(basePath, node.name);
+      const checked = graphqlSelectedFieldSet.has(path);
+      const hasChildren = node.children.length > 0 || node.fragments.length > 0;
+      return (
+        <div className="graphql-explorer-node" key={path} data-depth={depth}>
+          <label className="graphql-explorer-row">
+            <Checkbox
+              checked={checked}
+              onChange={event => toggleGraphqlExplorerField(path, event.currentTarget.checked, node)}
+            />
+            <span className="graphql-explorer-name">{node.name}</span>
+            <code>{node.returnType}</code>
+            {node.fragments.length > 0 ? <Badge size="xs" variant="light" color="violet">fragments</Badge> : null}
+          </label>
+          {checked && hasChildren ? (
+            <div className="graphql-explorer-children">
+              {node.children.length > 0 ? renderGraphqlExplorerNodes(node.children, path, depth + 1) : null}
+              {node.fragments.length > 0 ? renderGraphqlExplorerFragments(node.fragments, path, depth + 1) : null}
+            </div>
+          ) : null}
+        </div>
+      );
+    });
+  }
+
+  function renderGraphqlExplorerFragments(
+    fragments: GraphqlSelectionFragmentSummary[],
+    basePath = '',
+    depth = 0
+  ): React.JSX.Element[] {
+    return fragments.map(fragment => {
+      const path = graphqlFragmentPath(basePath, fragment.typeName);
+      const checked = graphqlSelectedFragmentSet.has(path);
+      return (
+        <div className="graphql-explorer-fragment" key={path} data-depth={depth}>
+          <label className="graphql-explorer-row graphql-explorer-row-fragment">
+            <Checkbox
+              checked={checked}
+              onChange={event => toggleGraphqlExplorerFragment(path, event.currentTarget.checked, fragment)}
+            />
+            <span className="graphql-explorer-name">... on {fragment.typeName}</span>
+            <Badge size="xs" variant="light" color="grape">fragment</Badge>
+          </label>
+          {checked && fragment.selection.length > 0 ? (
+            <div className="graphql-explorer-children">
+              {renderGraphqlExplorerNodes(fragment.selection, path, depth + 1)}
+            </div>
+          ) : null}
+        </div>
+      );
+    });
+  }
 
   return (
     <div className="request-panel">
@@ -1364,10 +1571,12 @@ export function RequestPanel(props: {
                                   {fields.slice(0, operation === 'query' ? 12 : 8).map(field => (
                                     <button
                                       type="button"
-                                      className="graphql-field-chip"
+                                      className={`graphql-field-chip${
+                                        graphqlExplorer?.operation === operation && graphqlExplorer?.fieldName === field.name ? ' active' : ''
+                                      }`}
                                       key={`${operation}:${field.name}`}
-                                      onClick={() => applyGraphqlOperationDraft(operation, field.name)}
-                                      title={`Insert ${operation} ${field.name}`}
+                                      onClick={() => selectGraphqlExplorerField(operation, field)}
+                                      title={`Explore ${operation} ${field.name}`}
                                     >
                                       <span>{field.name}</span>
                                       {field.args.length > 0 ? <em>{field.args.length}</em> : null}
@@ -1379,6 +1588,62 @@ export function RequestPanel(props: {
                             );
                           })}
                         </div>
+                        {graphqlExplorer && graphqlExplorerField ? (
+                          <div className="graphql-explorer-panel">
+                            <div className="graphql-explorer-head">
+                              <div>
+                                <Text size="xs" fw={700} c="dimmed">Explorer</Text>
+                                <Text size="sm" fw={700}>
+                                  {graphqlExplorer.operation} · {graphqlExplorerField.name}
+                                </Text>
+                              </div>
+                              <Group gap="xs">
+                                <Button size="xs" variant="subtle" onClick={resetGraphqlExplorerSelection}>
+                                  Reset
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  variant="default"
+                                  onClick={() => applyGraphqlOperationDraft(graphqlExplorer.operation, graphqlExplorer.fieldName)}
+                                >
+                                  Insert Selection
+                                </Button>
+                              </Group>
+                            </div>
+                            <div className="graphql-explorer-meta">
+                              {graphqlExplorerField.args.length > 0 ? (
+                                <Badge size="xs" variant="light" color="indigo">
+                                  {graphqlExplorerField.args.length} args
+                                </Badge>
+                              ) : null}
+                              <Badge size="xs" variant="light" color="gray">
+                                {graphqlExplorerField.returnType}
+                              </Badge>
+                              {graphqlExplorerField.selectionFragments.length > 0 ? (
+                                <Badge size="xs" variant="light" color="grape">
+                                  {graphqlExplorerField.selectionFragments.length} fragments
+                                </Badge>
+                              ) : null}
+                            </div>
+                            {graphqlExplorerField.selectionTree.length > 0 ? (
+                              <div className="graphql-explorer-tree">
+                                {renderGraphqlExplorerNodes(graphqlExplorerField.selectionTree)}
+                              </div>
+                            ) : null}
+                            {graphqlExplorerField.selectionFragments.length > 0 ? (
+                              <div className="graphql-explorer-fragments">
+                                <Text size="xs" fw={700} c="dimmed">Fragments</Text>
+                                {renderGraphqlExplorerFragments(graphqlExplorerField.selectionFragments)}
+                              </div>
+                            ) : null}
+                            {graphqlExplorerField.selectionTree.length === 0 &&
+                            graphqlExplorerField.selectionFragments.length === 0 ? (
+                              <Text size="xs" c="dimmed">
+                                This root field resolves to a scalar payload, so there are no child selections to toggle.
+                              </Text>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </>
                     ) : null}
                   </div>

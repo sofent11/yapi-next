@@ -1939,6 +1939,85 @@ mark {
   align-items: stretch;
 }
 
+.graphql-explorer-panel,
+.graphql-explorer-tree,
+.graphql-explorer-fragments,
+.graphql-explorer-children {
+  display: grid;
+  gap: 8px;
+}
+
+.graphql-explorer-panel {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.graphql-explorer-head,
+.graphql-explorer-meta,
+.graphql-explorer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.graphql-explorer-head {
+  justify-content: space-between;
+}
+
+.graphql-explorer-meta {
+  flex-wrap: wrap;
+}
+
+.graphql-explorer-node,
+.graphql-explorer-fragment {
+  display: grid;
+  gap: 6px;
+}
+
+.graphql-explorer-row {
+  min-height: 28px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--surface-muted) 48%, var(--surface));
+}
+
+.graphql-explorer-row-fragment {
+  border-style: dashed;
+}
+
+.graphql-explorer-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.graphql-explorer-row code {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.graphql-explorer-children {
+  margin-left: 18px;
+  padding-left: 12px;
+  border-left: 1px solid color-mix(in oklch, var(--line) 72%, transparent);
+}
+
 .graphql-field-group {
   display: grid;
   gap: 6px;
@@ -1970,6 +2049,12 @@ mark {
 .graphql-field-chip:hover {
   border-color: color-mix(in oklch, var(--accent) 42%, var(--line));
   background: color-mix(in oklch, var(--accent) 8%, var(--surface));
+}
+
+.graphql-field-chip.active {
+  border-color: color-mix(in oklch, var(--accent) 42%, var(--line));
+  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
+  color: var(--accent);
 }
 
 .graphql-field-chip span {

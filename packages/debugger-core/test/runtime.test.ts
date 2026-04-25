@@ -9,6 +9,8 @@ import {
   evaluateChecks,
   filtersFromCollectionReport,
   executeRequestScript,
+  graphqlFragmentPath,
+  graphqlSelectionPath,
   inspectCollectionDataText,
   inspectResolvedRequest,
   materializeBrunoCollectionExport,
@@ -782,6 +784,87 @@ test('buildGraphqlOperationDraft creates a query skeleton with variables', () =>
     order: 'RELEVANCE',
     ids: ['']
   });
+});
+
+test('buildGraphqlOperationDraft supports explorer field toggles and fragments', () => {
+  const summary = summarizeGraphqlSchema(JSON.stringify({
+    data: {
+      __schema: {
+        queryType: { name: 'Query' },
+        mutationType: null,
+        subscriptionType: null,
+        types: [
+          {
+            kind: 'OBJECT',
+            name: 'Query',
+            fields: [
+              {
+                name: 'node',
+                args: [{ name: 'id', type: { kind: 'NON_NULL', ofType: { kind: 'SCALAR', name: 'ID' } } }],
+                type: { kind: 'INTERFACE', name: 'Node' }
+              }
+            ]
+          },
+          {
+            kind: 'INTERFACE',
+            name: 'Node',
+            fields: [
+              { name: 'id', args: [], type: { kind: 'SCALAR', name: 'ID' } },
+              { name: 'name', args: [], type: { kind: 'SCALAR', name: 'String' } }
+            ],
+            possibleTypes: [{ kind: 'OBJECT', name: 'User' }, { kind: 'OBJECT', name: 'Admin' }]
+          },
+          {
+            kind: 'OBJECT',
+            name: 'User',
+            fields: [
+              { name: 'id', args: [], type: { kind: 'SCALAR', name: 'ID' } },
+              { name: 'name', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'email', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'profile', args: [], type: { kind: 'OBJECT', name: 'Profile' } }
+            ]
+          },
+          {
+            kind: 'OBJECT',
+            name: 'Admin',
+            fields: [
+              { name: 'id', args: [], type: { kind: 'SCALAR', name: 'ID' } },
+              { name: 'name', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'role', args: [], type: { kind: 'SCALAR', name: 'String' } }
+            ]
+          },
+          {
+            kind: 'OBJECT',
+            name: 'Profile',
+            fields: [
+              { name: 'city', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'timezone', args: [], type: { kind: 'SCALAR', name: 'String' } }
+            ]
+          },
+          { kind: 'SCALAR', name: 'ID', fields: null },
+          { kind: 'SCALAR', name: 'String', fields: null }
+        ]
+      }
+    }
+  }));
+
+  const userFragment = graphqlFragmentPath('', 'User');
+  const profilePath = graphqlSelectionPath(userFragment, 'profile');
+  const draft = buildGraphqlOperationDraft(summary, 'query', 'node', {
+    selectedFields: [
+      'id',
+      graphqlSelectionPath(userFragment, 'email'),
+      profilePath,
+      graphqlSelectionPath(profilePath, 'city')
+    ],
+    selectedFragments: [userFragment]
+  });
+
+  assert.match(draft.query, /query QueryNode\(\$id: ID!\)/);
+  assert.match(draft.query, /node\(id: \$id\) \{\n    id\n    \.\.\. on User \{\n      email\n      profile \{\n        city\n      \}\n    \}\n  \}/);
+  assert.doesNotMatch(draft.query, /\.\.\. on Admin/);
+  assert.doesNotMatch(draft.query, /\n    name\n/);
+  assert.deepEqual(JSON.parse(draft.variables), { id: '' });
 });
 
 test('resolveRequest interpolates WebSocket message drafts', () => {
