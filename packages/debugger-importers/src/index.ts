@@ -1458,6 +1458,7 @@ function openCollectionAuth(auth: any): RequestDocument['auth'] {
   if (auth === 'inherit') return { type: 'inherit' };
   const type = String(auth.type || '').toLowerCase();
   if (!type) return { type: 'inherit' };
+  if (type === 'none') return { type: 'none' };
   if (type === 'bearer') return { type: 'bearer', token: String(auth.token || '') };
   if (type === 'basic') return { type: 'basic', username: String(auth.username || ''), password: String(auth.password || '') };
   if (type === 'apikey') {

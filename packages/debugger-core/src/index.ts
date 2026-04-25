@@ -1519,6 +1519,335 @@ export function serializeBrunoJsonCollection(input: {
   }, null, 2) + '\n';
 }
 
+function openCollectionDescription(text: string) {
+  return text.trim() ? { content: text.trim(), type: 'text/markdown' } : undefined;
+}
+
+function openCollectionRow(row: ParameterRow, type?: 'query' | 'path') {
+  return {
+    name: row.name,
+    value: row.kind === 'file' ? row.filePath || row.value : row.value,
+    ...(type ? { type } : {}),
+    ...(row.enabled === false ? { disabled: true } : {}),
+    ...(row.description?.trim() ? { description: row.description.trim() } : {}),
+    ...(row.kind === 'file' ? { type: 'file' } : {})
+  };
+}
+
+function openCollectionAuth(auth: AuthConfig): unknown {
+  switch (auth.type) {
+    case 'inherit':
+      return 'inherit';
+    case 'none':
+      return { type: 'none' };
+    case 'bearer':
+      return { type: 'bearer', token: auth.token || tokenFromVar(auth.tokenFromVar) };
+    case 'basic':
+      return {
+        type: 'basic',
+        username: auth.username || tokenFromVar(auth.usernameFromVar),
+        password: auth.password || tokenFromVar(auth.passwordFromVar)
+      };
+    case 'apikey':
+      return {
+        type: 'apikey',
+        key: auth.key || 'X-API-Key',
+        value: auth.value || tokenFromVar(auth.valueFromVar),
+        placement: auth.addTo || 'header'
+      };
+    case 'oauth1':
+      return {
+        type: 'oauth1',
+        consumerKey: auth.consumerKey || '',
+        consumerSecret: auth.consumerSecret || '',
+        accessToken: auth.accessToken || auth.token || '',
+        accessTokenSecret: auth.secretKey || '',
+        signatureMethod: auth.signatureMethod || 'HMAC-SHA1',
+        version: auth.version || '1.0',
+        realm: auth.realm || ''
+      };
+    case 'oauth2':
+      return {
+        type: 'oauth2',
+        grantType: auth.grantType || auth.oauthFlow || 'client_credentials',
+        tokenUrl: auth.tokenUrl || '',
+        clientId: auth.clientId || tokenFromVar(auth.clientIdFromVar),
+        clientSecret: auth.clientSecret || tokenFromVar(auth.clientSecretFromVar),
+        scope: auth.scope || ''
+      };
+    case 'awsv4':
+      return {
+        type: 'awsv4',
+        accessKeyId: auth.accessKey || '',
+        secretAccessKey: auth.secretKey || '',
+        sessionToken: auth.sessionToken || '',
+        service: auth.service || '',
+        region: auth.region || ''
+      };
+    case 'digest':
+      return { type: 'digest', username: auth.username || '', password: auth.password || '' };
+    case 'ntlm':
+      return {
+        type: 'ntlm',
+        username: auth.username || '',
+        password: auth.password || '',
+        domain: auth.domain || '',
+        workstation: auth.workstation || ''
+      };
+    case 'wsse':
+      return { type: 'wsse', username: auth.username || '', password: auth.password || '' };
+    default:
+      return 'inherit';
+  }
+}
+
+function openCollectionBody(body: RequestBody, kind: RequestKind): unknown {
+  const normalized = normalizeBody(body);
+  if (kind === 'graphql') {
+    return {
+      query: normalized.graphql?.query || normalized.text || '',
+      variables: parseJsonOrString(normalized.graphql?.variables || '{}')
+    };
+  }
+  switch (normalized.mode) {
+    case 'json':
+    case 'text':
+    case 'xml':
+    case 'sparql':
+      return {
+        type: normalized.mode,
+        data: normalized.mode === 'json' ? parseJsonOrString(normalized.text || '') : normalized.text || ''
+      };
+    case 'form-urlencoded':
+      return {
+        type: 'form-urlencoded',
+        data: cleanRows(normalized.fields).map(row => openCollectionRow(row))
+      };
+    case 'multipart':
+      return {
+        type: 'multipart-form',
+        data: cleanRows(normalized.fields).map(row => openCollectionRow(row))
+      };
+    case 'file':
+      return {
+        type: 'file',
+        data: [{
+          type: 'file',
+          filePath: normalized.file || normalized.text || '',
+          contentType: normalized.mimeType || 'application/octet-stream',
+          selected: true
+        }]
+      };
+    default:
+      return undefined;
+  }
+}
+
+function parseJsonOrString(text: string) {
+  if (!text.trim()) return '';
+  try {
+    return JSON.parse(text);
+  } catch (_error) {
+    return text;
+  }
+}
+
+function openCollectionScripts(request: RequestDocument) {
+  const scripts = [
+    request.scripts.preRequest.trim() ? { type: 'before-request', code: request.scripts.preRequest.trim() } : null,
+    request.scripts.postResponse.trim() ? { type: 'after-response', code: request.scripts.postResponse.trim() } : null,
+    request.scripts.tests.trim() ? { type: 'tests', code: request.scripts.tests.trim() } : null
+  ].filter(Boolean);
+  return scripts.length > 0 ? scripts : undefined;
+}
+
+function openCollectionVariables(request: RequestDocument) {
+  const variables = request.vars.req
+    .filter(row => row.name)
+    .map(row => ({
+      name: row.name,
+      value: row.value,
+      ...(row.enabled === false ? { disabled: true } : {}),
+      ...(row.secret ? { secret: true } : {}),
+      ...(row.description?.trim() ? { description: row.description.trim() } : {})
+    }));
+  return variables.length > 0 ? variables : undefined;
+}
+
+function openCollectionItem(record: WorkspaceRequestRecord, seq: number) {
+  const request = requestDocumentSchema.parse({
+    ...record.request,
+    order: seq,
+    headers: cleanRows(record.request.headers),
+    query: cleanRows(record.request.query),
+    pathParams: cleanRows(record.request.pathParams),
+    body: normalizeBody(record.request.body)
+  });
+  const info = {
+    name: request.name,
+    type: request.kind === 'websocket' ? 'websocket' : request.kind,
+    seq,
+    ...(request.tags.length > 0 ? { tags: request.tags } : {})
+  };
+  const docs = openCollectionDescription(request.docs || request.description || '');
+  const runtime = {
+    ...(openCollectionScripts(request) ? { scripts: openCollectionScripts(request) } : {}),
+    ...(openCollectionVariables(request) ? { variables: openCollectionVariables(request) } : {})
+  };
+  const base = {
+    info,
+    ...(Object.keys(runtime).length > 0 ? { runtime } : {}),
+    ...(docs ? { docs } : {})
+  };
+
+  if (request.kind === 'script') {
+    return {
+      ...base,
+      script: request.body.text || request.scripts.preRequest || ''
+    };
+  }
+  if (request.kind === 'graphql') {
+    return {
+      ...base,
+      graphql: {
+        method: request.method,
+        url: request.url,
+        ...(request.headers.length > 0 ? { headers: request.headers.map(row => openCollectionRow(row)) } : {}),
+        ...((request.query.length > 0 || request.pathParams.length > 0) ? {
+          params: [
+            ...request.query.map(row => openCollectionRow(row, 'query')),
+            ...request.pathParams.map(row => openCollectionRow(row, 'path'))
+          ]
+        } : {}),
+        body: openCollectionBody(request.body, request.kind),
+        auth: openCollectionAuth(request.auth)
+      }
+    };
+  }
+  if (request.kind === 'websocket') {
+    return {
+      ...base,
+      websocket: {
+        url: request.url,
+        ...(request.headers.length > 0 ? { headers: request.headers.map(row => openCollectionRow(row)) } : {}),
+        message: (request.body.websocket?.messages || []).map((message, index) => ({
+          title: message.name || `message ${index + 1}`,
+          selected: message.enabled !== false,
+          message: {
+            type: 'json',
+            data: message.body || ''
+          }
+        })),
+        auth: openCollectionAuth(request.auth)
+      }
+    };
+  }
+  if (request.kind === 'grpc') {
+    const service = request.body.grpc?.service || '';
+    const method = request.body.grpc?.method || '';
+    return {
+      ...base,
+      grpc: {
+        url: request.url,
+        method: service && method ? `${service}/${method}` : method,
+        ...(request.body.grpc?.protoFile ? { protoFilePath: request.body.grpc.protoFile } : {}),
+        ...(request.headers.length > 0 ? { metadata: request.headers.map(row => openCollectionRow(row)) } : {}),
+        message: request.body.grpc?.message || '',
+        auth: openCollectionAuth(request.auth)
+      }
+    };
+  }
+  return {
+    ...base,
+    http: {
+      method: request.method,
+      url: request.url,
+      ...(request.headers.length > 0 ? { headers: request.headers.map(row => openCollectionRow(row)) } : {}),
+      ...((request.query.length > 0 || request.pathParams.length > 0) ? {
+        params: [
+          ...request.query.map(row => openCollectionRow(row, 'query')),
+          ...request.pathParams.map(row => openCollectionRow(row, 'path'))
+        ]
+      } : {}),
+      ...(openCollectionBody(request.body, request.kind) ? { body: openCollectionBody(request.body, request.kind) } : {}),
+      auth: openCollectionAuth(request.auth)
+    },
+    ...(request.examples.length > 0 ? {
+      examples: request.examples.slice(0, 3).map(example => ({
+        name: example.name,
+        response: {
+          status: example.status || 200,
+          body: {
+            type: example.mimeType?.includes('json') || example.contentType === 'json' ? 'json' : 'text',
+            data: example.text
+          }
+        }
+      }))
+    } : {})
+  };
+}
+
+export function serializeOpenCollection(input: {
+  project: ProjectDocument;
+  requests: WorkspaceRequestRecord[];
+  environments?: EnvironmentDocument[];
+  collection?: CollectionDocument;
+}) {
+  const collection = input.collection ? collectionDocumentSchema.parse(input.collection) : undefined;
+  const project = projectDocumentSchema.parse(input.project);
+  const name = collection?.name || project.name;
+  const ordered = orderedBrunoRequestRecords(input.requests, collection);
+  const rootItems: any[] = [];
+  const folders = new Map<string, any>();
+
+  function folderItems(folderSegments: string[]) {
+    let items = rootItems;
+    let currentPath = '';
+    folderSegments.forEach(segment => {
+      currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+      let folder = folders.get(currentPath);
+      if (!folder) {
+        folder = {
+          info: {
+            name: segment,
+            type: 'folder'
+          },
+          items: []
+        };
+        folders.set(currentPath, folder);
+        items.push(folder);
+      }
+      items = folder.items;
+    });
+    return items;
+  }
+
+  ordered.forEach(({ record, seq }) => {
+    folderItems(record.folderSegments).push(openCollectionItem(record, seq));
+  });
+
+  const environments = (input.environments || []).map(environment => environmentDocumentSchema.parse(environment));
+  const document = {
+    opencollection: '1.0.0',
+    info: { name },
+    ...(rootItems.length > 0 ? { items: rootItems } : {}),
+    ...(environments.length > 0 ? {
+      config: {
+        environments: environments.map(environment => ({
+          name: environment.name,
+          variables: Object.entries(environment.vars || {}).map(([variableName, value]) => ({
+            name: variableName,
+            value
+          }))
+        }))
+      }
+    } : {}),
+    bundled: true
+  };
+
+  return JSON.stringify(document, null, 2) + '\n';
+}
+
 export function materializeBrunoCollectionExport(input: {
   project: ProjectDocument;
   requests: WorkspaceRequestRecord[];

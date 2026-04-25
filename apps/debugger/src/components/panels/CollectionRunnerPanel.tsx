@@ -94,6 +94,7 @@ export function CollectionRunnerPanel(props: {
   onExtractValue?: (target: 'local' | 'runtime' | 'collection', input: { suggestedName: string; value: string }) => void;
   onExportReport?: (format: 'json' | 'html' | 'junit') => void;
   onExportBruno?: (format: 'folder' | 'json') => void;
+  onExportOpenCollection?: () => void;
   onCopyText?: (value: string, successMessage: string) => void;
 }) {
   const [reportFilter, setReportFilter] = useState('');
@@ -368,6 +369,9 @@ export function CollectionRunnerPanel(props: {
                     </Button>
                     <Button size="xs" variant="subtle" onClick={() => props.onExportBruno?.('json')} disabled={!props.onExportBruno}>
                       Export JSON
+                    </Button>
+                    <Button size="xs" variant="subtle" onClick={props.onExportOpenCollection} disabled={!props.onExportOpenCollection}>
+                      Export OpenCollection
                     </Button>
                     <Badge variant="light" color="gray">
                       {draftCollection.steps.length} steps · {selectedCollectionReportCount} reports

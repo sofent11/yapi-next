@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { materializeBrunoCollectionExport, serializeBrunoJsonCollection, serializeRequestToBruno } from '../../debugger-core/src/index';
+import { materializeBrunoCollectionExport, serializeBrunoJsonCollection, serializeOpenCollection, serializeRequestToBruno } from '../../debugger-core/src/index';
 import { createCollectionStep, createDefaultEnvironment, createDefaultProject, createEmptyCollection, createEmptyRequest } from '../../debugger-schema/src/index';
 import { importBrunoCollectionFiles, importSourceText } from '../src/index';
 
@@ -254,4 +254,123 @@ test('Bruno JSON collection export imports back with folders and collection step
   assert.equal(importedWebSocket?.kind, 'websocket');
   assert.equal(importedWebSocket?.body.websocket?.messages[0]?.body, '{"type":"subscribe"}');
   assert.equal(imported.collections[0]?.collection.steps.length, 2);
+});
+
+test('OpenCollection export imports back with mixed request kinds and environments', () => {
+  const project = createDefaultProject('OpenCollection Export Demo');
+  const environment = createDefaultEnvironment('Local');
+  environment.vars = {
+    baseUrl: 'https://api.example.com',
+    token: 'secret-token'
+  };
+  const createUser = createEmptyRequest('Create User');
+  createUser.id = 'req_oc_create_user';
+  createUser.method = 'POST';
+  createUser.url = '{{baseUrl}}/users/{{userId}}';
+  createUser.headers = [{ name: 'Content-Type', value: 'application/json', enabled: true, kind: 'text' }];
+  createUser.query = [{ name: 'verbose', value: 'true', enabled: true, kind: 'text' }];
+  createUser.pathParams = [{ name: 'userId', value: '42', enabled: true, kind: 'text' }];
+  createUser.body = {
+    mode: 'json',
+    mimeType: 'application/json',
+    text: '{"name":"Ada"}',
+    fields: []
+  };
+  createUser.auth = { type: 'bearer', tokenFromVar: 'token' };
+  createUser.scripts = {
+    preRequest: 'bru.setVar("trace", "1");',
+    postResponse: '',
+    tests: 'expect(res.status).to.equal(201);'
+  };
+  createUser.vars.req = [{ name: 'traceId', value: 'abc-123', enabled: true, kind: 'text', scope: 'request', secret: false }];
+  createUser.docs = 'Create a user.';
+
+  const graphql = createEmptyRequest('GraphQL User');
+  graphql.id = 'req_oc_graphql';
+  graphql.kind = 'graphql';
+  graphql.method = 'POST';
+  graphql.url = '{{baseUrl}}/graphql';
+  graphql.body = {
+    mode: 'graphql',
+    mimeType: 'application/json',
+    text: '',
+    fields: [],
+    graphql: {
+      query: 'query User($id: ID!) { user(id: $id) { id name } }',
+      variables: '{\n  "id": "42"\n}'
+    }
+  };
+
+  const websocket = createEmptyRequest('Live Feed');
+  websocket.id = 'req_oc_ws';
+  websocket.kind = 'websocket';
+  websocket.url = 'wss://example.com/socket';
+  websocket.body = {
+    mode: 'none',
+    text: '',
+    fields: [],
+    websocket: {
+      messages: [{ name: 'subscribe', body: '{"type":"subscribe"}', enabled: true }]
+    }
+  };
+
+  const collection = createEmptyCollection('OpenCollection Smoke');
+  collection.steps = [
+    createCollectionStep({ requestId: createUser.id }),
+    createCollectionStep({ requestId: graphql.id }),
+    createCollectionStep({ requestId: websocket.id })
+  ];
+
+  const json = serializeOpenCollection({
+    project,
+    collection,
+    environments: [environment],
+    requests: [
+      {
+        request: createUser,
+        cases: [],
+        folderSegments: ['Users'],
+        requestFilePath: '/workspace/requests/users/create.request.yaml',
+        resourceDirPath: '/workspace/requests/users/create'
+      },
+      {
+        request: graphql,
+        cases: [],
+        folderSegments: ['GraphQL'],
+        requestFilePath: '/workspace/requests/graphql/user.request.yaml',
+        resourceDirPath: '/workspace/requests/graphql/user'
+      },
+      {
+        request: websocket,
+        cases: [],
+        folderSegments: ['Realtime'],
+        requestFilePath: '/workspace/requests/realtime/live.request.yaml',
+        resourceDirPath: '/workspace/requests/realtime/live'
+      }
+    ]
+  });
+
+  const exported = JSON.parse(json);
+  assert.equal(exported.opencollection, '1.0.0');
+  assert.equal(exported.info.name, 'OpenCollection Smoke');
+  assert.equal(exported.config.environments[0].name, 'Local');
+
+  const imported = importSourceText(json);
+  const importedCreate = imported.requests.find(item => item.request.name === 'Create User')?.request;
+  const importedGraphql = imported.requests.find(item => item.request.kind === 'graphql')?.request;
+  const importedWebSocket = imported.requests.find(item => item.request.kind === 'websocket')?.request;
+
+  assert.equal(imported.detectedFormat, 'opencollection');
+  assert.equal(imported.requests.length, 3);
+  assert.deepEqual(imported.requests.map(item => item.folderSegments.join('/')), ['Users', 'GraphQL', 'Realtime']);
+  assert.equal(imported.environments[0]?.vars.baseUrl, 'https://api.example.com');
+  assert.equal(importedCreate?.auth.type, 'bearer');
+  assert.equal(importedCreate?.auth.token, '{{token}}');
+  assert.equal(importedCreate?.query.find(item => item.name === 'verbose')?.value, 'true');
+  assert.equal(importedCreate?.pathParams.find(item => item.name === 'userId')?.value, '42');
+  assert.match(importedCreate?.scripts.preRequest || '', /trace/);
+  assert.equal(importedCreate?.vars.req.find(item => item.name === 'traceId')?.value, 'abc-123');
+  assert.equal(importedGraphql?.body.mode, 'graphql');
+  assert.match(importedGraphql?.body.graphql?.query || '', /query User/);
+  assert.equal(importedWebSocket?.body.websocket?.messages[0]?.body, '{"type":"subscribe"}');
 });

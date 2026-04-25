@@ -55,6 +55,7 @@ import {
   duplicateRequestInWorkspace,
   exportBrunoCollection,
   exportBrunoJsonCollection,
+  exportOpenCollection,
   loadCollectionRunReports,
   loadRunHistory,
   importFromBrunoDirectory,
@@ -2060,6 +2061,28 @@ export function App() {
     });
   }
 
+  async function handleExportSelectedCollectionOpenCollection() {
+    if (!store.workspace || !draftCollection) {
+      notifications.show({ color: 'blue', message: 'Select a collection first.' });
+      return;
+    }
+
+    const targetPath = await saveFile({
+      title: 'Export OpenCollection',
+      defaultPath: `${slugify(draftCollection.name || store.workspace.project.name || 'opencollection')}.opencollection.json`,
+      filters: [
+        {
+          name: 'OpenCollection',
+          extensions: ['json']
+        }
+      ]
+    });
+    if (!targetPath) return;
+
+    await writeDocument(targetPath, exportOpenCollection(store.workspace, draftCollection));
+    notifications.show({ color: 'teal', message: 'OpenCollection exported.' });
+  }
+
   async function handleRefreshGitStatus() {
     if (!store.workspace) return;
     try {
@@ -3293,6 +3316,7 @@ export function App() {
                   onExtractValue={handleExtractCollectionReportValue}
                   onExportReport={handleExportSelectedCollectionReport}
                   onExportBruno={handleExportSelectedCollectionBruno}
+                  onExportOpenCollection={handleExportSelectedCollectionOpenCollection}
                   onCopyText={(value, successMessage) => {
                     void copyToClipboard(value, successMessage);
                   }}

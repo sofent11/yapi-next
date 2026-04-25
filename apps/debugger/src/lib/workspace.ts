@@ -13,6 +13,7 @@ import {
   mergeTemplateSources,
   renderCollectionRunReportJunit,
   serializeBrunoJsonCollection,
+  serializeOpenCollection,
   serializeRequestToBruno,
   filtersFromCollectionReport,
   rerunFailedStepKeys as rerunFailedStepKeysCore,
@@ -774,6 +775,18 @@ export function exportBrunoJsonCollection(
   return serializeBrunoJsonCollection({
     project: workspace.project,
     requests: workspace.requests,
+    collection
+  });
+}
+
+export function exportOpenCollection(
+  workspace: WorkspaceIndex,
+  collection?: CollectionDocument
+) {
+  return serializeOpenCollection({
+    project: workspace.project,
+    requests: workspace.requests,
+    environments: workspace.environments.map(item => item.document),
     collection
   });
 }
