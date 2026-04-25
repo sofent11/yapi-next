@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   applyCollectionRules,
   buildGraphqlIntrospectionRequest,
+  buildGraphqlOperationDraft,
   buildWorkspaceIndex,
   buildCurlCommand,
   evaluateChecks,
@@ -270,18 +271,100 @@ test('summarizeGraphqlSchema extracts root operation fields', () => {
         mutationType: { name: 'Mutation' },
         subscriptionType: null,
         types: [
-          { kind: 'OBJECT', name: 'Query', fields: [{ name: 'viewer' }, { name: 'search' }] },
-          { kind: 'OBJECT', name: 'Mutation', fields: [{ name: 'login' }] },
-          { kind: 'SCALAR', name: 'String', fields: null }
+          {
+            kind: 'OBJECT',
+            name: 'Query',
+            fields: [
+              {
+                name: 'viewer',
+                args: [],
+                type: { kind: 'OBJECT', name: 'User' }
+              },
+              {
+                name: 'search',
+                args: [
+                  {
+                    name: 'term',
+                    type: { kind: 'NON_NULL', name: null, ofType: { kind: 'SCALAR', name: 'String' } }
+                  }
+                ],
+                type: { kind: 'LIST', name: null, ofType: { kind: 'OBJECT', name: 'User' } }
+              }
+            ]
+          },
+          {
+            kind: 'OBJECT',
+            name: 'Mutation',
+            fields: [{ name: 'login', args: [], type: { kind: 'SCALAR', name: 'String' } }]
+          },
+          {
+            kind: 'OBJECT',
+            name: 'User',
+            fields: [
+              { name: 'id', args: [], type: { kind: 'SCALAR', name: 'ID' } },
+              { name: 'name', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'friends', args: [], type: { kind: 'LIST', ofType: { kind: 'OBJECT', name: 'User' } } }
+            ]
+          },
+          { kind: 'SCALAR', name: 'String', fields: null },
+          { kind: 'SCALAR', name: 'ID', fields: null }
         ]
       }
     }
   }));
 
   assert.equal(summary.ok, true);
-  assert.equal(summary.typeCount, 3);
+  assert.equal(summary.typeCount, 5);
   assert.deepEqual(summary.queries, ['viewer', 'search']);
   assert.deepEqual(summary.mutations, ['login']);
+  assert.deepEqual(summary.queryFields[0]?.selection, ['id', 'name']);
+  assert.equal(summary.queryFields[1]?.args[0]?.type, 'String!');
+});
+
+test('buildGraphqlOperationDraft creates a query skeleton with variables', () => {
+  const summary = summarizeGraphqlSchema(JSON.stringify({
+    data: {
+      __schema: {
+        queryType: { name: 'Query' },
+        mutationType: null,
+        subscriptionType: null,
+        types: [
+          {
+            kind: 'OBJECT',
+            name: 'Query',
+            fields: [
+              {
+                name: 'search',
+                args: [
+                  { name: 'term', type: { kind: 'NON_NULL', ofType: { kind: 'SCALAR', name: 'String' } } },
+                  { name: 'limit', type: { kind: 'SCALAR', name: 'Int' } }
+                ],
+                type: { kind: 'LIST', ofType: { kind: 'OBJECT', name: 'User' } }
+              }
+            ]
+          },
+          {
+            kind: 'OBJECT',
+            name: 'User',
+            fields: [
+              { name: 'id', args: [], type: { kind: 'SCALAR', name: 'ID' } },
+              { name: 'name', args: [], type: { kind: 'SCALAR', name: 'String' } }
+            ]
+          },
+          { kind: 'SCALAR', name: 'String', fields: null },
+          { kind: 'SCALAR', name: 'Int', fields: null },
+          { kind: 'SCALAR', name: 'ID', fields: null }
+        ]
+      }
+    }
+  }));
+
+  const draft = buildGraphqlOperationDraft(summary, 'query', 'search');
+
+  assert.match(draft.query, /query QuerySearch\(\$term: String!, \$limit: Int\)/);
+  assert.match(draft.query, /search\(term: \$term, limit: \$limit\)/);
+  assert.match(draft.query, /id/);
+  assert.deepEqual(JSON.parse(draft.variables), { term: '', limit: 0 });
 });
 
 test('resolveRequest interpolates WebSocket message drafts', () => {

@@ -14,9 +14,12 @@ import {
 } from '@tabler/icons-react';
 import {
   buildGraphqlIntrospectionRequest,
+  buildGraphqlOperationDraft,
   createEmptyCheck,
   inspectResolvedRequest,
   summarizeGraphqlSchema,
+  type GraphqlOperationFieldSummary,
+  type GraphqlOperationKind,
   type GraphqlSchemaSummary
 } from '@yapi-debugger/core';
 import type {
@@ -137,6 +140,22 @@ function appendEnabledQueryRows(url: string, rows: Array<{ name: string; value: 
   const params = new URLSearchParams();
   enabledRows.forEach(row => params.append(row.name, row.value));
   return `${url}${url.includes('?') ? '&' : '?'}${params.toString()}`;
+}
+
+function graphqlFieldsForOperation(summary: GraphqlSchemaSummary, operation: GraphqlOperationKind): GraphqlOperationFieldSummary[] {
+  if (operation === 'mutation') {
+    return summary.mutationFields.length > 0
+      ? summary.mutationFields
+      : summary.mutations.map(name => ({ name, args: [], returnType: 'JSON', selection: [] }));
+  }
+  if (operation === 'subscription') {
+    return summary.subscriptionFields.length > 0
+      ? summary.subscriptionFields
+      : summary.subscriptions.map(name => ({ name, args: [], returnType: 'JSON', selection: [] }));
+  }
+  return summary.queryFields.length > 0
+    ? summary.queryFields
+    : summary.queries.map(name => ({ name, args: [], returnType: 'JSON', selection: [] }));
 }
 
 export function RequestPanel(props: {
@@ -297,6 +316,23 @@ export function RequestPanel(props: {
       });
       notifications.show({ color: 'red', message });
     }
+  }
+
+  function applyGraphqlOperationDraft(operation: GraphqlOperationKind, fieldName: string) {
+    if (!graphqlIntrospection.summary) return;
+    const draft = buildGraphqlOperationDraft(graphqlIntrospection.summary, operation, fieldName);
+    updateBody({
+      ...body,
+      mode: 'graphql',
+      mimeType: 'application/json',
+      graphql: {
+        ...graphqlBody,
+        query: draft.query,
+        variables: draft.variables,
+        operationName: draft.operationName
+      }
+    });
+    notifications.show({ color: 'teal', message: `${draft.operationName} inserted` });
   }
 
   function updateWebSocketMessages(messages: NonNullable<RequestBody['websocket']>['messages']) {
@@ -1018,16 +1054,29 @@ export function RequestPanel(props: {
                           </div>
                         ) : null}
                         <div className="graphql-schema-fields">
-                          {graphqlIntrospection.summary.queries.slice(0, 12).map(name => (
-                            <Badge key={`query:${name}`} variant="light" color="blue">
-                              {name}
-                            </Badge>
-                          ))}
-                          {graphqlIntrospection.summary.mutations.slice(0, 8).map(name => (
-                            <Badge key={`mutation:${name}`} variant="light" color="orange">
-                              {name}
-                            </Badge>
-                          ))}
+                          {(['query', 'mutation', 'subscription'] as GraphqlOperationKind[]).map(operation => {
+                            const fields = graphqlFieldsForOperation(graphqlIntrospection.summary!, operation);
+                            if (fields.length === 0) return null;
+                            return (
+                              <div className="graphql-field-group" key={operation}>
+                                <Text size="xs" fw={700} c="dimmed">{operation}</Text>
+                                <div>
+                                  {fields.slice(0, operation === 'query' ? 12 : 8).map(field => (
+                                    <button
+                                      type="button"
+                                      className="graphql-field-chip"
+                                      key={`${operation}:${field.name}`}
+                                      onClick={() => applyGraphqlOperationDraft(operation, field.name)}
+                                      title={`Insert ${operation} ${field.name}`}
+                                    >
+                                      <span>{field.name}</span>
+                                      {field.args.length > 0 ? <em>{field.args.length}</em> : null}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </>
                     ) : null}

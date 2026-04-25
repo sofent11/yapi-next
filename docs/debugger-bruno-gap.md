@@ -13,7 +13,7 @@ This document tracks parity against Bruno OSS while keeping YAPI Debugger's loca
 | Area | Bruno OSS capability | YAPI Debugger status | Notes |
 |---|---|---|---|
 | HTTP requests | Method, URL, params, headers, body, auth | Implemented | Existing workbench covers the primary REST flow. |
-| Body modes | JSON, text, XML, GraphQL, SPARQL, file, form URL encoded, multipart | Partial | Schema/UI/runtime now accept XML, GraphQL, SPARQL, and file body for HTTP send. GraphQL query variables are materialized as JSON payloads, and the UI can fetch an introspection schema summary. GraphQL query builder is pending. |
+| Body modes | JSON, text, XML, GraphQL, SPARQL, file, form URL encoded, multipart | Partial | Schema/UI/runtime now accept XML, GraphQL, SPARQL, and file body for HTTP send. GraphQL query variables are materialized as JSON payloads, and the UI can fetch introspection plus generate query/mutation/subscription drafts from root fields. A full nested query explorer is pending. |
 | Request kinds | HTTP, GraphQL, gRPC, WebSocket, JS | Partial | Schema has `kind: http/graphql/grpc/websocket/script`; GraphQL sends over HTTP POST. WebSocket has a first-pass connect/send/receive session runner. gRPC and script item runtimes are pending. |
 | Auth | Basic, bearer, API key, OAuth2, OAuth1, AWS v4, Digest, NTLM, WSSE | Partial | Schema/UI preserve all major Bruno auth families. Runtime signing is implemented for existing basic/bearer/API key/OAuth2 client credentials only. |
 | Variables | Collection/folder/request/response/env/global/prompt vars | Partial | Schema has scoped variable rows. Runtime currently resolves project/env/runtime/data/step sources. Folder and prompt UX are pending. |
@@ -34,7 +34,7 @@ This document tracks parity against Bruno OSS while keeping YAPI Debugger's loca
 
 ## Next Milestones
 
-1. Add GraphQL query builder from the fetched introspection schema.
+1. Expand GraphQL builder into a nested explorer: selectable child fields, argument defaults, fragments, and persisted schema cache.
 2. Expand WebSocket runtime into a persistent timeline: manual send, reconnect, close controls, binary frames, and saved examples.
 3. Implement advanced auth signing: OAuth1, AWS v4, Digest, NTLM, WSSE.
 4. Add Bruno and Insomnia import/export fixtures and round-trip tests.
