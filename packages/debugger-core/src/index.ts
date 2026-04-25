@@ -44,6 +44,7 @@ import {
   type ProjectDocument,
   type RequestBody,
   type RequestDocument,
+  type RequestKind,
   type ResolvedAuthPreviewItem,
   type ResolvedFieldValue,
   type ResolvedRequestInsight,
@@ -1270,6 +1271,252 @@ function uniqueBrunoPath(used: Set<string>, folderSegments: string[], requestNam
   }
   used.add(candidate);
   return candidate;
+}
+
+function brunoJsonRow(row: ParameterRow, type?: 'query' | 'path') {
+  return {
+    name: row.name,
+    value: row.kind === 'file' ? row.filePath || row.value : row.value,
+    description: row.description || '',
+    enabled: row.enabled !== false,
+    ...(type ? { type } : {}),
+    ...(row.kind === 'file' ? { type: 'file' } : {})
+  };
+}
+
+function tokenFromVar(name: string | undefined) {
+  return name ? `{{${name}}}` : '';
+}
+
+function brunoJsonAuth(auth: AuthConfig) {
+  switch (auth.type) {
+    case 'none':
+      return { mode: 'none' };
+    case 'bearer':
+      return { mode: 'bearer', bearer: { token: auth.token || tokenFromVar(auth.tokenFromVar) } };
+    case 'basic':
+      return {
+        mode: 'basic',
+        basic: {
+          username: auth.username || tokenFromVar(auth.usernameFromVar),
+          password: auth.password || tokenFromVar(auth.passwordFromVar)
+        }
+      };
+    case 'apikey':
+      return {
+        mode: 'apikey',
+        apikey: {
+          key: auth.key || 'X-API-Key',
+          value: auth.value || tokenFromVar(auth.valueFromVar),
+          placement: auth.addTo || 'header'
+        }
+      };
+    case 'oauth1':
+      return {
+        mode: 'oauth1',
+        oauth1: {
+          consumerKey: auth.consumerKey || '',
+          consumerSecret: auth.consumerSecret || '',
+          accessToken: auth.accessToken || auth.token || '',
+          accessTokenSecret: auth.secretKey || '',
+          signatureMethod: auth.signatureMethod || 'HMAC-SHA1',
+          version: auth.version || '1.0',
+          realm: auth.realm || ''
+        }
+      };
+    case 'oauth2':
+      return {
+        mode: 'oauth2',
+        oauth2: {
+          grantType: auth.grantType || auth.oauthFlow || 'client_credentials',
+          tokenUrl: auth.tokenUrl || '',
+          clientId: auth.clientId || tokenFromVar(auth.clientIdFromVar),
+          clientSecret: auth.clientSecret || tokenFromVar(auth.clientSecretFromVar),
+          scope: auth.scope || ''
+        }
+      };
+    case 'digest':
+      return {
+        mode: 'digest',
+        digest: {
+          username: auth.username || '',
+          password: auth.password || ''
+        }
+      };
+    default:
+      return { mode: auth.type === 'inherit' ? 'inherit' : 'none' };
+  }
+}
+
+function brunoJsonBody(body: RequestBody, kind: RequestKind) {
+  const normalized = normalizeBody(body);
+  if (kind === 'websocket') {
+    return {
+      mode: 'ws',
+      ws: (normalized.websocket?.messages || []).map((message, index) => ({
+        name: message.name || `message ${index + 1}`,
+        type: 'json',
+        content: message.body || '',
+        enabled: message.enabled !== false
+      }))
+    };
+  }
+  if (kind === 'grpc') {
+    return {
+      mode: 'grpc',
+      grpc: [{
+        name: 'message 1',
+        content: normalized.grpc?.message || ''
+      }]
+    };
+  }
+  switch (normalized.mode) {
+    case 'json':
+      return { mode: 'json', json: normalized.text || '' };
+    case 'text':
+      return { mode: 'text', text: normalized.text || '' };
+    case 'xml':
+      return { mode: 'xml', xml: normalized.text || '' };
+    case 'sparql':
+      return { mode: 'sparql', sparql: normalized.text || '' };
+    case 'graphql':
+      return {
+        mode: 'graphql',
+        graphql: {
+          query: normalized.graphql?.query || normalized.text || '',
+          variables: normalized.graphql?.variables || '{}',
+          operationName: normalized.graphql?.operationName || undefined,
+          schemaUrl: normalized.graphql?.schemaUrl || undefined
+        }
+      };
+    case 'form-urlencoded':
+      return {
+        mode: 'formUrlEncoded',
+        formUrlEncoded: cleanRows(normalized.fields).map(row => brunoJsonRow(row))
+      };
+    case 'multipart':
+      return {
+        mode: 'multipartForm',
+        multipartForm: cleanRows(normalized.fields).map(row => brunoJsonRow(row))
+      };
+    case 'file':
+      return {
+        mode: 'file',
+        file: [{
+          filePath: normalized.file || normalized.text || '',
+          contentType: normalized.mimeType || 'application/octet-stream',
+          selected: true
+        }]
+      };
+    default:
+      return { mode: 'none' };
+  }
+}
+
+function brunoJsonRequestType(kind: RequestKind) {
+  if (kind === 'graphql') return 'graphql-request';
+  if (kind === 'websocket') return 'ws-request';
+  if (kind === 'grpc') return 'grpc-request';
+  if (kind === 'script') return 'js';
+  return 'http-request';
+}
+
+function brunoJsonMethod(request: RequestDocument) {
+  if (request.kind === 'grpc') {
+    const service = request.body.grpc?.service || '';
+    const method = request.body.grpc?.method || '';
+    return service && method ? `${service}/${method}` : method || request.method;
+  }
+  return request.method;
+}
+
+function brunoJsonItem(record: WorkspaceRequestRecord, seq: number) {
+  const request = requestDocumentSchema.parse({
+    ...record.request,
+    order: seq,
+    headers: cleanRows(record.request.headers),
+    query: cleanRows(record.request.query),
+    pathParams: cleanRows(record.request.pathParams),
+    body: normalizeBody(record.request.body)
+  });
+  if (request.kind === 'script') {
+    return {
+      uid: request.id,
+      type: 'js',
+      name: request.name,
+      fileContent: request.body.text || request.scripts.preRequest || ''
+    };
+  }
+  return {
+    uid: request.id,
+    name: request.name,
+    type: brunoJsonRequestType(request.kind),
+    seq,
+    tags: request.tags,
+    request: {
+      url: request.url,
+      method: brunoJsonMethod(request),
+      headers: request.headers.map(row => brunoJsonRow(row)),
+      params: [
+        ...request.query.map(row => brunoJsonRow(row, 'query')),
+        ...request.pathParams.map(row => brunoJsonRow(row, 'path'))
+      ],
+      body: brunoJsonBody(request.body, request.kind),
+      auth: brunoJsonAuth(request.auth),
+      script: {
+        req: request.scripts.preRequest || null,
+        res: request.scripts.postResponse || null
+      },
+      tests: request.scripts.tests || null,
+      docs: request.docs || ''
+    },
+    ...(request.kind === 'grpc' && request.body.grpc?.protoFile ? { protoPath: request.body.grpc.protoFile } : {})
+  };
+}
+
+export function serializeBrunoJsonCollection(input: {
+  project: ProjectDocument;
+  requests: WorkspaceRequestRecord[];
+  collection?: CollectionDocument;
+}) {
+  const collection = input.collection ? collectionDocumentSchema.parse(input.collection) : undefined;
+  const project = projectDocumentSchema.parse(input.project);
+  const name = collection?.name || project.name;
+  const ordered = orderedBrunoRequestRecords(input.requests, collection);
+  const rootItems: any[] = [];
+  const folders = new Map<string, any>();
+
+  function folderItems(folderSegments: string[]) {
+    let items = rootItems;
+    let currentPath = '';
+    folderSegments.forEach(segment => {
+      currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+      let folder = folders.get(currentPath);
+      if (!folder) {
+        folder = {
+          uid: slugify(currentPath) || `folder-${folders.size + 1}`,
+          name: segment,
+          type: 'folder',
+          items: []
+        };
+        folders.set(currentPath, folder);
+        items.push(folder);
+      }
+      items = folder.items;
+    });
+    return items;
+  }
+
+  ordered.forEach(({ record, seq }) => {
+    folderItems(record.folderSegments).push(brunoJsonItem(record, seq));
+  });
+
+  return JSON.stringify({
+    uid: slugify(name) || 'collection',
+    version: '1',
+    name,
+    items: rootItems
+  }, null, 2) + '\n';
 }
 
 export function materializeBrunoCollectionExport(input: {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { materializeBrunoCollectionExport, serializeRequestToBruno } from '../../debugger-core/src/index';
+import { materializeBrunoCollectionExport, serializeBrunoJsonCollection, serializeRequestToBruno } from '../../debugger-core/src/index';
 import { createCollectionStep, createDefaultEnvironment, createDefaultProject, createEmptyCollection, createEmptyRequest } from '../../debugger-schema/src/index';
 import { importBrunoCollectionFiles, importSourceText } from '../src/index';
 
@@ -172,4 +172,86 @@ test('Bruno collection folder import rebuilds requests and a runnable collection
     importedCollection?.steps.map(step => result.requests.find(item => item.request.id === step.requestId)?.request.name),
     ['Create User', 'Get User']
   );
+});
+
+test('Bruno JSON collection export imports back with folders and collection steps', () => {
+  const project = createDefaultProject('Bruno JSON Demo');
+  const createUser = createEmptyRequest('Create User');
+  createUser.id = 'req_create_json_user';
+  createUser.method = 'POST';
+  createUser.url = '{{baseUrl}}/users';
+  createUser.headers = [{ name: 'Content-Type', value: 'application/json', enabled: true, kind: 'text' }];
+  createUser.body = {
+    mode: 'json',
+    mimeType: 'application/json',
+    text: '{"name":"Ada"}',
+    fields: []
+  };
+  createUser.auth = { type: 'bearer', tokenFromVar: 'token' };
+  createUser.scripts = {
+    preRequest: 'bru.setVar("trace", "1");',
+    postResponse: 'console.log(res.status);',
+    tests: 'expect(res.status).to.equal(201);'
+  };
+
+  const liveFeed = createEmptyRequest('Live Feed');
+  liveFeed.id = 'req_live_feed';
+  liveFeed.kind = 'websocket';
+  liveFeed.url = 'wss://example.com/socket';
+  liveFeed.body = {
+    mode: 'none',
+    text: '',
+    fields: [],
+    websocket: {
+      messages: [{ name: 'subscribe', body: '{"type":"subscribe"}', enabled: true }]
+    }
+  };
+
+  const collection = createEmptyCollection('JSON Smoke');
+  collection.steps = [
+    createCollectionStep({ requestId: createUser.id }),
+    createCollectionStep({ requestId: liveFeed.id })
+  ];
+
+  const json = serializeBrunoJsonCollection({
+    project,
+    collection,
+    requests: [
+      {
+        request: createUser,
+        cases: [],
+        folderSegments: ['Users'],
+        requestFilePath: '/workspace/requests/users/create.request.yaml',
+        resourceDirPath: '/workspace/requests/users/create'
+      },
+      {
+        request: liveFeed,
+        cases: [],
+        folderSegments: ['Realtime'],
+        requestFilePath: '/workspace/requests/realtime/live.request.yaml',
+        resourceDirPath: '/workspace/requests/realtime/live'
+      }
+    ]
+  });
+
+  const parsed = JSON.parse(json);
+  assert.equal(parsed.name, 'JSON Smoke');
+  assert.equal(parsed.items[0].type, 'folder');
+  assert.equal(parsed.items[0].items[0].type, 'http-request');
+  assert.equal(parsed.items[1].items[0].type, 'ws-request');
+
+  const imported = importSourceText(json);
+  const importedCreate = imported.requests.find(item => item.request.name === 'Create User')?.request;
+  const importedWebSocket = imported.requests.find(item => item.request.name === 'Live Feed')?.request;
+
+  assert.equal(imported.detectedFormat, 'bruno');
+  assert.equal(imported.project.name, 'JSON Smoke');
+  assert.deepEqual(imported.requests.map(item => item.folderSegments.join('/')), ['Users', 'Realtime']);
+  assert.equal(importedCreate?.body.mode, 'json');
+  assert.equal(importedCreate?.auth.type, 'bearer');
+  assert.equal(importedCreate?.auth.token, '{{token}}');
+  assert.match(importedCreate?.scripts.tests || '', /201/);
+  assert.equal(importedWebSocket?.kind, 'websocket');
+  assert.equal(importedWebSocket?.body.websocket?.messages[0]?.body, '{"type":"subscribe"}');
+  assert.equal(imported.collections[0]?.collection.steps.length, 2);
 });
