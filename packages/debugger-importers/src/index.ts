@@ -75,6 +75,11 @@ function looksLikeOpenCollection(document: Record<string, any>) {
     document.info && typeof document.info === 'object';
 }
 
+function looksLikeWsdl(content: string) {
+  return /<\s*(?:\w+:)?definitions\b/i.test(content) &&
+    /<\s*(?:\w+:)?(?:portType|binding|service)\b/i.test(content);
+}
+
 function parseBruSections(content: string) {
   const lines = content.replace(/\r\n/g, '\n').split('\n');
   const sections: BruSection[] = [];
@@ -1755,6 +1760,306 @@ function importOpenCollection(document: Record<string, any>): ImportResult {
   };
 }
 
+type XmlNode = {
+  name: string;
+  attrs: Record<string, string>;
+  children: XmlNode[];
+  text: string;
+};
+
+type WsdlElement = {
+  name: string;
+  type: string;
+  minOccurs?: string;
+  maxOccurs?: string;
+  children: WsdlElement[];
+};
+
+type WsdlOperation = {
+  name: string;
+  inputMessage: string;
+  soapAction: string;
+  documentation: string;
+};
+
+function xmlLocalName(name: string) {
+  return name.split(':').pop() || name;
+}
+
+function xmlAttr(attrs: Record<string, string>, name: string) {
+  return attrs[name] || attrs[Object.keys(attrs).find(key => xmlLocalName(key) === name) || ''] || '';
+}
+
+function xmlChildren(node: XmlNode | undefined, localName: string) {
+  return node?.children.filter(child => xmlLocalName(child.name) === localName) || [];
+}
+
+function xmlFirst(node: XmlNode | undefined, localName: string) {
+  return xmlChildren(node, localName)[0];
+}
+
+function parseXmlAttributes(source: string) {
+  const attrs: Record<string, string> = {};
+  const attrPattern = /([A-Za-z_][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)')/g;
+  let match: RegExpExecArray | null;
+  while ((match = attrPattern.exec(source))) {
+    attrs[match[1]] = match[3] ?? match[4] ?? '';
+  }
+  return attrs;
+}
+
+function parseXmlDocument(content: string): XmlNode | null {
+  const root: XmlNode = { name: '#document', attrs: {}, children: [], text: '' };
+  const stack: XmlNode[] = [root];
+  const tokens = content.match(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<[^>]+>|[^<]+/g) || [];
+  for (const token of tokens) {
+    if (token.startsWith('<!--') || token.startsWith('<?')) continue;
+    if (token.startsWith('<![CDATA[')) {
+      stack.at(-1)!.text += token.slice(9, -3);
+      continue;
+    }
+    if (!token.startsWith('<')) {
+      const text = token.trim();
+      if (text) stack.at(-1)!.text += text;
+      continue;
+    }
+    if (/^<!/.test(token)) continue;
+    if (/^<\s*\//.test(token)) {
+      const closeName = xmlLocalName(token.replace(/^<\s*\//, '').replace(/\s*>$/, '').trim());
+      while (stack.length > 1) {
+        const current = stack.pop()!;
+        if (xmlLocalName(current.name) === closeName) break;
+      }
+      continue;
+    }
+    const selfClosing = /\/\s*>$/.test(token);
+    const inside = token.slice(1, selfClosing ? -2 : -1).trim();
+    const name = inside.split(/\s+/)[0] || '';
+    if (!name) continue;
+    const node: XmlNode = {
+      name,
+      attrs: parseXmlAttributes(inside.slice(name.length)),
+      children: [],
+      text: ''
+    };
+    stack.at(-1)!.children.push(node);
+    if (!selfClosing) stack.push(node);
+  }
+  return root.children[0] || null;
+}
+
+function cleanQName(value: string) {
+  return String(value || '').split(':').pop() || String(value || '');
+}
+
+function wsdlText(node: XmlNode | undefined) {
+  return node?.text.trim() || '';
+}
+
+function wsdlSimpleValue(type: string) {
+  const normalized = cleanQName(type).toLowerCase();
+  if (['boolean'].includes(normalized)) return 'true';
+  if (['int', 'integer', 'long', 'short', 'byte'].includes(normalized)) return '0';
+  if (['float', 'double', 'decimal'].includes(normalized)) return '0.0';
+  if (normalized === 'date') return '2024-01-01';
+  if (normalized === 'datetime') return '2024-01-01T00:00:00Z';
+  if (normalized === 'time') return '00:00:00';
+  return 'string';
+}
+
+function wsdlIsBuiltinType(type: string) {
+  const normalized = cleanQName(type);
+  return [
+    'string', 'int', 'integer', 'long', 'short', 'byte', 'boolean', 'float', 'double', 'decimal',
+    'date', 'dateTime', 'time', 'duration', 'anyURI', 'base64Binary'
+  ].includes(normalized);
+}
+
+function wsdlParseElement(node: XmlNode, complexTypes: Map<string, WsdlElement[]>): WsdlElement {
+  const type = xmlAttr(node.attrs, 'type');
+  const inlineComplex = xmlFirst(node, 'complexType');
+  const sequence = xmlFirst(inlineComplex, 'sequence') || xmlFirst(inlineComplex, 'all') || xmlFirst(inlineComplex, 'choice');
+  const inlineChildren = xmlChildren(sequence, 'element').map(child => wsdlParseElement(child, complexTypes));
+  const typeChildren = type && !wsdlIsBuiltinType(type) ? complexTypes.get(cleanQName(type)) || [] : [];
+  return {
+    name: xmlAttr(node.attrs, 'name') || cleanQName(xmlAttr(node.attrs, 'ref')),
+    type,
+    minOccurs: xmlAttr(node.attrs, 'minOccurs') || undefined,
+    maxOccurs: xmlAttr(node.attrs, 'maxOccurs') || undefined,
+    children: inlineChildren.length > 0 ? inlineChildren : typeChildren
+  };
+}
+
+function wsdlParseTypes(definitions: XmlNode) {
+  const complexTypes = new Map<string, WsdlElement[]>();
+  const elements = new Map<string, WsdlElement>();
+  const schemas = xmlChildren(xmlFirst(definitions, 'types'), 'schema');
+
+  schemas.forEach(schema => {
+    xmlChildren(schema, 'complexType').forEach(complexType => {
+      const name = xmlAttr(complexType.attrs, 'name');
+      const sequence = xmlFirst(complexType, 'sequence') || xmlFirst(complexType, 'all') || xmlFirst(complexType, 'choice');
+      complexTypes.set(name, xmlChildren(sequence, 'element').map(child => wsdlParseElement(child, complexTypes)));
+    });
+  });
+
+  schemas.forEach(schema => {
+    xmlChildren(schema, 'element').forEach(element => {
+      const parsed = wsdlParseElement(element, complexTypes);
+      if (parsed.name) elements.set(parsed.name, parsed);
+    });
+  });
+
+  return { complexTypes, elements };
+}
+
+function wsdlElementSample(element: WsdlElement, depth = 0): string {
+  if (depth > 12) return `<!-- recursive ${element.name} -->`;
+  const optional = element.minOccurs === '0' ? '<!--Optional:-->' : '';
+  if (element.children.length === 0) {
+    return `${optional}<${element.name}>${wsdlSimpleValue(element.type)}</${element.name}>`;
+  }
+  return `${optional}<${element.name}>${element.children.map(child => wsdlElementSample(child, depth + 1)).join('')}</${element.name}>`;
+}
+
+function wsdlSoapEnvelope(operation: WsdlOperation, messages: Map<string, string>, elements: Map<string, WsdlElement>, targetNamespace: string) {
+  const inputElementName = cleanQName(messages.get(cleanQName(operation.inputMessage)) || '');
+  const inputElement = elements.get(inputElementName);
+  const body = inputElement
+    ? wsdlElementSample(inputElement)
+    : `<!-- Element ${inputElementName || operation.name} not found -->`;
+  const namespace = targetNamespace ? ` xmlns="${targetNamespace}"` : '';
+  const namespacedBody = inputElement && targetNamespace
+    ? body.replace(`<${inputElement.name}>`, `<${inputElement.name}${namespace}>`)
+    : body;
+  return `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>${namespacedBody}</soap:Body></soap:Envelope>`;
+}
+
+function importWsdl(content: string): ImportResult {
+  const root = parseXmlDocument(content);
+  const definitions = root && xmlLocalName(root.name) === 'definitions' ? root : null;
+  if (!definitions) {
+    return {
+      detectedFormat: 'wsdl',
+      summary: { requests: 0, folders: 0, environments: 1 },
+      project: createDefaultProject('Imported WSDL'),
+      environments: [createDefaultEnvironment('shared')],
+      requests: [],
+      collections: [],
+      warnings: [{
+        level: 'warning',
+        scope: 'project',
+        code: 'wsdl-parse-error',
+        status: 'unsupported',
+        message: 'WSDL import failed: definitions element was not found.'
+      }]
+    };
+  }
+
+  const projectName = xmlAttr(definitions.attrs, 'name') || 'Imported WSDL';
+  const targetNamespace = xmlAttr(definitions.attrs, 'targetNamespace');
+  const { elements } = wsdlParseTypes(definitions);
+  const messages = new Map<string, string>();
+  xmlChildren(definitions, 'message').forEach(message => {
+    const part = xmlFirst(message, 'part');
+    messages.set(xmlAttr(message.attrs, 'name'), xmlAttr(part?.attrs || {}, 'element') || xmlAttr(part?.attrs || {}, 'type'));
+  });
+
+  const portTypes = new Map<string, WsdlOperation[]>();
+  xmlChildren(definitions, 'portType').forEach(portType => {
+    portTypes.set(xmlAttr(portType.attrs, 'name'), xmlChildren(portType, 'operation').map(operation => ({
+      name: xmlAttr(operation.attrs, 'name'),
+      inputMessage: xmlAttr(xmlFirst(operation, 'input')?.attrs || {}, 'message'),
+      soapAction: '',
+      documentation: wsdlText(xmlFirst(operation, 'documentation'))
+    })).filter(operation => operation.name));
+  });
+
+  const bindings = new Map<string, { type: string; operations: Map<string, string> }>();
+  xmlChildren(definitions, 'binding').forEach(binding => {
+    const operations = new Map<string, string>();
+    xmlChildren(binding, 'operation').forEach(operation => {
+      const soapAction = operation.children.find(child => xmlLocalName(child.name) === 'operation' && xmlAttr(child.attrs, 'soapAction'))?.attrs.soapAction || '';
+      operations.set(xmlAttr(operation.attrs, 'name'), soapAction);
+    });
+    bindings.set(xmlAttr(binding.attrs, 'name'), {
+      type: cleanQName(xmlAttr(binding.attrs, 'type')),
+      operations
+    });
+  });
+
+  const requests: ImportedRequestRecord[] = [];
+  const folderKeys = new Set<string>();
+  xmlChildren(definitions, 'service').forEach(service => {
+    const serviceName = xmlAttr(service.attrs, 'name') || projectName;
+    xmlChildren(service, 'port').forEach(port => {
+      const binding = bindings.get(cleanQName(xmlAttr(port.attrs, 'binding')));
+      if (!binding) return;
+      const operations = portTypes.get(binding.type) || [];
+      const address = port.children.find(child => xmlLocalName(child.name) === 'address' && xmlAttr(child.attrs, 'location'));
+      const url = xmlAttr(address?.attrs || {}, 'location');
+      operations.forEach((operation, index) => {
+        const soapAction = binding.operations.get(operation.name) || `${targetNamespace}${operation.name}`;
+        const bodyText = wsdlSoapEnvelope(operation, messages, elements, targetNamespace);
+        const request: RequestDocument = {
+          ...createEmptyRequest(operation.name),
+          name: operation.name,
+          method: 'POST',
+          url,
+          path: normalizePath(url),
+          description: operation.documentation,
+          headers: [
+            { name: 'Content-Type', value: 'text/xml; charset=utf-8', enabled: true, kind: 'text' },
+            { name: 'SOAPAction', value: soapAction, enabled: true, kind: 'text' }
+          ],
+          body: {
+            mode: 'xml',
+            mimeType: 'text/xml; charset=utf-8',
+            text: bodyText,
+            fields: []
+          },
+          auth: { type: 'none' },
+          docs: operation.documentation,
+          order: index + 1
+        };
+        requests.push({ folderSegments: [serviceName], request, cases: [] });
+        folderKeys.add(serviceName);
+      });
+    });
+  });
+
+  const warnings: ImportWarning[] = [{
+    level: 'info',
+    scope: 'project',
+    code: 'wsdl-import',
+    status: requests.length > 0 ? 'compatible' : 'degraded',
+    message: `${projectName}: WSDL imported with ${requests.length} SOAP operation${requests.length === 1 ? '' : 's'}.`
+  }];
+  if (requests.length === 0) {
+    warnings.push({
+      level: 'warning',
+      scope: 'project',
+      code: 'wsdl-empty',
+      status: 'degraded',
+      message: 'No SOAP operations were found in the WSDL services/bindings/portTypes.'
+    });
+  }
+
+  return {
+    detectedFormat: 'wsdl',
+    summary: {
+      requests: requests.length,
+      folders: folderKeys.size,
+      environments: 1
+    },
+    project: createDefaultProject(projectName),
+    environments: [createDefaultEnvironment('shared')],
+    requests,
+    collections: [],
+    warnings
+  };
+}
+
 function importBruno(content: string): ImportResult {
   const { sections, prelude } = parseBruSections(content);
   const metadata = parseBruKeyValueBlock(findBruSection(sections, 'meta')?.content || '');
@@ -1992,6 +2297,9 @@ export function importBrunoCollectionFiles(files: ImportFileEntry[]): ImportResu
 export function importSourceText(content: string): ImportResult {
   if (looksLikeBruno(content)) {
     return importBruno(content);
+  }
+  if (looksLikeWsdl(content)) {
+    return importWsdl(content);
   }
   const document = parseStructuredText(content);
   if (document.openapi) {

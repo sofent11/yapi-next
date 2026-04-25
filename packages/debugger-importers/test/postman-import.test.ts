@@ -422,6 +422,91 @@ items:
   assert.equal(result.warnings.some(warning => warning.code === 'opencollection-item-review'), false);
 });
 
+test('WSDL import creates SOAP requests from services, bindings, and port types', () => {
+  const wsdl = `<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions
+  name="TestWSDLServiceXML"
+  targetNamespace="http://example.com/testservice"
+  xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+  xmlns:tns="http://example.com/testservice"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <wsdl:types>
+    <xsd:schema targetNamespace="http://example.com/testservice">
+      <xsd:element name="GetUserRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="userId" type="xsd:string"/>
+            <xsd:element name="includeDetails" type="xsd:boolean" minOccurs="0"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="CreateUserRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="name" type="xsd:string"/>
+            <xsd:element name="email" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+    </xsd:schema>
+  </wsdl:types>
+  <wsdl:message name="GetUserRequestMessage">
+    <wsdl:part name="parameters" element="tns:GetUserRequest"/>
+  </wsdl:message>
+  <wsdl:message name="CreateUserRequestMessage">
+    <wsdl:part name="parameters" element="tns:CreateUserRequest"/>
+  </wsdl:message>
+  <wsdl:portType name="UserServicePortType">
+    <wsdl:operation name="GetUser">
+      <wsdl:documentation>Retrieve user information by ID</wsdl:documentation>
+      <wsdl:input message="tns:GetUserRequestMessage"/>
+    </wsdl:operation>
+    <wsdl:operation name="CreateUser">
+      <wsdl:input message="tns:CreateUserRequestMessage"/>
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="UserServiceBinding" type="tns:UserServicePortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="GetUser">
+      <soap:operation soapAction="http://example.com/testservice/GetUser"/>
+    </wsdl:operation>
+    <wsdl:operation name="CreateUser">
+      <soap:operation soapAction="http://example.com/testservice/CreateUser"/>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="UserService">
+    <wsdl:port name="UserServicePort" binding="tns:UserServiceBinding">
+      <soap:address location="http://example.com/soap/userservice"/>
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>`;
+
+  const result = importSourceText(wsdl);
+  const getUser = result.requests.find(item => item.request.name === 'GetUser')?.request;
+  const createUser = result.requests.find(item => item.request.name === 'CreateUser')?.request;
+
+  assert.equal(result.detectedFormat, 'wsdl');
+  assert.equal(result.project.name, 'TestWSDLServiceXML');
+  assert.equal(result.summary.requests, 2);
+  assert.equal(result.summary.folders, 1);
+  assert.deepEqual(result.requests[0]?.folderSegments, ['UserService']);
+  assert.equal(getUser?.method, 'POST');
+  assert.equal(getUser?.url, 'http://example.com/soap/userservice');
+  assert.equal(getUser?.auth.type, 'none');
+  assert.equal(getUser?.headers.find(item => item.name === 'Content-Type')?.value, 'text/xml; charset=utf-8');
+  assert.equal(getUser?.headers.find(item => item.name === 'SOAPAction')?.value, 'http://example.com/testservice/GetUser');
+  assert.equal(getUser?.body.mode, 'xml');
+  assert.match(getUser?.body.text || '', /<soap:Envelope/);
+  assert.match(getUser?.body.text || '', /<GetUserRequest xmlns="http:\/\/example\.com\/testservice">/);
+  assert.match(getUser?.body.text || '', /<userId>string<\/userId>/);
+  assert.match(getUser?.body.text || '', /<includeDetails>true<\/includeDetails>/);
+  assert.equal(getUser?.description, 'Retrieve user information by ID');
+  assert.equal(createUser?.headers.find(item => item.name === 'SOAPAction')?.value, 'http://example.com/testservice/CreateUser');
+  assert.match(createUser?.body.text || '', /<CreateUserRequest/);
+  assert.equal(result.warnings.some(warning => warning.code === 'wsdl-import'), true);
+});
+
 test('Bruno import maps a .bru HTTP request into a debugger request', () => {
   const bru = `meta {
   name: create-example
