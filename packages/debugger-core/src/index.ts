@@ -1505,6 +1505,26 @@ function buildAuthPreview(
     );
   }
 
+  if (auth.type === 'wsse') {
+    const token = buildWsseUsernameToken({
+      auth,
+      project,
+      environment,
+      extraSources,
+      generateDynamicValues: true
+    });
+    preview.push(
+      resolvedAuthPreviewItemSchema.parse({
+        target: 'header',
+        name: 'X-WSSE',
+        value: token.header,
+        sourceLabel: token.sourceLabel,
+        status: token.missing.length === 0 ? 'ready' : 'missing',
+        detail: token.missing.length ? `missing ${token.missing.join(', ')}` : 'UsernameToken'
+      })
+    );
+  }
+
   return preview;
 }
 
@@ -1632,6 +1652,55 @@ function hmacSha1Base64(key: string, value: string) {
   const outer = keyBytes.map(byte => byte ^ 0x5c);
   const inner = keyBytes.map(byte => byte ^ 0x36);
   return base64Bytes(sha1Bytes([...outer, ...sha1Bytes([...inner, ...utf8Bytes(value)])]));
+}
+
+function wsseQuotedValue(input: string) {
+  return input.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function buildWsseUsernameToken(input: {
+  auth: AuthConfig;
+  project: ProjectDocument;
+  environment: EnvironmentDocument | undefined;
+  extraSources: Array<Record<string, unknown>>;
+  generateDynamicValues?: boolean;
+}) {
+  const username = resolveAuthValue(input.auth.username, input.auth.usernameFromVar, input.project, input.environment, input.extraSources);
+  const password = resolveAuthValue(input.auth.password || '', input.auth.passwordFromVar, input.project, input.environment, input.extraSources);
+  const created = applyProjectVariables(
+    input.auth.created || (input.generateDynamicValues === false ? '' : new Date().toISOString()),
+    input.project,
+    input.environment,
+    input.extraSources
+  );
+  const nonce = applyProjectVariables(
+    input.auth.nonce || (input.generateDynamicValues === false ? '' : createId('nonce')),
+    input.project,
+    input.environment,
+    input.extraSources
+  );
+  const explicitDigest = applyProjectVariables(input.auth.passwordDigest || '', input.project, input.environment, input.extraSources);
+  const digest = explicitDigest || (nonce && created && password.value ? base64Bytes(sha1Bytes(utf8Bytes(`${nonce}${created}${password.value}`))) : '');
+  const missing = [
+    ...(username.value.trim() ? [] : [input.auth.usernameFromVar?.trim() || 'username']),
+    ...(digest.trim() ? [] : [input.auth.passwordFromVar?.trim() || 'password/passwordDigest']),
+    ...(nonce.trim() ? [] : ['nonce']),
+    ...(created.trim() ? [] : ['created'])
+  ];
+
+  return {
+    header:
+      missing.length === 0
+        ? `UsernameToken Username="${wsseQuotedValue(username.value)}", PasswordDigest="${wsseQuotedValue(digest)}", Nonce="${wsseQuotedValue(nonce)}", Created="${wsseQuotedValue(created)}"`
+        : '',
+    sourceLabel: [
+      username.sourceLabel,
+      explicitDigest ? 'password digest' : password.sourceLabel,
+      input.auth.nonce ? 'nonce' : 'generated nonce',
+      input.auth.created ? 'created' : 'generated created'
+    ].join('; '),
+    missing
+  };
 }
 
 function oauthPercentEncode(input: string) {
@@ -1835,6 +1904,16 @@ function buildPreflightDiagnostics(
       level: 'error',
       blocking: true,
       message: 'OAuth1 auth requires both consumer key and consumer secret.',
+      field: 'auth'
+    });
+  }
+
+  if (auth.type === 'wsse' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'x-wsse')) {
+    diagnostics.push({
+      code: 'incomplete-wsse-auth',
+      level: 'error',
+      blocking: true,
+      message: 'WSSE auth requires username plus either password or password digest.',
       field: 'auth'
     });
   }
@@ -2070,6 +2149,14 @@ export function inspectResolvedRequest(
                   authInput.clientSecretFromVar ? `{{${authInput.clientSecretFromVar}}}` : authInput.clientSecret || '',
                   authInput.scope || ''
                 ].filter(Boolean).join(' | ')
+            : authInput.type === 'wsse'
+              ? [
+                  authInput.usernameFromVar ? `{{${authInput.usernameFromVar}}}` : authInput.username || '',
+                  authInput.passwordDigest ||
+                    (authInput.passwordFromVar ? `{{${authInput.passwordFromVar}}}` : authInput.password || ''),
+                  authInput.nonce || '',
+                  authInput.created || ''
+                ].filter(Boolean).join(' | ')
             : '';
     fields.push(
       collectResolvedField(
@@ -2114,7 +2201,8 @@ export function inspectResolvedRequest(
     (auth.type === 'bearer' && !auth.token && !auth.tokenFromVar) ||
     (auth.type === 'basic' && !auth.username && !auth.usernameFromVar) ||
     (auth.type === 'apikey' && !auth.key) ||
-    (auth.type === 'oauth1' && (!auth.consumerKey || !auth.consumerSecret))
+    (auth.type === 'oauth1' && (!auth.consumerKey || !auth.consumerSecret)) ||
+    (auth.type === 'wsse' && ((!auth.username && !auth.usernameFromVar) || (!auth.password && !auth.passwordFromVar && !auth.passwordDigest)))
   ) {
     warnings.push({
       code: 'incomplete-auth',
@@ -2313,6 +2401,24 @@ export function resolveRequest(
       authHeaders.push({
         name: 'Authorization',
         value: formatOauth1AuthorizationHeader(signed.params, auth.realm),
+        enabled: true,
+        kind: 'text',
+        filePath: undefined
+      });
+    }
+  }
+  if (auth.type === 'wsse') {
+    const token = buildWsseUsernameToken({
+      auth,
+      project,
+      environment,
+      extraSources,
+      generateDynamicValues: true
+    });
+    if (token.header) {
+      authHeaders.push({
+        name: 'X-WSSE',
+        value: token.header,
         enabled: true,
         kind: 'text',
         filePath: undefined

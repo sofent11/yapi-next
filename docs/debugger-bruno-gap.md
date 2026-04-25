@@ -15,7 +15,7 @@ This document tracks parity against Bruno OSS while keeping YAPI Debugger's loca
 | HTTP requests | Method, URL, params, headers, body, auth | Implemented | Existing workbench covers the primary REST flow. |
 | Body modes | JSON, text, XML, GraphQL, SPARQL, file, form URL encoded, multipart | Partial | Schema/UI/runtime now accept XML, GraphQL, SPARQL, and file body for HTTP send. GraphQL query variables are materialized as JSON payloads, and the UI can fetch introspection plus generate query/mutation/subscription drafts from root fields with default variables and one-level selections. A full nested query explorer is pending. |
 | Request kinds | HTTP, GraphQL, gRPC, WebSocket, JS | Partial | Schema has `kind: http/graphql/grpc/websocket/script`; GraphQL sends over HTTP POST. WebSocket has a first-pass connect/send/receive session runner. gRPC and script item runtimes are pending. |
-| Auth | Basic, bearer, API key, OAuth2, OAuth1, AWS v4, Digest, NTLM, WSSE | Partial | Schema/UI preserve all major Bruno auth families. Runtime signing is implemented for basic/bearer/API key, cached OAuth2 tokens, and OAuth1 HMAC-SHA1/PLAINTEXT headers or query params. AWS v4, Digest, NTLM, and WSSE runtime signing are pending. |
+| Auth | Basic, bearer, API key, OAuth2, OAuth1, AWS v4, Digest, NTLM, WSSE | Partial | Schema/UI preserve all major Bruno auth families. Runtime signing is implemented for basic/bearer/API key, cached OAuth2 tokens, OAuth1 HMAC-SHA1/PLAINTEXT headers or query params, and WSSE UsernameToken headers. AWS v4, Digest, and NTLM runtime signing are pending. |
 | Variables | Collection/folder/request/response/env/global/prompt vars | Partial | Schema has scoped variable rows. Runtime currently resolves project/env/runtime/data/step sources. Folder and prompt UX are pending. |
 | Scripts/tests | Pre-request, post-response, tests, assertions | Partial | Existing case scripts and checks remain. Request/collection-level script fields are now in schema; full Bruno JS API parity is pending. |
 | Runner | GUI runner, tags, env matrix, reports | Partial | Existing collection runner supports iteration, env matrix, retries, reports. GUI and CLI can filter runs by tags across step/request/case metadata, collection `runnerTags` act as default filters, reports expose active filters, and failed reruns inherit report filters. Broader CLI packaging/report presets are pending. |
@@ -36,6 +36,6 @@ This document tracks parity against Bruno OSS while keeping YAPI Debugger's loca
 
 1. Expand GraphQL builder into a nested explorer: selectable child fields, argument defaults, fragments, and persisted schema cache.
 2. Expand WebSocket runtime into a persistent timeline: manual send, reconnect, close controls, binary frames, and saved examples.
-3. Implement advanced auth signing: OAuth1, AWS v4, Digest, NTLM, WSSE.
+3. Implement remaining advanced auth signing: AWS v4, Digest, NTLM.
 4. Add Bruno and Insomnia import/export fixtures and round-trip tests.
 5. Add Preferences center for proxy/cert/theme/keybindings/cache.

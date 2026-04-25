@@ -259,6 +259,49 @@ test('resolveRequest signs OAuth1 requests with HMAC-SHA1', () => {
   assert.match(authorization, /oauth_signature="tR3%2BTy81lMeYAr%2FFid0kMTYa%2FWM%3D"/);
 });
 
+test('resolveRequest builds WSSE UsernameToken headers', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('WSSE Feed');
+  request.method = 'GET';
+  request.url = 'https://api.example.com/feed';
+  request.auth = {
+    type: 'wsse',
+    username: 'alice',
+    password: 'secret',
+    nonce: 'abc',
+    created: '2024-01-01T00:00:00Z'
+  };
+
+  const preview = resolveRequest(project, request, undefined, environment);
+  const wsse = preview.headers.find(header => header.name === 'X-WSSE')?.value || '';
+
+  assert.match(wsse, /^UsernameToken /);
+  assert.match(wsse, /Username="alice"/);
+  assert.match(wsse, /PasswordDigest="2zAZN2kdxV\/Tm6fciqdYpqlZo6Q="/);
+  assert.match(wsse, /Nonce="abc"/);
+  assert.match(wsse, /Created="2024-01-01T00:00:00Z"/);
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
+  assert.equal(insight.authPreview.some(item => item.name === 'X-WSSE' && item.status === 'ready'), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-wsse-auth'), false);
+});
+
+test('inspectResolvedRequest blocks incomplete WSSE auth', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('WSSE Feed');
+  request.url = 'https://api.example.com/feed';
+  request.auth = {
+    type: 'wsse',
+    username: 'alice'
+  };
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
+  assert.equal(insight.authPreview.some(item => item.name === 'X-WSSE' && item.status === 'missing'), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-wsse-auth' && item.blocking), true);
+});
+
 test('buildGraphqlIntrospectionRequest targets schemaUrl and preserves auth headers', () => {
   const project = createDefaultProject('Demo');
   const environment = createDefaultEnvironment('shared');

@@ -1307,6 +1307,13 @@ export function RequestPanel(props: {
                       <TextInput label="Workstation" value={auth.workstation || ''} onChange={event => updateAuth({ ...auth, workstation: event.currentTarget.value })} />
                     </>
                   ) : null}
+                  {auth.type === 'wsse' ? (
+                    <>
+                      <TextInput label="Nonce" value={auth.nonce || ''} placeholder="Auto generated" onChange={event => updateAuth({ ...auth, nonce: event.currentTarget.value })} />
+                      <TextInput label="Created" value={auth.created || ''} placeholder="Auto generated ISO timestamp" onChange={event => updateAuth({ ...auth, created: event.currentTarget.value })} />
+                      <TextInput label="Password Digest" value={auth.passwordDigest || ''} placeholder="Optional override" onChange={event => updateAuth({ ...auth, passwordDigest: event.currentTarget.value })} />
+                    </>
+                  ) : null}
                 </>
               ) : null}
               {auth.type === 'profile' ? (

@@ -767,6 +767,34 @@ export function EnvironmentCenterPanel(props: {
                                   )
                                 }))
                               } />
+                              {profile.auth.type === 'wsse' ? (
+                                <>
+                                  <TextInput label="Nonce" value={profile.auth.nonce || ''} placeholder="Auto generated" onChange={event =>
+                                    props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                      ...environment,
+                                      authProfiles: environment.authProfiles.map(item =>
+                                        item.name === profile.name ? { ...item, auth: { ...item.auth, nonce: event.currentTarget.value } } : item
+                                      )
+                                    }))
+                                  } />
+                                  <TextInput label="Created" value={profile.auth.created || ''} placeholder="Auto generated ISO timestamp" onChange={event =>
+                                    props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                      ...environment,
+                                      authProfiles: environment.authProfiles.map(item =>
+                                        item.name === profile.name ? { ...item, auth: { ...item.auth, created: event.currentTarget.value } } : item
+                                      )
+                                    }))
+                                  } />
+                                  <TextInput label="Password Digest" value={profile.auth.passwordDigest || ''} placeholder="Optional override" onChange={event =>
+                                    props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                      ...environment,
+                                      authProfiles: environment.authProfiles.map(item =>
+                                        item.name === profile.name ? { ...item, auth: { ...item.auth, passwordDigest: event.currentTarget.value } } : item
+                                      )
+                                    }))
+                                  } />
+                                </>
+                              ) : null}
                             </>
                           ) : null}
                         </div>
