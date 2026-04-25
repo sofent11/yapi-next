@@ -1956,7 +1956,7 @@ mark {
   align-items: center;
   gap: 6px;
   min-height: 24px;
-  max-width: 220px;
+  max-width: 280px;
   padding: 3px 8px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -1990,6 +1990,17 @@ mark {
   background: color-mix(in oklch, var(--accent) 12%, var(--surface-muted));
   font-size: 10px;
   font-style: normal;
+}
+
+.graphql-field-chip small {
+  min-width: 0;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .graphql-schema-stats span {

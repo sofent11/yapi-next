@@ -241,6 +241,7 @@ query IntrospectionQuery {
         name
         args {
           name
+          defaultValue
           type {
             ...TypeRef
           }
@@ -283,6 +284,7 @@ export type GraphqlFieldArgumentSummary = {
   name: string;
   type: string;
   required: boolean;
+  defaultValue?: string;
 };
 
 export type GraphqlOperationFieldSummary = {
@@ -362,6 +364,26 @@ function isGraphqlLeafType(typeRef: GraphqlIntrospectionTypeRef | null | undefin
   return kind === 'SCALAR' || kind === 'ENUM';
 }
 
+function selectableGraphqlFields(typeRef: GraphqlIntrospectionTypeRef | null | undefined, byName: Map<string, unknown>) {
+  const namedType = namedGraphqlType(typeRef);
+  const schemaType = byName.get(namedType);
+  const fields = (schemaType as { fields?: unknown })?.fields;
+  if (!Array.isArray(fields)) return [];
+  return fields
+    .map(field => field as GraphqlIntrospectionField)
+    .filter(field => {
+      const args = Array.isArray(field.args) ? field.args : [];
+      return args.length === 0 && typeof field.name === 'string' && field.name.trim().length > 0;
+    });
+}
+
+function leafSelectionsForType(typeRef: GraphqlIntrospectionTypeRef | null | undefined, byName: Map<string, unknown>, limit = 6) {
+  return selectableGraphqlFields(typeRef, byName)
+    .filter(field => isGraphqlLeafType(field.type, byName))
+    .map(field => String(field.name))
+    .slice(0, limit);
+}
+
 function fieldNames(schemaType: unknown) {
   const fields = (schemaType as { fields?: unknown })?.fields;
   if (!Array.isArray(fields)) return [];
@@ -376,17 +398,15 @@ function selectionFieldsForType(typeRef: GraphqlIntrospectionTypeRef | null | un
   const schemaType = byName.get(namedType);
   const kind = schemaTypeKind(schemaType);
   if (!namedType || kind === 'SCALAR' || kind === 'ENUM') return [];
-  const fields = (schemaType as { fields?: unknown })?.fields;
-  if (!Array.isArray(fields)) return ['__typename'];
-  const selected = fields
-    .map(field => field as GraphqlIntrospectionField)
-    .filter(field => {
-      const args = Array.isArray(field.args) ? field.args : [];
-      return args.length === 0 && typeof field.name === 'string' && isGraphqlLeafType(field.type, byName);
-    })
-    .map(field => String(field.name))
-    .filter(Boolean)
-    .slice(0, 6);
+  const selected = leafSelectionsForType(typeRef, byName, 6);
+  const nested = selectableGraphqlFields(typeRef, byName)
+    .filter(field => !isGraphqlLeafType(field.type, byName))
+    .slice(0, Math.max(0, 8 - selected.length))
+    .map(field => {
+      const childSelections = leafSelectionsForType(field.type, byName, 4);
+      return `${String(field.name)} { ${childSelections.length > 0 ? childSelections.join(' ') : '__typename'} }`;
+    });
+  selected.push(...nested);
   return selected.length > 0 ? selected : ['__typename'];
 }
 
@@ -402,11 +422,12 @@ function operationFields(schemaType: unknown, byName: Map<string, unknown>): Gra
         name: String(field.name),
         args: args
           .map(arg => {
-            const source = arg as { name?: unknown; type?: GraphqlIntrospectionTypeRef | null };
+            const source = arg as { name?: unknown; defaultValue?: unknown; type?: GraphqlIntrospectionTypeRef | null };
             return {
               name: String(source.name || ''),
               type: formatGraphqlType(source.type),
-              required: isGraphqlRequired(source.type)
+              required: isGraphqlRequired(source.type),
+              defaultValue: typeof source.defaultValue === 'string' ? source.defaultValue : undefined
             };
           })
           .filter(arg => arg.name.trim().length > 0),
@@ -496,7 +517,23 @@ function capitalizeGraphqlName(input: string) {
   return words.map(word => `${word.charAt(0).toUpperCase()}${word.slice(1)}`).join('');
 }
 
-function placeholderForGraphqlType(type: string): unknown {
+function parseGraphqlDefaultValue(defaultValue: string | undefined): unknown {
+  if (!defaultValue) return undefined;
+  const trimmed = defaultValue.trim();
+  if (!trimmed) return undefined;
+  if (trimmed === 'true') return true;
+  if (trimmed === 'false') return false;
+  if (trimmed === 'null') return null;
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function placeholderForGraphqlType(type: string, defaultValue?: string): unknown {
+  const parsedDefault = parseGraphqlDefaultValue(defaultValue);
+  if (parsedDefault !== undefined) return parsedDefault;
   const normalized = type.replace(/[!\[\]]/g, '');
   if (type.startsWith('[')) return [];
   if (normalized === 'Int' || normalized === 'Float') return 0;
@@ -525,7 +562,7 @@ export function buildGraphqlOperationDraft(
   const selection = field.selection.length > 0
     ? ` {\n    ${field.selection.join('\n    ')}\n  }`
     : '';
-  const variables = Object.fromEntries(field.args.map(arg => [arg.name, placeholderForGraphqlType(arg.type)]));
+  const variables = Object.fromEntries(field.args.map(arg => [arg.name, placeholderForGraphqlType(arg.type, arg.defaultValue)]));
   return {
     operationName,
     query: `${operation} ${operationName}${variableDefinitions ? `(${variableDefinitions})` : ''} {\n  ${field.name}${callArguments ? `(${callArguments})` : ''}${selection}\n}`,

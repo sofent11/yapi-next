@@ -303,7 +303,16 @@ test('summarizeGraphqlSchema extracts root operation fields', () => {
             fields: [
               { name: 'id', args: [], type: { kind: 'SCALAR', name: 'ID' } },
               { name: 'name', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'profile', args: [], type: { kind: 'OBJECT', name: 'Profile' } },
               { name: 'friends', args: [], type: { kind: 'LIST', ofType: { kind: 'OBJECT', name: 'User' } } }
+            ]
+          },
+          {
+            kind: 'OBJECT',
+            name: 'Profile',
+            fields: [
+              { name: 'bio', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'avatarUrl', args: [], type: { kind: 'SCALAR', name: 'String' } }
             ]
           },
           { kind: 'SCALAR', name: 'String', fields: null },
@@ -314,10 +323,10 @@ test('summarizeGraphqlSchema extracts root operation fields', () => {
   }));
 
   assert.equal(summary.ok, true);
-  assert.equal(summary.typeCount, 5);
+  assert.equal(summary.typeCount, 6);
   assert.deepEqual(summary.queries, ['viewer', 'search']);
   assert.deepEqual(summary.mutations, ['login']);
-  assert.deepEqual(summary.queryFields[0]?.selection, ['id', 'name']);
+  assert.deepEqual(summary.queryFields[0]?.selection, ['id', 'name', 'profile { bio avatarUrl }', 'friends { id name }']);
   assert.equal(summary.queryFields[1]?.args[0]?.type, 'String!');
 });
 
@@ -337,7 +346,7 @@ test('buildGraphqlOperationDraft creates a query skeleton with variables', () =>
                 name: 'search',
                 args: [
                   { name: 'term', type: { kind: 'NON_NULL', ofType: { kind: 'SCALAR', name: 'String' } } },
-                  { name: 'limit', type: { kind: 'SCALAR', name: 'Int' } }
+                  { name: 'limit', defaultValue: '20', type: { kind: 'SCALAR', name: 'Int' } }
                 ],
                 type: { kind: 'LIST', ofType: { kind: 'OBJECT', name: 'User' } }
               }
@@ -364,7 +373,7 @@ test('buildGraphqlOperationDraft creates a query skeleton with variables', () =>
   assert.match(draft.query, /query QuerySearch\(\$term: String!, \$limit: Int\)/);
   assert.match(draft.query, /search\(term: \$term, limit: \$limit\)/);
   assert.match(draft.query, /id/);
-  assert.deepEqual(JSON.parse(draft.variables), { term: '', limit: 0 });
+  assert.deepEqual(JSON.parse(draft.variables), { term: '', limit: 20 });
 });
 
 test('resolveRequest interpolates WebSocket message drafts', () => {

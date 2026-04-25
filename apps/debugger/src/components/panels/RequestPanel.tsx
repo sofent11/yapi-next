@@ -1071,6 +1071,7 @@ export function RequestPanel(props: {
                                     >
                                       <span>{field.name}</span>
                                       {field.args.length > 0 ? <em>{field.args.length}</em> : null}
+                                      <small>{field.returnType}</small>
                                     </button>
                                   ))}
                                 </div>
