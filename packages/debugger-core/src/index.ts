@@ -2262,6 +2262,15 @@ function shouldRunCollectionStep(input: {
   return true;
 }
 
+function resolveCollectionRunFilters(collection: CollectionDocument, filters?: CollectionRunFilters): CollectionRunFilters {
+  return {
+    tags: filters?.tags !== undefined ? filters.tags : collection.runnerTags || [],
+    stepKeys: filters?.stepKeys || [],
+    requestIds: filters?.requestIds || [],
+    caseIds: filters?.caseIds || []
+  };
+}
+
 function shouldRetryAttempt(
   policy: RetryPolicy | undefined,
   failureType: 'network-error' | 'assertion-failed' | 'blocking-diagnostic',
@@ -2568,6 +2577,7 @@ export async function runCollection(input: {
   const record = input.workspace.collections.find(item => item.document.id === input.collectionId);
   if (!record) throw new Error('Collection not found');
   const collection = record.document;
+  const effectiveFilters = resolveCollectionRunFilters(collection, input.options?.filters);
   const matrixEnvironments = resolveCollectionEnvironments(input.workspace, collection, input.options?.environmentName);
   const parsedDataRows = parseCollectionDataText(record.dataText || '');
   const baseRows =
@@ -2603,7 +2613,7 @@ export async function runCollection(input: {
         if (!requestRecord || !shouldRunCollectionStep({
           step,
           requestRecord,
-          filters: input.options?.filters,
+          filters: effectiveFilters,
           explicitStepKeys: input.options?.stepKeys
         })) {
           continue;
@@ -2680,10 +2690,10 @@ export async function runCollection(input: {
     iterations: reportIterations,
     matrixEnvironments,
     filters: {
-      tags: input.options?.filters?.tags || [],
-      stepKeys: input.options?.filters?.stepKeys || input.options?.stepKeys || [],
-      requestIds: input.options?.filters?.requestIds || [],
-      caseIds: input.options?.filters?.caseIds || []
+      tags: effectiveFilters.tags || [],
+      stepKeys: effectiveFilters.stepKeys?.length ? effectiveFilters.stepKeys : input.options?.stepKeys || [],
+      requestIds: effectiveFilters.requestIds || [],
+      caseIds: effectiveFilters.caseIds || []
     }
   });
 }

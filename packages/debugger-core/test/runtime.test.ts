@@ -805,10 +805,10 @@ test('runCollection filters steps by step and request tags', async () => {
     createCollectionStep({
       key: 'audit',
       requestId: nightlyRequest.id,
-      name: 'Audit',
-      tags: ['nightly']
+      name: 'Audit'
     })
   ];
+  collection.steps[1].tags = ['nightly'];
 
   const workspace = {
     root: '/tmp/debugger-suite-tags',
@@ -869,6 +869,58 @@ test('runCollection filters steps by step and request tags', async () => {
   assert.deepEqual(report.filters.tags, ['request-smoke']);
   assert.equal(report.iterations[0]?.stepRuns.length, 1);
   assert.equal(report.iterations[0]?.stepRuns[0]?.stepKey, 'health');
+
+  collection.runnerTags = ['nightly'];
+  const defaultTagSeen: string[] = [];
+  const defaultTagReport = await runCollection({
+    workspace,
+    collectionId: collection.id,
+    sendRequest: async preview => {
+      defaultTagSeen.push(preview.name);
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: preview.url,
+        durationMs: 12,
+        sizeBytes: 2,
+        headers: [],
+        bodyText: '{}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.deepEqual(defaultTagSeen, ['Nightly Audit']);
+  assert.deepEqual(defaultTagReport.filters.tags, ['nightly']);
+
+  const clearedTagSeen: string[] = [];
+  const clearedTagReport = await runCollection({
+    workspace,
+    collectionId: collection.id,
+    options: {
+      filters: {
+        tags: []
+      }
+    },
+    sendRequest: async preview => {
+      clearedTagSeen.push(preview.name);
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: preview.url,
+        durationMs: 12,
+        sizeBytes: 2,
+        headers: [],
+        bodyText: '{}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.deepEqual(clearedTagSeen, ['Smoke Health', 'Nightly Audit']);
+  assert.deepEqual(clearedTagReport.filters.tags, []);
 });
 
 test('renderCollectionRunReportJunit and rerunFailedStepKeys encode failures for CI', () => {

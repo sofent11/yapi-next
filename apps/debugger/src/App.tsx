@@ -1327,7 +1327,7 @@ export function App() {
         environmentName: store.activeEnvironmentName,
         stepKeys: options?.stepKeys,
         seedReport: options?.seedReport,
-        filters: options?.tags && options.tags.length > 0 ? { tags: options.tags } : undefined
+        filters: options && 'tags' in options ? { tags: options.tags || [] } : undefined
       });
     },
     onSuccess: async report => {
