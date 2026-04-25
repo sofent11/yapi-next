@@ -232,6 +232,33 @@ test('inspectResolvedRequest blocks invalid GraphQL variables JSON', () => {
   assert.equal(insight.diagnostics.some(item => item.code === 'invalid-graphql-variables' && item.blocking), true);
 });
 
+test('resolveRequest signs OAuth1 requests with HMAC-SHA1', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('OAuth Photos');
+  request.method = 'GET';
+  request.url = 'http://photos.example.net/photos?file=vacation.jpg&size=original';
+  request.auth = {
+    type: 'oauth1',
+    consumerKey: 'dpf43f3p2l4k3l03',
+    consumerSecret: 'kd94hf93k423kf44',
+    token: 'nnch734d00sl2jdk',
+    clientSecret: 'pfkkdhi9sl3r4s00',
+    nonce: 'kllo9940pd9333jh',
+    created: '1191242096',
+    signatureMethod: 'HMAC-SHA1',
+    version: '1.0'
+  };
+
+  const preview = resolveRequest(project, request, undefined, environment);
+  const authorization = preview.headers.find(header => header.name === 'Authorization')?.value || '';
+
+  assert.match(authorization, /^OAuth /);
+  assert.match(authorization, /oauth_consumer_key="dpf43f3p2l4k3l03"/);
+  assert.match(authorization, /oauth_signature_method="HMAC-SHA1"/);
+  assert.match(authorization, /oauth_signature="tR3%2BTy81lMeYAr%2FFid0kMTYa%2FWM%3D"/);
+});
+
 test('buildGraphqlIntrospectionRequest targets schemaUrl and preserves auth headers', () => {
   const project = createDefaultProject('Demo');
   const environment = createDefaultEnvironment('shared');

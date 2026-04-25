@@ -1492,6 +1492,19 @@ function buildAuthPreview(
     }
   }
 
+  if (auth.type === 'oauth1') {
+    preview.push(
+      resolvedAuthPreviewItemSchema.parse({
+        target: auth.addTo === 'query' ? 'query' : 'header',
+        name: auth.addTo === 'query' ? 'oauth_signature' : 'Authorization',
+        value: auth.consumerKey && auth.consumerSecret ? 'OAuth 1.0 signature will be computed from the resolved request.' : '',
+        sourceLabel: profileName ? `environment profile: ${profileName}` : authSource,
+        status: auth.consumerKey && auth.consumerSecret ? 'ready' : 'missing',
+        detail: auth.signatureMethod || 'HMAC-SHA1'
+      })
+    );
+  }
+
   return preview;
 }
 
@@ -1529,6 +1542,182 @@ function encodeBasicAuth(username: string, password: string) {
       alphabet.charAt(fourthBlock);
   }
   return output;
+}
+
+function utf8Bytes(input: string) {
+  if (typeof TextEncoder !== 'undefined') return Array.from(new TextEncoder().encode(input));
+  return Array.from(unescape(encodeURIComponent(input))).map(char => char.charCodeAt(0));
+}
+
+function base64Bytes(bytes: number[]) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  let output = '';
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index] || 0;
+    const second = bytes[index + 1] || 0;
+    const third = bytes[index + 2] || 0;
+    output += alphabet[first >> 2];
+    output += alphabet[((first & 3) << 4) | (second >> 4)];
+    output += index + 1 < bytes.length ? alphabet[((second & 15) << 2) | (third >> 6)] : '=';
+    output += index + 2 < bytes.length ? alphabet[third & 63] : '=';
+  }
+  return output;
+}
+
+function sha1Bytes(input: number[]) {
+  const bytes = [...input];
+  const bitLength = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  for (let shift = 56; shift >= 0; shift -= 8) {
+    bytes.push((bitLength / 2 ** shift) & 0xff);
+  }
+
+  let h0 = 0x67452301;
+  let h1 = 0xefcdab89;
+  let h2 = 0x98badcfe;
+  let h3 = 0x10325476;
+  let h4 = 0xc3d2e1f0;
+
+  for (let offset = 0; offset < bytes.length; offset += 64) {
+    const words: number[] = [];
+    for (let index = 0; index < 80; index += 1) {
+      if (index < 16) {
+        const position = offset + index * 4;
+        words[index] = ((bytes[position] << 24) | (bytes[position + 1] << 16) | (bytes[position + 2] << 8) | bytes[position + 3]) >>> 0;
+      } else {
+        const value = words[index - 3] ^ words[index - 8] ^ words[index - 14] ^ words[index - 16];
+        words[index] = ((value << 1) | (value >>> 31)) >>> 0;
+      }
+    }
+
+    let a = h0;
+    let b = h1;
+    let c = h2;
+    let d = h3;
+    let e = h4;
+
+    for (let index = 0; index < 80; index += 1) {
+      const [f, k] =
+        index < 20
+          ? [((b & c) | (~b & d)) >>> 0, 0x5a827999]
+          : index < 40
+            ? [(b ^ c ^ d) >>> 0, 0x6ed9eba1]
+            : index < 60
+              ? [((b & c) | (b & d) | (c & d)) >>> 0, 0x8f1bbcdc]
+              : [(b ^ c ^ d) >>> 0, 0xca62c1d6];
+      const temp = ((((a << 5) | (a >>> 27)) >>> 0) + f + e + k + words[index]) >>> 0;
+      e = d;
+      d = c;
+      c = ((b << 30) | (b >>> 2)) >>> 0;
+      b = a;
+      a = temp;
+    }
+
+    h0 = (h0 + a) >>> 0;
+    h1 = (h1 + b) >>> 0;
+    h2 = (h2 + c) >>> 0;
+    h3 = (h3 + d) >>> 0;
+    h4 = (h4 + e) >>> 0;
+  }
+
+  return [h0, h1, h2, h3, h4].flatMap(word => [(word >>> 24) & 0xff, (word >>> 16) & 0xff, (word >>> 8) & 0xff, word & 0xff]);
+}
+
+function hmacSha1Base64(key: string, value: string) {
+  const blockSize = 64;
+  let keyBytes = utf8Bytes(key);
+  if (keyBytes.length > blockSize) keyBytes = sha1Bytes(keyBytes);
+  while (keyBytes.length < blockSize) keyBytes.push(0);
+  const outer = keyBytes.map(byte => byte ^ 0x5c);
+  const inner = keyBytes.map(byte => byte ^ 0x36);
+  return base64Bytes(sha1Bytes([...outer, ...sha1Bytes([...inner, ...utf8Bytes(value)])]));
+}
+
+function oauthPercentEncode(input: string) {
+  return encodeURIComponent(input)
+    .replace(/[!'()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function normalizedOauthUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    const defaultPort = (parsed.protocol === 'http:' && parsed.port === '80') || (parsed.protocol === 'https:' && parsed.port === '443');
+    const port = parsed.port && !defaultPort ? `:${parsed.port}` : '';
+    return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${port}${parsed.pathname || '/'}`;
+  } catch (_error) {
+    return url.split('?')[0] || url;
+  }
+}
+
+function oauthParameterString(rows: Array<{ name: string; value: string }>) {
+  return rows
+    .map(row => [oauthPercentEncode(row.name), oauthPercentEncode(row.value)] as const)
+    .sort((left, right) => left[0].localeCompare(right[0]) || left[1].localeCompare(right[1]))
+    .map(([name, value]) => `${name}=${value}`)
+    .join('&');
+}
+
+function buildOauth1Signature(input: {
+  auth: AuthConfig;
+  method: string;
+  url: string;
+  query: ParameterRow[];
+  body: RequestBody;
+  project: ProjectDocument;
+  environment: EnvironmentDocument | undefined;
+  extraSources: Array<Record<string, unknown>>;
+}) {
+  const consumerKey = resolveAuthValue(input.auth.consumerKey || '', undefined, input.project, input.environment, input.extraSources).value;
+  const consumerSecret = resolveAuthValue(input.auth.consumerSecret || '', undefined, input.project, input.environment, input.extraSources).value;
+  const token = resolveAuthValue(input.auth.token || '', input.auth.tokenFromVar, input.project, input.environment, input.extraSources).value;
+  const tokenSecret = resolveAuthValue(input.auth.clientSecret || input.auth.value || '', input.auth.valueFromVar, input.project, input.environment, input.extraSources).value;
+  const signatureMethod = (input.auth.signatureMethod || 'HMAC-SHA1').toUpperCase();
+  const oauthParams = [
+    { name: 'oauth_consumer_key', value: consumerKey },
+    { name: 'oauth_nonce', value: input.auth.nonce || createId('nonce') },
+    { name: 'oauth_signature_method', value: signatureMethod },
+    { name: 'oauth_timestamp', value: input.auth.created || String(Math.floor(Date.now() / 1000)) },
+    { name: 'oauth_version', value: input.auth.version || '1.0' },
+    ...(token ? [{ name: 'oauth_token', value: token }] : [])
+  ];
+  const requestParams = input.query
+    .filter(row => row.enabled && row.name.trim())
+    .map(row => ({ name: row.name, value: row.value }));
+  if (input.body.mode === 'form-urlencoded') {
+    requestParams.push(
+      ...input.body.fields
+        .filter(row => row.enabled && row.name.trim())
+        .map(row => ({ name: row.name, value: row.value }))
+    );
+  }
+  const signingKey = `${oauthPercentEncode(consumerSecret)}&${oauthPercentEncode(tokenSecret)}`;
+  const signature = signatureMethod === 'PLAINTEXT'
+    ? signingKey
+    : hmacSha1Base64(
+        signingKey,
+        [
+          input.method.toUpperCase(),
+          oauthPercentEncode(normalizedOauthUrl(input.url)),
+          oauthPercentEncode(oauthParameterString([...requestParams, ...oauthParams]))
+        ].join('&')
+      );
+  return {
+    params: [...oauthParams, { name: 'oauth_signature', value: signature }],
+    sourceLabel: [
+      consumerKey ? 'consumer key' : 'missing consumer key',
+      consumerSecret ? 'consumer secret' : 'missing consumer secret',
+      token ? 'token' : 'no token'
+    ].join('; ')
+  };
+}
+
+function formatOauth1AuthorizationHeader(params: Array<{ name: string; value: string }>, realm?: string) {
+  const headerParams = [
+    ...(realm ? [{ name: 'realm', value: realm }] : []),
+    ...params
+  ];
+  return `OAuth ${headerParams.map(row => `${oauthPercentEncode(row.name)}="${oauthPercentEncode(row.value)}"`).join(', ')}`;
 }
 
 function buildPreflightDiagnostics(
@@ -1638,6 +1827,16 @@ function buildPreflightDiagnostics(
         field: 'auth'
       });
     }
+  }
+
+  if (auth.type === 'oauth1' && (!auth.consumerKey || !auth.consumerSecret)) {
+    diagnostics.push({
+      code: 'incomplete-oauth1-auth',
+      level: 'error',
+      blocking: true,
+      message: 'OAuth1 auth requires both consumer key and consumer secret.',
+      field: 'auth'
+    });
   }
 
   if (body.mode === 'multipart') {
@@ -1914,7 +2113,8 @@ export function inspectResolvedRequest(
   if (
     (auth.type === 'bearer' && !auth.token && !auth.tokenFromVar) ||
     (auth.type === 'basic' && !auth.username && !auth.usernameFromVar) ||
-    (auth.type === 'apikey' && !auth.key)
+    (auth.type === 'apikey' && !auth.key) ||
+    (auth.type === 'oauth1' && (!auth.consumerKey || !auth.consumerSecret))
   ) {
     warnings.push({
       code: 'incomplete-auth',
@@ -2028,6 +2228,13 @@ export function resolveRequest(
   };
   const mergedBody = materializeGraphqlBody(requestBodySchema.parse(interpolatedBody));
 
+  const mergedVariables = mergeVariableSources(project, environment, extraSources);
+  let candidateUrl = urlParts.url;
+  if (!candidateUrl || (!candidateUrl.includes('://') && !rawUrl.startsWith('{{'))) {
+    const baseUrl = String(readPathValue(mergedVariables[mergedVariables.length - 1], 'baseUrl') || '');
+    candidateUrl = `${baseUrl}${candidateUrl || path || ''}`;
+  }
+
   const authHeaders = [...headers];
   const authQuery = [...query];
   if (auth.type === 'bearer' && (auth.token || auth.tokenFromVar)) {
@@ -2087,12 +2294,30 @@ export function resolveRequest(
       }
     }
   }
-
-  const mergedVariables = mergeVariableSources(project, environment, extraSources);
-  let candidateUrl = urlParts.url;
-  if (!candidateUrl || (!candidateUrl.includes('://') && !rawUrl.startsWith('{{'))) {
-    const baseUrl = String(readPathValue(mergedVariables[mergedVariables.length - 1], 'baseUrl') || '');
-    candidateUrl = `${baseUrl}${candidateUrl || path || ''}`;
+  if (auth.type === 'oauth1' && auth.consumerKey && auth.consumerSecret) {
+    const signed = buildOauth1Signature({
+      auth,
+      method: caseDocument?.overrides.method || request.method,
+      url: candidateUrl,
+      query: authQuery,
+      body: mergedBody,
+      project,
+      environment,
+      extraSources
+    });
+    if (auth.addTo === 'query') {
+      signed.params.forEach(row => {
+        authQuery.push({ ...row, enabled: true, kind: 'text' as const, filePath: undefined });
+      });
+    } else {
+      authHeaders.push({
+        name: 'Authorization',
+        value: formatOauth1AuthorizationHeader(signed.params, auth.realm),
+        enabled: true,
+        kind: 'text',
+        filePath: undefined
+      });
+    }
   }
 
   return interpolateResolvedRequest(resolvedRequestPreviewSchema.parse({
