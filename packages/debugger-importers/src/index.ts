@@ -1383,6 +1383,9 @@ function openCollectionWebsocketBody(message: any): RequestDocument['body'] {
       return message.map((item: any, index: number) => ({
         name: String(item.title || `message ${index + 1}`),
         body: openCollectionScalar(item.message?.data),
+        kind: ['json', 'text', 'binary'].includes(String(item.message?.type || '').toLowerCase())
+          ? String(item.message?.type).toLowerCase() as 'json' | 'text' | 'binary'
+          : 'json',
         enabled: item.selected !== false
       }));
     }
@@ -1390,6 +1393,9 @@ function openCollectionWebsocketBody(message: any): RequestDocument['body'] {
       return [{
         name: 'message 1',
         body: openCollectionScalar(message.data),
+        kind: ['json', 'text', 'binary'].includes(String(message.type || '').toLowerCase())
+          ? String(message.type).toLowerCase() as 'json' | 'text' | 'binary'
+          : 'json',
         enabled: true
       }];
     }
@@ -2321,6 +2327,9 @@ function brunoJsonBody(body: any): RequestDocument['body'] {
         messages: (Array.isArray(body.ws) ? body.ws : []).map((message: any, index: number) => ({
           name: String(message.name || `message ${index + 1}`),
           body: String(message.content || message.body || ''),
+          kind: ['json', 'text', 'binary'].includes(String(message.type || '').toLowerCase())
+            ? String(message.type).toLowerCase() as 'json' | 'text' | 'binary'
+            : 'json',
           enabled: message.enabled !== false
         }))
       }

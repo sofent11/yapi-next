@@ -166,6 +166,7 @@ export const requestBodySchema = z.object({
     messages: z.array(z.object({
       name: z.string().default('Message'),
       body: z.string().default(''),
+      kind: z.enum(['json', 'text', 'binary']).optional(),
       enabled: z.boolean().default(true)
     })).default([]),
     lastRun: z.object({

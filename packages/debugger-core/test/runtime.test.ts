@@ -797,7 +797,8 @@ test('resolveRequest interpolates WebSocket message drafts', () => {
     fields: [],
     websocket: {
       messages: [
-        { name: 'auth {{token}}', body: '{"type":"auth","token":"{{token}}"}', enabled: true }
+        { name: 'auth {{token}}', body: '{"type":"auth","token":"{{token}}"}', kind: 'json', enabled: true },
+        { name: 'binary hello', body: 'aGVsbG8=', kind: 'binary', enabled: true }
       ],
       lastRun: {
         ok: true,
@@ -816,6 +817,7 @@ test('resolveRequest interpolates WebSocket message drafts', () => {
 
   assert.equal(preview.body.websocket?.messages[0]?.name, 'auth secret');
   assert.equal(preview.body.websocket?.messages[0]?.body, '{"type":"auth","token":"secret"}');
+  assert.equal(preview.body.websocket?.messages[1]?.kind, 'binary');
   assert.equal(requestDocumentSchema.parse(request).body.websocket?.lastRun?.events.length, 2);
   assert.equal(preview.body.websocket?.lastRun?.durationMs, 42);
 });

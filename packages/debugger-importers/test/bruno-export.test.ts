@@ -235,7 +235,10 @@ test('Bruno JSON collection export imports back with folders and collection step
     text: '',
     fields: [],
     websocket: {
-      messages: [{ name: 'subscribe', body: '{"type":"subscribe"}', enabled: true }]
+      messages: [
+        { name: 'subscribe', body: '{"type":"subscribe"}', kind: 'json', enabled: true },
+        { name: 'hello bytes', body: 'aGVsbG8=', kind: 'binary', enabled: true }
+      ]
     }
   };
 
@@ -281,6 +284,7 @@ test('Bruno JSON collection export imports back with folders and collection step
   assert.equal(parsed.items[1].items[0].type, 'graphql-request');
   assert.equal(parsed.items[1].items[0].request.body.graphql.schemaCache.summary.typeCount, 4);
   assert.equal(parsed.items[2].items[0].type, 'ws-request');
+  assert.equal(parsed.items[2].items[0].request.body.ws[1].type, 'binary');
 
   const imported = importSourceText(json);
   const importedCreate = imported.requests.find(item => item.request.name === 'Create User')?.request;
@@ -297,6 +301,7 @@ test('Bruno JSON collection export imports back with folders and collection step
   assert.equal(importedGraphql?.body.graphql?.schemaCache?.summary.typeCount, 4);
   assert.equal(importedWebSocket?.kind, 'websocket');
   assert.equal(importedWebSocket?.body.websocket?.messages[0]?.body, '{"type":"subscribe"}');
+  assert.equal(importedWebSocket?.body.websocket?.messages[1]?.kind, 'binary');
   assert.equal(imported.collections[0]?.collection.steps.length, 3);
 });
 
@@ -371,7 +376,10 @@ test('OpenCollection export imports back with mixed request kinds and environmen
     text: '',
     fields: [],
     websocket: {
-      messages: [{ name: 'subscribe', body: '{"type":"subscribe"}', enabled: true }]
+      messages: [
+        { name: 'subscribe', body: '{"type":"subscribe"}', kind: 'json', enabled: true },
+        { name: 'hello bytes', body: 'aGVsbG8=', kind: 'binary', enabled: true }
+      ]
     }
   };
 
@@ -416,6 +424,7 @@ test('OpenCollection export imports back with mixed request kinds and environmen
   assert.equal(exported.info.name, 'OpenCollection Smoke');
   assert.equal(exported.config.environments[0].name, 'Local');
   assert.equal(exported.items[1].items[0].graphql.body.schemaCache.summary.typeCount, 5);
+  assert.equal(exported.items[2].items[0].websocket.message[1].message.type, 'binary');
 
   const imported = importSourceText(json);
   const importedCreate = imported.requests.find(item => item.request.name === 'Create User')?.request;
@@ -437,4 +446,5 @@ test('OpenCollection export imports back with mixed request kinds and environmen
   assert.equal(importedGraphql?.body.graphql?.operationName, 'User');
   assert.equal(importedGraphql?.body.graphql?.schemaCache?.summary.typeCount, 5);
   assert.equal(importedWebSocket?.body.websocket?.messages[0]?.body, '{"type":"subscribe"}');
+  assert.equal(importedWebSocket?.body.websocket?.messages[1]?.kind, 'binary');
 });

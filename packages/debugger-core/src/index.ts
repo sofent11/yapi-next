@@ -1475,7 +1475,7 @@ function brunoJsonBody(body: RequestBody, kind: RequestKind) {
       mode: 'ws',
       ws: (normalized.websocket?.messages || []).map((message, index) => ({
         name: message.name || `message ${index + 1}`,
-        type: 'json',
+        type: message.kind || 'json',
         content: message.body || '',
         enabled: message.enabled !== false
       }))
@@ -1858,7 +1858,7 @@ function openCollectionItem(record: WorkspaceRequestRecord, seq: number) {
           title: message.name || `message ${index + 1}`,
           selected: message.enabled !== false,
           message: {
-            type: 'json',
+            type: message.kind || 'json',
             data: message.body || ''
           }
         })),

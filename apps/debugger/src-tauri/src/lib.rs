@@ -1,5 +1,6 @@
 mod capture;
 
+use base64::{engine::general_purpose, Engine as _};
 use futures_util::{SinkExt, StreamExt};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use reqwest::{
@@ -149,6 +150,7 @@ struct SendRequestResult {
 struct WebSocketMessageInput {
     name: String,
     body: String,
+    kind: Option<String>,
     enabled: bool,
 }
 
@@ -1184,6 +1186,20 @@ fn websocket_message_body(message: Message) -> Option<(String, String)> {
     }
 }
 
+fn websocket_outgoing_message(message: &WebSocketMessageInput) -> Result<(Message, String), String> {
+    match message.kind.as_deref().unwrap_or("json").to_ascii_lowercase().as_str() {
+        "binary" => {
+            let decoded = general_purpose::STANDARD
+                .decode(message.body.trim())
+                .map_err(|error| format!("{} is not valid base64: {}", message.name, error))?;
+            let preview = format!("<{} bytes binary frame>", decoded.len());
+            Ok((Message::Binary(decoded.into()), preview))
+        }
+        "text" | "json" | "" => Ok((Message::Text(message.body.clone().into()), message.body.clone())),
+        other => Err(format!("Unsupported WebSocket message type: {}", other)),
+    }
+}
+
 async fn collect_websocket_messages<S>(
     socket: &mut S,
     start: Instant,
@@ -1261,14 +1277,15 @@ async fn websocket_run(input: WebSocketRunInput) -> Result<WebSocketRunResult, S
     ));
 
     for message in input.messages.iter().filter(|message| message.enabled) {
+        let (outgoing, preview) = websocket_outgoing_message(message)?;
         socket
-            .send(Message::Text(message.body.clone().into()))
+            .send(outgoing)
             .await
             .map_err(|error| error.to_string())?;
         events.push(websocket_event(
             "out",
             &message.name,
-            message.body.clone(),
+            preview,
             start,
         ));
         collect_websocket_messages(&mut socket, start, &mut events, 250).await?;
@@ -1360,4 +1377,40 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running yapi debugger");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn websocket_outgoing_message_decodes_binary_frames() {
+        let input = WebSocketMessageInput {
+            name: "hello".to_string(),
+            body: "aGVsbG8=".to_string(),
+            kind: Some("binary".to_string()),
+            enabled: true,
+        };
+
+        let (message, preview) = websocket_outgoing_message(&input).expect("binary message");
+
+        match message {
+            Message::Binary(bytes) => assert_eq!(&bytes[..], b"hello"),
+            other => panic!("expected binary frame, got {other:?}"),
+        }
+        assert_eq!(preview, "<5 bytes binary frame>");
+    }
+
+    #[test]
+    fn websocket_outgoing_message_rejects_invalid_base64() {
+        let input = WebSocketMessageInput {
+            name: "broken".to_string(),
+            body: "not base64".to_string(),
+            kind: Some("binary".to_string()),
+            enabled: true,
+        };
+
+        let error = websocket_outgoing_message(&input).expect_err("invalid base64 should fail");
+        assert!(error.contains("broken is not valid base64"));
+    }
 }

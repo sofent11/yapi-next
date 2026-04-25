@@ -579,7 +579,7 @@ export function RequestPanel(props: {
                     ? {
                         ...body,
                         mode: 'none' as const,
-                        websocket: body.websocket || { messages: [{ name: 'Message 1', body: '', enabled: true }] }
+                        websocket: body.websocket || { messages: [{ name: 'Message 1', body: '', kind: 'json', enabled: true }] }
                       }
                   : body;
               const nextMethod = nextKind === 'graphql' ? 'POST' : nextKind === 'websocket' ? 'GET' : effectiveMethod;
@@ -929,7 +929,7 @@ export function RequestPanel(props: {
                       onClick={() =>
                         updateWebSocketMessages([
                           ...websocketMessages,
-                          { name: `Message ${websocketMessages.length + 1}`, body: '', enabled: true }
+                          { name: `Message ${websocketMessages.length + 1}`, body: '', kind: 'json', enabled: true }
                         ])
                       }
                     >
@@ -964,6 +964,22 @@ export function RequestPanel(props: {
                             updateWebSocketMessages(next);
                           }}
                         />
+                        <Select
+                          value={message.kind || 'json'}
+                          data={[
+                            { value: 'json', label: 'json' },
+                            { value: 'text', label: 'text' },
+                            { value: 'binary', label: 'binary' }
+                          ]}
+                          onChange={value => {
+                            const next = [...websocketMessages];
+                            next[index] = { ...message, kind: (value || 'json') as 'json' | 'text' | 'binary' };
+                            updateWebSocketMessages(next);
+                          }}
+                          allowDeselect={false}
+                          size="xs"
+                          w={96}
+                        />
                         <Button
                           size="xs"
                           variant="subtle"
@@ -976,7 +992,7 @@ export function RequestPanel(props: {
                       </div>
                       <CodeEditor
                         value={message.body}
-                        language="json"
+                        language={(message.kind || 'json') === 'json' ? 'json' : 'text'}
                         onChange={value => {
                           const next = [...websocketMessages];
                           next[index] = { ...message, body: value };

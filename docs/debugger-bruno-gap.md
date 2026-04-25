@@ -14,7 +14,7 @@ This document tracks parity against Bruno OSS while keeping YAPI Debugger's loca
 |---|---|---|---|
 | HTTP requests | Method, URL, params, headers, body, auth | Implemented | Existing workbench covers the primary REST flow. |
 | Body modes | JSON, text, XML, GraphQL, SPARQL, file, form URL encoded, multipart | Partial | Schema/UI/runtime now accept XML, GraphQL, SPARQL, and file body for HTTP send. GraphQL query variables are materialized as JSON payloads, and the UI can fetch introspection, cache the schema summary on the request, clear stale cache entries, preserve that cache through Bruno JSON/OpenCollection JSON round-trips, and generate query/mutation/subscription drafts from root fields with scalar, enum, list, and input-object variable placeholders plus depth-limited nested selections. A full selectable query explorer with fragments is pending. |
-| Request kinds | HTTP, GraphQL, gRPC, WebSocket, JS | Partial | Schema has `kind: http/graphql/grpc/websocket/script`; GraphQL sends over HTTP POST. WebSocket has a connect/send/receive session runner and persists the most recent timeline on the request with a clear action. Manual live send/reconnect/close controls, binary frames, and gRPC/script item runtimes are pending. |
+| Request kinds | HTTP, GraphQL, gRPC, WebSocket, JS | Partial | Schema has `kind: http/graphql/grpc/websocket/script`; GraphQL sends over HTTP POST. WebSocket has a connect/send/receive session runner, persists the most recent timeline on the request with a clear action, and supports json/text/base64 binary outgoing frames. Manual live send/reconnect/close controls, richer binary previews, and gRPC/script item runtimes are pending. |
 | Auth | Basic, bearer, API key, OAuth2, OAuth1, AWS v4, Digest, NTLM, WSSE | Partial | Schema/UI preserve all major Bruno auth families. Runtime signing is implemented for basic/bearer/API key, cached OAuth2 tokens, OAuth1 HMAC-SHA1/PLAINTEXT headers or query params, AWS Signature v4 headers, Digest challenge retry, and WSSE UsernameToken headers. NTLM runtime signing is pending. |
 | Variables | Collection/folder/request/response/env/global/prompt vars | Partial | Schema has scoped variable rows. Runtime currently resolves project/env/runtime/data/step sources. Folder and prompt UX are pending. |
 | Scripts/tests | Pre-request, post-response, tests, assertions | Partial | Existing case scripts and checks remain. Request/collection-level script fields are now in schema; full Bruno JS API parity is pending. |
@@ -35,7 +35,7 @@ This document tracks parity against Bruno OSS while keeping YAPI Debugger's loca
 ## Next Milestones
 
 1. Expand GraphQL builder into a selectable explorer: child-field toggles and fragments.
-2. Expand WebSocket runtime into live controls: manual send, reconnect, close controls, binary frames, and saved examples.
+2. Expand WebSocket runtime into live controls: manual send, reconnect, close controls, richer binary previews, and saved examples.
 3. Implement remaining advanced auth signing: NTLM.
 4. Expand OpenCollection edge-case fixtures and add WSDL fixtures for imported schemas/includes.
 5. Add Preferences center for proxy/cert/theme/keybindings/cache.

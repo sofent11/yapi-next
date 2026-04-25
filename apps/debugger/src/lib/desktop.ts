@@ -145,7 +145,7 @@ export async function sendRequest(input: any): Promise<SendRequestResult> {
 export async function runWebSocketSession(input: {
   url: string;
   headers: Array<{ name: string; value: string; enabled: boolean; kind?: string; filePath?: string }>;
-  messages: Array<{ name: string; body: string; enabled: boolean }>;
+  messages: Array<{ name: string; body: string; kind?: 'json' | 'text' | 'binary'; enabled: boolean }>;
   timeoutMs?: number;
 }): Promise<WebSocketRunResult> {
   return invoke('websocket_run', { input });
