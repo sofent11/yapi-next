@@ -15,6 +15,7 @@ import {
   renderCollectionRunReportJunit,
   rerunFailedStepKeys,
   runCollection,
+  runPreparedRequest,
   resolveRequest,
   summarizeGraphqlSchema
 } from '../src/index';
@@ -345,7 +346,7 @@ test('resolveRequest signs Digest auth requests with qop auth', () => {
   assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-digest-auth'), false);
 });
 
-test('inspectResolvedRequest blocks incomplete Digest auth', () => {
+test('inspectResolvedRequest allows Digest challenge retry when credentials exist', () => {
   const project = createDefaultProject('Demo');
   const environment = createDefaultEnvironment('shared');
   const request = createEmptyRequest('Digest Protected');
@@ -358,7 +359,97 @@ test('inspectResolvedRequest blocks incomplete Digest auth', () => {
 
   const insight = inspectResolvedRequest(project, request, undefined, environment);
   assert.equal(insight.authPreview.some(item => item.name === 'Authorization' && item.status === 'missing'), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'digest-challenge-pending' && !item.blocking), true);
+  assert.equal(insight.diagnostics.some(item => item.blocking), false);
+});
+
+test('inspectResolvedRequest blocks Digest auth without credentials', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Digest Protected');
+  request.url = 'http://www.example.com/dir/index.html';
+  request.auth = {
+    type: 'digest',
+    username: 'Mufasa'
+  };
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
   assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-digest-auth' && item.blocking), true);
+});
+
+test('runPreparedRequest retries Digest auth after WWW-Authenticate challenge', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Digest Protected');
+  request.method = 'GET';
+  request.url = 'http://www.example.com/dir/index.html';
+  request.auth = {
+    type: 'digest',
+    username: 'Mufasa',
+    password: 'Circle Of Life'
+  };
+  const workspace = {
+    root: '/tmp/digest-workspace',
+    project,
+    environments: [{ document: environment, filePath: '/tmp/digest-workspace/environments/shared.yaml' }],
+    requests: [
+      {
+        request,
+        cases: [],
+        folderSegments: [],
+        requestFilePath: '/tmp/digest-workspace/requests/digest.request.yaml',
+        resourceDirPath: '/tmp/digest-workspace/requests/digest'
+      }
+    ],
+    collections: [],
+    tree: []
+  };
+  const sentAuthorization: string[] = [];
+
+  const result = await runPreparedRequest({
+    workspace,
+    request,
+    sendRequest: async preview => {
+      sentAuthorization.push(preview.headers.find(header => header.name === 'Authorization')?.value || '');
+      if (sentAuthorization.length === 1) {
+        return {
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          url: preview.url,
+          durationMs: 10,
+          sizeBytes: 0,
+          headers: [
+            {
+              name: 'www-authenticate',
+              value: 'Digest realm="testrealm@host.com", qop="auth,auth-int", nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093", opaque="5ccc069c403ebaf9f0171e9517f40e41"'
+            }
+          ],
+          bodyText: '',
+          timestamp: new Date().toISOString()
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: preview.url,
+        durationMs: 12,
+        sizeBytes: 11,
+        headers: [],
+        bodyText: '{"ok":true}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(sentAuthorization[0], '');
+  assert.match(sentAuthorization[1], /^Digest /);
+  assert.match(sentAuthorization[1], /realm="testrealm@host\.com"/);
+  assert.match(sentAuthorization[1], /nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093"/);
+  assert.match(sentAuthorization[1], /qop=auth/);
+  assert.match(result.preview.headers.find(header => header.name === 'Authorization')?.value || '', /^Digest /);
 });
 
 test('resolveRequest builds WSSE UsernameToken headers', () => {

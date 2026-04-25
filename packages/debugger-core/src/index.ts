@@ -2367,11 +2367,14 @@ function buildPreflightDiagnostics(
   }
 
   if (auth.type === 'digest' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')) {
+    const hasCredentials = Boolean((auth.username || auth.usernameFromVar) && (auth.password || auth.passwordFromVar));
     diagnostics.push({
-      code: 'incomplete-digest-auth',
-      level: 'error',
-      blocking: true,
-      message: 'Digest auth requires username, password, realm, and nonce from a WWW-Authenticate challenge.',
+      code: hasCredentials ? 'digest-challenge-pending' : 'incomplete-digest-auth',
+      level: hasCredentials ? 'warning' : 'error',
+      blocking: !hasCredentials,
+      message: hasCredentials
+        ? 'Digest auth will send once without Authorization and retry after a WWW-Authenticate challenge.'
+        : 'Digest auth requires username and password before a challenge can be attempted.',
       field: 'auth'
     });
   }
@@ -2688,7 +2691,7 @@ export function inspectResolvedRequest(
     (auth.type === 'apikey' && !auth.key) ||
     (auth.type === 'oauth1' && (!auth.consumerKey || !auth.consumerSecret)) ||
     (auth.type === 'awsv4' && (!auth.accessKey || !auth.secretKey || !auth.region || !auth.service)) ||
-    (auth.type === 'digest' && ((!auth.username && !auth.usernameFromVar) || (!auth.password && !auth.passwordFromVar) || !auth.realm || !auth.nonce)) ||
+    (auth.type === 'digest' && ((!auth.username && !auth.usernameFromVar) || (!auth.password && !auth.passwordFromVar))) ||
     (auth.type === 'wsse' && ((!auth.username && !auth.usernameFromVar) || (!auth.password && !auth.passwordFromVar && !auth.passwordDigest)))
   ) {
     warnings.push({
@@ -3148,6 +3151,82 @@ function normalizeStepRetry(step: CollectionStep, collection: CollectionDocument
   return retryPolicySchema.parse(enabled || step.retry || caseDocument?.retry || collection.defaultRetry || fallback);
 }
 
+function responseHeaderValue(response: SendRequestResult, name: string) {
+  const lower = name.toLowerCase();
+  return response.headers.find(header => header.name.toLowerCase() === lower)?.value || '';
+}
+
+function splitChallengeParameters(input: string) {
+  const parts: string[] = [];
+  let current = '';
+  let quoted = false;
+  let escaped = false;
+  for (const char of input) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === '\\' && quoted) {
+      current += char;
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      quoted = !quoted;
+      current += char;
+      continue;
+    }
+    if (char === ',' && !quoted) {
+      if (current.trim()) parts.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+function parseDigestChallenge(header: string) {
+  const match = /(?:^|,\s*)Digest\s+/i.exec(header);
+  if (!match) return undefined;
+  const paramsText = header.slice((match.index || 0) + match[0].length);
+  const output: Pick<AuthConfig, 'realm' | 'nonce' | 'qop' | 'opaque' | 'algorithm'> = {};
+  splitChallengeParameters(paramsText).forEach(part => {
+    const equalsIndex = part.indexOf('=');
+    if (equalsIndex === -1) return;
+    const key = part.slice(0, equalsIndex).trim().toLowerCase();
+    const rawValue = part.slice(equalsIndex + 1).trim();
+    const value = rawValue.startsWith('"') && rawValue.endsWith('"')
+      ? rawValue.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+      : rawValue;
+    if (key === 'realm') output.realm = value;
+    if (key === 'nonce') output.nonce = value;
+    if (key === 'opaque') output.opaque = value;
+    if (key === 'algorithm') output.algorithm = value;
+    if (key === 'qop') {
+      const qops = value.split(',').map(item => item.trim()).filter(Boolean);
+      output.qop = qops.includes('auth') ? 'auth' : qops[0];
+    }
+  });
+  return output.realm && output.nonce ? output : undefined;
+}
+
+function mergeDigestChallengeAuth(auth: AuthConfig, challenge: Pick<AuthConfig, 'realm' | 'nonce' | 'qop' | 'opaque' | 'algorithm'>) {
+  return authConfigSchema.parse({
+    ...auth,
+    type: 'digest',
+    realm: challenge.realm || auth.realm,
+    nonce: challenge.nonce || auth.nonce,
+    qop: challenge.qop || auth.qop || 'auth',
+    opaque: challenge.opaque || auth.opaque,
+    algorithm: challenge.algorithm || auth.algorithm || 'MD5',
+    nonceCount: auth.nonceCount || '00000001',
+    cnonce: auth.cnonce || createId('cnonce')
+  });
+}
+
 function applyStepOverrides(request: RequestDocument, caseDocument: CaseDocument | undefined, step: CollectionStep) {
   if (!step.timeoutMs) return { request, caseDocument };
   if (caseDocument) {
@@ -3236,7 +3315,45 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     ...insight.preview,
     sessionId: input.sessionId || input.workspace.root
   });
-  const response = await input.sendRequest(preview);
+  let finalPreview = preview;
+  let response = await input.sendRequest(preview);
+  const { auth: effectiveAuth } = mergeAuth(input.request.auth, input.caseDocument?.overrides.auth, preScript.state.environment || initialEnvironment);
+  if (effectiveAuth.type === 'digest' && response.status === 401 && !preview.headers.some(header => header.enabled && header.name.toLowerCase() === 'authorization')) {
+    const challenge = parseDigestChallenge(responseHeaderValue(response, 'www-authenticate'));
+    if (challenge) {
+      const retryAuth = mergeDigestChallengeAuth(effectiveAuth, challenge);
+      const retryRequest = input.caseDocument
+        ? input.request
+        : requestDocumentSchema.parse({
+            ...input.request,
+            auth: retryAuth
+          });
+      const retryCaseDocument = input.caseDocument
+        ? caseDocumentSchema.parse({
+            ...input.caseDocument,
+            overrides: {
+              ...input.caseDocument.overrides,
+              auth: retryAuth
+            }
+          })
+        : undefined;
+      const retryInsight = inspectResolvedRequest(
+        input.workspace.project,
+        retryRequest,
+        retryCaseDocument,
+        preScript.state.environment || initialEnvironment,
+        runtimeSources
+      );
+      const retryBlockingDiagnostics = retryInsight.diagnostics.filter(item => item.blocking);
+      if (retryBlockingDiagnostics.length === 0) {
+        finalPreview = resolvedRequestPreviewSchema.parse({
+          ...retryInsight.preview,
+          sessionId: input.sessionId || input.workspace.root
+        });
+        response = await input.sendRequest(finalPreview);
+      }
+    }
+  }
   const builtinChecks = input.caseDocument ? evaluateChecks(response, input.caseDocument.checks || [], { examples: input.request.examples }) : [];
   const collectionChecks = context.collectionRules
     ? applyCollectionRules({
@@ -3248,7 +3365,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     phase: 'post-response',
     script: input.caseDocument?.scripts?.postResponse || '',
     state: preScript.state,
-    request: preview,
+    request: finalPreview,
     response
   });
   const baselineChecks =
@@ -3266,7 +3383,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
       : [];
 
   return {
-    preview,
+    preview: finalPreview,
     response,
     checkResults: [...builtinChecks, ...collectionChecks, ...baselineChecks, ...postScript.testResults],
     scriptLogs: [...preScript.logs, ...postScript.logs],
