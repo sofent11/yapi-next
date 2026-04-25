@@ -192,6 +192,7 @@ export function CollectionRunnerPanel(props: {
   const showDesignView = activeStudioTab === 'design';
   const showDataView = activeStudioTab === 'data';
   const showReportsView = activeStudioTab === 'reports';
+  const enabledReporters = draftCollection?.reporters || ['json', 'html'];
   const selectedCollectionReportCount = useMemo(() => {
     if (!draftCollection) return 0;
     return props.reports.filter(report => report.collectionId === draftCollection.id).length;
@@ -292,13 +293,28 @@ export function CollectionRunnerPanel(props: {
             <div className="checks-head">
               <Text fw={700} size="sm">Reports</Text>
               <Group gap={6}>
-                <Button size="xs" variant="subtle" onClick={() => props.onExportReport?.('json')} disabled={!selectedReport}>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  onClick={() => props.onExportReport?.('json')}
+                  disabled={!selectedReport || !enabledReporters.includes('json')}
+                >
                   JSON
                 </Button>
-                <Button size="xs" variant="subtle" onClick={() => props.onExportReport?.('html')} disabled={!selectedReport}>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  onClick={() => props.onExportReport?.('html')}
+                  disabled={!selectedReport || !enabledReporters.includes('html')}
+                >
                   HTML
                 </Button>
-                <Button size="xs" variant="subtle" onClick={() => props.onExportReport?.('junit')} disabled={!selectedReport}>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  onClick={() => props.onExportReport?.('junit')}
+                  disabled={!selectedReport || !enabledReporters.includes('junit')}
+                >
                   JUnit
                 </Button>
                 <Button size="xs" variant="subtle" color="red" onClick={props.onClearReports}>
@@ -551,6 +567,44 @@ export function CollectionRunnerPanel(props: {
                     }
                   />
                 </div>
+                <Group gap={8} mt={12}>
+                  <Checkbox
+                    label="JSON Reporter"
+                    checked={draftCollection.reporters.includes('json')}
+                    onChange={event =>
+                      props.onCollectionChange({
+                        ...draftCollection,
+                        reporters: event.currentTarget.checked
+                          ? Array.from(new Set([...draftCollection.reporters, 'json']))
+                          : draftCollection.reporters.filter(item => item !== 'json')
+                      })
+                    }
+                  />
+                  <Checkbox
+                    label="HTML Reporter"
+                    checked={draftCollection.reporters.includes('html')}
+                    onChange={event =>
+                      props.onCollectionChange({
+                        ...draftCollection,
+                        reporters: event.currentTarget.checked
+                          ? Array.from(new Set([...draftCollection.reporters, 'html']))
+                          : draftCollection.reporters.filter(item => item !== 'html')
+                      })
+                    }
+                  />
+                  <Checkbox
+                    label="JUnit Reporter"
+                    checked={draftCollection.reporters.includes('junit')}
+                    onChange={event =>
+                      props.onCollectionChange({
+                        ...draftCollection,
+                        reporters: event.currentTarget.checked
+                          ? Array.from(new Set([...draftCollection.reporters, 'junit']))
+                          : draftCollection.reporters.filter(item => item !== 'junit')
+                      })
+                    }
+                  />
+                </Group>
               </div>
 
               <div className="inspector-section">
