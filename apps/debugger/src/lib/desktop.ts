@@ -68,7 +68,7 @@ export async function chooseImportFile() {
     filters: [
       {
         name: 'API Specs & HAR',
-        extensions: ['json', 'yaml', 'yml', 'har']
+        extensions: ['json', 'yaml', 'yml', 'har', 'bru']
       }
     ]
   });

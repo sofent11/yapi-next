@@ -25,6 +25,11 @@ type ImportContext = {
   warnings: ImportWarning[];
 };
 
+type BruSection = {
+  label: string;
+  content: string;
+};
+
 function authProfileVariableName(seed: string, suffix: string) {
   const base = String(seed || 'auth')
     .replace(/[^a-zA-Z0-9]+/g, ' ')
@@ -43,6 +48,192 @@ function parseStructuredText(content: string) {
   } catch (_err) {
     return YAML.parse(content) as Record<string, any>;
   }
+}
+
+function looksLikeBruno(content: string) {
+  return /^\s*meta\s*\{/m.test(content) ||
+    /^\s*type\s+http-request\s*$/m.test(content) ||
+    /^\s*(get|post|put|patch|delete|head|options)\s*\{/mi.test(content);
+}
+
+function parseBruSections(content: string) {
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  const sections: BruSection[] = [];
+  const consumed = new Set<number>();
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const match = /^([A-Za-z][\w:-]*(?:\([^)]*\))?)\s*\{\s*$/.exec(line.trim());
+    if (match) {
+      const body: string[] = [];
+      let cursor = index + 1;
+      while (cursor < lines.length && lines[cursor] !== '}') {
+        body.push(lines[cursor]);
+        consumed.add(cursor);
+        cursor += 1;
+      }
+      if (cursor < lines.length) {
+        sections.push({ label: match[1], content: body.join('\n').replace(/\n$/, '') });
+        consumed.add(index);
+        consumed.add(cursor);
+        index = cursor;
+      }
+      continue;
+    }
+
+    const legacyMatch = /^([A-Za-z][\w-]*(?:\([^)]*\))?)\s*$/.exec(line.trim());
+    if (legacyMatch) {
+      const closeName = legacyMatch[1].split('(')[0];
+      const body: string[] = [];
+      let cursor = index + 1;
+      while (cursor < lines.length && lines[cursor].trim() !== `/${closeName}`) {
+        body.push(lines[cursor]);
+        consumed.add(cursor);
+        cursor += 1;
+      }
+      if (cursor < lines.length) {
+        sections.push({ label: legacyMatch[1], content: body.join('\n').replace(/\n$/, '') });
+        consumed.add(index);
+        consumed.add(cursor);
+        index = cursor;
+      }
+    }
+  }
+
+  return {
+    sections,
+    prelude: lines.filter((_line, index) => !consumed.has(index)).join('\n')
+  };
+}
+
+function parseBruKeyValueBlock(content: string) {
+  const output: Record<string, string> = {};
+  content.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    const colon = trimmed.indexOf(':');
+    if (colon !== -1) {
+      output[trimmed.slice(0, colon).trim()] = trimmed.slice(colon + 1).trim();
+      return;
+    }
+    const match = /^([A-Za-z][\w-]*)\s+(.+)$/.exec(trimmed);
+    if (match) output[match[1]] = match[2].trim();
+  });
+  return output;
+}
+
+function parseBruPrelude(content: string) {
+  const output: Record<string, string> = {};
+  content.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    const match = /^([A-Za-z][\w-]*)\s+(.+)$/.exec(trimmed);
+    if (match) output[match[1]] = match[2].trim();
+  });
+  return output;
+}
+
+function findBruSection(sections: BruSection[], label: string) {
+  return sections.find(section => section.label.toLowerCase() === label.toLowerCase());
+}
+
+function findBruBodySection(sections: BruSection[], mode: string) {
+  const normalized = mode.toLowerCase();
+  return sections.find(section => {
+    const label = section.label.toLowerCase();
+    return label === `body:${normalized}` || label === `body(type=${normalized})`;
+  });
+}
+
+function parseBruRows(content: string) {
+  return content
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const oldRow = /^([01])\s+(\S+)(?:\s+(.*))?$/.exec(line);
+      if (oldRow) {
+        return {
+          name: oldRow[2],
+          value: oldRow[3] || '',
+          enabled: oldRow[1] === '1',
+          description: '',
+          kind: 'text' as const
+        };
+      }
+      const colon = line.indexOf(':');
+      const rawName = colon === -1 ? line : line.slice(0, colon).trim();
+      const disabled = rawName.startsWith('~');
+      return {
+        name: disabled ? rawName.slice(1) : rawName,
+        value: colon === -1 ? '' : line.slice(colon + 1).trim(),
+        enabled: !disabled,
+        description: '',
+        kind: 'text' as const
+      };
+    })
+    .filter(row => row.name);
+}
+
+function parseBruAuth(mode: string, authBlock: Record<string, string>) {
+  const normalized = mode.toLowerCase();
+  if (!normalized || normalized === 'none') return { type: 'none' as const };
+  if (normalized === 'inherit') return { type: 'inherit' as const };
+  if (normalized === 'bearer') {
+    return {
+      type: 'bearer' as const,
+      token: authBlock.token || ''
+    };
+  }
+  if (normalized === 'basic') {
+    return {
+      type: 'basic' as const,
+      username: authBlock.username || '',
+      password: authBlock.password || ''
+    };
+  }
+  if (normalized === 'apikey' || normalized === 'api-key') {
+    return {
+      type: 'apikey' as const,
+      key: authBlock.key || authBlock.name || 'X-API-Key',
+      value: authBlock.value || '',
+      addTo: authBlock.placement === 'query' || authBlock.in === 'query' ? 'query' as const : 'header' as const
+    };
+  }
+  if (normalized === 'oauth2') {
+    return {
+      type: 'oauth2' as const,
+      oauthFlow: authBlock.grant_type === 'client_credentials' ? 'client_credentials' as const : undefined,
+      tokenUrl: authBlock.access_token_url || authBlock.token_url || '',
+      clientId: authBlock.client_id || '',
+      clientSecret: authBlock.client_secret || '',
+      scope: authBlock.scope || '',
+      tokenPlacement: authBlock.token_placement === 'query' ? 'query' as const : 'header' as const,
+      tokenName: authBlock.token_placement === 'query' ? 'access_token' : 'Authorization',
+      tokenPrefix: authBlock.token_header_prefix || 'Bearer'
+    };
+  }
+  if (normalized === 'digest') {
+    return {
+      type: 'digest' as const,
+      username: authBlock.username || '',
+      password: authBlock.password || '',
+      realm: authBlock.realm || '',
+      nonce: authBlock.nonce || '',
+      qop: authBlock.qop || 'auth',
+      algorithm: authBlock.algorithm || 'MD5'
+    };
+  }
+  if (normalized === 'ntlm') {
+    return {
+      type: 'ntlm' as const,
+      username: authBlock.username || '',
+      password: authBlock.password || '',
+      domain: authBlock.domain || '',
+      workstation: authBlock.workstation || ''
+    };
+  }
+  return { type: 'inherit' as const };
 }
 
 function toRows(items: unknown, keyName = 'name', valueName = 'value') {
@@ -662,7 +853,146 @@ function importPostman(document: Record<string, any>): ImportResult {
   };
 }
 
+function importBruno(content: string): ImportResult {
+  const { sections, prelude } = parseBruSections(content);
+  const metadata = parseBruKeyValueBlock(findBruSection(sections, 'meta')?.content || '');
+  const legacy = parseBruPrelude(prelude);
+  const methodSection = sections.find(section => HTTP_METHODS.includes(section.label.toLowerCase() as any));
+  const methodFields = parseBruKeyValueBlock(methodSection?.content || '');
+  const method = methodLabel(methodSection?.label || legacy.method || 'GET');
+  const name = metadata.name || legacy.name || methodFields.name || 'Imported Bruno Request';
+  const url = methodFields.url || legacy.url || '';
+  const bodyMode = (methodFields.body || legacy['body-mode'] || 'none').toLowerCase();
+  const authMode = methodFields.auth || legacy.auth || 'inherit';
+  const authBlock = parseBruKeyValueBlock(
+    findBruSection(sections, `auth:${authMode}`)?.content ||
+      findBruSection(sections, 'auth')?.content ||
+      ''
+  );
+  const bodySection = findBruBodySection(sections, bodyMode);
+  const docs = findBruSection(sections, 'docs')?.content.trim() || '';
+  const preRequestScript = findBruSection(sections, 'script:pre-request')?.content.trim() || '';
+  const postResponseScript = findBruSection(sections, 'script:post-response')?.content.trim() || '';
+  const testScript = [
+    findBruSection(sections, 'tests')?.content.trim() || '',
+    findBruSection(sections, 'assert')?.content.trim() || ''
+  ].filter(Boolean).join('\n\n');
+  const genericScript = findBruSection(sections, 'script')?.content.trim() || '';
+  const headers = parseBruRows(findBruSection(sections, 'headers')?.content || '');
+  const query = parseBruRows(findBruSection(sections, 'params:query')?.content || findBruSection(sections, 'params')?.content || '');
+  const pathParams = parseBruRows(findBruSection(sections, 'params:path')?.content || '');
+  const warnings: ImportWarning[] = [];
+  const unsupportedSections = sections
+    .map(section => section.label)
+    .filter(label => /^(body:grpc|grpc|body:ws|vars:|settings|auth:oauth1|auth:awsv4)/i.test(label));
+
+  unsupportedSections.forEach(label => {
+    warnings.push({
+      level: 'warning',
+      scope: 'request',
+      requestName: name,
+      code: 'bruno-section-review',
+      status: 'degraded',
+      message: `${name}: Bruno section "${label}" was preserved only where compatible and should be reviewed after import.`
+    });
+  });
+  if (genericScript) {
+    warnings.push({
+      level: 'info',
+      scope: 'request',
+      requestName: name,
+      code: 'bruno-script-kept',
+      status: 'compatible',
+      message: `${name}: Bruno script was preserved in request scripts for review.`
+    });
+  }
+
+  const body =
+    bodyMode === 'json' || bodyMode === 'graphql' || bodyMode === 'xml' || bodyMode === 'sparql' || bodyMode === 'text'
+      ? {
+          mode: bodyMode === 'graphql' ? 'graphql' as const : bodyMode === 'xml' ? 'xml' as const : bodyMode === 'sparql' ? 'sparql' as const : bodyMode === 'json' ? 'json' as const : 'text' as const,
+          mimeType: bodyMode === 'json' || bodyMode === 'graphql'
+            ? 'application/json'
+            : bodyMode === 'xml'
+              ? 'application/xml'
+              : 'text/plain',
+          text: bodySection?.content.trim() || '',
+          fields: [],
+          graphql: bodyMode === 'graphql'
+            ? {
+                query: bodySection?.content.trim() || '',
+                variables: '{}'
+              }
+            : undefined
+        }
+      : bodyMode === 'form-urlencoded'
+        ? {
+            mode: 'form-urlencoded' as const,
+            mimeType: 'application/x-www-form-urlencoded',
+            text: '',
+            fields: parseBruRows(bodySection?.content || '')
+          }
+        : bodyMode === 'multipart'
+          ? {
+              mode: 'multipart' as const,
+              mimeType: 'multipart/form-data',
+              text: '',
+              fields: parseBruRows(bodySection?.content || '')
+            }
+          : {
+              mode: 'none' as const,
+              mimeType: '',
+              text: '',
+              fields: []
+            };
+
+  const request: RequestDocument = {
+    ...createEmptyRequest(name),
+    name,
+    kind: metadata.type === 'websocket' || bodyMode === 'ws' ? 'websocket' : 'http',
+    method,
+    url,
+    path: normalizePath(url),
+    description: docs,
+    docs,
+    order: Number(metadata.seq || legacy.seq || 0) || 0,
+    headers,
+    query,
+    pathParams,
+    body,
+    auth: parseBruAuth(authMode, authBlock),
+    scripts: {
+      preRequest: [preRequestScript, genericScript].filter(Boolean).join('\n\n'),
+      postResponse: postResponseScript,
+      tests: testScript
+    },
+    examples: []
+  };
+
+  return {
+    detectedFormat: 'bruno',
+    summary: {
+      requests: 1,
+      folders: 0,
+      environments: 1
+    },
+    project: createDefaultProject('Imported Bruno Collection'),
+    environments: [createDefaultEnvironment('shared')],
+    requests: [
+      {
+        folderSegments: [],
+        request,
+        cases: []
+      }
+    ],
+    warnings
+  };
+}
+
 export function importSourceText(content: string): ImportResult {
+  if (looksLikeBruno(content)) {
+    return importBruno(content);
+  }
   const document = parseStructuredText(content);
   if (document.openapi) {
     return importOpenApiLike(document);

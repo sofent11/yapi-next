@@ -178,3 +178,96 @@ test('OpenAPI import disables optional empty query params by default', () => {
   assert.equal(query.find(item => item.name === 'payOrderId')?.enabled, false);
   assert.equal(query.find(item => item.name === 'targetCurrency')?.enabled, false);
 });
+
+test('Bruno import maps a .bru HTTP request into a debugger request', () => {
+  const bru = `meta {
+  name: create-example
+  type: http
+  seq: 1
+}
+
+post {
+  url: https://testbench-sanity.usebruno.com/api/echo/json?debug=true
+  body: json
+  auth: bearer
+}
+
+headers {
+  Content-Type: application/json
+  ~x-disabled-header: nope
+}
+
+params:query {
+  debug: true
+}
+
+body:json {
+  {
+    "message": "Hello World"
+  }
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+script:pre-request {
+  bru.setVar("trace", "1");
+}
+
+tests {
+  expect(res.status).to.equal(200);
+}
+`;
+
+  const result = importSourceText(bru);
+  const request = result.requests[0]?.request;
+
+  assert.equal(result.detectedFormat, 'bruno');
+  assert.equal(result.requests.length, 1);
+  assert.equal(request?.name, 'create-example');
+  assert.equal(request?.method, 'POST');
+  assert.equal(request?.url, 'https://testbench-sanity.usebruno.com/api/echo/json?debug=true');
+  assert.equal(request?.body.mode, 'json');
+  assert.match(request?.body.text || '', /Hello World/);
+  assert.equal(request?.auth.type, 'bearer');
+  assert.equal(request?.auth.token, '{{token}}');
+  assert.equal(request?.headers.find(item => item.name === 'x-disabled-header')?.enabled, false);
+  assert.match(request?.scripts.preRequest || '', /bru\.setVar/);
+  assert.match(request?.scripts.tests || '', /expect/);
+});
+
+test('Bruno import supports legacy line-oriented .bru files', () => {
+  const bru = `type http-request
+name Send Bulk SMS
+method GET
+url https://api.textlocal.in/bulk_json
+body-mode json
+seq 1
+
+params
+  1 apiKey secret
+  0 disabled no
+/params
+
+headers
+  1 accept-language en-US
+/headers
+
+body(type=json)
+  {"ok": true}
+/body
+`;
+
+  const result = importSourceText(bru);
+  const request = result.requests[0]?.request;
+
+  assert.equal(result.detectedFormat, 'bruno');
+  assert.equal(request?.name, 'Send Bulk SMS');
+  assert.equal(request?.method, 'GET');
+  assert.equal(request?.query.find(item => item.name === 'apiKey')?.value, 'secret');
+  assert.equal(request?.query.find(item => item.name === 'disabled')?.enabled, false);
+  assert.equal(request?.headers.find(item => item.name === 'accept-language')?.value, 'en-US');
+  assert.equal(request?.body.mode, 'json');
+  assert.match(request?.body.text || '', /"ok"/);
+});
