@@ -1505,6 +1505,25 @@ function buildAuthPreview(
     );
   }
 
+  if (auth.type === 'digest') {
+    const missing = [
+      ...(auth.username || auth.usernameFromVar ? [] : ['username']),
+      ...(auth.password || auth.passwordFromVar ? [] : ['password']),
+      ...(auth.realm ? [] : ['realm']),
+      ...(auth.nonce ? [] : ['nonce'])
+    ];
+    preview.push(
+      resolvedAuthPreviewItemSchema.parse({
+        target: 'header',
+        name: 'Authorization',
+        value: missing.length === 0 ? 'Digest auth header will be computed from the resolved request.' : '',
+        sourceLabel: profileName ? `environment profile: ${profileName}` : authSource,
+        status: missing.length === 0 ? 'ready' : 'missing',
+        detail: missing.length ? `missing ${missing.join(', ')}` : auth.algorithm || 'MD5'
+      })
+    );
+  }
+
   if (auth.type === 'awsv4') {
     const missing = [
       ...(auth.accessKey ? [] : ['accessKey']),
@@ -1605,6 +1624,77 @@ function base64Bytes(bytes: number[]) {
 
 function hexBytes(bytes: number[]) {
   return bytes.map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+const MD5_S = [
+  7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+  5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+  4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+  6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+];
+
+const MD5_K = Array.from({ length: 64 }, (_value, index) => Math.floor(Math.abs(Math.sin(index + 1)) * 2 ** 32) >>> 0);
+
+function md5Bytes(input: number[]) {
+  const bytes = [...input];
+  const bitLength = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  for (let shift = 0; shift <= 56; shift += 8) {
+    bytes.push((bitLength / 2 ** shift) & 0xff);
+  }
+
+  let a0 = 0x67452301;
+  let b0 = 0xefcdab89;
+  let c0 = 0x98badcfe;
+  let d0 = 0x10325476;
+
+  for (let offset = 0; offset < bytes.length; offset += 64) {
+    const words: number[] = [];
+    for (let index = 0; index < 16; index += 1) {
+      const position = offset + index * 4;
+      words[index] = (bytes[position] | (bytes[position + 1] << 8) | (bytes[position + 2] << 16) | (bytes[position + 3] << 24)) >>> 0;
+    }
+
+    let a = a0;
+    let b = b0;
+    let c = c0;
+    let d = d0;
+
+    for (let index = 0; index < 64; index += 1) {
+      let f = 0;
+      let g = 0;
+      if (index < 16) {
+        f = (b & c) | (~b & d);
+        g = index;
+      } else if (index < 32) {
+        f = (d & b) | (~d & c);
+        g = (5 * index + 1) % 16;
+      } else if (index < 48) {
+        f = b ^ c ^ d;
+        g = (3 * index + 5) % 16;
+      } else {
+        f = c ^ (b | ~d);
+        g = (7 * index) % 16;
+      }
+      const rotated = (a + f + MD5_K[index] + words[g]) >>> 0;
+      a = d;
+      d = c;
+      c = b;
+      b = (b + (((rotated << MD5_S[index]) | (rotated >>> (32 - MD5_S[index]))) >>> 0)) >>> 0;
+    }
+
+    a0 = (a0 + a) >>> 0;
+    b0 = (b0 + b) >>> 0;
+    c0 = (c0 + c) >>> 0;
+    d0 = (d0 + d) >>> 0;
+  }
+
+  return [a0, b0, c0, d0].flatMap(word => [word & 0xff, (word >>> 8) & 0xff, (word >>> 16) & 0xff, (word >>> 24) & 0xff]);
+}
+
+function md5Hex(value: string) {
+  return hexBytes(md5Bytes(utf8Bytes(value)));
 }
 
 function sha1Bytes(input: number[]) {
@@ -1815,6 +1905,98 @@ function buildWsseUsernameToken(input: {
       input.auth.nonce ? 'nonce' : 'generated nonce',
       input.auth.created ? 'created' : 'generated created'
     ].join('; '),
+    missing
+  };
+}
+
+function authQuotedValue(input: string) {
+  return input.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function normalizeDigestNonceCount(input?: string) {
+  const trimmed = input?.trim();
+  if (!trimmed) return '00000001';
+  if (/^[0-9a-fA-F]{8}$/.test(trimmed)) return trimmed.toLowerCase();
+  const parsed = Number.parseInt(trimmed, 10);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed.toString(16).padStart(8, '0').slice(-8);
+  return trimmed;
+}
+
+function digestUri(url: string, query: ParameterRow[]) {
+  try {
+    const parsed = new URL(url);
+    query
+      .filter(row => row.enabled && row.name.trim())
+      .forEach(row => parsed.searchParams.append(row.name, row.value));
+    return `${parsed.pathname || '/'}${parsed.search}`;
+  } catch (_error) {
+    const path = url.split('://').pop()?.replace(/^[^/]+/, '') || url || '/';
+    return path.startsWith('/') ? path : `/${path}`;
+  }
+}
+
+function buildDigestAuthorization(input: {
+  auth: AuthConfig;
+  method: string;
+  url: string;
+  query: ParameterRow[];
+  body: RequestBody;
+  project: ProjectDocument;
+  environment: EnvironmentDocument | undefined;
+  extraSources: Array<Record<string, unknown>>;
+}) {
+  const username = resolveAuthValue(input.auth.username, input.auth.usernameFromVar, input.project, input.environment, input.extraSources);
+  const password = resolveAuthValue(input.auth.password || '', input.auth.passwordFromVar, input.project, input.environment, input.extraSources);
+  const realm = applyProjectVariables(input.auth.realm || '', input.project, input.environment, input.extraSources);
+  const nonce = applyProjectVariables(input.auth.nonce || '', input.project, input.environment, input.extraSources);
+  const qop = applyProjectVariables(input.auth.qop || 'auth', input.project, input.environment, input.extraSources).trim();
+  const opaque = applyProjectVariables(input.auth.opaque || '', input.project, input.environment, input.extraSources);
+  const algorithm = (applyProjectVariables(input.auth.algorithm || 'MD5', input.project, input.environment, input.extraSources).trim() || 'MD5').toUpperCase();
+  const cnonce = applyProjectVariables(input.auth.cnonce || createId('cnonce'), input.project, input.environment, input.extraSources);
+  const nonceCount = normalizeDigestNonceCount(input.auth.nonceCount);
+  const uri = digestUri(input.url, input.query);
+  const missing = [
+    ...(username.value.trim() ? [] : [input.auth.usernameFromVar?.trim() || 'username']),
+    ...(password.value.trim() ? [] : [input.auth.passwordFromVar?.trim() || 'password']),
+    ...(realm.trim() ? [] : ['realm']),
+    ...(nonce.trim() ? [] : ['nonce'])
+  ];
+  const supportedAlgorithm = algorithm === 'MD5' || algorithm === 'MD5-SESS';
+  const supportedQop = !qop || qop === 'auth' || qop === 'auth-int';
+  if (!supportedAlgorithm) missing.push('algorithm');
+  if (!supportedQop) missing.push('qop');
+  if (missing.length > 0) {
+    return {
+      header: '',
+      sourceLabel: `${username.sourceLabel}; ${password.sourceLabel}`,
+      missing
+    };
+  }
+
+  const ha1Base = md5Hex(`${username.value}:${realm}:${password.value}`);
+  const ha1 = algorithm === 'MD5-SESS' ? md5Hex(`${ha1Base}:${nonce}:${cnonce}`) : ha1Base;
+  const entityHash = qop === 'auth-int' ? md5Hex(input.body.text || '') : undefined;
+  const ha2 = md5Hex(
+    qop === 'auth-int'
+      ? `${input.method.toUpperCase()}:${uri}:${entityHash}`
+      : `${input.method.toUpperCase()}:${uri}`
+  );
+  const response = qop ? md5Hex(`${ha1}:${nonce}:${nonceCount}:${cnonce}:${qop}:${ha2}`) : md5Hex(`${ha1}:${nonce}:${ha2}`);
+  const params = [
+    ['username', username.value],
+    ['realm', realm],
+    ['nonce', nonce],
+    ['uri', uri],
+    ['response', response],
+    ['algorithm', algorithm],
+    ...(opaque ? [['opaque', opaque] as const] : []),
+    ...(qop ? [['qop', qop] as const, ['nc', nonceCount] as const, ['cnonce', cnonce] as const] : [])
+  ];
+  return {
+    header: `Digest ${params
+      .map(([name, value]) => (name === 'algorithm' || name === 'qop' || name === 'nc' ? `${name}=${value}` : `${name}="${authQuotedValue(value)}"`))
+      .join(', ')}`,
+    sourceLabel: `${username.sourceLabel}; ${password.sourceLabel}; realm; nonce`,
     missing
   };
 }
@@ -2184,6 +2366,16 @@ function buildPreflightDiagnostics(
     });
   }
 
+  if (auth.type === 'digest' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')) {
+    diagnostics.push({
+      code: 'incomplete-digest-auth',
+      level: 'error',
+      blocking: true,
+      message: 'Digest auth requires username, password, realm, and nonce from a WWW-Authenticate challenge.',
+      field: 'auth'
+    });
+  }
+
   if (auth.type === 'wsse' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'x-wsse')) {
     diagnostics.push({
       code: 'incomplete-wsse-auth',
@@ -2441,6 +2633,15 @@ export function inspectResolvedRequest(
                   authInput.service || '',
                   authInput.sessionToken || ''
                 ].filter(Boolean).join(' | ')
+            : authInput.type === 'digest'
+              ? [
+                  authInput.usernameFromVar ? `{{${authInput.usernameFromVar}}}` : authInput.username || '',
+                  authInput.passwordFromVar ? `{{${authInput.passwordFromVar}}}` : authInput.password || '',
+                  authInput.realm || '',
+                  authInput.nonce || '',
+                  authInput.qop || '',
+                  authInput.algorithm || ''
+                ].filter(Boolean).join(' | ')
             : '';
     fields.push(
       collectResolvedField(
@@ -2487,6 +2688,7 @@ export function inspectResolvedRequest(
     (auth.type === 'apikey' && !auth.key) ||
     (auth.type === 'oauth1' && (!auth.consumerKey || !auth.consumerSecret)) ||
     (auth.type === 'awsv4' && (!auth.accessKey || !auth.secretKey || !auth.region || !auth.service)) ||
+    (auth.type === 'digest' && ((!auth.username && !auth.usernameFromVar) || (!auth.password && !auth.passwordFromVar) || !auth.realm || !auth.nonce)) ||
     (auth.type === 'wsse' && ((!auth.username && !auth.usernameFromVar) || (!auth.password && !auth.passwordFromVar && !auth.passwordDigest)))
   ) {
     warnings.push({
@@ -2707,6 +2909,27 @@ export function resolveRequest(
     signed.headers.forEach(row => {
       authHeaders.push({ ...row, filePath: row.filePath });
     });
+  }
+  if (auth.type === 'digest') {
+    const digest = buildDigestAuthorization({
+      auth,
+      method: caseDocument?.overrides.method || request.method,
+      url: candidateUrl,
+      query: authQuery,
+      body: mergedBody,
+      project,
+      environment,
+      extraSources
+    });
+    if (digest.header) {
+      authHeaders.push({
+        name: 'Authorization',
+        value: digest.header,
+        enabled: true,
+        kind: 'text',
+        filePath: undefined
+      });
+    }
   }
   if (auth.type === 'wsse') {
     const token = buildWsseUsernameToken({

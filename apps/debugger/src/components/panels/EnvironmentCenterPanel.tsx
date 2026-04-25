@@ -767,6 +767,66 @@ export function EnvironmentCenterPanel(props: {
                                   )
                                 }))
                               } />
+                              {profile.auth.type === 'digest' ? (
+                                <>
+                                  <TextInput label="Realm" value={profile.auth.realm || ''} onChange={event =>
+                                    props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                      ...environment,
+                                      authProfiles: environment.authProfiles.map(item =>
+                                        item.name === profile.name ? { ...item, auth: { ...item.auth, realm: event.currentTarget.value } } : item
+                                      )
+                                    }))
+                                  } />
+                                  <TextInput label="Nonce" value={profile.auth.nonce || ''} onChange={event =>
+                                    props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                      ...environment,
+                                      authProfiles: environment.authProfiles.map(item =>
+                                        item.name === profile.name ? { ...item, auth: { ...item.auth, nonce: event.currentTarget.value } } : item
+                                      )
+                                    }))
+                                  } />
+                                  <TextInput label="QOP" value={profile.auth.qop || 'auth'} onChange={event =>
+                                    props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                      ...environment,
+                                      authProfiles: environment.authProfiles.map(item =>
+                                        item.name === profile.name ? { ...item, auth: { ...item.auth, qop: event.currentTarget.value } } : item
+                                      )
+                                    }))
+                                  } />
+                                  <TextInput label="Algorithm" value={profile.auth.algorithm || 'MD5'} onChange={event =>
+                                    props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                      ...environment,
+                                      authProfiles: environment.authProfiles.map(item =>
+                                        item.name === profile.name ? { ...item, auth: { ...item.auth, algorithm: event.currentTarget.value } } : item
+                                      )
+                                    }))
+                                  } />
+                                  <TextInput label="Opaque" value={profile.auth.opaque || ''} onChange={event =>
+                                    props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                      ...environment,
+                                      authProfiles: environment.authProfiles.map(item =>
+                                        item.name === profile.name ? { ...item, auth: { ...item.auth, opaque: event.currentTarget.value } } : item
+                                      )
+                                    }))
+                                  } />
+                                  <TextInput label="Client Nonce" value={profile.auth.cnonce || ''} placeholder="Auto generated" onChange={event =>
+                                    props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                      ...environment,
+                                      authProfiles: environment.authProfiles.map(item =>
+                                        item.name === profile.name ? { ...item, auth: { ...item.auth, cnonce: event.currentTarget.value } } : item
+                                      )
+                                    }))
+                                  } />
+                                  <TextInput label="Nonce Count" value={profile.auth.nonceCount || '00000001'} onChange={event =>
+                                    props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                                      ...environment,
+                                      authProfiles: environment.authProfiles.map(item =>
+                                        item.name === profile.name ? { ...item, auth: { ...item.auth, nonceCount: event.currentTarget.value } } : item
+                                      )
+                                    }))
+                                  } />
+                                </>
+                              ) : null}
                               {profile.auth.type === 'wsse' ? (
                                 <>
                                   <TextInput label="Nonce" value={profile.auth.nonce || ''} placeholder="Auto generated" onChange={event =>

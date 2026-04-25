@@ -1307,6 +1307,17 @@ export function RequestPanel(props: {
                       <TextInput label="Workstation" value={auth.workstation || ''} onChange={event => updateAuth({ ...auth, workstation: event.currentTarget.value })} />
                     </>
                   ) : null}
+                  {auth.type === 'digest' ? (
+                    <>
+                      <TextInput label="Realm" value={auth.realm || ''} onChange={event => updateAuth({ ...auth, realm: event.currentTarget.value })} />
+                      <TextInput label="Nonce" value={auth.nonce || ''} onChange={event => updateAuth({ ...auth, nonce: event.currentTarget.value })} />
+                      <TextInput label="QOP" value={auth.qop || 'auth'} onChange={event => updateAuth({ ...auth, qop: event.currentTarget.value })} />
+                      <TextInput label="Algorithm" value={auth.algorithm || 'MD5'} onChange={event => updateAuth({ ...auth, algorithm: event.currentTarget.value })} />
+                      <TextInput label="Opaque" value={auth.opaque || ''} onChange={event => updateAuth({ ...auth, opaque: event.currentTarget.value })} />
+                      <TextInput label="Client Nonce" value={auth.cnonce || ''} placeholder="Auto generated" onChange={event => updateAuth({ ...auth, cnonce: event.currentTarget.value })} />
+                      <TextInput label="Nonce Count" value={auth.nonceCount || '00000001'} onChange={event => updateAuth({ ...auth, nonceCount: event.currentTarget.value })} />
+                    </>
+                  ) : null}
                   {auth.type === 'wsse' ? (
                     <>
                       <TextInput label="Nonce" value={auth.nonce || ''} placeholder="Auto generated" onChange={event => updateAuth({ ...auth, nonce: event.currentTarget.value })} />

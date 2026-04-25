@@ -309,6 +309,58 @@ test('inspectResolvedRequest blocks incomplete AWS Signature v4 auth', () => {
   assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-awsv4-auth' && item.blocking), true);
 });
 
+test('resolveRequest signs Digest auth requests with qop auth', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Digest Protected');
+  request.method = 'GET';
+  request.url = 'http://www.example.com/dir/index.html';
+  request.auth = {
+    type: 'digest',
+    username: 'Mufasa',
+    password: 'Circle Of Life',
+    realm: 'testrealm@host.com',
+    nonce: 'dcd98b7102dd2f0e8b11d0f600bfb0c093',
+    qop: 'auth',
+    cnonce: '0a4f113b',
+    nonceCount: '00000001',
+    opaque: '5ccc069c403ebaf9f0171e9517f40e41',
+    algorithm: 'MD5'
+  };
+
+  const preview = resolveRequest(project, request, undefined, environment);
+  const authorization = preview.headers.find(header => header.name === 'Authorization')?.value || '';
+
+  assert.match(authorization, /^Digest /);
+  assert.match(authorization, /username="Mufasa"/);
+  assert.match(authorization, /realm="testrealm@host\.com"/);
+  assert.match(authorization, /uri="\/dir\/index\.html"/);
+  assert.match(authorization, /qop=auth/);
+  assert.match(authorization, /nc=00000001/);
+  assert.match(authorization, /cnonce="0a4f113b"/);
+  assert.match(authorization, /response="6629fae49393a05397450978507c4ef1"/);
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
+  assert.equal(insight.authPreview.some(item => item.name === 'Authorization' && item.status === 'ready'), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-digest-auth'), false);
+});
+
+test('inspectResolvedRequest blocks incomplete Digest auth', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Digest Protected');
+  request.url = 'http://www.example.com/dir/index.html';
+  request.auth = {
+    type: 'digest',
+    username: 'Mufasa',
+    password: 'Circle Of Life'
+  };
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
+  assert.equal(insight.authPreview.some(item => item.name === 'Authorization' && item.status === 'missing'), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-digest-auth' && item.blocking), true);
+});
+
 test('resolveRequest builds WSSE UsernameToken headers', () => {
   const project = createDefaultProject('Demo');
   const environment = createDefaultEnvironment('shared');
