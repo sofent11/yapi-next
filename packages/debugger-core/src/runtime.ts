@@ -164,6 +164,134 @@ function buildResponseHeaderMap(response: SendRequestResult) {
   return new Map(response.headers.map(item => [item.name.toLowerCase(), item.value]));
 }
 
+function scriptRowIndex(rows: ParameterRow[], key: string) {
+  const normalized = key.trim().toLowerCase();
+  return rows.findIndex(row => row.name.trim().toLowerCase() === normalized);
+}
+
+function normalizeScriptRowEntry(nameOrEntry: unknown, value?: Primitive): ParameterRow {
+  if (typeof nameOrEntry === 'string') {
+    return {
+      name: nameOrEntry,
+      value: value == null ? '' : String(value),
+      enabled: true,
+      kind: 'text' as const
+    };
+  }
+  const source = (nameOrEntry || {}) as Record<string, unknown>;
+  return {
+    name: String(source.key || source.name || ''),
+    value: source.value == null ? '' : String(source.value),
+    enabled: source.disabled === true ? false : true,
+    kind: source.type === 'file' ? 'file' : 'text',
+    filePath: typeof source.src === 'string' ? source.src : typeof source.filePath === 'string' ? source.filePath : undefined
+  };
+}
+
+function createScriptRowApi(rows: ParameterRow[]) {
+  return {
+    get(key: string) {
+      const index = scriptRowIndex(rows, key);
+      return index >= 0 ? rows[index]?.value || '' : '';
+    },
+    has(key: string) {
+      return scriptRowIndex(rows, key) >= 0;
+    },
+    add(nameOrEntry: unknown, value?: Primitive) {
+      const next = normalizeScriptRowEntry(nameOrEntry, value);
+      if (!next.name.trim()) return;
+      rows.push(next);
+    },
+    upsert(nameOrEntry: unknown, value?: Primitive) {
+      const next = normalizeScriptRowEntry(nameOrEntry, value);
+      if (!next.name.trim()) return;
+      const index = scriptRowIndex(rows, next.name);
+      if (index >= 0) {
+        rows[index] = next;
+        return;
+      }
+      rows.push(next);
+    },
+    remove(key: string) {
+      const index = scriptRowIndex(rows, key);
+      if (index >= 0) rows.splice(index, 1);
+    },
+    clear() {
+      rows.splice(0, rows.length);
+    },
+    toObject() {
+      return Object.fromEntries(rows.filter(row => row.name.trim() && row.enabled !== false).map(row => [row.name, row.value]));
+    }
+  };
+}
+
+function createVariableApi(target: Record<string, string>, fallbackSources: Array<Record<string, unknown>>) {
+  return {
+    get: (key: string) => target[key],
+    set: (key: string, value: Primitive) => {
+      target[key] = value == null ? '' : String(value);
+    },
+    unset: (key: string) => {
+      delete target[key];
+    },
+    has: (key: string) => Object.prototype.hasOwnProperty.call(target, key),
+    replaceIn: (value: string) => interpolateString(String(value || ''), [target, ...fallbackSources])
+  };
+}
+
+function createRequestApi(request: ResolvedRequestPreview) {
+  const headerApi = createScriptRowApi(request.headers);
+  const queryApi = createScriptRowApi(request.query);
+  const bodyApi = {
+    text: () => request.body.text,
+    json: () => safeJsonParse(request.body.text),
+    setText: (value: Primitive, mimeType?: string) => {
+      request.body.text = value == null ? '' : String(value);
+      request.body.mode = request.body.mode === 'none' ? 'text' : request.body.mode;
+      if (mimeType !== undefined) request.body.mimeType = mimeType;
+    },
+    setJson: (value: unknown) => {
+      request.body.mode = 'json';
+      request.body.mimeType = 'application/json';
+      request.body.text = typeof value === 'string' ? value : JSON.stringify(value);
+      request.body.fields = [];
+    },
+    clear: () => {
+      request.body.mode = 'none';
+      request.body.text = '';
+      request.body.fields = [];
+    }
+  };
+  const api: Record<string, unknown> = {
+    headers: headerApi,
+    query: queryApi,
+    body: bodyApi,
+    setUrl: (value: Primitive) => {
+      request.url = value == null ? '' : String(value);
+    },
+    setMethod: (value: Primitive) => {
+      request.method = String(value || 'GET').toUpperCase() as ResolvedRequestPreview['method'];
+    }
+  };
+  Object.defineProperties(api, {
+    url: {
+      enumerable: true,
+      get: () => request.url,
+      set: (value: Primitive) => {
+        request.url = value == null ? '' : String(value);
+      }
+    },
+    method: {
+      enumerable: true,
+      get: () => request.method,
+      set: (value: Primitive) => {
+        request.method = String(value || 'GET').toUpperCase() as ResolvedRequestPreview['method'];
+      }
+    }
+  });
+  return api;
+}
+
 const ajv = new Ajv({ strict: false, allErrors: true });
 
 function createScriptLog(phase: ScriptLog['phase'], level: ScriptLog['level'], message: string): ScriptLog {
@@ -176,10 +304,21 @@ function createScriptResponse(response: SendRequestResult) {
   return {
     code: response.status,
     status: response.status,
+    statusText: response.statusText,
     text: () => response.bodyText,
     json: () => responseBody,
     headers: {
-      get: (key: string) => responseHeaders.get(key.toLowerCase()) || ''
+      get: (key: string) => responseHeaders.get(key.toLowerCase()) || '',
+      has: (key: string) => responseHeaders.has(key.toLowerCase())
+    },
+    to: {
+      have: {
+        status(expected: number) {
+          if (response.status !== expected) {
+            throw new Error(`Expected response status ${response.status} to equal ${expected}`);
+          }
+        }
+      }
     }
   };
 }
@@ -320,19 +459,6 @@ function createPmApi(input: {
   sendRequest?: (request: ScriptSendRequestInput) => Promise<SendRequestResult>;
   pendingRequests: Array<Promise<SendRequestResult>>;
 }) {
-  const responseBody = safeJsonParse(input.response?.bodyText || '');
-  const responseHeaders = buildResponseHeaderMap(sendRequestResultSchema.parse(input.response || {
-    ok: false,
-    status: 0,
-    statusText: '',
-    url: '',
-    durationMs: 0,
-    sizeBytes: 0,
-    headers: [],
-    bodyText: '',
-    timestamp: ''
-  }));
-
   function recordTest(label: string, ok: boolean, message: string, expected?: string, actual?: string) {
     input.testResults.push(
       checkResultSchema.parse({
@@ -347,20 +473,23 @@ function createPmApi(input: {
     );
   }
 
+  const fallbackTemplateSources = [input.state.environment?.vars || {}];
+  const variablesApi = createVariableApi(input.state.variables, fallbackTemplateSources);
+  const environmentApi = input.state.environment
+    ? createVariableApi(input.state.environment.vars, [input.state.variables])
+    : {
+        get: (_key: string) => undefined,
+        set: () => undefined,
+        unset: () => undefined,
+        has: (_key: string) => false,
+        replaceIn: (value: string) => String(value || '')
+      };
+  const responseApi = input.response ? createScriptResponse(input.response) : undefined;
+
   return {
-    variables: {
-      get: (key: string) => input.state.variables[key],
-      set: (key: string, value: Primitive) => {
-        input.state.variables[key] = value == null ? '' : String(value);
-      }
-    },
-    environment: {
-      get: (key: string) => input.state.environment?.vars[key],
-      set: (key: string, value: Primitive) => {
-        if (!input.state.environment) return;
-        input.state.environment.vars[key] = value == null ? '' : String(value);
-      }
-    },
+    variables: variablesApi,
+    collectionVariables: variablesApi,
+    environment: environmentApi,
     sendRequest: (requestInput: unknown, callback?: (error: Error | null, response?: ReturnType<typeof createScriptResponse>) => void) => {
       if (input.phase !== 'pre-request') {
         throw new Error('pm.sendRequest lite is only available during pre-request scripts.');
@@ -384,18 +513,8 @@ function createPmApi(input: {
       input.pendingRequests.push(task);
       return task.then(response => createScriptResponse(response));
     },
-    request: input.request,
-    response: input.response
-      ? {
-          code: input.response.status,
-          status: input.response.status,
-          text: () => input.response?.bodyText || '',
-          json: () => responseBody,
-          headers: {
-            get: (key: string) => responseHeaders.get(key.toLowerCase()) || ''
-          }
-        }
-      : undefined,
+    request: createRequestApi(input.request),
+    response: responseApi,
     expect: buildExpect,
     test: (name: string, fn: () => void) => {
       try {

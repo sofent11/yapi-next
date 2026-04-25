@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, Group, NumberInput, Select, Text, TextInput } from '@mantine/core';
 import { inspectCollectionDataText } from '@yapi-debugger/core';
-import { createCollectionStep, type CollectionDocument, type CollectionRunReport, type WorkspaceIndex } from '@yapi-debugger/schema';
+import { createCollectionStep, createId, type CollectionDocument, type CollectionRunReport, type WorkspaceIndex } from '@yapi-debugger/schema';
 import { CodeEditor } from '../editors/CodeEditor';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
 
@@ -84,7 +84,7 @@ export function CollectionRunnerPanel(props: {
   onAddCurrentSelection?: () => void;
   onDeleteCollection: () => void;
   onSaveCollection: () => void;
-  onRunCollection: (filters?: { tags?: string[] }) => void;
+  onRunCollection: (options?: { tags?: string[]; environmentName?: string; stepKeys?: string[]; failFast?: boolean }) => void;
   onRerunFailed: () => void;
   onClearReports: () => void;
   onSelectReport: (id: string | null) => void;
@@ -551,6 +551,146 @@ export function CollectionRunnerPanel(props: {
                     }
                   />
                 </div>
+              </div>
+
+              <div className="inspector-section">
+                <div className="checks-head">
+                  <div>
+                    <Text className="section-kicker">Run Presets</Text>
+                    <h3 className="section-title">Reusable launch profiles</h3>
+                  </div>
+                  <Button
+                    size="xs"
+                    variant="default"
+                    onClick={() =>
+                      props.onCollectionChange({
+                        ...draftCollection,
+                        runPresets: [
+                          ...(draftCollection.runPresets || []),
+                          {
+                            id: createId('preset'),
+                            name: `Preset ${draftCollection.runPresets.length + 1}`,
+                            environmentName: draftCollection.defaultEnvironment || undefined,
+                            tags: [...(draftCollection.runnerTags || [])],
+                            stepKeys: [],
+                            failFast: false
+                          }
+                        ]
+                      })
+                    }
+                  >
+                    Add Preset
+                  </Button>
+                </div>
+                <Text size="sm" c="dimmed" mb={12}>
+                  Save the run filters you actually use so you can relaunch smoke, nightly, or focused subsets without retyping tags and step keys each time.
+                </Text>
+                {draftCollection.runPresets.length === 0 ? (
+                  <div className="empty-tab-state">No run preset yet. Add one to persist environment, tags, selected steps, and fail-fast behavior.</div>
+                ) : (
+                  <div className="checks-list">
+                    {draftCollection.runPresets.map(preset => (
+                      <div key={preset.id} className="check-card">
+                        <div className="settings-grid">
+                          <TextInput
+                            label="Preset Name"
+                            value={preset.name}
+                            onChange={event =>
+                              props.onCollectionChange({
+                                ...draftCollection,
+                                runPresets: draftCollection.runPresets.map(item =>
+                                  item.id === preset.id ? { ...item, name: event.currentTarget.value } : item
+                                )
+                              })
+                            }
+                          />
+                          <Select
+                            label="Environment Override"
+                            value={preset.environmentName || ''}
+                            data={[
+                              { value: '', label: 'Use active/default environment' },
+                              ...props.workspace.environments.map(item => ({ value: item.document.name, label: item.document.name }))
+                            ]}
+                            onChange={value =>
+                              props.onCollectionChange({
+                                ...draftCollection,
+                                runPresets: draftCollection.runPresets.map(item =>
+                                  item.id === preset.id ? { ...item, environmentName: value || undefined } : item
+                                )
+                              })
+                            }
+                          />
+                          <TextInput
+                            label="Tags"
+                            placeholder="smoke, nightly"
+                            value={(preset.tags || []).join(', ')}
+                            onChange={event =>
+                              props.onCollectionChange({
+                                ...draftCollection,
+                                runPresets: draftCollection.runPresets.map(item =>
+                                  item.id === preset.id ? { ...item, tags: parseTagList(event.currentTarget.value) } : item
+                                )
+                              })
+                            }
+                          />
+                          <TextInput
+                            label="Step Keys"
+                            placeholder="setup:login, health"
+                            value={(preset.stepKeys || []).join(', ')}
+                            onChange={event =>
+                              props.onCollectionChange({
+                                ...draftCollection,
+                                runPresets: draftCollection.runPresets.map(item =>
+                                  item.id === preset.id ? { ...item, stepKeys: parseTagList(event.currentTarget.value) } : item
+                                )
+                              })
+                            }
+                          />
+                          <Checkbox
+                            label="Fail Fast"
+                            checked={preset.failFast}
+                            onChange={event =>
+                              props.onCollectionChange({
+                                ...draftCollection,
+                                runPresets: draftCollection.runPresets.map(item =>
+                                  item.id === preset.id ? { ...item, failFast: event.currentTarget.checked } : item
+                                )
+                              })
+                            }
+                          />
+                        </div>
+                        <Group gap={8} mt={12}>
+                          <Button
+                            size="xs"
+                            onClick={() =>
+                              props.onRunCollection({
+                                environmentName: preset.environmentName,
+                                tags: preset.tags,
+                                stepKeys: preset.stepKeys,
+                                failFast: preset.failFast
+                              })
+                            }
+                          >
+                            Run Preset
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="default"
+                            color="red"
+                            onClick={() =>
+                              props.onCollectionChange({
+                                ...draftCollection,
+                                runPresets: draftCollection.runPresets.filter(item => item.id !== preset.id)
+                              })
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </Group>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="inspector-section">

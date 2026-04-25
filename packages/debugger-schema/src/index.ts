@@ -381,6 +381,16 @@ export const collectionRulesSchema = z.object({
 });
 export type CollectionRules = z.infer<typeof collectionRulesSchema>;
 
+export const collectionRunPresetSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  environmentName: z.string().optional(),
+  tags: z.array(z.string()).default([]),
+  stepKeys: z.array(z.string()).default([]),
+  failFast: z.boolean().default(false)
+});
+export type CollectionRunPreset = z.infer<typeof collectionRunPresetSchema>;
+
 export const collectionDocumentSchema = z.object({
   schemaVersion: schemaVersionSchema.default(SCHEMA_VERSION),
   id: z.string().min(1),
@@ -405,6 +415,7 @@ export const collectionDocumentSchema = z.object({
   teardownSteps: z.array(collectionStepSchema).default([]),
   envMatrix: z.array(z.string()).default([]),
   runnerTags: z.array(z.string()).default([]),
+  runPresets: z.array(collectionRunPresetSchema).default([]),
   defaultRetry: retryPolicySchema.default({
     count: 0,
     delayMs: 0,
@@ -906,6 +917,7 @@ export function createEmptyCollection(name = 'New Collection'): CollectionDocume
     teardownSteps: [],
     envMatrix: [],
     runnerTags: [],
+    runPresets: [],
     defaultRetry: {
       count: 0,
       delayMs: 0,

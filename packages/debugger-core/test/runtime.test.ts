@@ -30,6 +30,7 @@ import {
   createDefaultProject,
   createEmptyCase,
   createEmptyRequest,
+  collectionDocumentSchema,
   requestDocumentSchema
 } from '../../debugger-schema/src/index';
 
@@ -144,6 +145,65 @@ test('executeRequestScript supports pm.sendRequest lite during pre-request', asy
 
   assert.equal(result.state.environment?.vars.token, 'tok_123');
   assert.equal(result.testResults.length, 0);
+});
+
+test('executeRequestScript exposes richer request and response helpers', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Helpers');
+  request.url = 'https://example.com/ping';
+  const preview = resolveRequest(project, request, undefined, environment);
+  const state = {
+    variables: {},
+    environment
+  };
+
+  const pre = await executeRequestScript({
+    phase: 'pre-request',
+    script: `
+      pm.collectionVariables.set('tenant', 'team-a');
+      pm.request.method = 'post';
+      pm.request.url = pm.collectionVariables.replaceIn('https://api.example.com/{{tenant}}/users');
+      pm.request.headers.upsert('Authorization', pm.collectionVariables.replaceIn('Bearer {{tenant}}'));
+      pm.request.query.add('page', 2);
+      pm.request.body.setJson({ tenant: pm.collectionVariables.get('tenant'), active: true });
+    `,
+    state,
+    request: preview
+  });
+
+  assert.equal(pre.request.method, 'POST');
+  assert.equal(pre.request.url, 'https://api.example.com/team-a/users');
+  assert.equal(pre.request.headers.find(row => row.name === 'Authorization')?.value, 'Bearer team-a');
+  assert.equal(pre.request.query.find(row => row.name === 'page')?.value, '2');
+  assert.equal(pre.request.body.mode, 'json');
+  assert.deepEqual(JSON.parse(pre.request.body.text), { tenant: 'team-a', active: true });
+
+  const post = await executeRequestScript({
+    phase: 'post-response',
+    script: `
+      pm.test('response helper', () => {
+        pm.response.to.have.status(201);
+        pm.expect(pm.response.headers.has('x-trace')).to.equal(true);
+        pm.expect(pm.response.headers.get('x-trace')).to.equal('trace_1');
+      });
+    `,
+    state: pre.state,
+    request: pre.request,
+    response: {
+      ok: true,
+      status: 201,
+      statusText: 'Created',
+      url: pre.request.url,
+      durationMs: 18,
+      sizeBytes: 16,
+      headers: [{ name: 'x-trace', value: 'trace_1' }],
+      bodyText: '{"ok":true}',
+      timestamp: new Date().toISOString()
+    }
+  });
+
+  assert.equal(post.testResults[0]?.ok, true);
 });
 
 test('runPreparedRequest executes request-level scripts before case-level scripts', async () => {
@@ -340,6 +400,25 @@ test('schema v3 preserves Bruno parity request metadata', () => {
   assert.equal(request.body.mode, 'graphql');
   assert.equal(requestDocumentSchema.parse(request).body.graphql?.schemaCache?.endpoint, 'https://api.example.com/graphql');
   assert.equal(request.auth.type, 'awsv4');
+});
+
+test('collection schema preserves runner presets', () => {
+  const collection = createEmptyCollection('Smoke Flow');
+  collection.runPresets = [
+    {
+      id: 'preset_smoke',
+      name: 'Smoke Only',
+      environmentName: 'staging',
+      tags: ['smoke'],
+      stepKeys: ['health'],
+      failFast: true
+    }
+  ];
+
+  const parsed = collectionDocumentSchema.parse(collection);
+  assert.equal(parsed.runPresets[0]?.name, 'Smoke Only');
+  assert.deepEqual(parsed.runPresets[0]?.tags, ['smoke']);
+  assert.equal(parsed.runPresets[0]?.failFast, true);
 });
 
 test('resolveRequest materializes GraphQL editor fields into JSON body', () => {

@@ -1295,6 +1295,7 @@ export type CollectionRunOptions = {
   stepKeys?: string[];
   seedReport?: CollectionRunReport | null;
   filters?: CollectionRunFilters;
+  failFast?: boolean;
 };
 
 export async function runCollection(
