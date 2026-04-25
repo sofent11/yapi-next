@@ -1,11 +1,116 @@
-import { Button, Group, NumberInput, Select, Stack, Text, TextInput } from '@mantine/core';
+import { Button, Group, NumberInput, Select, Text, TextInput } from '@mantine/core';
+
+export type KeybindingPreset = 'default' | 'vscode' | 'custom';
+export type KeybindingActionId =
+  | 'commandPalette'
+  | 'saveChanges'
+  | 'runRequest'
+  | 'openEnvironments'
+  | 'openPreferences';
+export type KeybindingMap = Record<KeybindingActionId, string>;
+
+type KeybindingOption = {
+  value: string;
+  label: string;
+};
+
+type KeybindingDefinition = {
+  id: KeybindingActionId;
+  label: string;
+  description: string;
+  options: KeybindingOption[];
+};
+
+const KEYBINDING_DEFINITIONS: KeybindingDefinition[] = [
+  {
+    id: 'commandPalette',
+    label: 'Command Palette',
+    description: 'Open the indexed workspace command search.',
+    options: [
+      { value: 'mod + K', label: 'Mod + K' },
+      { value: 'mod + shift + P', label: 'Mod + Shift + P' }
+    ]
+  },
+  {
+    id: 'saveChanges',
+    label: 'Save Changes',
+    description: 'Persist the current workspace, request, environment, or collection edits.',
+    options: [
+      { value: 'mod + S', label: 'Mod + S' },
+      { value: 'mod + shift + S', label: 'Mod + Shift + S' }
+    ]
+  },
+  {
+    id: 'runRequest',
+    label: 'Run Current Request',
+    description: 'Run the active workspace request or the current Scratch request.',
+    options: [
+      { value: 'mod + Enter', label: 'Mod + Enter' },
+      { value: 'shift + Enter', label: 'Shift + Enter' }
+    ]
+  },
+  {
+    id: 'openEnvironments',
+    label: 'Open Environment Center',
+    description: 'Jump to environment variables, session defaults, and prompt values.',
+    options: [
+      { value: 'mod + E', label: 'Mod + E' },
+      { value: 'mod + shift + E', label: 'Mod + Shift + E' }
+    ]
+  },
+  {
+    id: 'openPreferences',
+    label: 'Open Preferences',
+    description: 'Jump directly into the Preferences center from anywhere in the debugger.',
+    options: [
+      { value: 'mod + ,', label: 'Mod + ,' },
+      { value: 'mod + .', label: 'Mod + .' }
+    ]
+  }
+];
+
+export function keybindingsForPreset(preset: Exclude<KeybindingPreset, 'custom'>): KeybindingMap {
+  if (preset === 'vscode') {
+    return {
+      commandPalette: 'mod + shift + P',
+      saveChanges: 'mod + S',
+      runRequest: 'mod + Enter',
+      openEnvironments: 'mod + E',
+      openPreferences: 'mod + ,'
+    };
+  }
+
+  return {
+    commandPalette: 'mod + K',
+    saveChanges: 'mod + S',
+    runRequest: 'mod + Enter',
+    openEnvironments: 'mod + E',
+    openPreferences: 'mod + ,'
+  };
+}
+
+export function inferKeybindingPreset(keybindings: KeybindingMap): KeybindingPreset {
+  const defaultPreset = keybindingsForPreset('default');
+  const vscodePreset = keybindingsForPreset('vscode');
+
+  if (Object.keys(defaultPreset).every(key => keybindings[key as KeybindingActionId] === defaultPreset[key as KeybindingActionId])) {
+    return 'default';
+  }
+
+  if (Object.keys(vscodePreset).every(key => keybindings[key as KeybindingActionId] === vscodePreset[key as KeybindingActionId])) {
+    return 'vscode';
+  }
+
+  return 'custom';
+}
 
 export type PreferencesState = {
   theme: 'light' | 'dark';
   uiScale: number;
   codeFontSize: number;
-  keybindingPreset: 'default' | 'vscode';
+  keybindingPreset: KeybindingPreset;
   commandPaletteShortcut: string;
+  keybindings: KeybindingMap;
   runtimeDefaults: {
     proxyUrl: string;
     clientCertificatePath: string;
@@ -20,6 +125,43 @@ export function PreferencesCenterPanel(props: {
   onClearCaches: () => void;
 }) {
   const { preferences } = props;
+  const keybindingPresetData = [
+    { value: 'default', label: 'Default' },
+    { value: 'vscode', label: 'VS Code' },
+    { value: 'custom', label: 'Custom (manual overrides)' }
+  ];
+
+  function applyPreset(value: KeybindingPreset) {
+    if (value === 'custom') {
+      props.onChange({
+        ...preferences,
+        keybindingPreset: 'custom',
+        commandPaletteShortcut: preferences.keybindings.commandPalette
+      });
+      return;
+    }
+
+    const nextKeybindings = keybindingsForPreset(value);
+    props.onChange({
+      ...preferences,
+      keybindingPreset: value,
+      commandPaletteShortcut: nextKeybindings.commandPalette,
+      keybindings: nextKeybindings
+    });
+  }
+
+  function updateKeybinding(action: KeybindingActionId, shortcut: string) {
+    const nextKeybindings = {
+      ...preferences.keybindings,
+      [action]: shortcut
+    };
+    props.onChange({
+      ...preferences,
+      keybindingPreset: inferKeybindingPreset(nextKeybindings),
+      commandPaletteShortcut: nextKeybindings.commandPalette,
+      keybindings: nextKeybindings
+    });
+  }
 
   return (
     <section className="workspace-main" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -45,18 +187,9 @@ export function PreferencesCenterPanel(props: {
             <Select
               label="Keybinding Preset"
               value={preferences.keybindingPreset}
-              data={[
-                { value: 'default', label: 'Default (Command Palette: Mod+K)' },
-                { value: 'vscode', label: 'VS Code (Command Palette: Mod+Shift+P)' }
-              ]}
-              onChange={value =>
-                value &&
-                props.onChange({
-                  ...preferences,
-                  keybindingPreset: value as PreferencesState['keybindingPreset'],
-                  commandPaletteShortcut: value === 'vscode' ? 'mod + shift + P' : 'mod + K'
-                })
-              }
+              data={keybindingPresetData}
+              description="Presets provide safe defaults; manual edits automatically switch to Custom."
+              onChange={value => value && applyPreset(value as PreferencesState['keybindingPreset'])}
             />
             <NumberInput
               label="UI Zoom"
@@ -84,8 +217,40 @@ export function PreferencesCenterPanel(props: {
             />
           </div>
           <Text size="xs" c="dimmed">
-            Current command palette shortcut: <strong>{preferences.commandPaletteShortcut}</strong>
+            Current command palette shortcut: <strong>{preferences.keybindings.commandPalette}</strong>
           </Text>
+        </div>
+
+        <div className="inspector-section">
+          <h3 className="section-title">Keybindings</h3>
+          <Text size="xs" c="dimmed" mb="md">
+            This focused shortcut set covers the highest-frequency debugger actions. Assigned shortcuts are filtered to avoid collisions.
+          </Text>
+          <div className="keybinding-grid">
+            {KEYBINDING_DEFINITIONS.map(definition => {
+              const currentShortcut = preferences.keybindings[definition.id];
+              const usedShortcuts = new Set(
+                Object.entries(preferences.keybindings)
+                  .filter(([action, shortcut]) => action !== definition.id && Boolean(shortcut))
+                  .map(([, shortcut]) => shortcut)
+              );
+
+              return (
+                <div key={definition.id} className="keybinding-row">
+                  <div className="keybinding-row-copy">
+                    <strong>{definition.label}</strong>
+                    <span>{definition.description}</span>
+                  </div>
+                  <Select
+                    label="Shortcut"
+                    value={currentShortcut}
+                    data={definition.options.filter(option => option.value === currentShortcut || !usedShortcuts.has(option.value))}
+                    onChange={value => value && updateKeybinding(definition.id, value)}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div className="inspector-section">

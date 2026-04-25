@@ -28,6 +28,19 @@ export type ScriptExecutionState = {
   environment: EnvironmentDocument | undefined;
 };
 
+export type ScriptRuntimeContext = {
+  iterationData?: Record<string, unknown>;
+  iteration?: number;
+  iterationCount?: number;
+  requestId?: string;
+  caseId?: string;
+  sourceCollection?: {
+    id: string;
+    name: string;
+    stepKey: string;
+  };
+};
+
 type ScriptSendRequestInput = {
   method: string;
   url: string;
@@ -113,6 +126,22 @@ export function interpolateResolvedRequest(
       ...preview.body,
       text: interpolateString(preview.body.text, sources),
       file: preview.body.file ? interpolateString(preview.body.file, sources) : preview.body.file,
+      grpc: preview.body.grpc
+        ? {
+            ...preview.body.grpc,
+            protoFile: preview.body.grpc.protoFile
+              ? interpolateString(preview.body.grpc.protoFile, sources)
+              : preview.body.grpc.protoFile,
+            importPaths: (preview.body.grpc.importPaths || []).map(item => interpolateString(item, sources)),
+            service: preview.body.grpc.service
+              ? interpolateString(preview.body.grpc.service, sources)
+              : preview.body.grpc.service,
+            method: preview.body.grpc.method
+              ? interpolateString(preview.body.grpc.method, sources)
+              : preview.body.grpc.method,
+            message: interpolateString(preview.body.grpc.message || '', sources)
+          }
+        : preview.body.grpc,
       fields: interpolateRows(preview.body.fields, sources)
     }
   });
@@ -251,6 +280,40 @@ function createVariableApi(target: Record<string, string>, fallbackSources: Arra
   };
 }
 
+function createReadonlyVariableApi(source: Record<string, string>, fallbackSources: Array<Record<string, unknown>>) {
+  return {
+    get: (key: string) => source[key],
+    has: (key: string) => Object.prototype.hasOwnProperty.call(source, key),
+    toObject: () => ({ ...source }),
+    replaceIn: (value: string) => interpolateString(String(value || ''), [source, ...fallbackSources])
+  };
+}
+
+function createUnsupportedApiError(name: string, guidance?: string) {
+  return new Error(guidance ? `${name} is not supported by the local debugger runtime yet. ${guidance}` : `${name} is not supported by the local debugger runtime yet.`);
+}
+
+function createUnsupportedVariableApi(name: string, fallbackSources: Array<Record<string, unknown>>) {
+  return {
+    get: (_key: string) => {
+      throw createUnsupportedApiError(name);
+    },
+    set: (_key: string, _value: Primitive) => {
+      throw createUnsupportedApiError(name);
+    },
+    unset: (_key: string) => {
+      throw createUnsupportedApiError(name);
+    },
+    has: (_key: string) => {
+      throw createUnsupportedApiError(name);
+    },
+    toObject: () => {
+      throw createUnsupportedApiError(name);
+    },
+    replaceIn: (value: string) => interpolateString(String(value || ''), fallbackSources)
+  };
+}
+
 function createRequestApi(request: ResolvedRequestPreview) {
   const headerApi = createScriptRowApi(request.headers);
   const queryApi = createScriptRowApi(request.query);
@@ -318,6 +381,9 @@ function createScriptResponse(response: SendRequestResult) {
     code: response.status,
     status: response.status,
     statusText: response.statusText,
+    reason: () => response.statusText,
+    responseTime: response.durationMs,
+    responseSize: response.sizeBytes,
     text: () => response.bodyText,
     json: (path?: string) => path ? readPathValue(responseBody, path) : responseBody,
     headers: {
@@ -477,9 +543,14 @@ function buildExpect(actual: unknown) {
         throw new Error(`Expected length ${actualLength} to equal ${expected}`);
       }
     },
-    property(expected: string) {
+    property(expected: string, value?: unknown) {
       if (!actual || typeof actual !== 'object' || !(expected in (actual as Record<string, unknown>))) {
         throw new Error(`Expected ${stringifyValue(actual)} to have property ${expected}`);
+      }
+      if (arguments.length > 1 && (actual as Record<string, unknown>)[expected] !== value) {
+        throw new Error(
+          `Expected property ${expected} to equal ${stringifyValue(value)}, got ${stringifyValue((actual as Record<string, unknown>)[expected])}`
+        );
       }
     }
   };
@@ -513,6 +584,7 @@ function createPmApi(input: {
   testResults: CheckResult[];
   sendRequest?: (request: ScriptSendRequestInput) => Promise<SendRequestResult>;
   pendingRequests: Array<Promise<SendRequestResult>>;
+  context?: ScriptRuntimeContext;
 }) {
   function recordTest(label: string, ok: boolean, message: string, expected?: string, actual?: string) {
     input.testResults.push(
@@ -539,12 +611,55 @@ function createPmApi(input: {
         has: (_key: string) => false,
         replaceIn: (value: string) => String(value || '')
       };
+  const iterationData = Object.fromEntries(
+    Object.entries(input.context?.iterationData || {}).map(([key, value]) => [key, stringifyTemplateValue(value)])
+  );
+  const iterationDataApi = createReadonlyVariableApi(iterationData, [input.state.variables, input.state.environment?.vars || {}]);
   const responseApi = input.response ? createScriptResponse(input.response) : undefined;
+  const globalsApi = createUnsupportedVariableApi('pm.globals', [input.state.variables, input.state.environment?.vars || {}]);
+  const unsupportedExecutionApi = {
+    setNextRequest: (_name?: string | null) => {
+      throw createUnsupportedApiError('pm.execution.setNextRequest', 'Collection-flow branching is not implemented yet.');
+    },
+    skipRequest: () => {
+      throw createUnsupportedApiError('pm.execution.skipRequest', 'Conditional request skipping is not implemented yet.');
+    }
+  };
 
   return {
     variables: variablesApi,
     collectionVariables: variablesApi,
+    iterationData: iterationDataApi,
     environment: environmentApi,
+    globals: globalsApi,
+    info: {
+      eventName: input.phase === 'pre-request' ? 'prerequest' : 'test',
+      iteration: input.context?.iteration ?? 0,
+      iterationCount: input.context?.iterationCount ?? 1,
+      requestName: input.request.name,
+      requestId: input.context?.requestId || '',
+      caseId: input.context?.caseId || '',
+      collectionId: input.context?.sourceCollection?.id || '',
+      collectionName: input.context?.sourceCollection?.name || '',
+      stepKey: input.context?.sourceCollection?.stepKey || ''
+    },
+    execution: unsupportedExecutionApi,
+    vault: {
+      get: (_key: string) => {
+        throw createUnsupportedApiError('pm.vault');
+      },
+      set: (_key: string, _value: Primitive) => {
+        throw createUnsupportedApiError('pm.vault');
+      }
+    },
+    visualizer: {
+      set: (_template: string, _data?: unknown) => {
+        throw createUnsupportedApiError('pm.visualizer');
+      }
+    },
+    require: (_name: string) => {
+      throw createUnsupportedApiError('pm.require');
+    },
     cookies: responseApi?.cookies || {
       get: (_key: string) => '',
       has: (_key: string) => false,
@@ -595,6 +710,7 @@ export async function executeRequestScript(input: {
   request: ResolvedRequestPreview;
   response?: SendRequestResult;
   sendRequest?: (request: ScriptSendRequestInput) => Promise<SendRequestResult>;
+  context?: ScriptRuntimeContext;
 }) {
   const logs: ScriptLog[] = [];
   const testResults: CheckResult[] = [];
@@ -613,8 +729,14 @@ export async function executeRequestScript(input: {
     logs,
     testResults,
     sendRequest: input.sendRequest,
-    pendingRequests
+    pendingRequests,
+    context: input.context
   });
+  const postman = {
+    setNextRequest: (_name?: string | null) => {
+      throw createUnsupportedApiError('postman.setNextRequest', 'Collection-flow branching is not implemented yet.');
+    }
+  };
   const scriptConsole = {
     log: (...args: unknown[]) => {
       logs.push(createScriptLog(input.phase, 'log', args.map(stringifyTemplateValue).join(' ')));
@@ -625,8 +747,8 @@ export async function executeRequestScript(input: {
   };
 
   try {
-    const runner = new Function('pm', 'console', `return (async () => {\n${normalizedScript}\n})();`);
-    await runner(pm, scriptConsole);
+    const runner = new Function('pm', 'postman', 'console', `return (async () => {\n${normalizedScript}\n})();`);
+    await runner(pm, postman, scriptConsole);
     if (pendingRequests.length > 0) {
       await Promise.all(pendingRequests);
     }

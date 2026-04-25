@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { findNext, findPrevious } from '@codemirror/search';
+import type { EditorView } from '@codemirror/view';
 import { Badge, Button, Group, Select, Tabs, Text, TextInput } from '@mantine/core';
 import { IconAlertCircle, IconBraces, IconCookie, IconDownload, IconEye, IconGitCompare, IconPlayerPlay, IconSearch } from '@tabler/icons-react';
 import type {
@@ -106,6 +108,20 @@ function searchBodyLines(text: string, needle: string, limit = 12) {
     .map((line, index) => ({ lineNumber: index + 1, text: line }))
     .filter(entry => entry.text.toLowerCase().includes(needle))
     .slice(0, limit);
+}
+
+function countSearchMatches(text: string, needle: string) {
+  if (!needle) return 0;
+  const lowerText = text.toLowerCase();
+  let count = 0;
+  let cursor = 0;
+  while (cursor < lowerText.length) {
+    const matchIndex = lowerText.indexOf(needle, cursor);
+    if (matchIndex === -1) break;
+    count += 1;
+    cursor = matchIndex + Math.max(needle.length, 1);
+  }
+  return count;
 }
 
 function compareLineRows(left: string, right: string, limit = 200) {
@@ -282,6 +298,9 @@ export function ResponsePanel(props: {
   const [compareFilter, setCompareFilter] = useState<'all' | 'changed' | 'added' | 'removed'>('all');
   const [compareView, setCompareView] = useState<'overview' | 'workbench'>('overview');
   const [selectedDiffIndex, setSelectedDiffIndex] = useState(0);
+  const previewEditorViewRef = useRef<EditorView | null>(null);
+  const bodyEditorViewRef = useRef<EditorView | null>(null);
+  const rawEditorViewRef = useRef<EditorView | null>(null);
   const examples = props.requestDocument?.examples || [];
   const selectedExample = examples.find(item => item.name === props.selectedExampleName) || null;
   const liveBody = props.response?.bodyText ?? '';
@@ -299,6 +318,7 @@ export function ResponsePanel(props: {
   const bodyView = parsedJson != null && prettifyJson ? prettyBody : displayBody;
   const mimeType = responseMimeType(props.response, selectedExample?.mimeType);
   const previewKind = responsePreviewKind(mimeType, parsedJson, props.response?.bodyBase64);
+  const previewEditorValue = previewKind === 'binary' ? displayBody.slice(0, 2000) : bodyView;
   const previewDataUrl =
     props.response?.bodyBase64 && mimeType
       ? `data:${mimeType};base64,${props.response.bodyBase64}`
@@ -328,6 +348,18 @@ export function ResponsePanel(props: {
     [searchNeedle, sessionCookies]
   );
   const bodyMatches = useMemo(() => searchBodyLines(displayBody, searchNeedle), [displayBody, searchNeedle]);
+  const activeBodySearchState = useMemo(() => {
+    if (props.activeTab === 'body') {
+      return { label: '正文', count: countSearchMatches(bodyView, searchNeedle) };
+    }
+    if (props.activeTab === 'raw') {
+      return { label: 'Raw', count: countSearchMatches(displayBody, searchNeedle) };
+    }
+    if (props.activeTab === 'preview' && (previewKind === 'json' || previewKind === 'text' || previewKind === 'binary')) {
+      return { label: '预览', count: countSearchMatches(previewEditorValue, searchNeedle) };
+    }
+    return null;
+  }, [bodyView, displayBody, previewEditorValue, previewKind, props.activeTab, searchNeedle]);
   const compareStatsSummary = useMemo(
     () => compareStats(liveBody, selectedExample?.text || ''),
     [liveBody, selectedExample]
@@ -364,6 +396,25 @@ export function ResponsePanel(props: {
   useEffect(() => {
     setSelectedDiffIndex(0);
   }, [selectedExample?.name, compareFilter, searchNeedle]);
+
+  function activeBodyEditorView() {
+    if (props.activeTab === 'body') return bodyEditorViewRef.current;
+    if (props.activeTab === 'raw') return rawEditorViewRef.current;
+    if (props.activeTab === 'preview' && (previewKind === 'json' || previewKind === 'text' || previewKind === 'binary')) {
+      return previewEditorViewRef.current;
+    }
+    return null;
+  }
+
+  function navigateBodySearch(direction: 'next' | 'previous') {
+    const editorView = activeBodyEditorView();
+    if (!editorView || !searchNeedle) return;
+    if (direction === 'next') {
+      findNext(editorView);
+      return;
+    }
+    findPrevious(editorView);
+  }
 
   return (
     <div className="response-panel">
@@ -536,6 +587,34 @@ export function ResponsePanel(props: {
               <Text size="sm" c="dimmed">正文里暂时没有命中当前关键词。</Text>
             )}
           </div>
+          <div className="compare-summary-card response-editor-search-card">
+            <div>
+              <Text fw={700}>正文编辑器</Text>
+              <Text size="sm" c="dimmed">
+                {activeBodySearchState
+                  ? `${activeBodySearchState.label} 标签中有 ${activeBodySearchState.count} 个全文命中。`
+                  : '切换到 Preview / Body / Raw 的文本视图后可进行全文导航。'}
+              </Text>
+            </div>
+            <Group gap={8} wrap="wrap" className="response-editor-search-actions">
+              <Button
+                size="xs"
+                variant="default"
+                onClick={() => navigateBodySearch('previous')}
+                disabled={!activeBodySearchState || activeBodySearchState.count === 0}
+              >
+                上一个命中
+              </Button>
+              <Button
+                size="xs"
+                variant="default"
+                onClick={() => navigateBodySearch('next')}
+                disabled={!activeBodySearchState || activeBodySearchState.count === 0}
+              >
+                下一个命中
+              </Button>
+            </Group>
+          </div>
         </div>
       ) : null}
 
@@ -632,19 +711,41 @@ export function ResponsePanel(props: {
                         This response is best handled as a file. Use download to inspect it in an external viewer.
                       </Text>
                       <CodeEditor
-                        value={displayBody.slice(0, 2000)}
+                        value={previewEditorValue}
                         readOnly
                         language="text"
                         minHeight="140px"
+                        searchQuery={searchNeedle}
+                        onCreateEditor={view => {
+                          previewEditorViewRef.current = view;
+                        }}
                       />
                     </div>
                   ) : (
-                    <CodeEditor value={bodyView} readOnly language={responseBodyLanguage(bodyView)} minHeight="400px" />
+                    <CodeEditor
+                      value={previewEditorValue}
+                      readOnly
+                      language={responseBodyLanguage(previewEditorValue)}
+                      minHeight="400px"
+                      searchQuery={searchNeedle}
+                      onCreateEditor={view => {
+                        previewEditorViewRef.current = view;
+                      }}
+                    />
                   )}
                 </div>
               </Tabs.Panel>
               <Tabs.Panel value="body">
-                <CodeEditor value={bodyView} readOnly language={responseBodyLanguage(bodyView)} minHeight="400px" />
+                <CodeEditor
+                  value={bodyView}
+                  readOnly
+                  language={responseBodyLanguage(bodyView)}
+                  minHeight="400px"
+                  searchQuery={searchNeedle}
+                  onCreateEditor={view => {
+                    bodyEditorViewRef.current = view;
+                  }}
+                />
               </Tabs.Panel>
               <Tabs.Panel value="json">
                 {parsedJson == null ? (
@@ -1045,7 +1146,16 @@ export function ResponsePanel(props: {
                 ) : null}
               </Tabs.Panel>
               <Tabs.Panel value="raw">
-                <CodeEditor value={displayBody} readOnly language="text" minHeight="400px" />
+                <CodeEditor
+                  value={displayBody}
+                  readOnly
+                  language="text"
+                  minHeight="400px"
+                  searchQuery={searchNeedle}
+                  onCreateEditor={view => {
+                    rawEditorViewRef.current = view;
+                  }}
+                />
               </Tabs.Panel>
             </>
           )}

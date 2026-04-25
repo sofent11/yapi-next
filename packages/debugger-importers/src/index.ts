@@ -1343,6 +1343,30 @@ function openCollectionSelectedBody<T extends Record<string, any>>(body: T | Arr
   return body;
 }
 
+function importGraphqlSavedOperations(input: unknown) {
+  if (!Array.isArray(input)) return undefined;
+  const savedOperations = input
+    .map((item, index) => {
+      const source = item && typeof item === 'object' ? item as Record<string, any> : {};
+      const name = String(source.name || source.title || `saved-${index + 1}`).trim();
+      const query = String(source.query || '');
+      const variables = source.variables == null
+        ? '{}'
+        : typeof source.variables === 'string'
+          ? source.variables
+          : JSON.stringify(source.variables, null, 2);
+      return {
+        name,
+        query,
+        variables,
+        operationName: source.operationName ? String(source.operationName) : undefined,
+        updatedAt: source.updatedAt ? String(source.updatedAt) : undefined
+      };
+    })
+    .filter(item => item.name || item.query.trim() || item.variables.trim());
+  return savedOperations.length > 0 ? savedOperations : undefined;
+}
+
 function openCollectionGraphqlBody(body: any): RequestDocument['body'] {
   const selected = openCollectionSelectedBody(body) || {};
   const query = String(selected.query || '');
@@ -1371,6 +1395,7 @@ function openCollectionGraphqlBody(body: any): RequestDocument['body'] {
       variables,
       operationName,
       schemaUrl: selected.schemaUrl ? String(selected.schemaUrl) : undefined,
+      savedOperations: importGraphqlSavedOperations(selected.savedOperations) || [],
       schemaCache: selected.schemaCache && typeof selected.schemaCache === 'object' ? selected.schemaCache : undefined
     }
   };
@@ -2288,6 +2313,7 @@ function brunoJsonBody(body: any): RequestDocument['body'] {
         variables,
         operationName: graphql.operationName ? String(graphql.operationName) : undefined,
         schemaUrl: graphql.schemaUrl ? String(graphql.schemaUrl) : undefined,
+        savedOperations: importGraphqlSavedOperations(graphql.savedOperations) || [],
         schemaCache: graphql.schemaCache && typeof graphql.schemaCache === 'object' ? graphql.schemaCache : undefined
       }
     };
@@ -2375,6 +2401,19 @@ function brunoJsonScripts(request: any) {
   };
 }
 
+function brunoJsonGrpcImportPaths(source: any) {
+  const topLevel = Array.isArray(source?.importPaths) ? source.importPaths : [];
+  if (topLevel.length > 0) {
+    return topLevel.map((item: any) => String(item?.path || item || '')).filter(Boolean);
+  }
+
+  const bodyEntries = Array.isArray(source?.body?.grpc) ? source.body.grpc : [];
+  return bodyEntries
+    .flatMap((item: any) => (Array.isArray(item?.importPaths) ? item.importPaths : []))
+    .map((item: any) => String(item?.path || item || ''))
+    .filter(Boolean);
+}
+
 function walkBrunoJsonItems(
   items: any[],
   folderSegments: string[],
@@ -2416,6 +2455,7 @@ function walkBrunoJsonItems(
             'http';
     const body = brunoJsonBody(source.body);
     const grpcParts = kind === 'grpc' ? splitGrpcMethod(String(source.method || '')) : { service: '', method: '' };
+    const grpcImportPaths = kind === 'grpc' ? brunoJsonGrpcImportPaths(source) : [];
     const params = Array.isArray(source.params) ? source.params : [];
     const paramsRows = brunoJsonRows(params);
     const request: RequestDocument = {
@@ -2435,6 +2475,7 @@ function walkBrunoJsonItems(
             ...body,
             grpc: {
               ...(body.grpc || { importPaths: [], message: '' }),
+              importPaths: grpcImportPaths,
               protoFile: source.protoPath ? String(source.protoPath) : body.grpc?.protoFile,
               service: grpcParts.service || body.grpc?.service,
               method: grpcParts.method || body.grpc?.method
@@ -2553,7 +2594,8 @@ function importBruno(content: string): ImportResult {
           graphql: bodyMode === 'graphql'
             ? {
                 query: bodySection?.content.trim() || '',
-                variables: graphqlVariablesSection?.content.trim() || '{}'
+                variables: graphqlVariablesSection?.content.trim() || '{}',
+                savedOperations: []
               }
             : undefined
         }

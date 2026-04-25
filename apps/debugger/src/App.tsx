@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { ActionIcon, Badge, Drawer, Select, Text, TextInput } from '@mantine/core';
+import { useHotkeys, type HotkeyItem } from '@mantine/hooks';
 import { Spotlight, spotlight, type SpotlightActionData } from '@mantine/spotlight';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
@@ -93,7 +94,12 @@ import { ImportRepairPanel } from './components/panels/ImportRepairPanel';
 import { InterfaceTreePanel } from './components/panels/InterfaceTreePanel';
 import { ScratchPadPanel } from './components/panels/ScratchPadPanel';
 import { SyncCenterPanel } from './components/panels/SyncCenterPanel';
-import { PreferencesCenterPanel, type PreferencesState } from './components/panels/PreferencesCenterPanel';
+import {
+  PreferencesCenterPanel,
+  inferKeybindingPreset,
+  keybindingsForPreset,
+  type PreferencesState
+} from './components/panels/PreferencesCenterPanel';
 import { WelcomePanel } from './components/panels/WelcomePanel';
 import { WorkspaceHomePanel } from './components/panels/WorkspaceHomePanel';
 import { WorkspaceMainPanel } from './components/panels/WorkspaceMainPanel';
@@ -268,12 +274,14 @@ function savePersistedJson(key: string, value: unknown) {
 }
 
 function defaultPreferences(): PreferencesState {
+  const keybindings = keybindingsForPreset('default');
   return {
     theme: 'light',
     uiScale: 1,
     codeFontSize: 13,
     keybindingPreset: 'default',
-    commandPaletteShortcut: 'mod + K',
+    commandPaletteShortcut: keybindings.commandPalette,
+    keybindings,
     runtimeDefaults: {
       proxyUrl: '',
       clientCertificatePath: '',
@@ -283,8 +291,31 @@ function defaultPreferences(): PreferencesState {
   };
 }
 
-function loadPreferences() {
-  return loadPersistedJson<PreferencesState>(PREFERENCES_STORAGE_KEY) || defaultPreferences();
+function loadPreferences(): PreferencesState {
+  const persisted = loadPersistedJson<Partial<PreferencesState>>(PREFERENCES_STORAGE_KEY);
+  const defaults = defaultPreferences();
+
+  if (!persisted) return defaults;
+
+  const presetSeed = persisted.keybindingPreset === 'vscode' ? keybindingsForPreset('vscode') : defaults.keybindings;
+  const keybindings: PreferencesState['keybindings'] = {
+    ...presetSeed,
+    ...(persisted.keybindings || {}),
+    commandPalette: persisted.keybindings?.commandPalette || persisted.commandPaletteShortcut || presetSeed.commandPalette
+  };
+
+  return {
+    theme: persisted.theme === 'dark' ? 'dark' : 'light',
+    uiScale: typeof persisted.uiScale === 'number' ? persisted.uiScale : defaults.uiScale,
+    codeFontSize: typeof persisted.codeFontSize === 'number' ? persisted.codeFontSize : defaults.codeFontSize,
+    keybindingPreset: inferKeybindingPreset(keybindings),
+    commandPaletteShortcut: keybindings.commandPalette,
+    keybindings,
+    runtimeDefaults: {
+      ...defaults.runtimeDefaults,
+      ...(persisted.runtimeDefaults || {})
+    }
+  };
 }
 
 function savePreferences(preferences: PreferencesState) {
@@ -1068,6 +1099,20 @@ export function App() {
     store.selectNode({ kind: 'project' });
   }
 
+  const handleChangeRailView = useCallback(
+    (view: AppRailView) => {
+      if (view === 'collections') {
+        setCollectionPanelTabHint(null);
+      }
+      if (view === 'workspace') {
+        openWorkbenchOverview();
+        return;
+      }
+      setActiveView(view);
+    },
+    [openWorkbenchOverview]
+  );
+
   function openImportTasks() {
     setActiveView('workspace');
     setActiveWorkbenchPane('import-tasks');
@@ -1297,6 +1342,64 @@ export function App() {
       notifications.show({ color: 'red', message: `Scratch request failed: ${message}` });
     }
   });
+
+  const debuggerHotkeys = useMemo<HotkeyItem[]>(
+    () => [
+      [
+        preferences.keybindings.saveChanges,
+        () => {
+          if (!store.workspace || !store.isDirty || saveMutation.isPending) return;
+          saveMutation.mutate();
+        },
+        { preventDefault: true }
+      ],
+      [
+        preferences.keybindings.runRequest,
+        () => {
+          if (activeView === 'workspace') {
+            if (!store.draftRequest || runMutation.isPending) return;
+            runMutation.mutate();
+            return;
+          }
+
+          if (activeView === 'scratch') {
+            if (!currentScratch || scratchRunMutation.isPending) return;
+            scratchRunMutation.mutate();
+          }
+        },
+        { preventDefault: true }
+      ],
+      [
+        preferences.keybindings.openEnvironments,
+        () => {
+          if (!store.workspace) return;
+          handleChangeRailView('environments');
+        },
+        { preventDefault: true }
+      ],
+      [
+        preferences.keybindings.openPreferences,
+        () => {
+          if (!store.workspace) return;
+          handleChangeRailView('preferences');
+        },
+        { preventDefault: true }
+      ]
+    ],
+    [
+      preferences.keybindings,
+      store.workspace,
+      store.isDirty,
+      store.draftRequest,
+      activeView,
+      currentScratch,
+      saveMutation,
+      runMutation,
+      scratchRunMutation,
+      handleChangeRailView
+    ]
+  );
+  useHotkeys(debuggerHotkeys);
 
   const importFileMutation = useMutation({
     mutationFn: async () => {
@@ -3419,15 +3522,7 @@ export function App() {
               isDirty={store.isDirty}
               activeView={activeView}
               importTaskCount={importTaskCount}
-              onChangeView={view => {
-                if (view === 'collections') {
-                  setCollectionPanelTabHint(null);
-                }
-                setActiveView(view);
-                if (view === 'workspace') {
-                  openWorkbenchOverview();
-                }
-              }}
+              onChangeView={handleChangeRailView}
             />
 
             <InterfaceTreePanel

@@ -275,6 +275,234 @@ test('executeRequestScript supports deeper sandbox assertions and cookie helpers
   assert.equal(result.testResults[0]?.ok, true);
 });
 
+test('executeRequestScript exposes info, iteration data, and response convenience helpers', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Metadata Helpers');
+  request.url = 'https://example.com/metadata';
+  const preview = resolveRequest(project, request, undefined, environment);
+
+  const result = await executeRequestScript({
+    phase: 'post-response',
+    script: `
+      pm.test('metadata helpers', () => {
+        pm.expect(pm.iterationData.get('tenant')).to.equal('team-a');
+        pm.expect(pm.iterationData.has('tenant')).to.equal(true);
+        pm.expect(pm.iterationData.toObject()).to.have.property('tenant', 'team-a');
+        pm.expect(pm.info.requestName).to.equal('Metadata Helpers');
+        pm.expect(pm.info.eventName).to.equal('test');
+        pm.expect(pm.info.iteration).to.equal(2);
+        pm.expect(pm.info.iterationCount).to.equal(5);
+        pm.expect(pm.info.collectionName).to.equal('Smoke Flow');
+        pm.expect(pm.info.stepKey).to.equal('step_meta');
+        pm.expect(pm.response.reason()).to.equal('Created');
+        pm.expect(pm.response.responseTime).to.equal(18);
+        pm.expect(pm.response.responseSize).to.equal(64);
+      });
+    `,
+    state: {
+      variables: {},
+      environment
+    },
+    request: preview,
+    response: {
+      ok: true,
+      status: 201,
+      statusText: 'Created',
+      url: preview.url,
+      durationMs: 18,
+      sizeBytes: 64,
+      headers: [{ name: 'content-type', value: 'application/json' }],
+      bodyText: '{"ok":true}',
+      timestamp: new Date().toISOString()
+    },
+    context: {
+      iterationData: { tenant: 'team-a' },
+      iteration: 2,
+      iterationCount: 5,
+      requestId: request.id,
+      sourceCollection: {
+        id: 'col_meta',
+        name: 'Smoke Flow',
+        stepKey: 'step_meta'
+      }
+    }
+  });
+
+  assert.equal(result.testResults[0]?.ok, true);
+});
+
+test('executeRequestScript reports explicit unsupported api errors', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Unsupported APIs');
+  request.url = 'https://example.com/unsupported';
+  const preview = resolveRequest(project, request, undefined, environment);
+
+  const result = await executeRequestScript({
+    phase: 'pre-request',
+    script: 'pm.execution.setNextRequest("next-step");',
+    state: {
+      variables: {},
+      environment
+    },
+    request: preview
+  });
+
+  assert.equal(result.testResults[0]?.ok, false);
+  assert.match(result.testResults[0]?.message || '', /pm\.execution\.setNextRequest is not supported/);
+});
+
+test('resolveRequest interpolates grpc payload fields and derives rpc path', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'grpc://localhost:50051';
+  const environment = createDefaultEnvironment('shared');
+  environment.vars.protoDir = '/workspace/protos';
+  environment.vars.package = 'demo.users';
+  environment.vars.methodName = 'GetUser';
+  environment.vars.userId = 'user-42';
+
+  const request = createEmptyRequest('Get User');
+  request.kind = 'grpc';
+  request.method = 'POST';
+  request.url = '{{baseUrl}}';
+  request.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: '{{protoDir}}/user.proto',
+      importPaths: ['{{protoDir}}', '{{protoDir}}/common'],
+      service: '{{package}}.UserService',
+      method: '{{methodName}}',
+      message: '{"id":"{{userId}}"}'
+    }
+  };
+
+  const resolved = resolveRequest(project, request, undefined, environment);
+  assert.equal(resolved.url, 'grpc://localhost:50051');
+  assert.equal(resolved.requestPath, '/demo.users.UserService/GetUser');
+  assert.equal(resolved.body.grpc?.protoFile, '/workspace/protos/user.proto');
+  assert.deepEqual(resolved.body.grpc?.importPaths, ['/workspace/protos', '/workspace/protos/common']);
+  assert.equal(resolved.body.grpc?.service, 'demo.users.UserService');
+  assert.equal(resolved.body.grpc?.method, 'GetUser');
+  assert.equal(resolved.body.grpc?.message, '{"id":"user-42"}');
+});
+
+test('inspectResolvedRequest blocks grpc requests without proto or rpc target', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'grpc://localhost:50051';
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Broken gRPC');
+  request.kind = 'grpc';
+  request.method = 'POST';
+  request.url = '{{baseUrl}}';
+  request.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: '',
+      importPaths: [],
+      service: '',
+      method: '',
+      message: '{}'
+    }
+  };
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
+  assert.deepEqual(
+    insight.diagnostics.filter(item => item.blocking).map(item => item.code).sort(),
+    ['missing-grpc-method', 'missing-grpc-proto', 'missing-grpc-service']
+  );
+});
+
+test('runPreparedRequest resolves grpc previews and exposes native runtime responses to scripts', async () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'grpc://localhost:50051';
+  const environment = createDefaultEnvironment('shared');
+  environment.vars.protoDir = '/workspace/protos';
+  environment.vars.package = 'demo.users';
+  environment.vars.methodName = 'GetUser';
+  environment.vars.userId = 'user-42';
+
+  const request = createEmptyRequest('Get User');
+  request.kind = 'grpc';
+  request.method = 'POST';
+  request.url = '{{baseUrl}}';
+  request.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: '{{protoDir}}/user.proto',
+      importPaths: ['{{protoDir}}', '{{protoDir}}/common'],
+      service: '{{package}}.UserService',
+      method: '{{methodName}}',
+      message: '{"id":"{{userId}}"}'
+    }
+  };
+  request.scripts.tests = [
+    'pm.test("grpc response body", () => pm.expect(pm.response.json("user.id")).to.equal("user-42"));',
+    'pm.test("grpc runtime header", () => pm.expect(pm.response.headers.get("x-debugger-runtime")).to.equal("grpc"));'
+  ].join('\n');
+
+  const workspace = {
+    root: '/workspace/grpc-runtime',
+    project,
+    environments: [{ document: environment, filePath: '/workspace/grpc-runtime/environments/shared.yaml' }],
+    requests: [
+      {
+        request,
+        cases: [],
+        folderSegments: ['RPC'],
+        requestFilePath: '/workspace/grpc-runtime/requests/get-user.request.yaml',
+        resourceDirPath: '/workspace/grpc-runtime/requests/get-user'
+      }
+    ],
+    folders: [],
+    collections: [],
+    tree: []
+  };
+  let seenPreviewUrl = '';
+
+  const result = await runPreparedRequest({
+    workspace,
+    request,
+    sendRequest: async preview => {
+      seenPreviewUrl = preview.url;
+      assert.equal(preview.requestPath, '/demo.users.UserService/GetUser');
+      assert.equal(preview.body.grpc?.protoFile, '/workspace/protos/user.proto');
+      assert.deepEqual(preview.body.grpc?.importPaths, ['/workspace/protos', '/workspace/protos/common']);
+      assert.equal(preview.body.grpc?.message, '{"id":"user-42"}');
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: 'http://localhost:50051/demo.users.UserService/GetUser',
+        durationMs: 18,
+        sizeBytes: 45,
+        headers: [
+          { name: 'content-type', value: 'application/json; charset=utf-8' },
+          { name: 'grpc-status', value: '0' },
+          { name: 'x-debugger-runtime', value: 'grpc' }
+        ],
+        bodyText: '{\n  "user": {\n    "id": "user-42"\n  }\n}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.equal(seenPreviewUrl, 'grpc://localhost:50051');
+  assert.equal(result.preview.requestPath, '/demo.users.UserService/GetUser');
+  assert.equal(result.response.url, 'http://localhost:50051/demo.users.UserService/GetUser');
+  assert.equal(result.response.headers.find(item => item.name === 'x-debugger-runtime')?.value, 'grpc');
+  assert.equal(result.checkResults.every(item => item.ok), true);
+});
+
 test('runPreparedRequest executes request-level scripts before case-level scripts', async () => {
   const project = createDefaultProject('Demo');
   const environment = createDefaultEnvironment('shared');
@@ -1608,6 +1836,84 @@ test('runCollection executes collection-level scripts around each step', async (
   ]);
 });
 
+test('runCollection passes iteration data and metadata into scripts', async () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Iteration Aware');
+  request.id = 'req_iteration_aware';
+  request.url = '{{baseUrl}}/orders/{{tenant}}';
+  request.scripts = {
+    preRequest: `
+      pm.variables.set('tenant', pm.iterationData.get('tenant'));
+      pm.variables.set('stepKey', pm.info.stepKey);
+      pm.variables.set('preEvent', pm.info.eventName);
+    `,
+    postResponse: '',
+    tests: `
+      pm.test('post metadata', () => {
+        pm.expect(pm.info.eventName).to.equal('test');
+        pm.expect(pm.iterationData.get('tenant')).to.equal('team-a');
+        pm.expect(pm.variables.get('stepKey')).to.equal('step_iteration');
+        pm.expect(pm.variables.get('preEvent')).to.equal('prerequest');
+      });
+    `
+  };
+  const collection = createEmptyCollection('Iteration Flow');
+  collection.id = 'col_iteration_flow';
+  collection.steps = [
+    createCollectionStep({
+      key: 'step_iteration',
+      requestId: request.id,
+      name: 'Iteration step'
+    })
+  ];
+
+  const report = await runCollection({
+    workspace: {
+      root: '/tmp/collection-iteration',
+      project,
+      environments: [{ document: environment, filePath: '/tmp/collection-iteration/environments/shared.yaml' }],
+      folders: [],
+      requests: [
+        {
+          request,
+          cases: [],
+          folderSegments: [],
+          requestFilePath: '/tmp/collection-iteration/requests/iteration.request.yaml',
+          resourceDirPath: '/tmp/collection-iteration/requests/iteration'
+        }
+      ],
+      collections: [
+        {
+          document: collection,
+          filePath: '/tmp/collection-iteration/collections/iteration.collection.yaml',
+          dataText: 'tenant\nteam-a\nteam-b\n'
+        }
+      ],
+      tree: []
+    },
+    collectionId: collection.id,
+    sendRequest: async preview => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      url: preview.url,
+      durationMs: 10,
+      sizeBytes: 2,
+      headers: [{ name: 'content-type', value: 'application/json' }],
+      bodyText: '{}',
+      timestamp: new Date().toISOString()
+    })
+  });
+
+  assert.equal(report.iterations[0]?.stepRuns[0]?.request?.url, 'https://api.example.com/orders/team-a');
+  assert.equal(report.iterations[1]?.stepRuns[0]?.request?.url, 'https://api.example.com/orders/team-b');
+  assert.deepEqual(report.iterations[0]?.stepRuns[0]?.checkResults.filter(item => item.source === 'script').map(item => item.label), [
+    'post metadata'
+  ]);
+});
+
 test('inspectResolvedRequest emits blocking diagnostics for missing values', () => {
   const project = createDefaultProject('Demo');
   project.runtime.baseUrl = '';
@@ -1644,12 +1950,14 @@ test('inspectResolvedRequest surfaces unsupported script APIs before send', () =
   request.url = '{{baseUrl}}/profile';
   const caseDocument = createEmptyCase(request.id, 'scripted');
   caseDocument.scripts = {
-    preRequest: 'pm.sendRequest("https://example.com/extra");',
-    postResponse: 'pm.vault.get("token");'
+    preRequest: 'pm.sendRequest("https://example.com/extra"); pm.execution.setNextRequest("next");',
+    postResponse: 'pm.vault.get("token"); postman.setNextRequest(null);'
   };
 
   const insight = inspectResolvedRequest(project, request, caseDocument, environment);
   assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-send-request'), true);
+  assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-set-next-request'), true);
+  assert.equal(insight.warnings.some(item => item.code === 'script-legacy-set-next-request'), true);
   assert.equal(insight.diagnostics.some(item => item.code === 'script-unsupported-vault' && item.blocking === false), true);
 });
 

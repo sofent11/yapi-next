@@ -243,6 +243,8 @@ sku-002,u-2
 - `tags`: 套件标签
 - `setupSteps` / `teardownSteps`: 前后置步骤
 - `envMatrix`: 环境矩阵，V1 按顺序串行执行
+- `runnerTags`: 默认 runner tag filter；GUI 与 headless CLI 都会继承，除非显式覆盖
+- `runPresets`: 持久化保存环境、标签、stepKeys、fail-fast 组合，可在 GUI 或 `yapi-debugger-runner --preset` 中复用
 - `defaultRetry`: Collection 默认重试策略
 - `continueOnFailure`: 是否允许失败后继续执行后续步骤
 - `reporters`: 默认报告格式，支持 `json`、`html`、`junit`

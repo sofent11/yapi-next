@@ -1722,6 +1722,38 @@ mark {
   background: var(--surface);
 }
 
+.keybinding-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.keybinding-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 16px;
+  align-items: start;
+  padding: 16px;
+  border: 1px solid color-mix(in oklch, var(--line) 90%, var(--accent-soft));
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--surface-muted) 80%, var(--surface));
+}
+
+.keybinding-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.keybinding-row-copy strong {
+  font-size: 0.82rem;
+}
+
+.keybinding-row-copy span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
 .danger-section {
   display: flex;
   align-items: center;
@@ -1745,6 +1777,12 @@ mark {
 
 .form-grid-2 {
   grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 900px) {
+  .keybinding-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .inspector-summary-grid {
@@ -1900,6 +1938,16 @@ mark {
   font-size: var(--code-font-size);
 }
 
+.code-editor-shell .cm-searchMatch {
+  background: color-mix(in srgb, var(--orange-soft) 72%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orange) 24%, transparent);
+}
+
+.code-editor-shell .cm-searchMatch.cm-searchMatch-selected {
+  background: color-mix(in srgb, var(--accent-soft) 88%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 36%, transparent);
+}
+
 .response-adaptive-preview {
   display: grid;
   gap: 12px;
@@ -1947,10 +1995,76 @@ mark {
   min-width: 0;
 }
 
+.graphql-editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
 .graphql-schema-actions {
   display: grid;
   align-content: end;
   gap: 6px;
+}
+
+.graphql-saved-ops-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--surface-muted) 62%, var(--surface));
+}
+
+.graphql-saved-ops-head,
+.graphql-saved-ops-controls,
+.graphql-saved-ops-preview-head,
+.graphql-schema-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.graphql-saved-ops-head,
+.graphql-saved-ops-controls,
+.graphql-saved-ops-preview-head {
+  justify-content: space-between;
+}
+
+.graphql-saved-ops-head > div,
+.graphql-schema-search .mantine-InputWrapper-root {
+  min-width: 0;
+  flex: 1;
+}
+
+.graphql-saved-ops-preview {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklch, var(--line) 88%, var(--accent-soft));
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.graphql-saved-ops-preview-head strong {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.graphql-saved-ops-preview span,
+.graphql-saved-ops-preview small {
+  color: var(--muted);
+  word-break: break-word;
+}
+
+.graphql-saved-ops-preview span {
+  font-size: 11px;
+}
+
+.graphql-saved-ops-preview small {
+  font-size: 10px;
 }
 
 .graphql-schema-panel {
@@ -1988,6 +2102,10 @@ mark {
 .graphql-schema-stats,
 .graphql-schema-fields {
   flex-wrap: wrap;
+}
+
+.graphql-schema-search {
+  align-items: flex-end;
 }
 
 .graphql-schema-fields {
@@ -3073,6 +3191,14 @@ mark {
   font-family: var(--font-mono);
 }
 
+.response-editor-search-card {
+  align-items: center;
+}
+
+.response-editor-search-actions {
+  justify-content: flex-end;
+}
+
 .variable-audit-card > div,
 .json-inspector-copy {
   min-width: 0;
@@ -3157,6 +3283,17 @@ mark {
 
   .response-diff-columns {
     grid-template-columns: 1fr;
+  }
+
+  .response-editor-search-card {
+    align-items: stretch;
+  }
+
+  .graphql-saved-ops-head,
+  .graphql-saved-ops-controls,
+  .graphql-schema-search {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .response-merge-grid {

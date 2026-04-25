@@ -3,6 +3,9 @@
   "version": "1.11.0",
   "description": "YAPI",
   "main": "apps/api/dist/main.js",
+  "bin": {
+    "yapi-debugger-runner": "./scripts/debugger-runner.js"
+  },
   "scripts": {
     "start": "./scripts/start-next.sh",
     "test": "npm run next:build",
@@ -52,9 +55,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "axios": "^1.15.2"
-  },
-  "devDependencies": {
+    "axios": "^1.15.2",
     "tsx": "^4.21.0"
   },
   "engines": {

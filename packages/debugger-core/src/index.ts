@@ -105,10 +105,46 @@ const UNSUPPORTED_SCRIPT_PATTERNS = [
     message: 'pm.sendRequest is only supported in lite pre-request mode. Complex or post-response usage still needs review.'
   },
   {
+    token: 'pm.execution.setNextRequest',
+    code: 'script-unsupported-set-next-request',
+    level: 'warning' as const,
+    message: 'pm.execution.setNextRequest is not supported by the local debugger runtime yet.'
+  },
+  {
+    token: 'pm.execution.skipRequest',
+    code: 'script-unsupported-skip-request',
+    level: 'warning' as const,
+    message: 'pm.execution.skipRequest is not supported by the local debugger runtime yet.'
+  },
+  {
+    token: 'pm.globals',
+    code: 'script-unsupported-globals',
+    level: 'warning' as const,
+    message: 'pm.globals is not supported by the local debugger runtime yet.'
+  },
+  {
     token: 'pm.vault',
     code: 'script-unsupported-vault',
     level: 'warning' as const,
     message: 'pm.vault is not supported by the local debugger runtime yet.'
+  },
+  {
+    token: 'pm.visualizer',
+    code: 'script-unsupported-visualizer',
+    level: 'warning' as const,
+    message: 'pm.visualizer is not supported by the local debugger runtime yet.'
+  },
+  {
+    token: 'pm.require',
+    code: 'script-unsupported-require',
+    level: 'warning' as const,
+    message: 'pm.require is not supported by the local debugger runtime yet.'
+  },
+  {
+    token: 'postman.setNextRequest',
+    code: 'script-legacy-set-next-request',
+    level: 'warning' as const,
+    message: 'postman.setNextRequest is not supported by the local debugger runtime yet.'
   },
   {
     token: 'postman.',
@@ -937,7 +973,8 @@ export function buildGraphqlIntrospectionRequest(preview: ResolvedRequestPreview
       fields: [],
       graphql: {
         query: GRAPHQL_INTROSPECTION_QUERY,
-        variables: '{}'
+        variables: '{}',
+        savedOperations: []
       }
     },
     sessionId: preview.sessionId,
@@ -1817,6 +1854,13 @@ function brunoJsonBody(body: RequestBody, kind: RequestKind) {
           variables: normalized.graphql?.variables || '{}',
           operationName: normalized.graphql?.operationName || undefined,
           schemaUrl: normalized.graphql?.schemaUrl || undefined,
+          savedOperations: (normalized.graphql?.savedOperations || []).map(operation => ({
+            name: operation.name,
+            query: operation.query,
+            variables: parseJsonOrString(operation.variables || '{}'),
+            ...(operation.operationName ? { operationName: operation.operationName } : {}),
+            ...(operation.updatedAt ? { updatedAt: operation.updatedAt } : {})
+          })),
           schemaCache: normalized.graphql?.schemaCache || undefined
         }
       };
@@ -1900,7 +1944,10 @@ function brunoJsonItem(record: WorkspaceRequestRecord, seq: number) {
       },
       tests: request.scripts.tests || null,
       docs: request.docs || '',
-      ...(request.kind === 'grpc' && request.body.grpc?.protoFile ? { protoPath: request.body.grpc.protoFile } : {})
+      ...(request.kind === 'grpc' && request.body.grpc?.protoFile ? { protoPath: request.body.grpc.protoFile } : {}),
+      ...(request.kind === 'grpc' && request.body.grpc?.importPaths?.length
+        ? { importPaths: request.body.grpc.importPaths.filter(Boolean) }
+        : {})
     }
   };
 }
@@ -2040,6 +2087,17 @@ function openCollectionBody(body: RequestBody, kind: RequestKind): unknown {
       variables: parseJsonOrString(normalized.graphql?.variables || '{}'),
       ...(normalized.graphql?.operationName ? { operationName: normalized.graphql.operationName } : {}),
       ...(normalized.graphql?.schemaUrl ? { schemaUrl: normalized.graphql.schemaUrl } : {}),
+      ...(normalized.graphql?.savedOperations?.length
+        ? {
+            savedOperations: normalized.graphql.savedOperations.map(operation => ({
+              name: operation.name,
+              query: operation.query,
+              variables: parseJsonOrString(operation.variables || '{}'),
+              ...(operation.operationName ? { operationName: operation.operationName } : {}),
+              ...(operation.updatedAt ? { updatedAt: operation.updatedAt } : {})
+            }))
+          }
+        : {}),
       ...(normalized.graphql?.schemaCache ? { schemaCache: normalized.graphql.schemaCache } : {})
     };
   }
@@ -2186,6 +2244,7 @@ function openCollectionItem(record: WorkspaceRequestRecord, seq: number) {
         url: request.url,
         method: service && method ? `${service}/${method}` : method,
         ...(request.body.grpc?.protoFile ? { protoFilePath: request.body.grpc.protoFile } : {}),
+        ...(request.body.grpc?.importPaths?.length ? { importPaths: request.body.grpc.importPaths.filter(Boolean) } : {}),
         ...(request.headers.length > 0 ? { metadata: request.headers.map(row => openCollectionRow(row)) } : {}),
         message: request.body.grpc?.message || '',
         auth: openCollectionAuth(request.auth)
@@ -4140,6 +4199,36 @@ function buildPreflightDiagnostics(
     });
   }
 
+  if (kind === 'grpc') {
+    if (!preview.body.grpc?.protoFile?.trim()) {
+      diagnostics.push({
+        code: 'missing-grpc-proto',
+        level: 'error',
+        blocking: true,
+        message: 'gRPC requests require a proto file before they can run.',
+        field: 'body'
+      });
+    }
+    if (!preview.body.grpc?.service?.trim()) {
+      diagnostics.push({
+        code: 'missing-grpc-service',
+        level: 'error',
+        blocking: true,
+        message: 'gRPC requests require a fully qualified service name.',
+        field: 'body'
+      });
+    }
+    if (!preview.body.grpc?.method?.trim()) {
+      diagnostics.push({
+        code: 'missing-grpc-method',
+        level: 'error',
+        blocking: true,
+        message: 'gRPC requests require a method name.',
+        field: 'body'
+      });
+    }
+  }
+
   return diagnostics;
 }
 
@@ -4155,6 +4244,13 @@ function scriptRequestSource(request: RequestDocument, caseDocument?: CaseDocume
 function scriptRequestUsesLegacyPreRequestSource(request: RequestDocument, caseDocument?: CaseDocument) {
   const body = caseDocument?.overrides.body ?? request.body;
   return effectiveRequestKind(request, caseDocument) === 'script' && !body.text.trim() && Boolean(request.scripts.preRequest.trim());
+}
+
+function grpcRequestPath(grpc?: RequestBody['grpc']) {
+  const service = grpc?.service?.trim() || '';
+  const method = grpc?.method?.trim() || '';
+  if (!service && !method) return '/';
+  return `/${[service, method].filter(Boolean).join('/')}`;
 }
 
 function buildScriptRunResponse(input: {
@@ -4351,6 +4447,85 @@ export function inspectResolvedRequest(
             label: 'GraphQL Variables',
             rawValue: body.graphql.variables,
             resolvedValue: preview.body.graphql?.variables || ''
+          },
+          project,
+          environment,
+          extraSources,
+          variables
+        )
+      );
+    }
+  }
+
+  if (kind === 'grpc' && body.grpc) {
+    if (body.grpc.protoFile) {
+      fields.push(
+        collectResolvedField(
+          {
+            location: 'body',
+            label: 'gRPC Proto File',
+            rawValue: body.grpc.protoFile,
+            resolvedValue: preview.body.grpc?.protoFile || ''
+          },
+          project,
+          environment,
+          extraSources,
+          variables
+        )
+      );
+    }
+    (body.grpc.importPaths || []).forEach((importPath, index) => {
+      fields.push(
+        collectResolvedField(
+          {
+            location: 'body',
+            label: `gRPC Import Path ${index + 1}`,
+            rawValue: importPath,
+            resolvedValue: preview.body.grpc?.importPaths?.[index] || ''
+          },
+          project,
+          environment,
+          extraSources,
+          variables
+        )
+      );
+    });
+    fields.push(
+      collectResolvedField(
+        {
+          location: 'body',
+          label: 'gRPC Service',
+          rawValue: body.grpc.service || '',
+          resolvedValue: preview.body.grpc?.service || ''
+        },
+        project,
+        environment,
+        extraSources,
+        variables
+      )
+    );
+    fields.push(
+      collectResolvedField(
+        {
+          location: 'body',
+          label: 'gRPC Method',
+          rawValue: body.grpc.method || '',
+          resolvedValue: preview.body.grpc?.method || ''
+        },
+        project,
+        environment,
+        extraSources,
+        variables
+      )
+    );
+    if (body.grpc.message) {
+      fields.push(
+        collectResolvedField(
+          {
+            location: 'body',
+            label: 'gRPC Message',
+            rawValue: body.grpc.message,
+            resolvedValue: preview.body.grpc?.message || ''
           },
           project,
           environment,
@@ -4582,6 +4757,24 @@ export function resolveRequest(
           }))
         }
       : resolvedBody.websocket,
+    grpc: resolvedBody.grpc
+      ? {
+          ...resolvedBody.grpc,
+          protoFile: resolvedBody.grpc.protoFile
+            ? applyProjectVariables(resolvedBody.grpc.protoFile, project, environment, extraSources)
+            : resolvedBody.grpc.protoFile,
+          importPaths: (resolvedBody.grpc.importPaths || []).map(item =>
+            applyProjectVariables(item, project, environment, extraSources)
+          ),
+          service: resolvedBody.grpc.service
+            ? applyProjectVariables(resolvedBody.grpc.service, project, environment, extraSources)
+            : resolvedBody.grpc.service,
+          method: resolvedBody.grpc.method
+            ? applyProjectVariables(resolvedBody.grpc.method, project, environment, extraSources)
+            : resolvedBody.grpc.method,
+          message: applyProjectVariables(resolvedBody.grpc.message || '', project, environment, extraSources)
+        }
+      : resolvedBody.grpc,
     fields: resolvedBody.fields.map((row: ParameterRow) => ({
       ...row,
       value: applyProjectVariables(row.value, project, environment, extraSources),
@@ -4780,7 +4973,7 @@ export function resolveRequest(
     name: caseDocument ? `${request.name} / ${caseDocument.name}` : request.name,
     environmentName: caseDocument?.environment || environment?.name,
     authSource,
-    requestPath: path || request.path || '/',
+    requestPath: path || request.path || (kind === 'grpc' ? grpcRequestPath(mergedBody.grpc) : '/'),
     method: caseDocument?.overrides.method || request.method,
     url: candidateUrl,
     headers: authHeaders,
@@ -4827,6 +5020,9 @@ export type RequestRunContext = {
     variables: Record<string, string>;
     environment: EnvironmentDocument;
   };
+  iterationData?: Record<string, unknown>;
+  iteration?: number;
+  iterationCount?: number;
   collectionScripts?: RequestScripts;
   collectionRules?: {
     requireSuccessStatus: boolean;
@@ -5135,6 +5331,14 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     input.request.scripts.tests,
     input.caseDocument?.scripts?.postResponse
   );
+  const scriptContext = {
+    iterationData: input.context?.iterationData,
+    iteration: input.context?.iteration,
+    iterationCount: input.context?.iterationCount,
+    requestId: input.request.id,
+    caseId: input.caseDocument?.id,
+    sourceCollection: input.context?.sourceCollection
+  };
 
   const beforeSources = [
     createNamedTemplateSource('runtime variables', state.variables, 'runtime'),
@@ -5152,6 +5356,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     script: preRequestScript,
     state,
     request: previewBeforeScripts,
+    context: scriptContext,
     sendRequest: request => input.sendRequest(sendRequestInputSchema.parse({
       ...request,
       sessionId: input.sessionId || previewBeforeScripts.sessionId
@@ -5185,6 +5390,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
       script: scriptRequestSource(input.request, input.caseDocument),
       state: preScript.state,
       request: preview,
+      context: scriptContext,
       sendRequest: request => input.sendRequest(sendRequestInputSchema.parse({
         ...request,
         sessionId: input.sessionId || preview.sessionId
@@ -5201,7 +5407,8 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
       script: postResponseScript,
       state: mainScript.state,
       request: preview,
-      response
+      response,
+      context: scriptContext
     });
     return {
       preview,
@@ -5287,7 +5494,8 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     script: postResponseScript,
     state: preScript.state,
     request: finalPreview,
-    response
+    response,
+    context: scriptContext
   });
   const baselineChecks =
     input.caseDocument?.baselineRef
@@ -5322,6 +5530,8 @@ async function runCollectionStepWithRetry(input: {
   requestRecord: WorkspaceRequestRecord;
   runtimeState: { variables: Record<string, string>; environment: EnvironmentDocument };
   dataVars: Record<string, unknown>;
+  iteration: number;
+  iterationCount: number;
   seeded: Record<string, unknown>;
   sendRequest: RuntimeSendRequest;
 }) {
@@ -5386,6 +5596,9 @@ async function runCollectionStepWithRetry(input: {
         sessionId: input.workspace.root,
         context: {
           extraSources,
+          iterationData: input.dataVars,
+          iteration: input.iteration,
+          iterationCount: input.iterationCount,
           state: {
             variables: stepVariables,
             environment: input.runtimeState.environment
@@ -5568,6 +5781,8 @@ export async function runCollection(input: {
           requestRecord,
           runtimeState,
           dataVars,
+          iteration: index,
+          iterationCount: baseRows.length,
           seeded,
           sendRequest: input.sendRequest
         });
@@ -5819,13 +6034,15 @@ function inspectScriptSource(script: string) {
   const trimmed = script.trim();
   if (!trimmed) return [] as Array<{ code: string; level: 'warning' | 'error'; message: string }>;
 
-  const signals: Array<{ code: string; level: 'warning' | 'error'; message: string }> = UNSUPPORTED_SCRIPT_PATTERNS
+  const matchedPatterns = UNSUPPORTED_SCRIPT_PATTERNS
     .filter(pattern => trimmed.includes(pattern.token))
+    .filter(pattern => !UNSUPPORTED_SCRIPT_PATTERNS.some(other => other !== pattern && trimmed.includes(other.token) && other.token.startsWith(pattern.token)))
+  const signals: Array<{ code: string; level: 'warning' | 'error'; message: string }> = matchedPatterns
     .map(pattern => ({
-    code: pattern.code,
-    level: pattern.level,
-    message: pattern.message
-  }));
+      code: pattern.code,
+      level: pattern.level,
+      message: pattern.message
+    }));
 
   try {
     // Validate syntax early so the UI can warn before the user sends the request.

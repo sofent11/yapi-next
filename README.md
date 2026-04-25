@@ -75,6 +75,12 @@ npm run debugger:run -- --workspace ./my-api-project --collection smoke-suite --
 # 按标签筛选并只重跑失败步骤
 npm run debugger:run -- --workspace ./my-api-project --collection smoke-suite --tag smoke --rerun-failed ./reports/last-run.json --fail-fast
 
+# 使用 collection 预设并一次导出该 collection 已启用的全部报告格式
+npx yapi-debugger-runner --workspace ./my-api-project --collection smoke-suite --preset nightly --report-configured ./reports/nightly.json
+
+# 查看 collection 中已保存的 run preset
+npx yapi-debugger-runner --workspace ./my-api-project --collection smoke-suite --list-presets
+
 # 仅检查 Web TypeScript 类型
 npm run next:web:typecheck
 
@@ -138,6 +144,7 @@ npm run perf:roundtrip
 - `apps/debugger` 默认在 `http://localhost:1420` 提供前端开发服务器，并由 Tauri 2 载入
 - 独立调试器不依赖 `apps/api` 运行，不直接与 YApi 后台交互
 - 远程规范导入仅支持通过 URL 拉取文本内容，可按 Bearer、自定义 Header 或 Query 参数携带 token
+- 仓库安装依赖后可直接使用 `yapi-debugger-runner` / `npx yapi-debugger-runner` 作为 headless runner CLI
 - `debugger:run` 固定退出码：`0` 全通过，`1` 有测试失败，`2` workspace/配置/迁移错误，`3` 运行时异常
 
 ### Docker 构建相关
@@ -177,7 +184,7 @@ docker compose up -d --build
 - 工作区已升级到 `schemaVersion: 2`，首次打开旧工作区会自动备份并迁移到 V2，迁移记录落在 `.yapi-debugger-cache/`
 - 支持多步骤 Collection Runner、JSON/YAML/CSV 数据驱动、串行环境矩阵、setup/teardown、step/case/collection 统一 retry、本地报告缓存与 JSON/HTML/JUnit 导出
 - 支持断言 2.0：新增 `json-not-exists`、`json-type`、`json-length`、`number-gt`、`number-lt`、`number-between`、`schema-match`、`snapshot-match`
-- 支持 Headless Runner：直接读取现有 workspace 在命令行执行 collection，支持 `--tag`、`--step`、`--request`、`--case`、`--environment`、`--fail-fast`、`--rerun-failed`
+- 支持 Headless Runner：直接读取现有 workspace 在命令行执行 collection，支持 `--preset`、`--list-presets`、`--report-configured` 以及 `--tag`、`--step`、`--request`、`--case`、`--environment`、`--fail-fast`、`--rerun-failed`
 - 一期不依赖 YApi API，不做云同步和团队实时协同
 
 工作区格式与目录约定见：

@@ -242,11 +242,32 @@ test('Bruno JSON collection export imports back with folders and collection step
     }
   };
 
+  const grpc = createEmptyRequest('User Service');
+  grpc.id = 'req_grpc_user_service';
+  grpc.kind = 'grpc';
+  grpc.method = 'POST';
+  grpc.url = 'grpcs://grpc.example.com';
+  grpc.headers = [{ name: 'authorization', value: 'Bearer {{token}}', enabled: true, kind: 'text' }];
+  grpc.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: 'protos/user.proto',
+      importPaths: ['protos', 'protos/common'],
+      service: 'demo.users.UserService',
+      method: 'GetUser',
+      message: '{"id":"42"}'
+    }
+  };
+
   const collection = createEmptyCollection('JSON Smoke');
   collection.steps = [
     createCollectionStep({ requestId: createUser.id }),
     createCollectionStep({ requestId: graphql.id }),
-    createCollectionStep({ requestId: liveFeed.id })
+    createCollectionStep({ requestId: liveFeed.id }),
+    createCollectionStep({ requestId: grpc.id })
   ];
 
   const json = serializeBrunoJsonCollection({
@@ -273,6 +294,13 @@ test('Bruno JSON collection export imports back with folders and collection step
         folderSegments: ['Realtime'],
         requestFilePath: '/workspace/requests/realtime/live.request.yaml',
         resourceDirPath: '/workspace/requests/realtime/live'
+      },
+      {
+        request: grpc,
+        cases: [],
+        folderSegments: ['RPC'],
+        requestFilePath: '/workspace/requests/rpc/get-user.request.yaml',
+        resourceDirPath: '/workspace/requests/rpc/get-user'
       }
     ]
   });
@@ -285,15 +313,19 @@ test('Bruno JSON collection export imports back with folders and collection step
   assert.equal(parsed.items[1].items[0].request.body.graphql.schemaCache.summary.typeCount, 4);
   assert.equal(parsed.items[2].items[0].type, 'ws-request');
   assert.equal(parsed.items[2].items[0].request.body.ws[1].type, 'binary');
+  assert.equal(parsed.items[3].items[0].type, 'grpc-request');
+  assert.equal(parsed.items[3].items[0].request.protoPath, 'protos/user.proto');
+  assert.deepEqual(parsed.items[3].items[0].request.importPaths, ['protos', 'protos/common']);
 
   const imported = importSourceText(json);
   const importedCreate = imported.requests.find(item => item.request.name === 'Create User')?.request;
   const importedGraphql = imported.requests.find(item => item.request.name === 'GraphQL Search')?.request;
   const importedWebSocket = imported.requests.find(item => item.request.name === 'Live Feed')?.request;
+  const importedGrpc = imported.requests.find(item => item.request.name === 'User Service')?.request;
 
   assert.equal(imported.detectedFormat, 'bruno');
   assert.equal(imported.project.name, 'JSON Smoke');
-  assert.deepEqual(imported.requests.map(item => item.folderSegments.join('/')), ['Users', 'GraphQL', 'Realtime']);
+  assert.deepEqual(imported.requests.map(item => item.folderSegments.join('/')), ['Users', 'GraphQL', 'Realtime', 'RPC']);
   assert.equal(importedCreate?.body.mode, 'json');
   assert.equal(importedCreate?.auth.type, 'bearer');
   assert.equal(importedCreate?.auth.token, '{{token}}');
@@ -302,7 +334,12 @@ test('Bruno JSON collection export imports back with folders and collection step
   assert.equal(importedWebSocket?.kind, 'websocket');
   assert.equal(importedWebSocket?.body.websocket?.messages[0]?.body, '{"type":"subscribe"}');
   assert.equal(importedWebSocket?.body.websocket?.messages[1]?.kind, 'binary');
-  assert.equal(imported.collections[0]?.collection.steps.length, 3);
+  assert.equal(importedGrpc?.kind, 'grpc');
+  assert.equal(importedGrpc?.body.grpc?.protoFile, 'protos/user.proto');
+  assert.deepEqual(importedGrpc?.body.grpc?.importPaths, ['protos', 'protos/common']);
+  assert.equal(importedGrpc?.body.grpc?.service, 'demo.users.UserService');
+  assert.equal(importedGrpc?.body.grpc?.method, 'GetUser');
+  assert.equal(imported.collections[0]?.collection.steps.length, 4);
 });
 
 test('OpenCollection export imports back with mixed request kinds and environments', () => {
@@ -386,11 +423,32 @@ test('OpenCollection export imports back with mixed request kinds and environmen
     }
   };
 
+  const grpc = createEmptyRequest('User Service');
+  grpc.id = 'req_oc_grpc';
+  grpc.kind = 'grpc';
+  grpc.method = 'POST';
+  grpc.url = 'grpcs://grpc.example.com';
+  grpc.headers = [{ name: 'authorization', value: 'Bearer {{token}}', enabled: true, kind: 'text' }];
+  grpc.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: 'protos/user.proto',
+      importPaths: ['protos', 'protos/common'],
+      service: 'demo.users.UserService',
+      method: 'GetUser',
+      message: '{"id":"42"}'
+    }
+  };
+
   const collection = createEmptyCollection('OpenCollection Smoke');
   collection.steps = [
     createCollectionStep({ requestId: createUser.id }),
     createCollectionStep({ requestId: graphql.id }),
-    createCollectionStep({ requestId: websocket.id })
+    createCollectionStep({ requestId: websocket.id }),
+    createCollectionStep({ requestId: grpc.id })
   ];
 
   const json = serializeOpenCollection({
@@ -418,6 +476,13 @@ test('OpenCollection export imports back with mixed request kinds and environmen
         folderSegments: ['Realtime'],
         requestFilePath: '/workspace/requests/realtime/live.request.yaml',
         resourceDirPath: '/workspace/requests/realtime/live'
+      },
+      {
+        request: grpc,
+        cases: [],
+        folderSegments: ['RPC'],
+        requestFilePath: '/workspace/requests/rpc/get-user.request.yaml',
+        resourceDirPath: '/workspace/requests/rpc/get-user'
       }
     ]
   });
@@ -428,15 +493,18 @@ test('OpenCollection export imports back with mixed request kinds and environmen
   assert.equal(exported.config.environments[0].name, 'Local');
   assert.equal(exported.items[1].items[0].graphql.body.schemaCache.summary.typeCount, 5);
   assert.equal(exported.items[2].items[0].websocket.message[1].message.type, 'binary');
+  assert.equal(exported.items[3].items[0].grpc.protoFilePath, 'protos/user.proto');
+  assert.deepEqual(exported.items[3].items[0].grpc.importPaths, ['protos', 'protos/common']);
 
   const imported = importSourceText(json);
   const importedCreate = imported.requests.find(item => item.request.name === 'Create User')?.request;
   const importedGraphql = imported.requests.find(item => item.request.kind === 'graphql')?.request;
   const importedWebSocket = imported.requests.find(item => item.request.kind === 'websocket')?.request;
+  const importedGrpc = imported.requests.find(item => item.request.kind === 'grpc')?.request;
 
   assert.equal(imported.detectedFormat, 'opencollection');
-  assert.equal(imported.requests.length, 3);
-  assert.deepEqual(imported.requests.map(item => item.folderSegments.join('/')), ['Users', 'GraphQL', 'Realtime']);
+  assert.equal(imported.requests.length, 4);
+  assert.deepEqual(imported.requests.map(item => item.folderSegments.join('/')), ['Users', 'GraphQL', 'Realtime', 'RPC']);
   assert.equal(imported.environments[0]?.vars.baseUrl, 'https://api.example.com');
   assert.equal(importedCreate?.auth.type, 'bearer');
   assert.equal(importedCreate?.auth.token, '{{token}}');
@@ -451,4 +519,8 @@ test('OpenCollection export imports back with mixed request kinds and environmen
   assert.equal(importedGraphql?.body.graphql?.schemaCache?.summary.typeCount, 5);
   assert.equal(importedWebSocket?.body.websocket?.messages[0]?.body, '{"type":"subscribe"}');
   assert.equal(importedWebSocket?.body.websocket?.messages[1]?.kind, 'binary');
+  assert.equal(importedGrpc?.body.grpc?.protoFile, 'protos/user.proto');
+  assert.deepEqual(importedGrpc?.body.grpc?.importPaths, ['protos', 'protos/common']);
+  assert.equal(importedGrpc?.body.grpc?.service, 'demo.users.UserService');
+  assert.equal(importedGrpc?.body.grpc?.method, 'GetUser');
 });

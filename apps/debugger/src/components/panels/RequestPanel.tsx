@@ -42,6 +42,7 @@ import type {
 } from '@yapi-debugger/schema';
 import type { RequestTab } from '../../store/workspace-store';
 import { parseCurlCommand } from '../../lib/curl';
+import { confirmAction, promptForText } from '../../lib/dialogs';
 import {
   chooseRequestBodyFile,
   closeWebSocketLive,
@@ -169,6 +170,7 @@ type WebSocketLiveState = {
 
 type WebSocketMessageDraft = NonNullable<NonNullable<RequestBody['websocket']>['messages']>[number];
 type RequestVariableRow = RequestDocument['vars']['req'][number];
+type GraphqlSavedOperation = NonNullable<NonNullable<RequestBody['graphql']>['savedOperations']>[number];
 
 function looksLikeBase64Payload(value: string) {
   const normalized = value.trim();
@@ -343,6 +345,22 @@ function removeGraphqlSelectionBranch(paths: string[], basePath: string) {
   return paths.filter(path => path !== basePath && !path.startsWith(`${basePath}.`) && !path.startsWith(`${basePath}::`));
 }
 
+function graphqlSavedOperationSummary(operation: GraphqlSavedOperation) {
+  const firstLine = operation.query
+    .split('\n')
+    .map(line => line.trim())
+    .find(Boolean);
+  return firstLine || 'Empty query draft';
+}
+
+function graphqlFieldMatchesSearch(field: GraphqlOperationFieldSummary, search: string) {
+  const normalizedSearch = search.trim().toLowerCase();
+  if (!normalizedSearch) return true;
+  if (field.name.toLowerCase().includes(normalizedSearch)) return true;
+  if (field.returnType.toLowerCase().includes(normalizedSearch)) return true;
+  return field.args.some(arg => arg.name.toLowerCase().includes(normalizedSearch) || arg.type.toLowerCase().includes(normalizedSearch));
+}
+
 export function RequestPanel(props: {
   workspace: WorkspaceIndex;
   activeEnvironmentName?: string;
@@ -380,7 +398,8 @@ export function RequestPanel(props: {
   const pathRows = selectedCase?.overrides.pathParams ?? requestDocument.pathParams;
   const headerRows = selectedCase?.overrides.headers ?? requestDocument.headers;
   const body = selectedCase?.overrides.body || requestDocument.body;
-  const graphqlBody = body.graphql || { query: '', variables: '{}', operationName: '', schemaUrl: '' };
+  const graphqlBody = body.graphql || { query: '', variables: '{}', operationName: '', schemaUrl: '', savedOperations: [] };
+  const grpcBody = body.grpc || { protoFile: '', importPaths: [], service: '', method: '', message: '{}' };
   const websocketMessages = body.websocket?.messages?.length
     ? body.websocket.messages
     : [{ name: 'Message 1', body: '', kind: 'json' as const, enabled: true }];
@@ -407,6 +426,10 @@ export function RequestPanel(props: {
   const [graphqlIntrospection, setGraphqlIntrospection] = useState<GraphqlIntrospectionState>(() => graphqlIntrospectionStateFromBody(body));
   const [graphqlExplorer, setGraphqlExplorer] = useState<GraphqlExplorerState | null>(() =>
     graphqlIntrospection.summary ? firstGraphqlExplorerState(graphqlIntrospection.summary) : null
+  );
+  const [graphqlSchemaSearch, setGraphqlSchemaSearch] = useState('');
+  const [selectedGraphqlSavedOperation, setSelectedGraphqlSavedOperation] = useState<string | null>(
+    () => graphqlBody.savedOperations?.[0]?.name || null
   );
   const [websocketRun, setWebsocketRun] = useState<WebSocketRunState>(() => websocketStateFromBody(body));
   const [websocketLive, setWebsocketLive] = useState<WebSocketLiveState>({ connecting: false, closing: false });
@@ -435,6 +458,17 @@ export function RequestPanel(props: {
       return current;
     });
   }, [graphqlIntrospection.summary, requestDocument.id, selectedCase?.id]);
+
+  useEffect(() => {
+    const savedOperations = graphqlBody.savedOperations || [];
+    if (savedOperations.length === 0) {
+      setSelectedGraphqlSavedOperation(null);
+      return;
+    }
+    setSelectedGraphqlSavedOperation(current =>
+      current && savedOperations.some(operation => operation.name === current) ? current : savedOperations[0]?.name || null
+    );
+  }, [graphqlBody.savedOperations, requestDocument.id, selectedCase?.id]);
 
   useEffect(() => {
     setWebsocketRun(current => {
@@ -503,6 +537,11 @@ export function RequestPanel(props: {
   const graphqlSelectedFragmentSet = useMemo(
     () => new Set(graphqlExplorer?.selectedFragments || []),
     [graphqlExplorer?.selectedFragments]
+  );
+  const graphqlSavedOperations = graphqlBody.savedOperations || [];
+  const activeGraphqlSavedOperation = useMemo(
+    () => graphqlSavedOperations.find(operation => operation.name === selectedGraphqlSavedOperation) || null,
+    [graphqlSavedOperations, selectedGraphqlSavedOperation]
   );
 
   function updateSelectedCase(updater: (current: CaseDocument) => CaseDocument) {
@@ -579,6 +618,11 @@ export function RequestPanel(props: {
     const selectedPath = await chooseRequestBodyFile();
     if (!selectedPath) return;
     updateBody({ ...body, mode: 'file', file: selectedPath, text: selectedPath });
+    return selectedPath;
+  }
+
+  async function handlePickGrpcProtoFile() {
+    return chooseRequestBodyFile();
   }
 
   async function handleGraphqlIntrospection() {
@@ -696,6 +740,18 @@ export function RequestPanel(props: {
     notifications.show({ color: 'teal', message: `${draft.operationName} inserted` });
   }
 
+  function updateGraphqlBody(patch: Partial<NonNullable<RequestBody['graphql']>>) {
+    updateBody({
+      ...body,
+      mode: 'graphql',
+      mimeType: 'application/json',
+      graphql: {
+        ...graphqlBody,
+        ...patch
+      }
+    });
+  }
+
   function clearGraphqlSchemaCache() {
     const { schemaCache: _schemaCache, ...nextGraphql } = graphqlBody;
     updateBody({
@@ -704,6 +760,76 @@ export function RequestPanel(props: {
     });
     setGraphqlIntrospection({ loading: false });
     notifications.show({ color: 'blue', message: 'GraphQL schema cache cleared' });
+  }
+
+  async function saveGraphqlOperationDraft() {
+    const suggestedName =
+      activeGraphqlSavedOperation?.name ||
+      graphqlBody.operationName ||
+      graphqlExplorerField?.name ||
+      `saved-${graphqlSavedOperations.length + 1}`;
+    const name = await promptForText({
+      title: 'Save GraphQL Draft',
+      label: 'Draft Name',
+      description: 'Keep a reusable operation snapshot with the current query and variables.',
+      defaultValue: suggestedName,
+      placeholder: 'get-user-by-id',
+      confirmLabel: 'Save Draft',
+      validate: value => (value ? null : 'Enter a draft name.')
+    });
+    if (!name) return;
+    const nextDraft: GraphqlSavedOperation = {
+      name,
+      query: graphqlBody.query || '',
+      variables: graphqlBody.variables || '{}',
+      operationName: graphqlBody.operationName || undefined,
+      updatedAt: new Date().toISOString()
+    };
+    const nextSavedOperations = [...graphqlSavedOperations.filter(operation => operation.name !== name), nextDraft].sort((a, b) =>
+      a.name.localeCompare(b.name, 'zh-CN')
+    );
+    setSelectedGraphqlSavedOperation(name);
+    updateGraphqlBody({ savedOperations: nextSavedOperations });
+    notifications.show({ color: 'teal', message: `Saved GraphQL draft "${name}"` });
+  }
+
+  function loadGraphqlSavedOperation(name: string | null) {
+    if (!name) return;
+    const savedOperation = graphqlSavedOperations.find(operation => operation.name === name);
+    if (!savedOperation) return;
+    setSelectedGraphqlSavedOperation(savedOperation.name);
+    updateGraphqlBody({
+      query: savedOperation.query,
+      variables: savedOperation.variables || '{}',
+      operationName: savedOperation.operationName || ''
+    });
+    notifications.show({ color: 'blue', message: `Loaded GraphQL draft "${savedOperation.name}"` });
+  }
+
+  async function deleteGraphqlSavedOperation(name: string | null) {
+    if (!name) return;
+    const confirmed = await confirmAction({
+      title: 'Delete GraphQL Draft',
+      message: `Remove "${name}" from this request?`,
+      detail: 'This only deletes the saved snapshot. The current editor contents stay as-is.',
+      confirmLabel: 'Delete Draft'
+    });
+    if (!confirmed) return;
+    const nextSavedOperations = graphqlSavedOperations.filter(operation => operation.name !== name);
+    setSelectedGraphqlSavedOperation(nextSavedOperations[0]?.name || null);
+    updateGraphqlBody({ savedOperations: nextSavedOperations });
+    notifications.show({ color: 'teal', message: `Deleted GraphQL draft "${name}"` });
+  }
+
+  function formatGraphqlVariables() {
+    const source = graphqlBody.variables?.trim() || '{}';
+    try {
+      const formatted = JSON.stringify(JSON.parse(source), null, 2);
+      updateGraphqlBody({ variables: formatted });
+      notifications.show({ color: 'teal', message: 'GraphQL variables formatted' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: (error as Error).message || 'Variables JSON is invalid' });
+    }
   }
 
   function updateWebSocketMessages(messages: NonNullable<RequestBody['websocket']>['messages']) {
@@ -1063,14 +1189,21 @@ export function RequestPanel(props: {
             data={REQUEST_KINDS.map(kind => ({ value: kind, label: kind.toUpperCase() }))}
             onChange={value => {
               const nextKind = (value as RequestDocument['kind']) || 'http';
-              const nextBody =
-                nextKind === 'graphql' && body.mode !== 'graphql'
-                  ? {
-                      ...body,
-                      mode: 'graphql' as const,
-                      mimeType: 'application/json',
-                      graphql: body.graphql || { query: '', variables: '{}', operationName: '', schemaUrl: '' }
-                    }
+                const nextBody =
+                  nextKind === 'graphql' && body.mode !== 'graphql'
+                    ? {
+                        ...body,
+                        mode: 'graphql' as const,
+                        mimeType: 'application/json',
+                        graphql: body.graphql || { query: '', variables: '{}', operationName: '', schemaUrl: '', savedOperations: [] }
+                      }
+                  : nextKind === 'grpc'
+                    ? {
+                        ...body,
+                        mode: 'none' as const,
+                        mimeType: 'application/grpc',
+                        grpc: body.grpc || { protoFile: '', importPaths: [], service: '', method: '', message: '{}' }
+                      }
                   : nextKind === 'websocket'
                     ? {
                         ...body,
@@ -1087,8 +1220,8 @@ export function RequestPanel(props: {
                           mimeType: 'application/javascript',
                           text: body.text || requestDocument.scripts.preRequest || ''
                         }
-                    : body;
-              const nextMethod = nextKind === 'graphql' ? 'POST' : nextKind === 'websocket' ? 'GET' : effectiveMethod;
+                      : body;
+              const nextMethod = nextKind === 'graphql' || nextKind === 'grpc' ? 'POST' : nextKind === 'websocket' ? 'GET' : effectiveMethod;
               if (selectedCase) {
                 updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, kind: nextKind, method: nextMethod, body: nextBody } }));
               } else {
@@ -1110,6 +1243,7 @@ export function RequestPanel(props: {
                 props.onRequestChange({ ...requestDocument, method: nextMethod });
               }
             }}
+            disabled={effectiveKind === 'grpc'}
             variant="filled"
           />
           <TextInput
@@ -1223,11 +1357,26 @@ export function RequestPanel(props: {
                 />
                 <CodeEditor
                   value={
-                    resolvedPreview.body.mode === 'json'
+                    effectiveKind === 'grpc'
+                      ? JSON.stringify(
+                          {
+                            mode: 'grpc',
+                            endpoint: resolvedPreview.url,
+                            service: resolvedPreview.body.grpc?.service || '',
+                            method: resolvedPreview.body.grpc?.method || '',
+                            protoFile: resolvedPreview.body.grpc?.protoFile || '',
+                            importPaths: resolvedPreview.body.grpc?.importPaths || [],
+                            message: resolvedPreview.body.grpc?.message || ''
+                          },
+                          null,
+                          2
+                        )
+                      : resolvedPreview.body.mode === 'json'
                       ? resolvedPreview.body.text
                       : JSON.stringify(
                           {
                             mode: resolvedPreview.body.mode,
+                            grpc: resolvedPreview.body.grpc,
                             fields: resolvedPreview.body.fields,
                             text: resolvedPreview.body.text
                           },
@@ -1237,7 +1386,7 @@ export function RequestPanel(props: {
                   }
                   readOnly
                   language={
-                    resolvedPreview.body.mode === 'json' || resolvedPreview.body.mode === 'graphql'
+                    effectiveKind === 'grpc' || resolvedPreview.body.mode === 'json' || resolvedPreview.body.mode === 'graphql'
                       ? 'json'
                       : 'text'
                   }
@@ -1420,7 +1569,76 @@ export function RequestPanel(props: {
           </Tabs.Panel>
 
           <Tabs.Panel value="body">
-            {effectiveKind === 'websocket' ? (
+            {effectiveKind === 'grpc' ? (
+              <div className="graphql-body-grid">
+                <div className="settings-grid">
+                  <TextInput
+                    label="Proto File"
+                    value={grpcBody.protoFile || ''}
+                    placeholder="Relative to workspace or absolute path"
+                    onChange={event => updateBody({ ...body, mode: 'none', mimeType: 'application/grpc', grpc: { ...grpcBody, protoFile: event.currentTarget.value } })}
+                  />
+                  <Textarea
+                    label="Import Paths"
+                    autosize
+                    minRows={2}
+                    maxRows={4}
+                    value={(grpcBody.importPaths || []).join('\n')}
+                    placeholder="One path per line"
+                    onChange={event =>
+                      updateBody({
+                        ...body,
+                        mode: 'none',
+                        mimeType: 'application/grpc',
+                        grpc: {
+                          ...grpcBody,
+                          importPaths: event.currentTarget.value.split('\n').map(item => item.trim()).filter(Boolean)
+                        }
+                      })
+                    }
+                  />
+                  <TextInput
+                    label="Service"
+                    value={grpcBody.service || ''}
+                    placeholder="package.Service"
+                    onChange={event => updateBody({ ...body, mode: 'none', mimeType: 'application/grpc', grpc: { ...grpcBody, service: event.currentTarget.value } })}
+                  />
+                  <TextInput
+                    label="Method"
+                    value={grpcBody.method || ''}
+                    placeholder="UnaryMethod"
+                    onChange={event => updateBody({ ...body, mode: 'none', mimeType: 'application/grpc', grpc: { ...grpcBody, method: event.currentTarget.value } })}
+                  />
+                  <div className="preview-note">
+                    <Button
+                      size="xs"
+                      variant="default"
+                      onClick={async () => {
+                        const filePath = await handlePickGrpcProtoFile();
+                        if (!filePath) return;
+                        updateBody({
+                          ...body,
+                          mode: 'none',
+                          mimeType: 'application/grpc',
+                          grpc: { ...grpcBody, protoFile: filePath }
+                        });
+                      }}
+                    >
+                      Choose Proto File
+                    </Button>
+                  </div>
+                </div>
+                <div>
+                  <Text size="xs" fw={700} c="dimmed">Unary Message (JSON or protobuf text format)</Text>
+                  <CodeEditor
+                    value={grpcBody.message || '{}'}
+                    language="json"
+                    onChange={value => updateBody({ ...body, mode: 'none', mimeType: 'application/grpc', grpc: { ...grpcBody, message: value } })}
+                    minHeight="260px"
+                  />
+                </div>
+              </div>
+            ) : effectiveKind === 'websocket' ? (
               <div className="websocket-body-grid">
                 <div className="websocket-toolbar">
                   <div>
@@ -1682,7 +1900,7 @@ export function RequestPanel(props: {
                     mode: nextMode,
                     graphql:
                       nextMode === 'graphql'
-                        ? body.graphql || { query: body.text || '', variables: '{}', operationName: '', schemaUrl: '' }
+                        ? body.graphql || { query: body.text || '', variables: '{}', operationName: '', schemaUrl: '', savedOperations: [] }
                         : body.graphql,
                     mimeType:
                       nextMode === 'json'
@@ -1772,7 +1990,12 @@ export function RequestPanel(props: {
                     />
                   </div>
                   <div>
-                    <Text size="xs" fw={700} c="dimmed">Variables JSON</Text>
+                    <div className="graphql-editor-head">
+                      <Text size="xs" fw={700} c="dimmed">Variables JSON</Text>
+                      <Button size="xs" variant="subtle" onClick={formatGraphqlVariables}>
+                        Format
+                      </Button>
+                    </div>
                     <CodeEditor
                       value={graphqlBody.variables || '{}'}
                       language="json"
@@ -1780,6 +2003,72 @@ export function RequestPanel(props: {
                       minHeight="140px"
                     />
                   </div>
+                </div>
+                <div className="graphql-saved-ops-panel">
+                  <div className="graphql-saved-ops-head">
+                    <div>
+                      <Text size="xs" fw={700} c="dimmed">Saved Drafts</Text>
+                      <Text size="xs" c="dimmed">
+                        Reuse a named query + variables snapshot without leaving the current request.
+                      </Text>
+                    </div>
+                    <Button size="xs" variant="default" onClick={saveGraphqlOperationDraft}>
+                      Save Current Draft
+                    </Button>
+                  </div>
+                  {graphqlSavedOperations.length === 0 ? (
+                    <Text size="xs" c="dimmed">
+                      No saved draft yet. Keep one for recurring fragments, named operations, or example variables.
+                    </Text>
+                  ) : (
+                    <>
+                      <div className="graphql-saved-ops-controls">
+                        <Select
+                          label="Saved Draft"
+                          value={selectedGraphqlSavedOperation}
+                          data={graphqlSavedOperations.map(operation => ({ value: operation.name, label: operation.name }))}
+                          onChange={value => setSelectedGraphqlSavedOperation(value)}
+                        />
+                        <Group gap="xs">
+                          <Button
+                            size="xs"
+                            variant="default"
+                            disabled={!activeGraphqlSavedOperation}
+                            onClick={() => loadGraphqlSavedOperation(selectedGraphqlSavedOperation)}
+                          >
+                            Load Draft
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            color="red"
+                            disabled={!activeGraphqlSavedOperation}
+                            onClick={() => deleteGraphqlSavedOperation(selectedGraphqlSavedOperation)}
+                          >
+                            Delete
+                          </Button>
+                        </Group>
+                      </div>
+                      {activeGraphqlSavedOperation ? (
+                        <div className="graphql-saved-ops-preview">
+                          <div className="graphql-saved-ops-preview-head">
+                            <strong>{activeGraphqlSavedOperation.name}</strong>
+                            {activeGraphqlSavedOperation.operationName ? (
+                              <Badge size="xs" variant="light" color="indigo">
+                                {activeGraphqlSavedOperation.operationName}
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <span>{graphqlSavedOperationSummary(activeGraphqlSavedOperation)}</span>
+                          <small>
+                            {activeGraphqlSavedOperation.updatedAt
+                              ? `Updated ${new Date(activeGraphqlSavedOperation.updatedAt).toLocaleString()}`
+                              : 'Saved with this request'}
+                          </small>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </div>
                 {graphqlIntrospection.summary || graphqlIntrospection.error ? (
                   <div className="graphql-schema-panel">
@@ -1801,6 +2090,16 @@ export function RequestPanel(props: {
                         </Badge>
                       ) : null}
                     </div>
+                    {graphqlIntrospection.summary ? (
+                      <div className="graphql-schema-search">
+                        <TextInput
+                          label="Schema Filter"
+                          placeholder="Search root fields, args, or return types"
+                          value={graphqlSchemaSearch}
+                          onChange={event => setGraphqlSchemaSearch(event.currentTarget.value)}
+                        />
+                      </div>
+                    ) : null}
                     {graphqlIntrospection.error ? (
                       <div className="request-preview-warning">
                         <strong>network</strong>
@@ -1823,11 +2122,15 @@ export function RequestPanel(props: {
                         ) : null}
                         <div className="graphql-schema-fields">
                           {(['query', 'mutation', 'subscription'] as GraphqlOperationKind[]).map(operation => {
-                            const fields = graphqlFieldsForOperation(graphqlIntrospection.summary!, operation);
+                            const allFields = graphqlFieldsForOperation(graphqlIntrospection.summary!, operation);
+                            const fields = allFields.filter(field => graphqlFieldMatchesSearch(field, graphqlSchemaSearch));
                             if (fields.length === 0) return null;
                             return (
                               <div className="graphql-field-group" key={operation}>
-                                <Text size="xs" fw={700} c="dimmed">{operation}</Text>
+                                <Text size="xs" fw={700} c="dimmed">
+                                  {operation}
+                                  {graphqlSchemaSearch.trim() ? ` · ${fields.length}/${allFields.length}` : ''}
+                                </Text>
                                 <div>
                                   {fields.slice(0, operation === 'query' ? 12 : 8).map(field => (
                                     <button
@@ -1849,6 +2152,16 @@ export function RequestPanel(props: {
                             );
                           })}
                         </div>
+                        {graphqlSchemaSearch.trim() &&
+                        !(['query', 'mutation', 'subscription'] as GraphqlOperationKind[]).some(operation =>
+                          graphqlFieldsForOperation(graphqlIntrospection.summary!, operation).some(field =>
+                            graphqlFieldMatchesSearch(field, graphqlSchemaSearch)
+                          )
+                        ) ? (
+                          <Text size="xs" c="dimmed">
+                            No root fields matched this schema filter.
+                          </Text>
+                        ) : null}
                         {graphqlExplorer && graphqlExplorerField ? (
                           <div className="graphql-explorer-panel">
                             <div className="graphql-explorer-head">

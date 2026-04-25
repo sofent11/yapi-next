@@ -16,6 +16,9 @@ tauri-build = { version = "2", features = [] }
 base64 = "0.22"
 futures-util = "0.3"
 notify = "8"
+prost = "0.14"
+prost-reflect = { version = "0.16", features = ["serde", "text-format"] }
+protox = "0.9"
 reqwest = { version = "0.12", features = ["json", "multipart", "rustls-tls", "cookies"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -23,3 +26,4 @@ tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
+tonic = { version = "0.14", features = ["transport", "tls-native-roots"] }

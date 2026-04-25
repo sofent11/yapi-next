@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   buildWorkspaceIndex,
   filtersFromCollectionReport,
@@ -16,22 +17,39 @@ import {
 import {
   DEFAULT_GITIGNORE,
   SCHEMA_VERSION,
+  type CollectionDocument,
   type CollectionRunReport,
+  type CollectionRunPreset,
   type ResolvedRequestPreview,
   type SendRequestInput,
   type SendRequestResult,
   type WorkspaceIndex
 } from '../packages/debugger-schema/src/index';
 
+export type ReporterFormat = 'json' | 'html' | 'junit';
+
+type CliExplicitFlags = {
+  environmentName: boolean;
+  failFast: boolean;
+  tags: boolean;
+  stepKeys: boolean;
+  requestIds: boolean;
+  caseIds: boolean;
+};
+
 type CliOptions = {
   workspaceRoot: string;
   collectionSelector?: string;
+  presetSelector?: string;
   environmentName?: string;
   listOnly: boolean;
+  listPresets: boolean;
   failFast: boolean;
   filters: CollectionRunFilters;
   rerunFailedReportPath?: string;
-  reportPaths: Partial<Record<'json' | 'html' | 'junit', string>>;
+  reportPaths: Partial<Record<ReporterFormat, string>>;
+  configuredReportBasePath?: string;
+  explicit: CliExplicitFlags;
 };
 
 const EXIT_SUCCESS = 0;
@@ -43,8 +61,10 @@ function printUsage() {
   console.log(`Usage:
   npm run debugger:run -- --workspace <path> [--collection <id|name>] [--environment <name>] [--tag smoke] [--step login] [--request req_x] [--case case_x]
   npm run debugger:run -- --workspace <path> [--report-json file] [--report-html file] [--report-junit file] [--fail-fast]
+  npm run debugger:run -- --workspace <path> --collection smoke-suite --preset nightly --report-configured ./reports/nightly.json
   npm run debugger:run -- --workspace <path> --rerun-failed ./reports/last-run.json
   npm run debugger:run -- --workspace <path> --list
+  npm run debugger:run -- --workspace <path> --collection smoke-suite --list-presets
 `);
 }
 
@@ -52,20 +72,7 @@ function pushFilterValue(record: Record<string, string[]>, key: keyof Collection
   record[key] = [...(record[key] || []), value];
 }
 
-function hasFilterValues(filters: CollectionRunFilters) {
-  return Boolean(filters.tags?.length || filters.stepKeys?.length || filters.requestIds?.length || filters.caseIds?.length);
-}
-
-function mergeFilters(base: CollectionRunFilters, override: CollectionRunFilters): CollectionRunFilters {
-  return {
-    tags: override.tags?.length ? override.tags : base.tags,
-    stepKeys: override.stepKeys?.length ? override.stepKeys : base.stepKeys,
-    requestIds: override.requestIds?.length ? override.requestIds : base.requestIds,
-    caseIds: override.caseIds?.length ? override.caseIds : base.caseIds
-  };
-}
-
-function formatFilters(filters: CollectionRunFilters) {
+export function formatFilters(filters: CollectionRunFilters) {
   const parts = [
     filters.tags?.length ? `tags=${filters.tags.join(',')}` : '',
     filters.stepKeys?.length ? `steps=${filters.stepKeys.join(',')}` : '',
@@ -75,13 +82,22 @@ function formatFilters(filters: CollectionRunFilters) {
   return parts.length > 0 ? parts.join(' · ') : 'none';
 }
 
-function parseArgs(argv: string[]): CliOptions {
+export function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     workspaceRoot: '',
     listOnly: false,
+    listPresets: false,
     failFast: false,
     filters: {},
-    reportPaths: {}
+    reportPaths: {},
+    explicit: {
+      environmentName: false,
+      failFast: false,
+      tags: false,
+      stepKeys: false,
+      requestIds: false,
+      caseIds: false
+    }
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -97,28 +113,38 @@ function parseArgs(argv: string[]): CliOptions {
       index += 1;
       continue;
     }
+    if (token === '--preset' && next) {
+      options.presetSelector = next;
+      index += 1;
+      continue;
+    }
     if (token === '--environment' && next) {
       options.environmentName = next;
+      options.explicit.environmentName = true;
       index += 1;
       continue;
     }
     if (token === '--tag' && next) {
       pushFilterValue(options.filters, 'tags', next);
+      options.explicit.tags = true;
       index += 1;
       continue;
     }
     if (token === '--step' && next) {
       pushFilterValue(options.filters, 'stepKeys', next);
+      options.explicit.stepKeys = true;
       index += 1;
       continue;
     }
     if (token === '--request' && next) {
       pushFilterValue(options.filters, 'requestIds', next);
+      options.explicit.requestIds = true;
       index += 1;
       continue;
     }
     if (token === '--case' && next) {
       pushFilterValue(options.filters, 'caseIds', next);
+      options.explicit.caseIds = true;
       index += 1;
       continue;
     }
@@ -150,12 +176,22 @@ function parseArgs(argv: string[]): CliOptions {
       index += 1;
       continue;
     }
+    if (token === '--report-configured' && next) {
+      options.configuredReportBasePath = next;
+      index += 1;
+      continue;
+    }
     if (token === '--fail-fast') {
       options.failFast = true;
+      options.explicit.failFast = true;
       continue;
     }
     if (token === '--list') {
       options.listOnly = true;
+      continue;
+    }
+    if (token === '--list-presets') {
+      options.listPresets = true;
       continue;
     }
     if (token === '--help' || token === '-h') {
@@ -390,6 +426,72 @@ function matchesCollection(workspace: WorkspaceIndex, selector?: string) {
   return workspace.collections.find(item => item.document.id === selector || item.document.name === selector);
 }
 
+export function selectRunPreset(collection: CollectionDocument, selector?: string) {
+  if (!selector) return undefined;
+  return collection.runPresets.find(item => item.id === selector || item.name === selector);
+}
+
+function mergeFilterValue(base?: string[], override?: string[]) {
+  return override !== undefined ? override : base;
+}
+
+export function resolveExecutionOptions(
+  options: CliOptions,
+  inheritedFilters: CollectionRunFilters = {},
+  preset?: CollectionRunPreset
+) {
+  const filters: CollectionRunFilters = {
+    tags: options.explicit.tags
+      ? options.filters.tags
+      : preset
+        ? [...preset.tags]
+        : inheritedFilters.tags,
+    stepKeys: options.explicit.stepKeys
+      ? options.filters.stepKeys
+      : preset
+        ? [...preset.stepKeys]
+        : inheritedFilters.stepKeys,
+    requestIds: options.explicit.requestIds
+      ? options.filters.requestIds
+      : inheritedFilters.requestIds,
+    caseIds: options.explicit.caseIds
+      ? options.filters.caseIds
+      : inheritedFilters.caseIds
+  };
+
+  return {
+    environmentName: options.explicit.environmentName
+      ? options.environmentName
+      : preset?.environmentName ?? options.environmentName,
+    failFast: options.explicit.failFast ? options.failFast : preset?.failFast ?? options.failFast,
+    filters
+  };
+}
+
+function stripConfiguredReportExtension(filePath: string) {
+  return filePath.replace(/\.(json|html|xml)$/i, '');
+}
+
+export function resolveReportPaths(
+  explicitPaths: Partial<Record<ReporterFormat, string>>,
+  configuredReportBasePath: string | undefined,
+  reporters: ReporterFormat[]
+) {
+  const configuredPaths = configuredReportBasePath
+    ? Object.fromEntries(
+        reporters.map(reporter => [
+          reporter,
+          `${stripConfiguredReportExtension(configuredReportBasePath)}.${reporter === 'junit' ? 'xml' : reporter}`
+        ])
+      ) as Partial<Record<ReporterFormat, string>>
+    : {};
+  return {
+    json: mergeFilterValue(configuredPaths.json, explicitPaths.json),
+    html: mergeFilterValue(configuredPaths.html, explicitPaths.html),
+    junit: mergeFilterValue(configuredPaths.junit, explicitPaths.junit)
+  };
+}
+
 async function main() {
   try {
     const options = parseArgs(process.argv.slice(2));
@@ -405,45 +507,78 @@ async function main() {
     if (!collection) {
       throw new Error('No collections were found in the workspace');
     }
+    const preset = selectRunPreset(collection.document, options.presetSelector);
+    if (options.presetSelector && !preset) {
+      throw new Error(`Preset "${options.presetSelector}" was not found on collection ${collection.document.name}`);
+    }
+
+    if (options.listPresets) {
+      if (collection.document.runPresets.length === 0) {
+        console.log('No run presets defined for the selected collection.');
+      } else {
+        collection.document.runPresets.forEach(item => {
+          console.log([
+            item.id,
+            item.name,
+            `environment=${item.environmentName || 'default'}`,
+            `tags=${item.tags.join(',') || 'none'}`,
+            `steps=${item.stepKeys.join(',') || 'all'}`,
+            `failFast=${item.failFast ? 'yes' : 'no'}`
+          ].join('\t'));
+        });
+      }
+      process.exitCode = EXIT_SUCCESS;
+      return;
+    }
 
     const seedReport = options.rerunFailedReportPath ? await readReport(options.rerunFailedReportPath) : null;
     const inheritedFilters = seedReport ? filtersFromCollectionReport(seedReport) : {};
-    const effectiveFilters = seedReport && !hasFilterValues(options.filters)
-      ? inheritedFilters
-      : mergeFilters(inheritedFilters, options.filters);
+    const executionOptions = resolveExecutionOptions(options, inheritedFilters, preset);
+    const effectiveFilters = executionOptions.filters;
     const stepKeys = seedReport ? rerunFailedStepKeys(seedReport) : effectiveFilters.stepKeys;
+    const reportPaths = resolveReportPaths(
+      options.reportPaths,
+      options.configuredReportBasePath,
+      collection.document.reporters as ReporterFormat[]
+    );
+    if (options.configuredReportBasePath && collection.document.reporters.length === 0) {
+      throw new Error('The selected collection has no configured reporters. Enable at least one reporter first.');
+    }
     const cookieJar = new Map<string, string>();
     const report = await runCollection({
       workspace,
       collectionId: collection.document.id,
       options: {
-        environmentName: options.environmentName,
+        environmentName: executionOptions.environmentName,
         filters: effectiveFilters,
         stepKeys,
         seedReport,
-        failFast: options.failFast
+        failFast: executionOptions.failFast
       },
       sendRequest: preview => sendPreview(preview, cookieJar)
     });
 
     console.log(`Collection: ${report.collectionName}`);
+    if (preset) {
+      console.log(`Preset: ${preset.name}`);
+    }
     console.log(`Environment: ${report.environmentName || 'shared'}`);
     console.log(`Matrix: ${report.matrixEnvironments.join(', ') || 'single'}`);
     console.log(`Status: ${report.status}`);
     console.log(`Passed: ${report.passedSteps}  Failed: ${report.failedSteps}  Skipped: ${report.skippedSteps}`);
     console.log(`Filters: ${formatFilters(report.filters)}`);
 
-    if (options.reportPaths.json) {
-      await writeReport(options.reportPaths.json, JSON.stringify(report, null, 2));
-      console.log(`JSON report written to ${path.resolve(options.reportPaths.json)}`);
+    if (reportPaths.json) {
+      await writeReport(reportPaths.json, JSON.stringify(report, null, 2));
+      console.log(`JSON report written to ${path.resolve(reportPaths.json)}`);
     }
-    if (options.reportPaths.html) {
-      await writeReport(options.reportPaths.html, renderCollectionRunReportHtml(report));
-      console.log(`HTML report written to ${path.resolve(options.reportPaths.html)}`);
+    if (reportPaths.html) {
+      await writeReport(reportPaths.html, renderCollectionRunReportHtml(report));
+      console.log(`HTML report written to ${path.resolve(reportPaths.html)}`);
     }
-    if (options.reportPaths.junit) {
-      await writeReport(options.reportPaths.junit, renderCollectionRunReportJunit(report));
-      console.log(`JUnit report written to ${path.resolve(options.reportPaths.junit)}`);
+    if (reportPaths.junit) {
+      await writeReport(reportPaths.junit, renderCollectionRunReportJunit(report));
+      console.log(`JUnit report written to ${path.resolve(reportPaths.junit)}`);
     }
 
     process.exitCode = report.failedSteps > 0 ? EXIT_FAILURE : EXIT_SUCCESS;
@@ -456,4 +591,6 @@ async function main() {
   }
 }
 
-void main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void main();
+}

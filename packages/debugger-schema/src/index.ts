@@ -146,6 +146,14 @@ const websocketMessageSchema = z.object({
   enabled: z.boolean().default(true)
 });
 
+const graphqlSavedOperationSchema = z.object({
+  name: z.string().min(1),
+  query: z.string().default(''),
+  variables: z.string().default('{}'),
+  operationName: z.string().optional(),
+  updatedAt: z.string().optional()
+});
+
 export const requestBodySchema = z.object({
   mode: z.enum(['none', 'json', 'text', 'xml', 'graphql', 'sparql', 'file', 'form-urlencoded', 'multipart']).default('none'),
   mimeType: z.string().optional(),
@@ -157,6 +165,7 @@ export const requestBodySchema = z.object({
     variables: z.string().default(''),
     operationName: z.string().optional(),
     schemaUrl: z.string().optional(),
+    savedOperations: z.array(graphqlSavedOperationSchema).default([]),
     schemaCache: z.object({
       endpoint: z.string().optional(),
       checkedAt: z.string().optional(),

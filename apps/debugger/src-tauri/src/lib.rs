@@ -3,6 +3,8 @@ mod capture;
 use base64::{engine::general_purpose, Engine as _};
 use futures_util::{SinkExt, StreamExt};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use prost::Message as ProstMessage;
+use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor};
 use reqwest::{
     cookie::{CookieStore, Jar},
     header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE},
@@ -11,12 +13,14 @@ use reqwest::{
     Client, Url,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    str::FromStr,
     sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -28,6 +32,14 @@ use tokio_tungstenite::tungstenite::{
     client::IntoClientRequest,
     http::header::{HeaderName as WsHeaderName, HeaderValue as WsHeaderValue},
     Message,
+};
+use tonic::{
+    client::Grpc,
+    codec::{BufferSettings, Codec, DecodeBuf, Decoder, EncodeBuf, Encoder},
+    codegen::http::uri::PathAndQuery,
+    metadata::{Ascii, MetadataKey, MetadataValue},
+    transport::Endpoint,
+    Code as GrpcCode, Request as GrpcRequest, Status,
 };
 
 static WATCHERS: OnceLock<Mutex<HashMap<String, RecommendedWatcher>>> = OnceLock::new();
@@ -111,12 +123,26 @@ struct ParameterRow {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct GrpcBody {
+    proto_file: Option<String>,
+    #[serde(default)]
+    import_paths: Vec<String>,
+    service: Option<String>,
+    method: Option<String>,
+    #[serde(default)]
+    message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RequestBody {
     mode: String,
     mime_type: Option<String>,
     text: String,
     file: Option<String>,
     fields: Vec<ParameterRow>,
+    #[serde(default)]
+    grpc: Option<GrpcBody>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1347,8 +1373,391 @@ fn multipart_form(fields: &[ParameterRow]) -> Result<Form, String> {
     Ok(form)
 }
 
+#[derive(Debug, Clone, Default)]
+struct DynamicMessageEncoder;
+
+#[derive(Debug, Clone)]
+struct DynamicMessageDecoder {
+    descriptor: MessageDescriptor,
+}
+
+#[derive(Debug, Clone)]
+struct DynamicMessageCodec {
+    descriptor: MessageDescriptor,
+}
+
+impl DynamicMessageCodec {
+    fn new(descriptor: MessageDescriptor) -> Self {
+        Self { descriptor }
+    }
+}
+
+impl Codec for DynamicMessageCodec {
+    type Encode = DynamicMessage;
+    type Decode = DynamicMessage;
+    type Encoder = DynamicMessageEncoder;
+    type Decoder = DynamicMessageDecoder;
+
+    fn encoder(&mut self) -> Self::Encoder {
+        DynamicMessageEncoder
+    }
+
+    fn decoder(&mut self) -> Self::Decoder {
+        DynamicMessageDecoder {
+            descriptor: self.descriptor.clone(),
+        }
+    }
+}
+
+impl Encoder for DynamicMessageEncoder {
+    type Item = DynamicMessage;
+    type Error = Status;
+
+    fn encode(
+        &mut self,
+        item: Self::Item,
+        dst: &mut EncodeBuf<'_>,
+    ) -> Result<(), Self::Error> {
+        item.encode(dst)
+            .map_err(|error| Status::internal(error.to_string()))
+    }
+
+    fn buffer_settings(&self) -> BufferSettings {
+        BufferSettings::default()
+    }
+}
+
+impl Decoder for DynamicMessageDecoder {
+    type Item = DynamicMessage;
+    type Error = Status;
+
+    fn decode(
+        &mut self,
+        src: &mut DecodeBuf<'_>,
+    ) -> Result<Option<Self::Item>, Self::Error> {
+        DynamicMessage::decode(self.descriptor.clone(), src)
+            .map(Some)
+            .map_err(|error| Status::internal(error.to_string()))
+    }
+
+    fn buffer_settings(&self) -> BufferSettings {
+        BufferSettings::default()
+    }
+}
+
+fn session_root_path(session_id: Option<&str>) -> Option<PathBuf> {
+    let raw = session_id?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let path = PathBuf::from(raw);
+    if path.is_dir() {
+        return Some(path);
+    }
+    path.parent().map(|parent| parent.to_path_buf())
+}
+
+fn resolve_workspace_path(
+    session_id: Option<&str>,
+    raw_path: &str,
+    base_dir: Option<&Path>,
+) -> PathBuf {
+    let candidate = PathBuf::from(raw_path);
+    if candidate.is_absolute() {
+        return candidate;
+    }
+    if let Some(base) = base_dir {
+        let resolved = base.join(&candidate);
+        if resolved.exists() {
+            return resolved;
+        }
+    }
+    if let Some(root) = session_root_path(session_id) {
+        let resolved = root.join(&candidate);
+        if resolved.exists() {
+            return resolved;
+        }
+        return resolved;
+    }
+    if let Some(base) = base_dir {
+        return base.join(candidate);
+    }
+    candidate
+}
+
+fn normalize_grpc_endpoint(url: &str) -> Result<Url, String> {
+    let trimmed = url.trim();
+    let normalized = if let Some(rest) = trimmed.strip_prefix("grpc://") {
+        format!("http://{rest}")
+    } else if let Some(rest) = trimmed.strip_prefix("grpcs://") {
+        format!("https://{rest}")
+    } else {
+        trimmed.to_string()
+    };
+    Url::parse(&normalized).map_err(|error| error.to_string())
+}
+
+fn grpc_status_to_http_status(code: GrpcCode) -> u16 {
+    match code {
+        GrpcCode::Ok => 200,
+        GrpcCode::Cancelled => 499,
+        GrpcCode::InvalidArgument => 400,
+        GrpcCode::DeadlineExceeded => 504,
+        GrpcCode::NotFound => 404,
+        GrpcCode::AlreadyExists => 409,
+        GrpcCode::PermissionDenied => 403,
+        GrpcCode::ResourceExhausted => 429,
+        GrpcCode::FailedPrecondition => 400,
+        GrpcCode::Aborted => 409,
+        GrpcCode::OutOfRange => 400,
+        GrpcCode::Unimplemented => 501,
+        GrpcCode::Internal => 500,
+        GrpcCode::Unavailable => 503,
+        GrpcCode::DataLoss => 500,
+        GrpcCode::Unauthenticated => 401,
+        GrpcCode::Unknown => 520,
+    }
+}
+
+fn grpc_status_code_value(code: GrpcCode) -> u8 {
+    match code {
+        GrpcCode::Ok => 0,
+        GrpcCode::Cancelled => 1,
+        GrpcCode::Unknown => 2,
+        GrpcCode::InvalidArgument => 3,
+        GrpcCode::DeadlineExceeded => 4,
+        GrpcCode::NotFound => 5,
+        GrpcCode::AlreadyExists => 6,
+        GrpcCode::PermissionDenied => 7,
+        GrpcCode::ResourceExhausted => 8,
+        GrpcCode::FailedPrecondition => 9,
+        GrpcCode::Aborted => 10,
+        GrpcCode::OutOfRange => 11,
+        GrpcCode::Unimplemented => 12,
+        GrpcCode::Internal => 13,
+        GrpcCode::Unavailable => 14,
+        GrpcCode::DataLoss => 15,
+        GrpcCode::Unauthenticated => 16,
+    }
+}
+
+fn grpc_proto_context(
+    input: &SendRequestInput,
+    grpc: &GrpcBody,
+) -> Result<(DescriptorPool, PathBuf), String> {
+    let proto_raw = grpc
+        .proto_file
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "gRPC requests require a proto file".to_string())?;
+    let session_root = session_root_path(input.session_id.as_deref());
+    let proto_path = resolve_workspace_path(input.session_id.as_deref(), proto_raw, session_root.as_deref());
+    if !proto_path.exists() {
+        return Err(format!("Proto file not found: {}", proto_path.display()));
+    }
+    let proto_dir = proto_path.parent().map(|parent| parent.to_path_buf());
+    let mut include_paths = Vec::new();
+    let mut seen = HashSet::new();
+    let mut push_include = |path: PathBuf| {
+        let normalized = path.to_string_lossy().to_string();
+        if seen.insert(normalized) {
+            include_paths.push(path);
+        }
+    };
+    if let Some(dir) = proto_dir.clone() {
+        push_include(dir);
+    }
+    if let Some(root) = session_root {
+        push_include(root);
+    }
+    for raw_path in &grpc.import_paths {
+        if raw_path.trim().is_empty() {
+            continue;
+        }
+        let resolved = resolve_workspace_path(input.session_id.as_deref(), raw_path, proto_dir.as_deref());
+        push_include(resolved);
+    }
+    let file_descriptors =
+        protox::compile([proto_path.clone()], include_paths).map_err(|error| error.to_string())?;
+    let pool = DescriptorPool::from_file_descriptor_set(file_descriptors)
+        .map_err(|error| error.to_string())?;
+    Ok((pool, proto_path))
+}
+
+fn grpc_method_descriptor(
+    pool: &DescriptorPool,
+    grpc: &GrpcBody,
+) -> Result<prost_reflect::MethodDescriptor, String> {
+    let service_name = grpc.service.as_deref().unwrap_or("").trim();
+    let method_name = grpc.method.as_deref().unwrap_or("").trim();
+    let service = pool
+        .services()
+        .find(|item| item.full_name() == service_name || item.name() == service_name)
+        .ok_or_else(|| format!("gRPC service not found in proto descriptors: {service_name}"))?;
+    let method = service
+        .methods()
+        .find(|item| item.name() == method_name)
+        .ok_or_else(|| format!("gRPC method not found on service {service_name}: {method_name}"))?;
+    if method.is_client_streaming() || method.is_server_streaming() {
+        return Err("Only unary gRPC methods are supported right now.".to_string());
+    }
+    Ok(method)
+}
+
+fn grpc_request_message(
+    descriptor: MessageDescriptor,
+    raw_message: &str,
+) -> Result<DynamicMessage, String> {
+    let trimmed = raw_message.trim();
+    if trimmed.is_empty() {
+        return Ok(DynamicMessage::new(descriptor));
+    }
+    let mut json_deserializer = serde_json::Deserializer::from_str(trimmed);
+    match DynamicMessage::deserialize(descriptor.clone(), &mut json_deserializer) {
+        Ok(message) => {
+            json_deserializer
+                .end()
+                .map_err(|error| error.to_string())?;
+            Ok(message)
+        }
+        Err(json_error) => DynamicMessage::parse_text_format(descriptor, trimmed).map_err(|text_error| {
+            format!(
+                "Failed to parse gRPC message as JSON ({json_error}) or protobuf text format ({text_error})."
+            )
+        }),
+    }
+}
+
+fn grpc_request_metadata(
+    request: &mut GrpcRequest<DynamicMessage>,
+    headers: &[ParameterRow],
+) -> Result<(), String> {
+    for row in headers
+        .iter()
+        .filter(|row| row.enabled && !row.name.trim().is_empty())
+    {
+        let name = row.name.trim().to_ascii_lowercase();
+        if matches!(
+            name.as_str(),
+            "content-type" | "content-length" | "host" | "te" | "grpc-timeout"
+        ) {
+            continue;
+        }
+        let key = MetadataKey::<Ascii>::from_str(&name).map_err(|error| error.to_string())?;
+        let value =
+            MetadataValue::<Ascii>::from_str(row.value.trim()).map_err(|error| error.to_string())?;
+        request.metadata_mut().insert(key, value);
+    }
+    Ok(())
+}
+
+async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult, String> {
+    let start = Instant::now();
+    let timeout_ms = input.timeout_ms.unwrap_or(30_000);
+    let grpc = input
+        .body
+        .grpc
+        .clone()
+        .ok_or_else(|| "Missing gRPC request body configuration".to_string())?;
+    let endpoint_url = normalize_grpc_endpoint(&input.url)?;
+    let (pool, _proto_path) = grpc_proto_context(&input, &grpc)?;
+    let method = grpc_method_descriptor(&pool, &grpc)?;
+    let input_message = grpc_request_message(method.input(), grpc.message.as_str())?;
+    let rpc_path = format!("/{}/{}", method.parent_service().full_name(), method.name());
+    let path =
+        PathAndQuery::from_str(&rpc_path).map_err(|error| format!("Invalid gRPC path: {error}"))?;
+    let mut rpc_url = endpoint_url.clone();
+    rpc_url.set_query(None);
+    rpc_url.set_path(&rpc_path);
+    let endpoint = Endpoint::from_shared(endpoint_url.to_string())
+        .map_err(|error| error.to_string())?
+        .connect_timeout(Duration::from_millis(timeout_ms))
+        .timeout(Duration::from_millis(timeout_ms));
+    let channel = endpoint.connect().await.map_err(|error| error.to_string())?;
+    let mut request = GrpcRequest::new(input_message);
+    grpc_request_metadata(&mut request, &input.headers)?;
+    let mut client = Grpc::new(channel);
+    let result = client
+        .unary(request, path, DynamicMessageCodec::new(method.output()))
+        .await;
+
+    match result {
+        Ok(response) => {
+            let body_text = serde_json::to_string_pretty(&response.into_inner())
+                .map_err(|error| error.to_string())?;
+            Ok(SendRequestResult {
+                ok: true,
+                status: 200,
+                status_text: "OK".into(),
+                url: rpc_url.to_string(),
+                duration_ms: start.elapsed().as_millis() as u64,
+                size_bytes: body_text.as_bytes().len(),
+                headers: vec![
+                    ResponseHeader {
+                        name: "content-type".into(),
+                        value: "application/json; charset=utf-8".into(),
+                    },
+                    ResponseHeader {
+                        name: "grpc-status".into(),
+                        value: "0".into(),
+                    },
+                    ResponseHeader {
+                        name: "x-debugger-runtime".into(),
+                        value: "grpc".into(),
+                    },
+                ],
+                body_text,
+                body_base64: None,
+                timestamp: chrono_timestamp(),
+            })
+        }
+        Err(status) => {
+            let body_text = serde_json::to_string_pretty(&json!({
+                "grpc": {
+                    "code": format!("{:?}", status.code()),
+                    "message": status.message(),
+                    "detailsBase64": (!status.details().is_empty()).then(|| general_purpose::STANDARD.encode(status.details()))
+                }
+            }))
+            .map_err(|error| error.to_string())?;
+            Ok(SendRequestResult {
+                ok: false,
+                status: grpc_status_to_http_status(status.code()),
+                status_text: format!("{:?}", status.code()),
+                url: rpc_url.to_string(),
+                duration_ms: start.elapsed().as_millis() as u64,
+                size_bytes: body_text.as_bytes().len(),
+                headers: vec![
+                    ResponseHeader {
+                        name: "content-type".into(),
+                        value: "application/json; charset=utf-8".into(),
+                    },
+                    ResponseHeader {
+                        name: "grpc-status".into(),
+                        value: grpc_status_code_value(status.code()).to_string(),
+                    },
+                    ResponseHeader {
+                        name: "grpc-message".into(),
+                        value: status.message().to_string(),
+                    },
+                    ResponseHeader {
+                        name: "x-debugger-runtime".into(),
+                        value: "grpc".into(),
+                    },
+                ],
+                body_text,
+                body_base64: None,
+                timestamp: chrono_timestamp(),
+            })
+        }
+    }
+}
+
 #[tauri::command]
 async fn request_send(input: SendRequestInput) -> Result<SendRequestResult, String> {
+    if input.body.grpc.is_some() {
+        return grpc_request_send(input).await;
+    }
     let method = input
         .method
         .parse::<reqwest::Method>()
