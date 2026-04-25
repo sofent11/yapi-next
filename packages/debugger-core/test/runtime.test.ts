@@ -798,7 +798,17 @@ test('resolveRequest interpolates WebSocket message drafts', () => {
     websocket: {
       messages: [
         { name: 'auth {{token}}', body: '{"type":"auth","token":"{{token}}"}', enabled: true }
-      ]
+      ],
+      lastRun: {
+        ok: true,
+        url: 'wss://example.com/socket',
+        durationMs: 42,
+        ranAt: '2026-04-25T10:00:00.000Z',
+        events: [
+          { direction: 'runtime', label: 'connected', body: 'wss://example.com/socket', elapsedMs: 0 },
+          { direction: 'out', label: 'auth secret', body: '{"type":"auth","token":"secret"}', elapsedMs: 1 }
+        ]
+      }
     }
   };
 
@@ -806,6 +816,8 @@ test('resolveRequest interpolates WebSocket message drafts', () => {
 
   assert.equal(preview.body.websocket?.messages[0]?.name, 'auth secret');
   assert.equal(preview.body.websocket?.messages[0]?.body, '{"type":"auth","token":"secret"}');
+  assert.equal(requestDocumentSchema.parse(request).body.websocket?.lastRun?.events.length, 2);
+  assert.equal(preview.body.websocket?.lastRun?.durationMs, 42);
 });
 
 test('buildCurlCommand supports Bruno parity body modes', () => {

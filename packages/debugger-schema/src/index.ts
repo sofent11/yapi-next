@@ -167,7 +167,19 @@ export const requestBodySchema = z.object({
       name: z.string().default('Message'),
       body: z.string().default(''),
       enabled: z.boolean().default(true)
-    })).default([])
+    })).default([]),
+    lastRun: z.object({
+      ok: z.boolean(),
+      url: z.string(),
+      durationMs: z.number().int().nonnegative(),
+      ranAt: z.string().optional(),
+      events: z.array(z.object({
+        direction: z.enum(['runtime', 'in', 'out']),
+        label: z.string(),
+        body: z.string(),
+        elapsedMs: z.number().int().nonnegative()
+      })).default([])
+    }).optional()
   }).optional()
 });
 export type RequestBody = z.infer<typeof requestBodySchema>;

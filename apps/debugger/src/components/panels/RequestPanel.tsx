@@ -140,6 +140,12 @@ type WebSocketRunState = {
   error?: string;
 };
 
+function websocketStateFromBody(body: RequestBody): WebSocketRunState {
+  return body.websocket?.lastRun
+    ? { loading: false, result: body.websocket.lastRun }
+    : { loading: false };
+}
+
 function requestSectionForTab(tab: RequestTab): RequestSection {
   if (tab === 'checks') return 'validation';
   if (tab === 'scripts' || tab === 'settings') return 'automation';
@@ -240,7 +246,7 @@ export function RequestPanel(props: {
   const activeSection = requestSectionForTab(props.activeTab);
   const visibleTabs = new Set<RequestTab>(tabOptionsForSection(activeSection));
   const [graphqlIntrospection, setGraphqlIntrospection] = useState<GraphqlIntrospectionState>(() => graphqlIntrospectionStateFromBody(body));
-  const [websocketRun, setWebsocketRun] = useState<WebSocketRunState>({ loading: false });
+  const [websocketRun, setWebsocketRun] = useState<WebSocketRunState>(() => websocketStateFromBody(body));
 
   useEffect(() => {
     setGraphqlIntrospection(current => {
@@ -252,6 +258,18 @@ export function RequestPanel(props: {
     selectedCase?.id,
     body.graphql?.schemaCache?.endpoint,
     body.graphql?.schemaCache?.checkedAt
+  ]);
+
+  useEffect(() => {
+    setWebsocketRun(current => {
+      if (current.loading) return current;
+      return websocketStateFromBody(body);
+    });
+  }, [
+    requestDocument.id,
+    selectedCase?.id,
+    body.websocket?.lastRun?.ranAt,
+    body.websocket?.lastRun?.durationMs
   ]);
 
   function updateSelectedCase(updater: (current: CaseDocument) => CaseDocument) {
@@ -412,12 +430,33 @@ export function RequestPanel(props: {
         timeoutMs: resolvedPreview.timeoutMs
       });
       setWebsocketRun({ loading: false, result });
+      updateBody({
+        ...body,
+        websocket: {
+          ...(body.websocket || {}),
+          messages: websocketMessages,
+          lastRun: {
+            ...result,
+            ranAt: new Date().toISOString()
+          }
+        }
+      });
       notifications.show({ color: 'teal', message: `WebSocket session captured ${result.events.length} events` });
     } catch (error) {
       const message = (error as Error).message || 'WebSocket session failed';
       setWebsocketRun({ loading: false, error: message });
       notifications.show({ color: 'red', message });
     }
+  }
+
+  function clearWebSocketTimeline() {
+    const { lastRun: _lastRun, ...nextWebSocket } = body.websocket || { messages: websocketMessages };
+    updateBody({
+      ...body,
+      websocket: nextWebSocket
+    });
+    setWebsocketRun({ loading: false });
+    notifications.show({ color: 'blue', message: 'WebSocket timeline cleared' });
   }
 
   function applyUrlChange(nextUrl: string) {
@@ -899,6 +938,9 @@ export function RequestPanel(props: {
                     <Button size="xs" leftSection={<IconPlayerPlay size={14} />} loading={websocketRun.loading} onClick={handleWebSocketRun}>
                       Run Session
                     </Button>
+                    <Button size="xs" variant="subtle" disabled={!websocketRun.result} onClick={clearWebSocketTimeline}>
+                      Clear Timeline
+                    </Button>
                   </Group>
                 </div>
                 <div className="websocket-message-list">
@@ -949,9 +991,14 @@ export function RequestPanel(props: {
                   <div className="websocket-timeline">
                     <div className="websocket-timeline-head">
                       <Text size="xs" fw={700} c="dimmed">Timeline</Text>
-                      {websocketRun.result ? (
-                        <Badge variant="light" color="teal">{websocketRun.result.durationMs} ms</Badge>
-                      ) : null}
+                      <Group gap={6}>
+                        {body.websocket?.lastRun && websocketRun.result ? (
+                          <Badge variant="light" color="blue">saved</Badge>
+                        ) : null}
+                        {websocketRun.result ? (
+                          <Badge variant="light" color="teal">{websocketRun.result.durationMs} ms</Badge>
+                        ) : null}
+                      </Group>
                     </div>
                     {websocketRun.error ? (
                       <div className="request-preview-warning">
