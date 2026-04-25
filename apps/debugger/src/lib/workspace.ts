@@ -8,6 +8,7 @@ import {
   materializeCollectionDocument,
   materializeBrunoCollectionExport,
   materializeEnvironmentDocuments,
+  materializeFolderDocument,
   materializeProjectDocument,
   materializeRequestDocuments,
   mergeTemplateSources,
@@ -15,6 +16,7 @@ import {
   serializeBrunoJsonCollection,
   serializeOpenCollection,
   serializeRequestToBruno,
+  workspaceFolderVariableSources,
   filtersFromCollectionReport,
   rerunFailedStepKeys as rerunFailedStepKeysCore,
   runCollection as runCollectionCore,
@@ -44,6 +46,7 @@ import {
   type ImportAuth,
   type ImportResult,
   type ImportWarning,
+  type ParameterRow,
   type ProjectDocument,
   type RequestDocument,
   type ResolvedRequestPreview,
@@ -695,6 +698,10 @@ function mergeImportedAuthProfiles(baseProfiles: EnvironmentDocument['authProfil
   return output;
 }
 
+function isSameOrChildCategory(currentPath: string, targetPath: string) {
+  return currentPath === targetPath || currentPath.startsWith(`${targetPath}/`);
+}
+
 export async function createWorkspace(root: string, projectName: string) {
   const seed = createProjectSeed({ projectName, includeSampleRequest: true });
   await Promise.all(seed.writes.map(item => writeDocument(`${root}/${item.path}`, item.content)));
@@ -713,6 +720,28 @@ export async function saveEnvironment(root: string, environment: EnvironmentDocu
 
 export async function saveProject(root: string, project: ProjectDocument) {
   const file = materializeProjectDocument(project, root);
+  await writeDocument(file.path, file.content);
+}
+
+export async function saveFolderVariables(
+  root: string,
+  folderPath: string,
+  variableRows: ParameterRow[],
+  previousFilePath?: string
+) {
+  const normalizedPath = folderPath.split('/').filter(Boolean).join('/');
+  if (!normalizedPath) return;
+  const rows = variableRows.filter(row => row.name.trim());
+  if (rows.length === 0) {
+    if (previousFilePath) {
+      await deleteEntry(previousFilePath, false).catch(() => undefined);
+    }
+    return;
+  }
+  if (previousFilePath) {
+    await deleteEntry(previousFilePath, false).catch(() => undefined);
+  }
+  const file = materializeFolderDocument(normalizedPath, rows, root);
   await writeDocument(file.path, file.content);
 }
 
@@ -943,7 +972,10 @@ export async function renameCategoryInWorkspace(
   oldPath: string,
   nextPath: string
 ) {
-  const affected = workspace.requests.filter(r => r.folderSegments.join('/').startsWith(oldPath));
+  const affected = workspace.requests.filter(r => isSameOrChildCategory(r.folderSegments.join('/'), oldPath));
+  const affectedFolders = workspace.folders.filter(
+    record => isSameOrChildCategory(record.path, oldPath)
+  );
   const newSegments = nextPath.split('/').filter(Boolean);
   const oldSegmentsCount = oldPath.split('/').filter(Boolean).length;
 
@@ -959,12 +991,24 @@ export async function renameCategoryInWorkspace(
       targetSegments
     );
   }
+
+  for (const record of affectedFolders) {
+    const relativeSegments = record.path.split('/').filter(Boolean).slice(oldSegmentsCount);
+    const targetPath = [...newSegments, ...relativeSegments].join('/');
+    await saveFolderVariables(root, targetPath, record.document.variableRows || [], record.filePath);
+  }
 }
 
 export async function deleteCategoryInWorkspace(workspace: WorkspaceIndex, path: string) {
-  const affected = workspace.requests.filter(r => r.folderSegments.join('/').startsWith(path));
+  const affected = workspace.requests.filter(r => isSameOrChildCategory(r.folderSegments.join('/'), path));
   for (const record of affected) {
     await deleteRequestInWorkspace(record);
+  }
+  const affectedFolders = workspace.folders.filter(
+    record => isSameOrChildCategory(record.path, path)
+  );
+  for (const record of affectedFolders) {
+    await deleteEntry(record.filePath, false).catch(() => undefined);
   }
 }
 
@@ -1082,16 +1126,25 @@ export type PreparedRequestRunInput = {
   context?: RequestRunContext;
 };
 
+function requestFolderSources(workspace: WorkspaceIndex, request: RequestDocument) {
+  const record = workspace.requests.find(item => item.request.id === request.id);
+  return record ? workspaceFolderVariableSources(workspace, record.folderSegments) : [];
+}
+
 export async function runPreparedRequest(
   workspace: WorkspaceIndex,
   input: PreparedRequestRunInput
 ) {
+  const folderSources = requestFolderSources(workspace, input.request);
   return runPreparedRequestCore({
     workspace,
     request: input.request,
     caseDocument: input.caseDocument,
     sessionId: input.sessionId || workspace.root,
-    context: input.context,
+    context: {
+      ...input.context,
+      extraSources: [...(input.context?.extraSources || []), ...folderSources]
+    },
     sendRequest: preview =>
       sendRequest({
         ...preview,
@@ -1135,7 +1188,8 @@ export async function refreshResolvedRequestAuth(
   const environment = createRuntimeEnvironment(workspace, envName);
   const extraSources = [
     createNamedTemplateSource('runtime variables', input.runtimeVariables || {}, 'runtime'),
-    ...(input.extraSources || [])
+    ...(input.extraSources || []),
+    ...workspaceFolderVariableSources(workspace, record.folderSegments)
   ];
   const refreshed = await refreshOauthClientCredentials({
     workspace,

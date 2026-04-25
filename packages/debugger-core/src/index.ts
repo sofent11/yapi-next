@@ -5,6 +5,7 @@ import {
   CASE_SUFFIX,
   COLLECTION_SUFFIX,
   DEFAULT_GITIGNORE,
+  FOLDER_CONFIG_FILE,
   LOCAL_ENV_SUFFIX,
   REQUEST_SUFFIX,
   SCHEMA_VERSION,
@@ -20,6 +21,7 @@ import {
   createId,
   emptyParameterRow,
   environmentDocumentSchema,
+  folderDocumentSchema,
   projectDocumentSchema,
   retryPolicySchema,
   resolvedAuthPreviewItemSchema,
@@ -40,6 +42,7 @@ import {
   type CollectionStep,
   type CollectionStepRun,
   type EnvironmentDocument,
+  type FolderDocument,
   type ParameterRow,
   type ProjectDocument,
   type RequestBody,
@@ -56,6 +59,7 @@ import {
   type SendRequestResult,
   type WorkspaceCollectionRecord,
   type WorkspaceEnvironmentRecord,
+  type WorkspaceFolderRecord,
   type WorkspaceIndex,
   type WorkspaceRequestRecord,
   type WorkspaceTreeNode
@@ -148,6 +152,11 @@ function parseEnvironmentFile(filePath: string, content: string): EnvironmentDoc
     });
   }
   return parsed;
+}
+
+function parseFolderFile(_filePath: string, content: string): FolderDocument {
+  const input = parseYamlDocument<unknown>(content);
+  return folderDocumentSchema.parse(input);
 }
 
 function environmentStem(filePath: string) {
@@ -938,6 +947,7 @@ export function buildGraphqlIntrospectionRequest(preview: ResolvedRequestPreview
 export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
   const project = projectDocumentSchema.parse(parseYamlDocument<unknown>(input.projectContent));
   const environmentRecords: WorkspaceEnvironmentRecord[] = [];
+  const folderRecords: WorkspaceFolderRecord[] = [];
   const requestRecords: WorkspaceRequestRecord[] = [];
   const collectionRecords: WorkspaceCollectionRecord[] = [];
   const requestsByPath = new Map<string, WorkspaceRequestRecord>();
@@ -947,6 +957,23 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
   const filePaths = Object.keys(input.fileContents).sort((a: string, b: string) => a.localeCompare(b, 'zh-CN'));
   for (const filePath of filePaths) {
     const content = input.fileContents[filePath];
+    if (
+      filePath.startsWith(`${input.root}/requests`) &&
+      (filePath === `${input.root}/requests/${FOLDER_CONFIG_FILE}` || filePath.endsWith(`/${FOLDER_CONFIG_FILE}`))
+    ) {
+      const document = parseFolderFile(filePath, content);
+      const relativeSegments = pathSegmentsBetween(`${input.root}/requests`, filePath);
+      const folderPath = relativeSegments.slice(0, -1).join('/');
+      if (folderPath) {
+        folderRecords.push({
+          path: folderPath,
+          filePath,
+          document
+        });
+      }
+      continue;
+    }
+
     if (filePath.endsWith(REQUEST_SUFFIX)) {
       const request = parseRequestFile(filePath, content);
       const relativeSegments = pathSegmentsBetween(`${input.root}/requests`, filePath);
@@ -1060,13 +1087,13 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
     children: []
   };
   const treeMap = new Map<string, Extract<WorkspaceTreeNode, { kind: 'category' }>>();
-
-  for (const record of [...requestRecords].sort((left, right) =>
-    left.requestFilePath.localeCompare(right.requestFilePath, 'zh-CN')
-  )) {
-    let parentChildren = projectNode.children;
+  const ensureCategoryNode = (path: string): Extract<WorkspaceTreeNode, { kind: 'category' }> | null => {
+    const normalized = path.split('/').filter(Boolean).join('/');
+    if (!normalized) return null;
     let currentPath = '';
-    record.folderSegments.forEach((segment: string) => {
+    let parentChildren = projectNode.children;
+    let currentNode: Extract<WorkspaceTreeNode, { kind: 'category' }> | null = null;
+    normalized.split('/').forEach(segment => {
       currentPath = currentPath ? `${currentPath}/${segment}` : segment;
       let categoryNode = treeMap.get(currentPath);
       if (!categoryNode) {
@@ -1081,7 +1108,20 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
         parentChildren.push(categoryNode);
       }
       parentChildren = categoryNode.children;
+      currentNode = categoryNode;
     });
+    return currentNode;
+  };
+
+  sortRecords(folderRecords).forEach(record => {
+    ensureCategoryNode(record.path);
+  });
+
+  for (const record of [...requestRecords].sort((left, right) =>
+    left.requestFilePath.localeCompare(right.requestFilePath, 'zh-CN')
+  )) {
+    const parentNode = ensureCategoryNode(record.folderSegments.join('/'));
+    const parentChildren = parentNode ? parentNode.children : projectNode.children;
 
     parentChildren.push({
       id: `request:${record.request.id}`,
@@ -1109,6 +1149,7 @@ export function buildWorkspaceIndex(input: ScanFilesInput): WorkspaceIndex {
     root: input.root,
     project,
     environments: sortRecords(environmentRecords.map(item => ({ ...item, name: item.document.name }))) as WorkspaceEnvironmentRecord[],
+    folders: sortRecords(folderRecords),
     requests: requestRecords,
     collections: sortRecords(collectionRecords.map(item => ({ ...item, name: item.document.name }))) as WorkspaceCollectionRecord[],
     tree: [projectNode],
@@ -1325,6 +1366,59 @@ function serializeRequestDocument(record: {
   });
 
   return writes;
+}
+
+function folderConfigPath(rootPath: string, folderPath: string) {
+  const normalized = folderPath.split('/').filter(Boolean).join('/');
+  return `${rootPath ? `${rootPath}/` : ''}requests/${normalized ? `${normalized}/` : ''}${FOLDER_CONFIG_FILE}`;
+}
+
+export function materializeFolderDocument(
+  folderPath: string,
+  variableRows: ParameterRow[],
+  rootPath: string
+): WorkspaceFileWrite {
+  const cleanVariableRows = cleanRows(variableRows).filter(row => row.name.trim());
+  return {
+    path: folderConfigPath(rootPath, folderPath),
+    content: stringifyYamlDocument(folderDocumentSchema.parse({
+      schemaVersion: SCHEMA_VERSION,
+      variableRows: cleanVariableRows
+    }))
+  };
+}
+
+function folderVariableValues(rows: ParameterRow[]) {
+  const entries = cleanRows(rows)
+    .filter(row => row.enabled !== false && row.name.trim())
+    .map(row => [row.name.trim(), row.kind === 'file' ? row.filePath || row.value || '' : row.value] as const);
+  return entries.length > 0 ? Object.fromEntries(entries) : {};
+}
+
+function workspaceFolderVariableMap(workspace: WorkspaceIndex, folderSegments: string[]) {
+  const normalizedSegments = folderSegments.filter(Boolean);
+  const values: Record<string, unknown> = {};
+  for (let index = 1; index <= normalizedSegments.length; index += 1) {
+    const path = normalizedSegments.slice(0, index).join('/');
+    const record = workspace.folders.find(item => item.path === path);
+    if (!record) continue;
+    Object.assign(values, folderVariableValues(record.document.variableRows || []));
+  }
+  return values;
+}
+
+export function workspaceFolderVariableSources(workspace: WorkspaceIndex, folderSegments: string[]) {
+  const normalizedSegments = folderSegments.filter(Boolean);
+  const sources: Array<Record<string, unknown>> = [];
+  for (let index = normalizedSegments.length; index > 0; index -= 1) {
+    const path = normalizedSegments.slice(0, index).join('/');
+    const record = workspace.folders.find(item => item.path === path);
+    if (!record) continue;
+    const values = folderVariableValues(record.document.variableRows || []);
+    if (Object.keys(values).length === 0) continue;
+    sources.push(createNamedTemplateSource(`folder variables · ${path}`, values, 'runtime'));
+  }
+  return sources;
 }
 
 function bruScalar(value: unknown) {
@@ -4780,7 +4874,9 @@ async function runCollectionStepWithRetry(input: {
   const caseDocument = input.requestRecord.cases.find(item => item.id === input.step.caseId);
   const retry = normalizeStepRetry(input.step, input.collection, caseDocument);
   const attempts: CollectionStepRun['attempts'] = [];
+  const folderVariables = workspaceFolderVariableMap(input.workspace, input.requestRecord.folderSegments);
   const extraSources = [
+    ...workspaceFolderVariableSources(input.workspace, input.requestRecord.folderSegments),
     createNamedTemplateSource('collection vars', input.collection.vars, 'collection'),
     createNamedTemplateSource('step outputs', { steps: input.seeded }, 'step-output'),
     createNamedTemplateSource('data row', input.dataVars, 'data-row')
@@ -4814,6 +4910,20 @@ async function runCollectionStepWithRetry(input: {
   for (let attempt = 1; attempt <= retry.count + 1; attempt += 1) {
     try {
       const overridden = applyStepOverrides(input.requestRecord.request, caseDocument, input.step);
+      const stepVariables = { ...input.runtimeState.variables };
+      const injectedFolderKeys = new Map<string, { value: string; previous?: string; hadPrevious: boolean }>();
+      Object.entries(folderVariables).forEach(([key, rawValue]) => {
+        const nextValue = String(rawValue ?? '');
+        const currentValue = stepVariables[key];
+        const collectionValue = input.collection.vars[key];
+        if (currentValue !== undefined && currentValue !== collectionValue) return;
+        injectedFolderKeys.set(key, {
+          value: nextValue,
+          previous: currentValue,
+          hadPrevious: currentValue !== undefined
+        });
+        stepVariables[key] = nextValue;
+      });
       const result = await runPreparedRequest({
         workspace: input.workspace,
         request: overridden.request,
@@ -4822,7 +4932,10 @@ async function runCollectionStepWithRetry(input: {
         sessionId: input.workspace.root,
         context: {
           extraSources,
-          state: input.runtimeState,
+          state: {
+            variables: stepVariables,
+            environment: input.runtimeState.environment
+          },
           collectionRules: input.collection.rules,
           sourceCollection: {
             id: input.collection.id,
@@ -4830,6 +4943,15 @@ async function runCollectionStepWithRetry(input: {
             stepKey: input.step.key
           }
         }
+      });
+      const nextVariables = { ...result.state.variables };
+      injectedFolderKeys.forEach((seeded, key) => {
+        if (nextVariables[key] !== seeded.value) return;
+        if (seeded.hadPrevious) {
+          nextVariables[key] = seeded.previous || '';
+          return;
+        }
+        delete nextVariables[key];
       });
       const ok = result.checkResults.every(check => check.ok);
       attempts.push({
@@ -4856,7 +4978,10 @@ async function runCollectionStepWithRetry(input: {
             baselineName: caseDocument?.baselineRef || undefined,
             attempts
           } satisfies CollectionStepRun,
-          nextState: result.state,
+          nextState: {
+            variables: nextVariables,
+            environment: result.state.environment
+          },
           output: buildStepOutput(result.preview, result.response)
         };
       }

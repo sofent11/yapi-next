@@ -12,6 +12,7 @@ export const REQUEST_SUFFIX = '.request.yaml';
 export const CASE_SUFFIX = '.case.yaml';
 export const COLLECTION_SUFFIX = '.collection.yaml';
 export const LOCAL_ENV_SUFFIX = '.local.yaml';
+export const FOLDER_CONFIG_FILE = '_folder.yaml';
 export const DEFAULT_GITIGNORE = ['.DS_Store', 'environments/*.local.yaml', '.yapi-debugger-cache/'].join('\n') + '\n';
 export const BODY_SIDECAR_THRESHOLD = 1800;
 
@@ -440,6 +441,19 @@ export const workspaceEnvironmentRecordSchema = z.object({
 });
 export type WorkspaceEnvironmentRecord = z.infer<typeof workspaceEnvironmentRecordSchema>;
 
+export const folderDocumentSchema = z.object({
+  schemaVersion: schemaVersionSchema.default(SCHEMA_VERSION),
+  variableRows: z.array(parameterRowSchema).default([])
+});
+export type FolderDocument = z.infer<typeof folderDocumentSchema>;
+
+export const workspaceFolderRecordSchema = z.object({
+  path: z.string(),
+  filePath: z.string(),
+  document: folderDocumentSchema
+});
+export type WorkspaceFolderRecord = z.infer<typeof workspaceFolderRecordSchema>;
+
 export type WorkspaceTreeNode =
   | {
       id: string;
@@ -517,6 +531,7 @@ export const workspaceIndexSchema = z.object({
   root: z.string(),
   project: projectDocumentSchema,
   environments: z.array(workspaceEnvironmentRecordSchema).default([]),
+  folders: z.array(workspaceFolderRecordSchema).default([]),
   requests: z.array(workspaceRequestRecordSchema).default([]),
   collections: z.array(workspaceCollectionRecordSchema).default([]),
   tree: z.array(workspaceTreeNodeSchema).default([]),

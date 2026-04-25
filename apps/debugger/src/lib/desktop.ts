@@ -222,6 +222,14 @@ export async function gitPush(root: string): Promise<string> {
   return invoke('git_push', { root });
 }
 
+export async function gitDiff(root: string, path: string): Promise<string> {
+  return invoke('git_diff', { root, path });
+}
+
+export async function gitClone(parent: string, repoUrl: string, folderName: string): Promise<string> {
+  return invoke('git_clone', { parent, repoUrl, folderName });
+}
+
 export async function openTerminal(root: string) {
   await invoke('open_terminal', { root });
 }

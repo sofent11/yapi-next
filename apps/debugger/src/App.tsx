@@ -5,9 +5,9 @@ import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
 import { IconRefresh, IconSearch } from '@tabler/icons-react';
-import { createEmptyCheck, createNamedTemplateSource, evaluateSyncGuard, inspectResolvedRequest } from '@yapi-debugger/core';
+import { createEmptyCheck, createNamedTemplateSource, evaluateSyncGuard, inspectResolvedRequest, workspaceFolderVariableSources } from '@yapi-debugger/core';
 import { save as saveFile } from '@tauri-apps/plugin-dialog';
-import { SCHEMA_VERSION, createCollectionStep, createEmptyCase, createEmptyCollection, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type EnvironmentDocument, type ImportWarning, type RequestDocument, type ResponseExample, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
+import { SCHEMA_VERSION, createCollectionStep, createEmptyCase, createEmptyCollection, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type EnvironmentDocument, type ImportWarning, type ParameterRow, type RequestDocument, type ResponseExample, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
 import '@mantine/spotlight/styles.css';
 import {
   chooseDirectory,
@@ -17,6 +17,8 @@ import {
   clearBrowserCaptureSession,
   clearSession,
   deleteEntry,
+  gitClone,
+  gitDiff,
   gitPull,
   gitPush,
   gitStatus,
@@ -74,6 +76,7 @@ import {
   saveCollectionRecord,
   saveRunHistory,
   saveEnvironment,
+  saveFolderVariables,
   saveProject,
   saveRequestRecord,
   saveScratchRequestToWorkspace
@@ -198,6 +201,12 @@ function saveRecentRoots(roots: string[]) {
   window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(roots.slice(0, 6)));
 }
 
+function inferCloneFolderName(repoUrl: string) {
+  const sanitized = repoUrl.trim().replace(/\/+$/, '').replace(/\.git$/i, '');
+  const segment = sanitized.split(/[/:]/).filter(Boolean).at(-1) || 'workspace';
+  return slugify(segment) || segment.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'workspace';
+}
+
 function uiStorageKey(root: string) {
   return `${UI_STORAGE_KEY_PREFIX}:${root}`;
 }
@@ -281,7 +290,11 @@ function requestVariableSource(rows: RequestVariableRow[], scope: 'request' | 'p
   return entries.length > 0 ? Object.fromEntries(entries) : {};
 }
 
-function requestExtraSources(request: RequestDocument, promptValues?: Record<string, string>) {
+function requestExtraSources(
+  request: RequestDocument,
+  folderSources: Array<Record<string, unknown>> = [],
+  promptValues?: Record<string, string>
+) {
   const rows = requestVariableRows(request);
   const sources: Array<Record<string, unknown>> = [];
   if (promptValues && Object.keys(promptValues).length > 0) {
@@ -291,7 +304,7 @@ function requestExtraSources(request: RequestDocument, promptValues?: Record<str
   if (Object.keys(requestValues).length > 0) {
     sources.push(createNamedTemplateSource('request variables', requestValues, 'runtime'));
   }
-  return sources;
+  return [...sources, ...folderSources];
 }
 
 function applyPreferencesToDocument(preferences: PreferencesState) {
@@ -324,6 +337,20 @@ function isSameOrChildPath(path: string, target: string) {
 function findRecord(workspace: WorkspaceIndex | null, requestId: string | null) {
   if (!workspace || !requestId) return null;
   return workspace.requests.find(item => item.request.id === requestId) || null;
+}
+
+function findFolderRecord(workspace: WorkspaceIndex | null, folderPath: string | null) {
+  if (!workspace || !folderPath) return null;
+  return workspace.folders.find(item => item.path === folderPath) || null;
+}
+
+function normalizeFolderVariableRows(rows: ParameterRow[]) {
+  return rows
+    .filter(row => row.name.trim() || row.value.trim())
+    .map(row => ({
+      ...row,
+      name: row.name.trim()
+    }));
 }
 
 function requestSlugExists(workspace: WorkspaceIndex, name: string, ignoreId: string, folderPath: string) {
@@ -628,8 +655,13 @@ export function App() {
   const [sessionSnapshot, setSessionSnapshot] = useState<SessionSnapshot | null>(null);
   const [runtimeVariables, setRuntimeVariables] = useState<Record<string, string>>({});
   const [runtimeEnvironments, setRuntimeEnvironments] = useState<Record<string, EnvironmentDocument>>({});
+  const [categoryVariableRows, setCategoryVariableRows] = useState<ParameterRow[]>([]);
   const [hostSessionSnapshots, setHostSessionSnapshots] = useState<Array<{ host: string; snapshot: SessionSnapshot }>>([]);
   const [gitInfo, setGitInfo] = useState<GitStatusPayload | null>(null);
+  const [selectedGitDiffFile, setSelectedGitDiffFile] = useState<string | null>(null);
+  const [gitDiffText, setGitDiffText] = useState('');
+  const [gitDiffLoading, setGitDiffLoading] = useState(false);
+  const [gitDiffError, setGitDiffError] = useState<string | null>(null);
   const [lastImportSession, setLastImportSession] = useState<ImportRepairSession | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [spotlightQuery, setSpotlightQuery] = useState('');
@@ -836,6 +868,35 @@ export function App() {
       caseName: selectedCase?.name || null
     };
   }, [caseId, requestId, store.workspace]);
+  const currentRequestRecord = useMemo(
+    () => findRecord(store.workspace, requestId),
+    [requestId, store.workspace]
+  );
+  const selectedCategoryRecord = useMemo(
+    () => findFolderRecord(store.workspace, categoryPath),
+    [categoryPath, store.workspace]
+  );
+  const currentRequestFolderSources = useMemo(
+    () =>
+      store.workspace && currentRequestRecord
+        ? workspaceFolderVariableSources(store.workspace, currentRequestRecord.folderSegments)
+        : [],
+    [currentRequestRecord, store.workspace]
+  );
+  const categoryVariableRowsBaseline = useMemo(
+    () => selectedCategoryRecord?.document.variableRows || [],
+    [selectedCategoryRecord]
+  );
+  const categoryVariablesDirty = useMemo(
+    () =>
+      JSON.stringify(normalizeFolderVariableRows(categoryVariableRows)) !==
+      JSON.stringify(normalizeFolderVariableRows(categoryVariableRowsBaseline)),
+    [categoryVariableRows, categoryVariableRowsBaseline]
+  );
+
+  useEffect(() => {
+    setCategoryVariableRows(selectedCategoryRecord?.document.variableRows || []);
+  }, [selectedCategoryRecord]);
 
   const captureFilters = useMemo(() => normalizeCaptureHostFilters(captureFilterText), [captureFilterText]);
   const visibleCaptureEntries = useMemo(
@@ -920,12 +981,12 @@ export function App() {
         applyRuntimeDefaultsToRequest(store.draftRequest),
         store.draftCases.find(item => item.id === caseId),
         selectedRuntimeEnvironment || undefined,
-        [...requestExtraSources(applyRuntimeDefaultsToRequest(store.draftRequest)), namedRuntimeSource]
+        [...requestExtraSources(applyRuntimeDefaultsToRequest(store.draftRequest), currentRequestFolderSources), namedRuntimeSource]
       );
     } catch (_error) {
       return null;
     }
-  }, [store.workspace, store.draftRequest, store.draftCases, caseId, selectedRuntimeEnvironment, requestId, namedRuntimeSource, preferences.runtimeDefaults]);
+  }, [store.workspace, store.draftRequest, store.draftCases, caseId, selectedRuntimeEnvironment, requestId, namedRuntimeSource, currentRequestFolderSources, preferences.runtimeDefaults]);
 
   const currentRequestPreview = currentRequestInsight?.preview || null;
 
@@ -986,9 +1047,14 @@ export function App() {
     setUiState(nextUi);
     setSelectedExampleName(null);
     setRuntimeVariables({});
+    setCategoryVariableRows([]);
     setSessionSnapshot(null);
     setHostSessionSnapshots([]);
     setGitInfo(null);
+    setSelectedGitDiffFile(null);
+    setGitDiffText('');
+    setGitDiffLoading(false);
+    setGitDiffError(null);
     setLastImportSession(loadImportRepairSession(workspace.root));
     setLastSyncAt(loadLastSyncAt(workspace.root));
     setSelectedCollectionId(workspace.collections[0]?.document.id || null);
@@ -1106,7 +1172,7 @@ export function App() {
             variables: runtimeVariables,
             environment: structuredClone(selectedRuntimeEnvironment || environment)
           },
-          extraSources: requestExtraSources(request, promptValues)
+          extraSources: requestExtraSources(request, [], promptValues)
         }
       });
     },
@@ -1149,7 +1215,7 @@ export function App() {
             variables: runtimeVariables,
             environment: structuredClone(selectedRuntimeEnvironment || environment)
           },
-          extraSources: requestExtraSources(request, promptValues)
+          extraSources: requestExtraSources(request, [], promptValues)
         }
       });
     },
@@ -1783,6 +1849,35 @@ export function App() {
     if (root) createMutation.mutate(root);
   }
 
+  async function handleCloneRepository() {
+    const repoUrl = await promptForText({
+      title: 'Clone Git 仓库',
+      label: '仓库地址',
+      placeholder: 'https://github.com/org/repo.git',
+      confirmLabel: '下一步',
+      validate: value => (value.trim() ? null : '请输入仓库地址。')
+    });
+    if (!repoUrl) return;
+    const parent = await chooseDirectory();
+    if (!parent) return;
+    const folderName = await promptForText({
+      title: 'Clone Git 仓库',
+      label: '目标文件夹名',
+      description: `仓库会被 clone 到 ${parent} 下的新目录中。`,
+      defaultValue: inferCloneFolderName(repoUrl),
+      confirmLabel: '开始 Clone',
+      validate: value => (value.trim() ? null : '请输入目标文件夹名。')
+    });
+    if (!folderName) return;
+    try {
+      const root = await gitClone(parent, repoUrl, folderName.trim());
+      notifications.show({ color: 'teal', message: `Repository cloned into ${folderName.trim()}` });
+      openExistingWorkspace(root);
+    } catch (error) {
+      notifications.show({ color: 'red', message: `Failed to clone repository: ${(error as Error).message}` });
+    }
+  }
+
   function handleConfirmCreateCategory() {
     const seed = categoryDraft.trim();
     if (!seed) return;
@@ -1791,6 +1886,18 @@ export function App() {
     setCategoryDraft('');
     setCreatingCategory(false);
     notifications.show({ color: 'teal', message: `Category ${nextPath} is ready. Create a request inside it.` });
+  }
+
+  async function handleSaveCategoryVariables() {
+    if (!store.workspace || !categoryPath) return;
+    await saveFolderVariables(
+      store.workspace.root,
+      categoryPath,
+      categoryVariableRows,
+      selectedCategoryRecord?.filePath
+    );
+    notifications.show({ color: 'teal', message: 'Category variables saved' });
+    await reloadWorkspace({ kind: 'category', path: categoryPath });
   }
 
   async function handleAddEnvironment() {
@@ -1906,7 +2013,7 @@ export function App() {
       const refreshed = await refreshResolvedRequestAuth(store.workspace, requestId, caseId || undefined, {
         environmentName: store.activeEnvironmentName,
         runtimeVariables,
-        extraSources: request ? requestExtraSources(request, promptValues) : [],
+        extraSources: request ? requestExtraSources(request, [], promptValues) : [],
         forceRefresh
       });
       cacheRuntimeEnvironment(refreshed.environment);
@@ -2195,9 +2302,36 @@ export function App() {
   async function handleRefreshGitStatus() {
     if (!store.workspace) return;
     try {
-      setGitInfo(await gitStatus(store.workspace.root));
+      const nextGitInfo = await gitStatus(store.workspace.root);
+      setGitInfo(nextGitInfo);
+      if (!nextGitInfo.changedFiles.length) {
+        setSelectedGitDiffFile(null);
+        setGitDiffText('');
+        setGitDiffError(null);
+        return;
+      }
+      if (selectedGitDiffFile && !nextGitInfo.changedFiles.includes(selectedGitDiffFile)) {
+        setSelectedGitDiffFile(null);
+        setGitDiffText('');
+        setGitDiffError(null);
+      }
     } catch (error) {
       notifications.show({ color: 'red', message: `Failed to read git status: ${(error as Error).message}` });
+    }
+  }
+
+  async function handleLoadGitDiff(path: string) {
+    if (!store.workspace) return;
+    try {
+      setSelectedGitDiffFile(path);
+      setGitDiffLoading(true);
+      setGitDiffError(null);
+      setGitDiffText(await gitDiff(store.workspace.root, path));
+    } catch (error) {
+      setGitDiffError((error as Error).message || 'Failed to load git diff');
+      setGitDiffText('');
+    } finally {
+      setGitDiffLoading(false);
     }
   }
 
@@ -3093,6 +3227,7 @@ export function App() {
         projectName={projectName}
         onProjectNameChange={setProjectName}
         onOpenDirectory={handleOpenDirectory}
+        onCloneRepository={handleCloneRepository}
         onCreateWorkspace={handleCreateWorkspace}
         onSelectRecent={openExistingWorkspace}
       />
@@ -3487,6 +3622,8 @@ export function App() {
                 onTabSelect={store.selectNode}
                 onTabClose={store.closeTab}
                 categoryRequests={categoryRequests}
+                categoryVariableRows={categoryVariableRows}
+                categoryVariablesDirty={categoryVariablesDirty}
                 draftProject={store.draftProject}
                 request={store.draftRequest}
                 response={store.response}
@@ -3506,6 +3643,10 @@ export function App() {
                 sessionSnapshot={sessionSnapshot}
                 mainSplitRatio={uiState.mainSplitRatio}
                 gitStatus={gitInfo}
+                selectedGitDiffFile={selectedGitDiffFile}
+                gitDiffText={gitDiffText}
+                gitDiffLoading={gitDiffLoading}
+                gitDiffError={gitDiffError}
                 onProjectChange={project => store.updateProject(project)}
                 onDeleteProject={handleDeleteProject}
                 onEnvironmentChange={name => store.setActiveEnvironment(name)}
@@ -3526,6 +3667,8 @@ export function App() {
                 onSelectRequest={handleSelectRequest}
                 onOpenImport={() => setImportOpened(true)}
                 onCreateInterface={handleCreateInterface}
+                onCategoryVariablesChange={setCategoryVariableRows}
+                onSaveCategoryVariables={handleSaveCategoryVariables}
                 onCopyToScratch={handleCopyCurrentRequestToScratch}
                 onRequestTabChange={tab => updateUiState(current => ({ ...current, activeRequestTab: tab }))}
                 onResponseTabChange={tab => updateUiState(current => ({ ...current, activeResponseTab: tab }))}
@@ -3549,6 +3692,7 @@ export function App() {
                 }
                 onGitPull={handleGitPull}
                 onGitPush={handleGitPush}
+                onSelectGitDiff={handleLoadGitDiff}
                 onOpenTerminal={() =>
                   store.workspace &&
                   openTerminal(store.workspace.root).catch(error => {

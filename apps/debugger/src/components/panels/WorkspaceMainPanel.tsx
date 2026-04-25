@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import { Badge, Button, Select, Text, TextInput } from '@mantine/core';
+import { Badge, Button, Group, Select, Text, TextInput } from '@mantine/core';
 import {
   IconAlertTriangle,
   IconApi,
@@ -10,6 +10,7 @@ import type {
   CaseDocument,
   CheckResult,
   EnvironmentDocument,
+  ParameterRow,
   ProjectDocument,
   RequestDocument,
   ResolvedRequestInsight,
@@ -20,6 +21,7 @@ import type {
   WorkspaceIndex
 } from '@yapi-debugger/schema';
 import type { RequestTab, ResponseTab, SelectedNode } from '../../store/workspace-store';
+import { CodeEditor } from '../editors/CodeEditor';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
 import { Resizer } from '../primitives/Resizer';
 import { RequestPanel } from './RequestPanel';
@@ -46,7 +48,10 @@ function projectBreadcrumbs(project: ProjectDocument, selectedNode: SelectedNode
 }
 
 function projectCounts(workspace: WorkspaceIndex) {
-  const categorySet = new Set(workspace.requests.map(item => item.folderSegments.join('/')).filter(Boolean));
+  const categorySet = new Set([
+    ...workspace.requests.map(item => item.folderSegments.join('/')).filter(Boolean),
+    ...workspace.folders.map(item => item.path).filter(Boolean)
+  ]);
   const caseTotal = workspace.requests.reduce((total, item) => total + item.cases.length, 0);
   return {
     categories: categorySet.size,
@@ -60,6 +65,8 @@ export function WorkspaceMainPanel(props: {
   selectedNode: SelectedNode;
   openTabs: SelectedNode[];
   categoryRequests: WorkspaceIndex['requests'];
+  categoryVariableRows: ParameterRow[];
+  categoryVariablesDirty: boolean;
   draftProject: ProjectDocument | null;
   request: RequestDocument | null;
   response: SendRequestResult | null;
@@ -79,6 +86,10 @@ export function WorkspaceMainPanel(props: {
   sessionSnapshot: SessionSnapshot | null;
   mainSplitRatio: number;
   gitStatus?: GitStatusPayload | null;
+  selectedGitDiffFile?: string | null;
+  gitDiffText?: string;
+  gitDiffLoading?: boolean;
+  gitDiffError?: string | null;
   onProjectChange: (project: ProjectDocument) => void;
   onDeleteProject: () => void;
   onEnvironmentChange: (name: string) => void;
@@ -92,6 +103,8 @@ export function WorkspaceMainPanel(props: {
   onSelectRequest: (requestId: string) => void;
   onOpenImport: () => void;
   onCreateInterface: () => void;
+  onCategoryVariablesChange: (rows: ParameterRow[]) => void;
+  onSaveCategoryVariables: () => void;
   onCopyToScratch: () => void;
   onRequestTabChange: (tab: RequestTab) => void;
   onResponseTabChange: (tab: ResponseTab | 'json' | 'cookies' | 'compare') => void;
@@ -114,6 +127,7 @@ export function WorkspaceMainPanel(props: {
   onCopySuggestedCommitMessage?: () => void;
   onGitPull?: () => void;
   onGitPush?: () => void;
+  onSelectGitDiff?: (path: string) => void;
   onOpenTerminal?: () => void;
   onTabSelect: (node: SelectedNode) => void;
   onTabClose: (node: SelectedNode) => void;
@@ -269,17 +283,53 @@ export function WorkspaceMainPanel(props: {
                 <div className="checks-list" style={{ marginTop: 12 }}>
                   {props.gitStatus.changedFiles.length > 0 ? (
                     props.gitStatus.changedFiles.slice(0, 12).map(file => (
-                      <div key={file} className="check-result-row">
+                      <button
+                        key={file}
+                        type="button"
+                        className="check-result-row"
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          border: '1px solid transparent',
+                          background: props.selectedGitDiffFile === file ? 'var(--accent-soft)' : 'transparent',
+                          borderRadius: 8,
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => props.onSelectGitDiff?.(file)}
+                      >
                         <div className="tree-row-copy">
                           <strong>{file.split('/').at(-1)}</strong>
                           <span>{file}</span>
                         </div>
-                      </div>
+                      </button>
                     ))
                   ) : (
                     <div className="empty-tab-state">Working tree is clean.</div>
                   )}
                 </div>
+                {props.selectedGitDiffFile ? (
+                  <div className="check-card" style={{ marginTop: 12 }}>
+                    <Group justify="space-between">
+                      <Text fw={700}>Visual Diff</Text>
+                      <Badge variant="light" color="indigo">{props.selectedGitDiffFile}</Badge>
+                    </Group>
+                    {props.gitDiffError ? (
+                      <div className="empty-tab-state">{props.gitDiffError}</div>
+                    ) : (
+                      <>
+                        <Text size="xs" c="dimmed" mb={8}>
+                          {props.gitDiffLoading ? 'Loading diff…' : 'Inspect the current diff without leaving the debugger.'}
+                        </Text>
+                        <CodeEditor
+                          value={props.gitDiffText || ''}
+                          readOnly
+                          language="text"
+                          minHeight="220px"
+                        />
+                      </>
+                    )}
+                  </div>
+                ) : null}
               </>
             ) : (
               <div className="empty-tab-state" style={{ marginTop: 12 }}>This workspace is not inside a Git repository.</div>
@@ -307,15 +357,39 @@ export function WorkspaceMainPanel(props: {
       <section className="workspace-main">
         {renderTabHeader()}
         {renderToolbar(
-          <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={props.onCreateInterface}>
-            New Request
-          </Button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button
+              size="xs"
+              variant="filled"
+              leftSection={<IconDeviceFloppy size={14} />}
+              onClick={props.onSaveCategoryVariables}
+              disabled={!props.categoryVariablesDirty}
+            >
+              Save Variables
+            </Button>
+            <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={props.onCreateInterface}>
+              New Request
+            </Button>
+          </div>
         )}
 
         <div className="category-workbench">
           <div className="category-header">
             <Text size="xs" fw={700} c="dimmed" style={{ textTransform: 'uppercase' }}>Category</Text>
             <h1 className="section-title">{categoryLabel(props.selectedNode.path)}</h1>
+          </div>
+
+          <div className="check-card">
+            <Text fw={700}>Folder Variables</Text>
+            <Text size="xs" c="dimmed">
+              These variables apply to requests in this category and nested categories. Deeper categories override duplicate keys.
+            </Text>
+            <KeyValueEditor
+              rows={props.categoryVariableRows}
+              onChange={props.onCategoryVariablesChange}
+              nameLabel="Variable"
+              valueLabel="Value"
+            />
           </div>
 
           <div className="category-table">

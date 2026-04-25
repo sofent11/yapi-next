@@ -494,6 +494,7 @@ test('runPreparedRequest retries Digest auth after WWW-Authenticate challenge', 
         resourceDirPath: '/tmp/digest-workspace/requests/digest'
       }
     ],
+    folders: [],
     collections: [],
     tree: []
   };
@@ -1082,6 +1083,85 @@ test('buildWorkspaceIndex merges shared and local environment overlays', () => {
   assert.equal(environment?.localVars?.token, 'secret');
   assert.equal(environment?.headers[0]?.value, 'local');
   assert.equal(environment?.overlayMode, 'overlay');
+});
+
+test('buildWorkspaceIndex keeps folder variable documents and folder-only categories', () => {
+  const index = buildWorkspaceIndex({
+    root: '/tmp/demo',
+    projectContent: `schemaVersion: 3\nname: Demo\ndefaultEnvironment: shared\nruntime:\n  baseUrl: https://api.example.com\n  vars: {}\n  headers: []\n`,
+    fileContents: {
+      '/tmp/demo/requests/orders/_folder.yaml': `schemaVersion: 3\nvariableRows:\n  - name: tenant\n    value: folder-tenant\n    enabled: true\n    kind: text\n`,
+      '/tmp/demo/requests/orders/history/list.request.yaml': `schemaVersion: 3\nid: req_history\nname: History\nkind: http\nmethod: GET\nurl: '{{baseUrl}}/history'\npath: /history\nheaders: []\nquery: []\npathParams: []\nbody:\n  mode: none\n  text: ''\n  fields: []\nauth:\n  type: none\nvars:\n  req: []\n  res: []\nexamples: []\nscripts:\n  preRequest: ''\n  postResponse: ''\n  tests: ''\nruntime:\n  timeoutMs: 30000\n  followRedirects: true\n`
+    }
+  });
+
+  assert.equal(index.folders[0]?.path, 'orders');
+  assert.equal(index.folders[0]?.document.variableRows[0]?.name, 'tenant');
+  assert.equal(index.tree[0]?.children[0]?.kind, 'category');
+  assert.equal(index.tree[0]?.children[0]?.path, 'orders');
+});
+
+test('runCollection resolves folder variables before collection vars', async () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Scoped');
+  request.id = 'req_folder_scope';
+  request.url = '{{baseUrl}}/orders/{{tenant}}';
+  const collection = createEmptyCollection('Scoped Flow');
+  collection.id = 'col_folder_scope';
+  collection.vars.tenant = 'collection-tenant';
+  collection.steps = [createCollectionStep({ key: 'step_1', requestId: request.id, name: 'Scoped step' })];
+  const seenUrls: string[] = [];
+
+  const report = await runCollection({
+    workspace: {
+      root: '/tmp/folder-vars',
+      project,
+      environments: [{ document: environment, filePath: '/tmp/folder-vars/environments/shared.yaml' }],
+      folders: [
+        {
+          path: 'orders',
+          filePath: '/tmp/folder-vars/requests/orders/_folder.yaml',
+          document: {
+            schemaVersion: SCHEMA_VERSION,
+            variableRows: [{ name: 'tenant', value: 'folder-tenant', enabled: true, kind: 'text' }]
+          }
+        }
+      ],
+      requests: [
+        {
+          request,
+          cases: [],
+          folderSegments: ['orders'],
+          requestFilePath: '/tmp/folder-vars/requests/orders/scoped.request.yaml',
+          resourceDirPath: '/tmp/folder-vars/requests/orders/scoped'
+        }
+      ],
+      collections: [{ document: collection, filePath: '/tmp/folder-vars/collections/scoped.collection.yaml', dataText: '' }],
+      tree: [],
+      gitignorePath: '/tmp/folder-vars/.gitignore',
+      gitignoreContent: ''
+    },
+    collectionId: collection.id,
+    sendRequest: async preview => {
+      seenUrls.push(preview.url);
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: preview.url,
+        durationMs: 10,
+        sizeBytes: 2,
+        headers: [],
+        bodyText: '{}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.equal(seenUrls[0], 'https://api.example.com/orders/folder-tenant');
+  assert.equal(report.iterations[0]?.stepRuns[0]?.request?.url, 'https://api.example.com/orders/folder-tenant');
 });
 
 test('inspectResolvedRequest emits blocking diagnostics for missing values', () => {

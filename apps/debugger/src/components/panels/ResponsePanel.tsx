@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Badge, Button, Group, Select, Tabs, Text } from '@mantine/core';
-import { IconAlertCircle, IconBraces, IconCookie, IconDownload, IconEye, IconGitCompare, IconPlayerPlay } from '@tabler/icons-react';
+import { Badge, Button, Group, Select, Tabs, Text, TextInput } from '@mantine/core';
+import { IconAlertCircle, IconBraces, IconCookie, IconDownload, IconEye, IconGitCompare, IconPlayerPlay, IconSearch } from '@tabler/icons-react';
 import type {
   CheckResult,
   RequestDocument,
@@ -94,6 +94,50 @@ function safeJson(text: string) {
   }
 }
 
+function matchesSearch(values: Array<string | number | null | undefined>, needle: string) {
+  if (!needle) return true;
+  return values.some(value => String(value || '').toLowerCase().includes(needle));
+}
+
+function searchBodyLines(text: string, needle: string, limit = 12) {
+  if (!needle) return [] as Array<{ lineNumber: number; text: string }>;
+  return text
+    .split('\n')
+    .map((line, index) => ({ lineNumber: index + 1, text: line }))
+    .filter(entry => entry.text.toLowerCase().includes(needle))
+    .slice(0, limit);
+}
+
+function compareLineRows(left: string, right: string, limit = 24) {
+  const leftLines = left.split('\n');
+  const rightLines = right.split('\n');
+  const length = Math.max(leftLines.length, rightLines.length);
+  const rows: Array<{ lineNumber: number; live: string; saved: string }> = [];
+  for (let index = 0; index < length; index += 1) {
+    const live = leftLines[index] || '';
+    const saved = rightLines[index] || '';
+    if (live === saved) continue;
+    rows.push({ lineNumber: index + 1, live, saved });
+    if (rows.length >= limit) break;
+  }
+  return rows;
+}
+
+function compareStats(left: string, right: string) {
+  const leftLines = left ? left.split('\n') : [];
+  const rightLines = right ? right.split('\n') : [];
+  const length = Math.max(leftLines.length, rightLines.length);
+  let changedLines = 0;
+  for (let index = 0; index < length; index += 1) {
+    if ((leftLines[index] || '') !== (rightLines[index] || '')) changedLines += 1;
+  }
+  return {
+    liveLines: leftLines.length,
+    exampleLines: rightLines.length,
+    changedLines
+  };
+}
+
 function flattenJsonPaths(input: unknown, prefix = '$', rows: Array<{ path: string; value: string }> = []) {
   if (Array.isArray(input)) {
     input.forEach((item, index) => flattenJsonPaths(item, `${prefix}[${index}]`, rows));
@@ -129,10 +173,8 @@ function parseSetCookies(response: SendRequestResult | null) {
 function compareSummary(left: string, right: string) {
   if (!left && !right) return 'No content to compare yet.';
   if (left === right) return 'The live response matches the selected example.';
-  const leftLines = left.split('\n');
-  const rightLines = right.split('\n');
-  const changed = Math.abs(leftLines.length - rightLines.length);
-  return `The bodies differ. Live lines: ${leftLines.length}, example lines: ${rightLines.length}, line delta: ${changed}.`;
+  const stats = compareStats(left, right);
+  return `The bodies differ. Changed lines: ${stats.changedLines}, live lines: ${stats.liveLines}, example lines: ${stats.exampleLines}.`;
 }
 
 function exampleOptionLabel(name: string, role?: string) {
@@ -163,6 +205,7 @@ export function ResponsePanel(props: {
   onExtractValue?: (target: 'local' | 'runtime', input: { suggestedName: string; value: string }) => void;
 }) {
   const [prettifyJson, setPrettifyJson] = useState(true);
+  const [searchText, setSearchText] = useState('');
   const examples = props.requestDocument?.examples || [];
   const selectedExample = examples.find(item => item.name === props.selectedExampleName) || null;
   const liveBody = props.response?.bodyText ?? '';
@@ -176,6 +219,7 @@ export function ResponsePanel(props: {
     () => (parsedJson == null ? displayBody : JSON.stringify(parsedJson, null, 2)),
     [displayBody, parsedJson]
   );
+  const searchNeedle = searchText.trim().toLowerCase();
   const bodyView = parsedJson != null && prettifyJson ? prettyBody : displayBody;
   const mimeType = responseMimeType(props.response, selectedExample?.mimeType);
   const previewKind = responsePreviewKind(mimeType, parsedJson, props.response?.bodyBase64);
@@ -183,9 +227,42 @@ export function ResponsePanel(props: {
     props.response?.bodyBase64 && mimeType
       ? `data:${mimeType};base64,${props.response.bodyBase64}`
       : null;
-  const jsonRows = useMemo(() => flattenJsonPaths(parsedJson).slice(0, 80), [parsedJson]);
+  const allJsonRows = useMemo(() => flattenJsonPaths(parsedJson), [parsedJson]);
+  const jsonRows = useMemo(
+    () =>
+      (searchNeedle
+        ? allJsonRows.filter(row => matchesSearch([row.path, row.value], searchNeedle))
+        : allJsonRows
+      ).slice(0, 80),
+    [allJsonRows, searchNeedle]
+  );
   const responseCookies = useMemo(() => parseSetCookies(props.response), [props.response]);
+  const filteredHeaders = useMemo(
+    () =>
+      props.response?.headers.filter(header => matchesSearch([header.name, header.value], searchNeedle)) || [],
+    [props.response, searchNeedle]
+  );
+  const filteredResponseCookies = useMemo(
+    () => responseCookies.filter(cookie => matchesSearch([cookie.name, cookie.value], searchNeedle)),
+    [responseCookies, searchNeedle]
+  );
   const sessionCookies = props.sessionSnapshot?.cookies || [];
+  const filteredSessionCookies = useMemo(
+    () => sessionCookies.filter(cookie => matchesSearch([cookie.name, cookie.value], searchNeedle)),
+    [searchNeedle, sessionCookies]
+  );
+  const bodyMatches = useMemo(() => searchBodyLines(displayBody, searchNeedle), [displayBody, searchNeedle]);
+  const compareStatsSummary = useMemo(
+    () => compareStats(liveBody, selectedExample?.text || ''),
+    [liveBody, selectedExample]
+  );
+  const diffRows = useMemo(
+    () =>
+      compareLineRows(liveBody, selectedExample?.text || '').filter(row =>
+        matchesSearch([row.lineNumber, row.live, row.saved], searchNeedle)
+      ),
+    [liveBody, searchNeedle, selectedExample]
+  );
 
   return (
     <div className="response-panel">
@@ -207,6 +284,14 @@ export function ResponsePanel(props: {
           ) : null}
         </div>
         <Group gap="xs" wrap="wrap" className="response-header-actions">
+          <TextInput
+            size="xs"
+            className="response-search-input"
+            leftSection={<IconSearch size={14} />}
+            placeholder="搜索 body / JSON / header / cookie"
+            value={searchText}
+            onChange={event => setSearchText(event.currentTarget.value)}
+          />
           <Select
             size="xs"
             className="response-example-select"
@@ -324,6 +409,32 @@ export function ResponsePanel(props: {
               </div>
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {searchNeedle ? (
+        <div className="response-search-summary-grid">
+          <div className="compare-summary-card">
+            <Text fw={700}>搜索命中</Text>
+            <Text size="sm" c="dimmed">
+              body {bodyMatches.length} · JSON {jsonRows.length} · headers {filteredHeaders.length} · cookies {filteredResponseCookies.length + filteredSessionCookies.length}
+            </Text>
+          </div>
+          <div className="compare-summary-card">
+            <Text fw={700}>首批正文摘录</Text>
+            {bodyMatches.length > 0 ? (
+              <div className="response-search-results">
+                {bodyMatches.map(match => (
+                  <div key={`${match.lineNumber}-${match.text}`} className="response-search-result-row">
+                    <strong>L{match.lineNumber}</strong>
+                    <span>{match.text}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Text size="sm" c="dimmed">正文里暂时没有命中当前关键词。</Text>
+            )}
+          </div>
         </div>
       ) : null}
 
@@ -644,6 +755,11 @@ export function ResponsePanel(props: {
                       ? compareSummary(liveBody, selectedExample.text || '')
                       : '选择一个已保存的 Example 或 Baseline，和最新响应做差异对比。'}
                   </Text>
+                  {selectedExample ? (
+                    <Text size="xs" c="dimmed">
+                      Diff snapshot · changed {compareStatsSummary.changedLines} / live {compareStatsSummary.liveLines} / example {compareStatsSummary.exampleLines}
+                    </Text>
+                  ) : null}
                 </div>
                 <div className="response-compare-grid">
                   <div className="check-card">
@@ -667,6 +783,34 @@ export function ResponsePanel(props: {
                     />
                   </div>
                 </div>
+                {selectedExample ? (
+                  <div className="json-inspector-list">
+                    {(searchNeedle ? diffRows : diffRows.slice(0, 12)).map(row => (
+                      <div key={`diff-${row.lineNumber}`} className="response-diff-row">
+                        <div className="response-diff-meta">
+                          <Badge size="xs" variant="light" color="indigo">
+                            L{row.lineNumber}
+                          </Badge>
+                        </div>
+                        <div className="response-diff-columns">
+                          <div className="response-diff-column">
+                            <strong>实时响应</strong>
+                            <span>{row.live || '∅'}</span>
+                          </div>
+                          <div className="response-diff-column">
+                            <strong>已选结果</strong>
+                            <span>{row.saved || '∅'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {diffRows.length === 0 ? (
+                      <div className="empty-tab-state">
+                        {searchNeedle ? '当前搜索词没有命中差异行。' : '当前没有可展示的差异行。'}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </Tabs.Panel>
               <Tabs.Panel value="raw">
                 <CodeEditor value={displayBody} readOnly language="text" minHeight="400px" />

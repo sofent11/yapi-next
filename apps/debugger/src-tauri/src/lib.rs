@@ -839,6 +839,25 @@ fn run_git(root: &str, args: &[&str]) -> Result<std::process::Output, String> {
         .map_err(|error| error.to_string())
 }
 
+fn git_display_path(path: &str) -> String {
+    path.split(" -> ")
+        .last()
+        .unwrap_or(path)
+        .trim()
+        .to_string()
+}
+
+fn null_device() -> &'static str {
+    #[cfg(target_family = "windows")]
+    {
+        "NUL"
+    }
+    #[cfg(not(target_family = "windows"))]
+    {
+        "/dev/null"
+    }
+}
+
 #[tauri::command]
 fn git_status(root: String) -> Result<GitStatusPayload, String> {
     let branch_output = run_git(&root, &["status", "--short", "--branch"])?;
@@ -912,6 +931,73 @@ fn git_push(root: String) -> Result<String, String> {
         return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
     }
     Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+}
+
+#[tauri::command]
+fn git_diff(root: String, path: String) -> Result<String, String> {
+    let normalized_path = git_display_path(&path);
+    let mut sections = Vec::new();
+
+    let unstaged = run_git(&root, &["--no-pager", "diff", "--", &normalized_path])?;
+    if !unstaged.stdout.is_empty() {
+        sections.push(String::from_utf8_lossy(&unstaged.stdout).trim().to_string());
+    }
+
+    let staged = run_git(&root, &["--no-pager", "diff", "--cached", "--", &normalized_path])?;
+    if !staged.stdout.is_empty() {
+        sections.push(String::from_utf8_lossy(&staged.stdout).trim().to_string());
+    }
+
+    if sections.is_empty() {
+        let absolute_path = PathBuf::from(&root).join(&normalized_path);
+        let untracked = Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["--no-pager", "diff", "--no-index", "--", null_device()])
+            .arg(&absolute_path)
+            .output()
+            .map_err(|error| error.to_string())?;
+        if !untracked.stdout.is_empty() {
+            sections.push(String::from_utf8_lossy(&untracked.stdout).trim().to_string());
+        }
+    }
+
+    if sections.is_empty() {
+        return Ok(format!("No diff available for {}", normalized_path));
+    }
+
+    Ok(sections.join("\n\n"))
+}
+
+#[tauri::command]
+fn git_clone(parent: String, repo_url: String, folder_name: String) -> Result<String, String> {
+    let parent_path = PathBuf::from(&parent);
+    if !parent_path.exists() {
+        return Err("Clone parent directory does not exist".into());
+    }
+    let folder = folder_name.trim();
+    if folder.is_empty() {
+        return Err("Clone folder name cannot be empty".into());
+    }
+    let target = parent_path.join(folder);
+    if target.exists() {
+        return Err("Clone target already exists".into());
+    }
+    let output = Command::new("git")
+        .arg("clone")
+        .arg(repo_url.trim())
+        .arg(&target)
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "git clone failed".into()
+        } else {
+            stderr
+        });
+    }
+    Ok(normalize_path(&target.to_string_lossy()))
 }
 
 #[tauri::command]
@@ -1604,6 +1690,8 @@ pub fn run() {
             git_status,
             git_pull,
             git_push,
+            git_diff,
+            git_clone,
             open_terminal,
             request_send,
             websocket_run,

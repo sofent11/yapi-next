@@ -6,6 +6,7 @@ export function WelcomePanel(props: {
   recentRoots: string[];
   onProjectNameChange: (name: string) => void;
   onOpenDirectory: () => void;
+  onCloneRepository: () => void;
   onCreateWorkspace: () => void;
   onSelectRecent: (root: string) => void;
 }) {
@@ -69,6 +70,13 @@ export function WelcomePanel(props: {
                   onClick={props.onOpenDirectory}
                 >
                   打开现有工作区
+                </Button>
+                <Button
+                  variant="default"
+                  leftSection={<IconGitBranch size={16} />}
+                  onClick={props.onCloneRepository}
+                >
+                  Clone Git 仓库
                 </Button>
                 <Button
                   variant="filled"
