@@ -259,6 +259,56 @@ test('resolveRequest signs OAuth1 requests with HMAC-SHA1', () => {
   assert.match(authorization, /oauth_signature="tR3%2BTy81lMeYAr%2FFid0kMTYa%2FWM%3D"/);
 });
 
+test('resolveRequest signs AWS Signature v4 requests', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('AWS IAM');
+  request.method = 'GET';
+  request.url = 'https://iam.amazonaws.com/?Action=ListUsers&Version=2010-05-08';
+  request.auth = {
+    type: 'awsv4',
+    accessKey: 'AKIDEXAMPLE',
+    secretKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+    region: 'us-east-1',
+    service: 'iam',
+    created: '20150830T123600Z'
+  };
+
+  const preview = resolveRequest(project, request, undefined, environment);
+  const authorization = preview.headers.find(header => header.name === 'Authorization')?.value || '';
+
+  assert.equal(preview.headers.find(header => header.name === 'x-amz-date')?.value, '20150830T123600Z');
+  assert.equal(
+    preview.headers.find(header => header.name === 'x-amz-content-sha256')?.value,
+    'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+  );
+  assert.match(authorization, /^AWS4-HMAC-SHA256 /);
+  assert.match(authorization, /Credential=AKIDEXAMPLE\/20150830\/us-east-1\/iam\/aws4_request/);
+  assert.match(authorization, /SignedHeaders=host;x-amz-content-sha256;x-amz-date/);
+  assert.match(authorization, /Signature=65f031d93b4631aedf16a8f7f830cdc8ce2bc5276c307b5a2cc2143d4b68e323/);
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
+  assert.equal(insight.authPreview.some(item => item.name === 'Authorization' && item.status === 'ready'), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-awsv4-auth'), false);
+});
+
+test('inspectResolvedRequest blocks incomplete AWS Signature v4 auth', () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('AWS IAM');
+  request.url = 'https://iam.amazonaws.com/';
+  request.auth = {
+    type: 'awsv4',
+    accessKey: 'AKIDEXAMPLE',
+    region: 'us-east-1',
+    service: 'iam'
+  };
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
+  assert.equal(insight.authPreview.some(item => item.name === 'Authorization' && item.status === 'missing'), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-awsv4-auth' && item.blocking), true);
+});
+
 test('resolveRequest builds WSSE UsernameToken headers', () => {
   const project = createDefaultProject('Demo');
   const environment = createDefaultEnvironment('shared');

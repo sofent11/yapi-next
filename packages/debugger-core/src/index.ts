@@ -1505,6 +1505,25 @@ function buildAuthPreview(
     );
   }
 
+  if (auth.type === 'awsv4') {
+    const missing = [
+      ...(auth.accessKey ? [] : ['accessKey']),
+      ...(auth.secretKey ? [] : ['secretKey']),
+      ...(auth.region ? [] : ['region']),
+      ...(auth.service ? [] : ['service'])
+    ];
+    preview.push(
+      resolvedAuthPreviewItemSchema.parse({
+        target: 'header',
+        name: 'Authorization',
+        value: missing.length === 0 ? 'AWS Signature v4 will be computed from the resolved request.' : '',
+        sourceLabel: profileName ? `environment profile: ${profileName}` : authSource,
+        status: missing.length === 0 ? 'ready' : 'missing',
+        detail: missing.length ? `missing ${missing.join(', ')}` : `${auth.region}/${auth.service}`
+      })
+    );
+  }
+
   if (auth.type === 'wsse') {
     const token = buildWsseUsernameToken({
       auth,
@@ -1584,6 +1603,10 @@ function base64Bytes(bytes: number[]) {
   return output;
 }
 
+function hexBytes(bytes: number[]) {
+  return bytes.map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 function sha1Bytes(input: number[]) {
   const bytes = [...input];
   const bitLength = bytes.length * 8;
@@ -1644,14 +1667,107 @@ function sha1Bytes(input: number[]) {
   return [h0, h1, h2, h3, h4].flatMap(word => [(word >>> 24) & 0xff, (word >>> 16) & 0xff, (word >>> 8) & 0xff, word & 0xff]);
 }
 
-function hmacSha1Base64(key: string, value: string) {
+const SHA256_K = [
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+];
+
+function sha256Bytes(input: number[]) {
+  const bytes = [...input];
+  const bitLength = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  for (let shift = 56; shift >= 0; shift -= 8) {
+    bytes.push((bitLength / 2 ** shift) & 0xff);
+  }
+
+  let h0 = 0x6a09e667;
+  let h1 = 0xbb67ae85;
+  let h2 = 0x3c6ef372;
+  let h3 = 0xa54ff53a;
+  let h4 = 0x510e527f;
+  let h5 = 0x9b05688c;
+  let h6 = 0x1f83d9ab;
+  let h7 = 0x5be0cd19;
+
+  for (let offset = 0; offset < bytes.length; offset += 64) {
+    const words: number[] = [];
+    for (let index = 0; index < 64; index += 1) {
+      if (index < 16) {
+        const position = offset + index * 4;
+        words[index] = ((bytes[position] << 24) | (bytes[position + 1] << 16) | (bytes[position + 2] << 8) | bytes[position + 3]) >>> 0;
+      } else {
+        const s0 = (((words[index - 15] >>> 7) | (words[index - 15] << 25)) ^ ((words[index - 15] >>> 18) | (words[index - 15] << 14)) ^ (words[index - 15] >>> 3)) >>> 0;
+        const s1 = (((words[index - 2] >>> 17) | (words[index - 2] << 15)) ^ ((words[index - 2] >>> 19) | (words[index - 2] << 13)) ^ (words[index - 2] >>> 10)) >>> 0;
+        words[index] = (words[index - 16] + s0 + words[index - 7] + s1) >>> 0;
+      }
+    }
+
+    let a = h0;
+    let b = h1;
+    let c = h2;
+    let d = h3;
+    let e = h4;
+    let f = h5;
+    let g = h6;
+    let h = h7;
+
+    for (let index = 0; index < 64; index += 1) {
+      const s1 = (((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))) >>> 0;
+      const ch = ((e & f) ^ (~e & g)) >>> 0;
+      const temp1 = (h + s1 + ch + SHA256_K[index] + words[index]) >>> 0;
+      const s0 = (((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))) >>> 0;
+      const maj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
+      const temp2 = (s0 + maj) >>> 0;
+      h = g;
+      g = f;
+      f = e;
+      e = (d + temp1) >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temp1 + temp2) >>> 0;
+    }
+
+    h0 = (h0 + a) >>> 0;
+    h1 = (h1 + b) >>> 0;
+    h2 = (h2 + c) >>> 0;
+    h3 = (h3 + d) >>> 0;
+    h4 = (h4 + e) >>> 0;
+    h5 = (h5 + f) >>> 0;
+    h6 = (h6 + g) >>> 0;
+    h7 = (h7 + h) >>> 0;
+  }
+
+  return [h0, h1, h2, h3, h4, h5, h6, h7].flatMap(word => [(word >>> 24) & 0xff, (word >>> 16) & 0xff, (word >>> 8) & 0xff, word & 0xff]);
+}
+
+function hmacBytes(key: number[], value: number[], hash: (bytes: number[]) => number[]) {
   const blockSize = 64;
-  let keyBytes = utf8Bytes(key);
-  if (keyBytes.length > blockSize) keyBytes = sha1Bytes(keyBytes);
+  let keyBytes = [...key];
+  if (keyBytes.length > blockSize) keyBytes = hash(keyBytes);
   while (keyBytes.length < blockSize) keyBytes.push(0);
   const outer = keyBytes.map(byte => byte ^ 0x5c);
   const inner = keyBytes.map(byte => byte ^ 0x36);
-  return base64Bytes(sha1Bytes([...outer, ...sha1Bytes([...inner, ...utf8Bytes(value)])]));
+  return hash([...outer, ...hash([...inner, ...value])]);
+}
+
+function hmacSha1Base64(key: string, value: string) {
+  return base64Bytes(hmacBytes(utf8Bytes(key), utf8Bytes(value), sha1Bytes));
+}
+
+function hmacSha256Bytes(key: number[] | string, value: string) {
+  return hmacBytes(typeof key === 'string' ? utf8Bytes(key) : key, utf8Bytes(value), sha256Bytes);
+}
+
+function sha256Hex(value: string) {
+  return hexBytes(sha256Bytes(utf8Bytes(value)));
 }
 
 function wsseQuotedValue(input: string) {
@@ -1699,6 +1815,156 @@ function buildWsseUsernameToken(input: {
       input.auth.nonce ? 'nonce' : 'generated nonce',
       input.auth.created ? 'created' : 'generated created'
     ].join('; '),
+    missing
+  };
+}
+
+function awsPercentEncode(input: string) {
+  return encodeURIComponent(input)
+    .replace(/[!'()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function safeDecodeUriPart(input: string) {
+  try {
+    return decodeURIComponent(input);
+  } catch (_error) {
+    return input;
+  }
+}
+
+function canonicalAwsPath(pathname: string) {
+  const path = pathname || '/';
+  return path
+    .split('/')
+    .map(segment => awsPercentEncode(safeDecodeUriPart(segment)))
+    .join('/') || '/';
+}
+
+function canonicalAwsQuery(rows: ParameterRow[]) {
+  return rows
+    .filter(row => row.enabled && row.name.trim())
+    .map(row => [awsPercentEncode(row.name), awsPercentEncode(row.value)] as const)
+    .sort((left, right) => left[0].localeCompare(right[0]) || left[1].localeCompare(right[1]))
+    .map(([name, value]) => `${name}=${value}`)
+    .join('&');
+}
+
+function formatAwsDate(input?: string) {
+  if (input?.trim()) {
+    const trimmed = input.trim();
+    if (/^\d{8}T\d{6}Z$/.test(trimmed)) return trimmed;
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().replace(/[:-]|\.\d{3}/g, '');
+    }
+  }
+  return new Date().toISOString().replace(/[:-]|\.\d{3}/g, '');
+}
+
+function awsPayloadHash(body: RequestBody) {
+  if (body.mode === 'file' || body.mode === 'multipart') return 'UNSIGNED-PAYLOAD';
+  if (body.mode === 'form-urlencoded') {
+    return sha256Hex(
+      body.fields
+        .filter(row => row.enabled && row.name.trim())
+        .map(row => `${awsPercentEncode(row.name)}=${awsPercentEncode(row.value)}`)
+        .join('&')
+    );
+  }
+  if (body.mode === 'none') return sha256Hex('');
+  return sha256Hex(body.text || '');
+}
+
+function buildAwsV4Signature(input: {
+  auth: AuthConfig;
+  method: string;
+  url: string;
+  headers: ParameterRow[];
+  query: ParameterRow[];
+  body: RequestBody;
+  project: ProjectDocument;
+  environment: EnvironmentDocument | undefined;
+  extraSources: Array<Record<string, unknown>>;
+}) {
+  const accessKey = resolveAuthValue(input.auth.accessKey || '', undefined, input.project, input.environment, input.extraSources).value;
+  const secretKey = resolveAuthValue(input.auth.secretKey || '', undefined, input.project, input.environment, input.extraSources).value;
+  const region = applyProjectVariables(input.auth.region || '', input.project, input.environment, input.extraSources).trim();
+  const service = applyProjectVariables(input.auth.service || '', input.project, input.environment, input.extraSources).trim();
+  const sessionToken = applyProjectVariables(input.auth.sessionToken || '', input.project, input.environment, input.extraSources).trim();
+  const amzDate = formatAwsDate(input.auth.created);
+  const dateStamp = amzDate.slice(0, 8);
+  const payloadHash = awsPayloadHash(input.body);
+  const missing = [
+    ...(accessKey.trim() ? [] : ['accessKey']),
+    ...(secretKey.trim() ? [] : ['secretKey']),
+    ...(region ? [] : ['region']),
+    ...(service ? [] : ['service'])
+  ];
+
+  let parsed: URL;
+  try {
+    parsed = new URL(input.url);
+  } catch (_error) {
+    missing.push('url');
+    parsed = new URL('https://invalid.local/');
+  }
+
+  if (missing.length > 0) {
+    return {
+      headers: [] as ParameterRow[],
+      signedHeaders: '',
+      authorization: '',
+      missing
+    };
+  }
+
+  const signingHeaders = [
+    ...input.headers.filter(row => row.enabled && row.name.trim()),
+    { name: 'host', value: parsed.host, enabled: true, kind: 'text' as const },
+    { name: 'x-amz-content-sha256', value: payloadHash, enabled: true, kind: 'text' as const },
+    { name: 'x-amz-date', value: amzDate, enabled: true, kind: 'text' as const },
+    ...(sessionToken ? [{ name: 'x-amz-security-token', value: sessionToken, enabled: true, kind: 'text' as const }] : [])
+  ];
+  const headerMap = new Map<string, string>();
+  signingHeaders.forEach(row => {
+    const key = row.name.trim().toLowerCase();
+    const value = String(row.value || '').trim().replace(/\s+/g, ' ');
+    headerMap.set(key, headerMap.has(key) ? `${headerMap.get(key)},${value}` : value);
+  });
+  const sortedHeaderNames = [...headerMap.keys()].sort();
+  const canonicalHeaders = sortedHeaderNames.map(name => `${name}:${headerMap.get(name)}`).join('\n') + '\n';
+  const signedHeaders = sortedHeaderNames.join(';');
+  const canonicalRequest = [
+    input.method.toUpperCase(),
+    canonicalAwsPath(parsed.pathname),
+    canonicalAwsQuery(input.query),
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash
+  ].join('\n');
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credentialScope,
+    sha256Hex(canonicalRequest)
+  ].join('\n');
+  const dateKey = hmacSha256Bytes(`AWS4${secretKey}`, dateStamp);
+  const regionKey = hmacSha256Bytes(dateKey, region);
+  const serviceKey = hmacSha256Bytes(regionKey, service);
+  const signingKey = hmacSha256Bytes(serviceKey, 'aws4_request');
+  const signature = hexBytes(hmacSha256Bytes(signingKey, stringToSign));
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  return {
+    headers: [
+      { name: 'x-amz-date', value: amzDate, enabled: true, kind: 'text' as const, filePath: undefined },
+      { name: 'x-amz-content-sha256', value: payloadHash, enabled: true, kind: 'text' as const, filePath: undefined },
+      ...(sessionToken ? [{ name: 'x-amz-security-token', value: sessionToken, enabled: true, kind: 'text' as const, filePath: undefined }] : []),
+      { name: 'Authorization', value: authorization, enabled: true, kind: 'text' as const, filePath: undefined }
+    ],
+    signedHeaders,
+    authorization,
     missing
   };
 }
@@ -1904,6 +2170,16 @@ function buildPreflightDiagnostics(
       level: 'error',
       blocking: true,
       message: 'OAuth1 auth requires both consumer key and consumer secret.',
+      field: 'auth'
+    });
+  }
+
+  if (auth.type === 'awsv4' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')) {
+    diagnostics.push({
+      code: 'incomplete-awsv4-auth',
+      level: 'error',
+      blocking: true,
+      message: 'AWS Signature v4 auth requires access key, secret key, region, service, and an absolute URL.',
       field: 'auth'
     });
   }
@@ -2157,6 +2433,14 @@ export function inspectResolvedRequest(
                   authInput.nonce || '',
                   authInput.created || ''
                 ].filter(Boolean).join(' | ')
+            : authInput.type === 'awsv4'
+              ? [
+                  authInput.accessKey || '',
+                  authInput.secretKey || '',
+                  authInput.region || '',
+                  authInput.service || '',
+                  authInput.sessionToken || ''
+                ].filter(Boolean).join(' | ')
             : '';
     fields.push(
       collectResolvedField(
@@ -2202,6 +2486,7 @@ export function inspectResolvedRequest(
     (auth.type === 'basic' && !auth.username && !auth.usernameFromVar) ||
     (auth.type === 'apikey' && !auth.key) ||
     (auth.type === 'oauth1' && (!auth.consumerKey || !auth.consumerSecret)) ||
+    (auth.type === 'awsv4' && (!auth.accessKey || !auth.secretKey || !auth.region || !auth.service)) ||
     (auth.type === 'wsse' && ((!auth.username && !auth.usernameFromVar) || (!auth.password && !auth.passwordFromVar && !auth.passwordDigest)))
   ) {
     warnings.push({
@@ -2406,6 +2691,22 @@ export function resolveRequest(
         filePath: undefined
       });
     }
+  }
+  if (auth.type === 'awsv4') {
+    const signed = buildAwsV4Signature({
+      auth,
+      method: caseDocument?.overrides.method || request.method,
+      url: candidateUrl,
+      headers: authHeaders,
+      query: authQuery,
+      body: mergedBody,
+      project,
+      environment,
+      extraSources
+    });
+    signed.headers.forEach(row => {
+      authHeaders.push({ ...row, filePath: row.filePath });
+    });
   }
   if (auth.type === 'wsse') {
     const token = buildWsseUsernameToken({
