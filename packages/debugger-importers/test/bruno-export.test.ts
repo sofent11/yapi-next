@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { serializeRequestToBruno } from '../../debugger-core/src/index';
-import { createEmptyRequest } from '../../debugger-schema/src/index';
-import { importSourceText } from '../src/index';
+import { materializeBrunoCollectionExport, serializeRequestToBruno } from '../../debugger-core/src/index';
+import { createCollectionStep, createDefaultProject, createEmptyCollection, createEmptyRequest } from '../../debugger-schema/src/index';
+import { importBrunoCollectionFiles, importSourceText } from '../src/index';
 
 test('Bruno export writes a modern .bru request and imports it back', () => {
   const request = createEmptyRequest('Create Example');
@@ -102,4 +102,64 @@ test('Bruno export uses Bruno body names for form and GraphQL requests', () => {
   const importedGraphql = importSourceText(graphqlBru).requests[0]?.request;
   assert.equal(importedGraphql?.body.mode, 'graphql');
   assert.match(importedGraphql?.body.graphql?.variables || '', /debugger/);
+});
+
+test('Bruno collection folder import rebuilds requests and a runnable collection', () => {
+  const project = createDefaultProject('Demo API');
+  const createUser = createEmptyRequest('Create User');
+  createUser.id = 'req_create_user';
+  createUser.method = 'POST';
+  createUser.url = '{{baseUrl}}/users';
+  createUser.body = {
+    mode: 'json',
+    mimeType: 'application/json',
+    text: '{"name":"Ada"}',
+    fields: []
+  };
+  const getUser = createEmptyRequest('Get User');
+  getUser.id = 'req_get_user';
+  getUser.url = '{{baseUrl}}/users/{{userId}}';
+  const collection = createEmptyCollection('Smoke Flow');
+  collection.headers = [{ name: 'x-suite', value: 'smoke', enabled: true, kind: 'text' }];
+  collection.vars = { userId: 'u_1' };
+  collection.steps = [
+    createCollectionStep({ requestId: createUser.id }),
+    createCollectionStep({ requestId: getUser.id })
+  ];
+  const writes = materializeBrunoCollectionExport({
+    project,
+    collection,
+    requests: [
+      {
+        request: createUser,
+        cases: [],
+        folderSegments: ['Users'],
+        requestFilePath: '/workspace/requests/users/create.request.yaml',
+        resourceDirPath: '/workspace/requests/users/create'
+      },
+      {
+        request: getUser,
+        cases: [],
+        folderSegments: ['Users'],
+        requestFilePath: '/workspace/requests/users/get.request.yaml',
+        resourceDirPath: '/workspace/requests/users/get'
+      }
+    ]
+  });
+
+  const result = importBrunoCollectionFiles(writes);
+  const importedCollection = result.collections[0]?.collection;
+
+  assert.equal(result.detectedFormat, 'bruno');
+  assert.equal(result.project.name, 'Smoke Flow');
+  assert.equal(result.requests.length, 2);
+  assert.deepEqual(result.requests.map(item => item.folderSegments.join('/')), ['Users', 'Users']);
+  assert.equal(importedCollection?.name, 'Smoke Flow');
+  assert.equal(importedCollection?.headers.find(item => item.name === 'x-suite')?.value, 'smoke');
+  assert.equal(importedCollection?.vars.userId, 'u_1');
+  assert.equal(importedCollection?.steps.length, 2);
+  assert.deepEqual(
+    importedCollection?.steps.map(step => result.requests.find(item => item.request.id === step.requestId)?.request.name),
+    ['Create User', 'Get User']
+  );
 });

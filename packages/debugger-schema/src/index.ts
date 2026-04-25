@@ -543,6 +543,10 @@ export const importResultSchema = z.object({
     request: requestDocumentSchema,
     cases: z.array(caseDocumentSchema).default([])
   })).default([]),
+  collections: z.array(z.object({
+    collection: collectionDocumentSchema,
+    dataText: z.string().default('')
+  })).default([]),
   warnings: z.array(importWarningSchema).default([])
 });
 export type ImportResult = z.infer<typeof importResultSchema>;

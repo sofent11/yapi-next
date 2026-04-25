@@ -51,7 +51,7 @@ import {
   type WorkspaceCollectionRecord,
   type WorkspaceIndex
 } from '@yapi-debugger/schema';
-import { importSourceText } from '@yapi-debugger/importers';
+import { importBrunoCollectionFiles, importSourceText } from '@yapi-debugger/importers';
 import {
   appendCollectionReport,
   appendHistory,
@@ -542,6 +542,7 @@ export function buildImportPreviewSummary(
   const compatibleScriptWarnings = warningsByStatus(result.warnings || [], 'compatible');
   const runnableScore = result.requests.length === 0 ? 0 : Math.max(0, Math.round((runnableRequests / result.requests.length) * 100));
   const nextSteps = [
+    (result.collections || []).length > 0 ? `${result.collections.length} collections will be created from the import source.` : '',
     conflicts > 0 ? `${conflicts} requests match existing names in the same folder. Review the conflict strategy before applying.` : '',
     degradedWarnings > 0 ? `${degradedWarnings} imported items need manual follow-up before they behave like the source collection.` : '',
     unsupportedWarnings > 0 ? `${unsupportedWarnings} scripts or features were preserved as text only and will not execute automatically.` : '',
@@ -621,6 +622,17 @@ export async function importIntoWorkspace(
     }
   };
   await saveProject(root, nextProject);
+
+  const collectionNames = workspace.collections.map(item => item.document.name);
+  for (const importedCollection of result.collections || []) {
+    const collection = {
+      ...importedCollection.collection,
+      name: uniqueCopyName(importedCollection.collection.name, collectionNames)
+    };
+    collectionNames.push(collection.name);
+    const writes = materializeCollectionDocument(collection, root, importedCollection.dataText || '');
+    await Promise.all(writes.map(item => writeDocument(item.path, item.content)));
+  }
 
   for (const importedEnv of result.environments) {
     const existing = workspace.environments.find(item => item.document.name === importedEnv.name)?.document;
@@ -989,6 +1001,24 @@ export async function importFromFile(path: string) {
   return {
     source,
     result: importSourceText(source.content)
+  };
+}
+
+export async function importFromBrunoDirectory(root: string) {
+  const payload = await scanWorkspace(root);
+  const result = importBrunoCollectionFiles(
+    payload.files.map(file => ({
+      path: relativeWorkspacePath(payload.root, file.path),
+      content: file.content
+    }))
+  );
+  return {
+    source: {
+      name: root.split('/').filter(Boolean).at(-1) || 'bruno',
+      content: '',
+      source_type: 'directory'
+    },
+    result
   };
 }
 

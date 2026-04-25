@@ -355,7 +355,7 @@ fn is_workspace_text_file(path: &Path) -> bool {
     }
     matches!(
         path.extension().and_then(|value| value.to_str()),
-        Some("yaml") | Some("yml") | Some("json") | Some("txt")
+        Some("yaml") | Some("yml") | Some("json") | Some("txt") | Some("bru")
     )
 }
 

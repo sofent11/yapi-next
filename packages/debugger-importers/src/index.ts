@@ -3,8 +3,11 @@ import {
   createDefaultEnvironment,
   createDefaultProject,
   createEmptyCase,
+  createCollectionStep,
+  createEmptyCollection,
   createEmptyRequest,
   type CaseDocument,
+  type CollectionDocument,
   type EnvironmentDocument,
   type ImportWarning,
   type ImportResult,
@@ -27,6 +30,11 @@ type ImportContext = {
 
 type BruSection = {
   label: string;
+  content: string;
+};
+
+export type ImportFileEntry = {
+  path: string;
   content: string;
 };
 
@@ -161,6 +169,82 @@ function normalizeBruBodyMode(mode: string) {
   if (normalized === 'formurlencoded' || normalized === 'form-urlencoded') return 'form-urlencoded';
   if (normalized === 'multipartform' || normalized === 'multipart-form') return 'multipart';
   return normalized;
+}
+
+function parseBruCollectionDocument(content: string, name: string): CollectionDocument {
+  const { sections } = parseBruSections(content);
+  const authMeta = parseBruKeyValueBlock(findBruSection(sections, 'auth')?.content || '');
+  const authMode = authMeta.mode || authMeta.type || 'inherit';
+  const authBlock = parseBruKeyValueBlock(
+    findBruSection(sections, `auth:${authMode}`)?.content ||
+      findBruSection(sections, 'auth')?.content ||
+      ''
+  );
+  const vars = Object.fromEntries(
+    parseBruRows(findBruSection(sections, 'vars:pre-request')?.content || '')
+      .filter(row => row.enabled !== false)
+      .map(row => [row.name, row.value])
+  );
+
+  return {
+    ...createEmptyCollection(name),
+    name,
+    headers: parseBruRows(findBruSection(sections, 'headers')?.content || ''),
+    vars,
+    auth: parseBruAuth(authMode, authBlock),
+    scripts: {
+      preRequest: findBruSection(sections, 'script:pre-request')?.content.trim() || '',
+      postResponse: findBruSection(sections, 'script:post-response')?.content.trim() || '',
+      tests: [
+        findBruSection(sections, 'tests')?.content.trim() || '',
+        findBruSection(sections, 'assert')?.content.trim() || ''
+      ].filter(Boolean).join('\n\n')
+    },
+    docs: findBruSection(sections, 'docs')?.content.trim() || ''
+  };
+}
+
+function normalizeImportPath(path: string) {
+  return path.replace(/\\/g, '/').replace(/^\.\/+/, '').replace(/^\/+/, '');
+}
+
+function basename(path: string) {
+  return normalizeImportPath(path).split('/').filter(Boolean).at(-1) || '';
+}
+
+function dirnameSegments(path: string) {
+  const segments = normalizeImportPath(path).split('/').filter(Boolean);
+  return segments.slice(0, -1);
+}
+
+function folderNameMap(files: ImportFileEntry[]) {
+  const map = new Map<string, string>();
+  files.forEach(file => {
+    if (basename(file.path).toLowerCase() !== 'folder.bru') return;
+    const folderSegments = dirnameSegments(file.path);
+    if (folderSegments.length === 0) return;
+    const metadata = parseBruKeyValueBlock(findBruSection(parseBruSections(file.content).sections, 'meta')?.content || '');
+    map.set(folderSegments.join('/'), metadata.name || folderSegments.at(-1) || 'Folder');
+  });
+  return map;
+}
+
+function displayFolderSegments(rawSegments: string[], names: Map<string, string>) {
+  let current = '';
+  return rawSegments.map(segment => {
+    current = current ? `${current}/${segment}` : segment;
+    return names.get(current) || segment;
+  });
+}
+
+function parseBrunoProjectName(content: string | undefined) {
+  if (!content) return 'Imported Bruno Collection';
+  try {
+    const parsed = JSON.parse(content) as { name?: string };
+    return parsed.name || 'Imported Bruno Collection';
+  } catch (_error) {
+    return 'Imported Bruno Collection';
+  }
 }
 
 function parseBruRows(content: string) {
@@ -654,6 +738,7 @@ function importOpenApiLike(document: Record<string, any>): ImportResult {
     project,
     environments,
     requests,
+    collections: [],
     warnings
   };
 }
@@ -726,6 +811,7 @@ function importHar(document: Record<string, any>): ImportResult {
     project,
     environments,
     requests,
+    collections: [],
     warnings
   };
 }
@@ -897,6 +983,7 @@ function importPostman(document: Record<string, any>): ImportResult {
     project,
     environments,
     requests,
+    collections: [],
     warnings
   };
 }
@@ -1042,6 +1129,81 @@ function importBruno(content: string): ImportResult {
         cases: []
       }
     ],
+    collections: [],
+    warnings
+  };
+}
+
+export function importBrunoCollectionFiles(files: ImportFileEntry[]): ImportResult {
+  const normalizedFiles = files
+    .map(file => ({
+      path: normalizeImportPath(file.path),
+      content: file.content
+    }))
+    .filter(file => file.path && file.content != null);
+  const brunoJson = normalizedFiles.find(file => basename(file.path).toLowerCase() === 'bruno.json');
+  const projectName = parseBrunoProjectName(brunoJson?.content);
+  const collectionFile = normalizedFiles.find(file => basename(file.path).toLowerCase() === 'collection.bru');
+  const folderNames = folderNameMap(normalizedFiles);
+  const warnings: ImportWarning[] = [];
+  const requests = normalizedFiles
+    .filter(file => file.path.toLowerCase().endsWith('.bru'))
+    .filter(file => {
+      const name = basename(file.path).toLowerCase();
+      return name !== 'collection.bru' && name !== 'folder.bru';
+    })
+    .filter(file => looksLikeBruno(file.content))
+    .map(file => {
+      const result = importBruno(file.content);
+      warnings.push(...(result.warnings || []));
+      const request = result.requests[0];
+      return request
+        ? {
+            ...request,
+            folderSegments: displayFolderSegments(dirnameSegments(file.path), folderNames),
+            sourcePath: file.path
+          }
+        : null;
+    })
+    .filter((record): record is ImportedRequestRecord & { sourcePath: string } => Boolean(record))
+    .sort((left, right) => {
+      const seqDiff = (left.request.order || 0) - (right.request.order || 0);
+      return seqDiff || left.sourcePath.localeCompare(right.sourcePath, 'zh-CN');
+    });
+
+  const collection = parseBruCollectionDocument(collectionFile?.content || '', projectName);
+  collection.steps = requests.map((record, index) =>
+    createCollectionStep({
+      key: `step_${index + 1}`,
+      requestId: record.request.id,
+      name: record.request.name
+    })
+  );
+
+  warnings.push({
+    level: 'info',
+    scope: 'project',
+    code: 'bruno-collection-import',
+    status: 'compatible',
+    message: `${projectName}: Bruno collection folder imported with ${requests.length} request file${requests.length === 1 ? '' : 's'}.`
+  });
+
+  return {
+    detectedFormat: 'bruno',
+    summary: {
+      requests: requests.length,
+      folders: new Set(requests.map(item => item.folderSegments.join('/')).filter(Boolean)).size,
+      environments: 1
+    },
+    project: createDefaultProject(projectName),
+    environments: [createDefaultEnvironment('shared')],
+    requests: requests.map(({ sourcePath: _sourcePath, ...record }) => record),
+    collections: [
+      {
+        collection,
+        dataText: ''
+      }
+    ],
     warnings
   };
 }
@@ -1070,6 +1232,7 @@ export function importSourceText(content: string): ImportResult {
     project: createDefaultProject('Imported Workspace'),
     environments: [createDefaultEnvironment('shared')],
     requests: [],
+    collections: [],
     warnings: []
   };
 }

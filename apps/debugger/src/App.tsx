@@ -12,6 +12,7 @@ import '@mantine/spotlight/styles.css';
 import {
   chooseDirectory,
   chooseBrunoExportDirectory,
+  chooseBrunoImportDirectory,
   chooseImportFile,
   clearBrowserCaptureSession,
   clearSession,
@@ -55,6 +56,7 @@ import {
   exportBrunoCollection,
   loadCollectionRunReports,
   loadRunHistory,
+  importFromBrunoDirectory,
   importFromFile,
   importFromUrl,
   importIntoWorkspace,
@@ -1095,6 +1097,17 @@ export function App() {
       const filePath = await chooseImportFile();
       if (!filePath) return;
       return importFromFile(filePath);
+    },
+    onSuccess: data => {
+      if (data) store.setImportPreview(data.result);
+    }
+  });
+
+  const importBrunoDirectoryMutation = useMutation({
+    mutationFn: async () => {
+      const root = await chooseBrunoImportDirectory();
+      if (!root) return;
+      return importFromBrunoDirectory(root);
     },
     onSuccess: data => {
       if (data) store.setImportPreview(data.result);
@@ -3396,9 +3409,10 @@ export function App() {
           warnings={store.importPreview?.warnings || []}
           onImportUrlChange={setImportUrl}
           onImportStrategyChange={setImportStrategy}
-          onImportAuthChange={auth => store.setImportAuth(auth)}
-          onChooseFile={() => importFileMutation.mutate()}
-          onPreviewUrl={() => importUrlMutation.mutate()}
+                  onImportAuthChange={auth => store.setImportAuth(auth)}
+                  onChooseFile={() => importFileMutation.mutate()}
+                  onChooseBrunoFolder={() => importBrunoDirectoryMutation.mutate()}
+                  onPreviewUrl={() => importUrlMutation.mutate()}
           onConfirmImport={() => applyImportMutation.mutate()}
           onOpenScratchFromImport={handleOpenImportPreviewInScratch}
         />

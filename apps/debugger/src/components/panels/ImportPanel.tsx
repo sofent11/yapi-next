@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { ActionIcon, Button, Divider, Group, Select, Text, TextInput } from '@mantine/core';
-import { IconArrowRight, IconLink, IconUpload } from '@tabler/icons-react';
+import { IconArrowRight, IconFolderOpen, IconLink, IconUpload } from '@tabler/icons-react';
 import type { ImportAuth, WorkspaceIndex } from '@yapi-debugger/schema';
 
 function warningTone(level: string) {
@@ -38,6 +38,7 @@ export function ImportPanel(props: {
   onImportStrategyChange: (strategy: 'append' | 'replace') => void;
   onImportAuthChange: (auth: ImportAuth) => void;
   onChooseFile: () => void;
+  onChooseBrunoFolder: () => void;
   onPreviewUrl: () => void;
   onConfirmImport: () => void;
   onOpenScratchFromImport: () => void;
@@ -56,6 +57,14 @@ export function ImportPanel(props: {
             fullWidth
           >
             从本地文件导入
+          </Button>
+          <Button
+            variant="default"
+            leftSection={<IconFolderOpen size={16} />}
+            onClick={props.onChooseBrunoFolder}
+            fullWidth
+          >
+            导入 Bruno Collection 文件夹
           </Button>
 
           <Divider label="或者" labelPosition="center" my="lg" />
