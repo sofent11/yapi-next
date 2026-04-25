@@ -1232,6 +1232,93 @@ test('runCollection resolves folder variables before collection vars', async () 
   assert.equal(report.iterations[0]?.stepRuns[0]?.request?.url, 'https://api.example.com/orders/folder-tenant');
 });
 
+test('runCollection executes collection-level scripts around each step', async () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Layered Scripts');
+  request.id = 'req_collection_scripts';
+  request.url = '{{baseUrl}}/orders/{{token}}';
+  request.scripts = {
+    preRequest: 'pm.variables.set("token", `${pm.variables.get("token")}-request`); console.log("request-pre");',
+    postResponse: 'console.log("request-post");',
+    tests: 'pm.test("request status", () => pm.expect(pm.response?.code).to.equal(200));'
+  };
+  const caseDocument = createEmptyCase(request.id, 'scripted');
+  caseDocument.scripts = {
+    preRequest: 'pm.variables.set("token", `${pm.variables.get("token")}-case`); console.log("case-pre");',
+    postResponse: 'pm.test("case sees token", () => pm.expect(pm.variables.get("token")).to.equal("collection-request-case")); console.log("case-post");'
+  };
+  const collection = createEmptyCollection('Scripted Flow');
+  collection.id = 'col_collection_scripts';
+  collection.scripts = {
+    preRequest: 'pm.variables.set("token", "collection"); console.log("collection-pre");',
+    postResponse: 'console.log("collection-post");',
+    tests: 'pm.test("collection status", () => pm.expect(pm.response?.code).to.equal(200));'
+  };
+  collection.steps = [
+    createCollectionStep({
+      key: 'step_scripts',
+      requestId: request.id,
+      caseId: caseDocument.id,
+      name: 'Layered step'
+    })
+  ];
+  const seenUrls: string[] = [];
+
+  const report = await runCollection({
+    workspace: {
+      root: '/tmp/collection-scripts',
+      project,
+      environments: [{ document: environment, filePath: '/tmp/collection-scripts/environments/shared.yaml' }],
+      folders: [],
+      requests: [
+        {
+          request,
+          cases: [caseDocument],
+          folderSegments: [],
+          requestFilePath: '/tmp/collection-scripts/requests/layered.request.yaml',
+          resourceDirPath: '/tmp/collection-scripts/requests/layered'
+        }
+      ],
+      collections: [{ document: collection, filePath: '/tmp/collection-scripts/collections/scripted.collection.yaml', dataText: '' }],
+      tree: []
+    },
+    collectionId: collection.id,
+    sendRequest: async preview => {
+      seenUrls.push(preview.url);
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: preview.url,
+        durationMs: 10,
+        sizeBytes: 2,
+        headers: [{ name: 'content-type', value: 'application/json' }],
+        bodyText: '{}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  const stepRun = report.iterations[0]?.stepRuns[0];
+  assert.equal(seenUrls[0], 'https://api.example.com/orders/collection-request-case');
+  assert.equal(stepRun?.request?.url, 'https://api.example.com/orders/collection-request-case');
+  assert.deepEqual(stepRun?.checkResults.filter(item => item.source === 'script').map(item => item.label), [
+    'collection status',
+    'request status',
+    'case sees token'
+  ]);
+  assert.deepEqual(stepRun?.scriptLogs.map(item => item.message), [
+    'collection-pre',
+    'request-pre',
+    'case-pre',
+    'collection-post',
+    'request-post',
+    'case-post'
+  ]);
+});
+
 test('inspectResolvedRequest emits blocking diagnostics for missing values', () => {
   const project = createDefaultProject('Demo');
   project.runtime.baseUrl = '';

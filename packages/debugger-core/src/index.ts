@@ -48,6 +48,7 @@ import {
   type RequestBody,
   type RequestDocument,
   type RequestKind,
+  type RequestScripts,
   type ResolvedAuthPreviewItem,
   type ResolvedFieldValue,
   type ResolvedRequestInsight,
@@ -4477,6 +4478,7 @@ export type RequestRunContext = {
     variables: Record<string, string>;
     environment: EnvironmentDocument;
   };
+  collectionScripts?: RequestScripts;
   collectionRules?: {
     requireSuccessStatus: boolean;
     maxDurationMs?: number;
@@ -4751,8 +4753,14 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     environment: initialEnvironment
   };
   state.environment = initialEnvironment;
-  const preRequestScript = joinScriptBlocks(input.request.scripts.preRequest, input.caseDocument?.scripts?.preRequest);
+  const preRequestScript = joinScriptBlocks(
+    input.context?.collectionScripts?.preRequest,
+    input.request.scripts.preRequest,
+    input.caseDocument?.scripts?.preRequest
+  );
   const postResponseScript = joinScriptBlocks(
+    input.context?.collectionScripts?.postResponse,
+    input.context?.collectionScripts?.tests,
     input.request.scripts.postResponse,
     input.request.scripts.tests,
     input.caseDocument?.scripts?.postResponse
@@ -4956,6 +4964,7 @@ async function runCollectionStepWithRetry(input: {
             environment: input.runtimeState.environment
           },
           collectionRules: input.collection.rules,
+          collectionScripts: input.collection.scripts,
           sourceCollection: {
             id: input.collection.id,
             name: input.collection.name,

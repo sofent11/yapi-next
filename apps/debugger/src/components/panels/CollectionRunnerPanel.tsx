@@ -576,6 +576,70 @@ export function CollectionRunnerPanel(props: {
               </div>
 
               <div className="inspector-section">
+                <Text className="section-kicker">Scripts</Text>
+                <h3 className="section-title">Collection-level runtime hooks</h3>
+                <Text size="sm" c="dimmed" mb={12}>
+                  These hooks wrap every runnable step in the collection: pre-request runs before request and case scripts, while post-response and tests run before request-level response hooks.
+                </Text>
+                <div className="checks-list">
+                  <div className="check-card">
+                    <Text fw={700}>Collection Pre-request Script</Text>
+                    <CodeEditor
+                      value={draftCollection.scripts.preRequest || ''}
+                      language="text"
+                      onChange={value =>
+                        props.onCollectionChange({
+                          ...draftCollection,
+                          scripts: {
+                            ...draftCollection.scripts,
+                            preRequest: value
+                          }
+                        })
+                      }
+                      minHeight="160px"
+                    />
+                  </div>
+                  <div className="check-card">
+                    <Text fw={700}>Collection Post-response Script</Text>
+                    <CodeEditor
+                      value={draftCollection.scripts.postResponse || ''}
+                      language="text"
+                      onChange={value =>
+                        props.onCollectionChange({
+                          ...draftCollection,
+                          scripts: {
+                            ...draftCollection.scripts,
+                            postResponse: value
+                          }
+                        })
+                      }
+                      minHeight="180px"
+                    />
+                  </div>
+                  <div className="check-card">
+                    <Text fw={700}>Collection Tests</Text>
+                    <Text size="xs" c="dimmed" mt={4}>
+                      Assertions here are evaluated for every executed step and feed the same report/check pipeline as request-level tests.
+                    </Text>
+                    <CodeEditor
+                      value={draftCollection.scripts.tests || ''}
+                      language="text"
+                      onChange={value =>
+                        props.onCollectionChange({
+                          ...draftCollection,
+                          scripts: {
+                            ...draftCollection.scripts,
+                            tests: value
+                          }
+                        })
+                      }
+                      minHeight="160px"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="inspector-section">
                 <div className="checks-head">
                   <div>
                     <Text className="section-kicker">Steps</Text>
