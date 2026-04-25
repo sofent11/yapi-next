@@ -194,6 +194,38 @@ test('Bruno JSON collection export imports back with folders and collection step
     tests: 'expect(res.status).to.equal(201);'
   };
 
+  const graphql = createEmptyRequest('GraphQL Search');
+  graphql.id = 'req_json_graphql_search';
+  graphql.kind = 'graphql';
+  graphql.method = 'POST';
+  graphql.url = '{{baseUrl}}/graphql';
+  graphql.body = {
+    mode: 'graphql',
+    mimeType: 'application/json',
+    text: '',
+    fields: [],
+    graphql: {
+      query: 'query Search($q: String!) { search(q: $q) { id name } }',
+      variables: '{\n  "q": "debugger"\n}',
+      schemaUrl: '{{baseUrl}}/graphql',
+      schemaCache: {
+        endpoint: 'https://api.example.com/graphql',
+        checkedAt: '12:00:00',
+        summary: {
+          ok: true,
+          typeCount: 4,
+          queries: ['search'],
+          mutations: [],
+          subscriptions: [],
+          queryFields: [],
+          mutationFields: [],
+          subscriptionFields: [],
+          warnings: []
+        }
+      }
+    }
+  };
+
   const liveFeed = createEmptyRequest('Live Feed');
   liveFeed.id = 'req_live_feed';
   liveFeed.kind = 'websocket';
@@ -210,6 +242,7 @@ test('Bruno JSON collection export imports back with folders and collection step
   const collection = createEmptyCollection('JSON Smoke');
   collection.steps = [
     createCollectionStep({ requestId: createUser.id }),
+    createCollectionStep({ requestId: graphql.id }),
     createCollectionStep({ requestId: liveFeed.id })
   ];
 
@@ -225,6 +258,13 @@ test('Bruno JSON collection export imports back with folders and collection step
         resourceDirPath: '/workspace/requests/users/create'
       },
       {
+        request: graphql,
+        cases: [],
+        folderSegments: ['GraphQL'],
+        requestFilePath: '/workspace/requests/graphql/search.request.yaml',
+        resourceDirPath: '/workspace/requests/graphql/search'
+      },
+      {
         request: liveFeed,
         cases: [],
         folderSegments: ['Realtime'],
@@ -238,22 +278,26 @@ test('Bruno JSON collection export imports back with folders and collection step
   assert.equal(parsed.name, 'JSON Smoke');
   assert.equal(parsed.items[0].type, 'folder');
   assert.equal(parsed.items[0].items[0].type, 'http-request');
-  assert.equal(parsed.items[1].items[0].type, 'ws-request');
+  assert.equal(parsed.items[1].items[0].type, 'graphql-request');
+  assert.equal(parsed.items[1].items[0].request.body.graphql.schemaCache.summary.typeCount, 4);
+  assert.equal(parsed.items[2].items[0].type, 'ws-request');
 
   const imported = importSourceText(json);
   const importedCreate = imported.requests.find(item => item.request.name === 'Create User')?.request;
+  const importedGraphql = imported.requests.find(item => item.request.name === 'GraphQL Search')?.request;
   const importedWebSocket = imported.requests.find(item => item.request.name === 'Live Feed')?.request;
 
   assert.equal(imported.detectedFormat, 'bruno');
   assert.equal(imported.project.name, 'JSON Smoke');
-  assert.deepEqual(imported.requests.map(item => item.folderSegments.join('/')), ['Users', 'Realtime']);
+  assert.deepEqual(imported.requests.map(item => item.folderSegments.join('/')), ['Users', 'GraphQL', 'Realtime']);
   assert.equal(importedCreate?.body.mode, 'json');
   assert.equal(importedCreate?.auth.type, 'bearer');
   assert.equal(importedCreate?.auth.token, '{{token}}');
   assert.match(importedCreate?.scripts.tests || '', /201/);
+  assert.equal(importedGraphql?.body.graphql?.schemaCache?.summary.typeCount, 4);
   assert.equal(importedWebSocket?.kind, 'websocket');
   assert.equal(importedWebSocket?.body.websocket?.messages[0]?.body, '{"type":"subscribe"}');
-  assert.equal(imported.collections[0]?.collection.steps.length, 2);
+  assert.equal(imported.collections[0]?.collection.steps.length, 3);
 });
 
 test('OpenCollection export imports back with mixed request kinds and environments', () => {
@@ -297,7 +341,24 @@ test('OpenCollection export imports back with mixed request kinds and environmen
     fields: [],
     graphql: {
       query: 'query User($id: ID!) { user(id: $id) { id name } }',
-      variables: '{\n  "id": "42"\n}'
+      variables: '{\n  "id": "42"\n}',
+      operationName: 'User',
+      schemaUrl: '{{baseUrl}}/graphql',
+      schemaCache: {
+        endpoint: 'https://api.example.com/graphql',
+        checkedAt: '12:00:00',
+        summary: {
+          ok: true,
+          typeCount: 5,
+          queries: ['user'],
+          mutations: [],
+          subscriptions: [],
+          queryFields: [],
+          mutationFields: [],
+          subscriptionFields: [],
+          warnings: []
+        }
+      }
     }
   };
 
@@ -354,6 +415,7 @@ test('OpenCollection export imports back with mixed request kinds and environmen
   assert.equal(exported.opencollection, '1.0.0');
   assert.equal(exported.info.name, 'OpenCollection Smoke');
   assert.equal(exported.config.environments[0].name, 'Local');
+  assert.equal(exported.items[1].items[0].graphql.body.schemaCache.summary.typeCount, 5);
 
   const imported = importSourceText(json);
   const importedCreate = imported.requests.find(item => item.request.name === 'Create User')?.request;
@@ -372,5 +434,7 @@ test('OpenCollection export imports back with mixed request kinds and environmen
   assert.equal(importedCreate?.vars.req.find(item => item.name === 'traceId')?.value, 'abc-123');
   assert.equal(importedGraphql?.body.mode, 'graphql');
   assert.match(importedGraphql?.body.graphql?.query || '', /query User/);
+  assert.equal(importedGraphql?.body.graphql?.operationName, 'User');
+  assert.equal(importedGraphql?.body.graphql?.schemaCache?.summary.typeCount, 5);
   assert.equal(importedWebSocket?.body.websocket?.messages[0]?.body, '{"type":"subscribe"}');
 });

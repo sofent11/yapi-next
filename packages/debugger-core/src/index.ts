@@ -1425,7 +1425,8 @@ function brunoJsonBody(body: RequestBody, kind: RequestKind) {
           query: normalized.graphql?.query || normalized.text || '',
           variables: normalized.graphql?.variables || '{}',
           operationName: normalized.graphql?.operationName || undefined,
-          schemaUrl: normalized.graphql?.schemaUrl || undefined
+          schemaUrl: normalized.graphql?.schemaUrl || undefined,
+          schemaCache: normalized.graphql?.schemaCache || undefined
         }
       };
     case 'form-urlencoded':
@@ -1645,7 +1646,10 @@ function openCollectionBody(body: RequestBody, kind: RequestKind): unknown {
   if (kind === 'graphql') {
     return {
       query: normalized.graphql?.query || normalized.text || '',
-      variables: parseJsonOrString(normalized.graphql?.variables || '{}')
+      variables: parseJsonOrString(normalized.graphql?.variables || '{}'),
+      ...(normalized.graphql?.operationName ? { operationName: normalized.graphql.operationName } : {}),
+      ...(normalized.graphql?.schemaUrl ? { schemaUrl: normalized.graphql.schemaUrl } : {}),
+      ...(normalized.graphql?.schemaCache ? { schemaCache: normalized.graphql.schemaCache } : {})
     };
   }
   switch (normalized.mode) {

@@ -1370,7 +1370,8 @@ function openCollectionGraphqlBody(body: any): RequestDocument['body'] {
       query,
       variables,
       operationName,
-      schemaUrl: selected.schemaUrl ? String(selected.schemaUrl) : undefined
+      schemaUrl: selected.schemaUrl ? String(selected.schemaUrl) : undefined,
+      schemaCache: selected.schemaCache && typeof selected.schemaCache === 'object' ? selected.schemaCache : undefined
     }
   };
 }
@@ -2279,7 +2280,8 @@ function brunoJsonBody(body: any): RequestDocument['body'] {
         query,
         variables,
         operationName: graphql.operationName ? String(graphql.operationName) : undefined,
-        schemaUrl: graphql.schemaUrl ? String(graphql.schemaUrl) : undefined
+        schemaUrl: graphql.schemaUrl ? String(graphql.schemaUrl) : undefined,
+        schemaCache: graphql.schemaCache && typeof graphql.schemaCache === 'object' ? graphql.schemaCache : undefined
       }
     };
   }
