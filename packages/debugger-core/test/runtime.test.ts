@@ -640,7 +640,16 @@ test('summarizeGraphqlSchema extracts root operation fields', () => {
             name: 'Profile',
             fields: [
               { name: 'bio', args: [], type: { kind: 'SCALAR', name: 'String' } },
-              { name: 'avatarUrl', args: [], type: { kind: 'SCALAR', name: 'String' } }
+              { name: 'avatarUrl', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'address', args: [], type: { kind: 'OBJECT', name: 'Address' } }
+            ]
+          },
+          {
+            kind: 'OBJECT',
+            name: 'Address',
+            fields: [
+              { name: 'city', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'country', args: [], type: { kind: 'SCALAR', name: 'String' } }
             ]
           },
           { kind: 'SCALAR', name: 'String', fields: null },
@@ -651,10 +660,15 @@ test('summarizeGraphqlSchema extracts root operation fields', () => {
   }));
 
   assert.equal(summary.ok, true);
-  assert.equal(summary.typeCount, 6);
+  assert.equal(summary.typeCount, 7);
   assert.deepEqual(summary.queries, ['viewer', 'search']);
   assert.deepEqual(summary.mutations, ['login']);
-  assert.deepEqual(summary.queryFields[0]?.selection, ['id', 'name', 'profile { bio avatarUrl }', 'friends { id name }']);
+  assert.deepEqual(summary.queryFields[0]?.selection, [
+    'id',
+    'name',
+    'profile {\n  bio\n  avatarUrl\n  address {\n    city\n    country\n  }\n}',
+    'friends {\n  id\n  name\n}'
+  ]);
   assert.equal(summary.queryFields[1]?.args[0]?.type, 'String!');
 });
 
@@ -685,7 +699,15 @@ test('buildGraphqlOperationDraft creates a query skeleton with variables', () =>
             name: 'User',
             fields: [
               { name: 'id', args: [], type: { kind: 'SCALAR', name: 'ID' } },
-              { name: 'name', args: [], type: { kind: 'SCALAR', name: 'String' } }
+              { name: 'name', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'profile', args: [], type: { kind: 'OBJECT', name: 'Profile' } }
+            ]
+          },
+          {
+            kind: 'OBJECT',
+            name: 'Profile',
+            fields: [
+              { name: 'bio', args: [], type: { kind: 'SCALAR', name: 'String' } }
             ]
           },
           { kind: 'SCALAR', name: 'String', fields: null },
@@ -701,6 +723,7 @@ test('buildGraphqlOperationDraft creates a query skeleton with variables', () =>
   assert.match(draft.query, /query QuerySearch\(\$term: String!, \$limit: Int\)/);
   assert.match(draft.query, /search\(term: \$term, limit: \$limit\)/);
   assert.match(draft.query, /id/);
+  assert.match(draft.query, /profile \{\n      bio\n    \}/);
   assert.deepEqual(JSON.parse(draft.variables), { term: '', limit: 20 });
 });
 

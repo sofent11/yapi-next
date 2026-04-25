@@ -385,6 +385,14 @@ function leafSelectionsForType(typeRef: GraphqlIntrospectionTypeRef | null | und
     .slice(0, limit);
 }
 
+function indentGraphqlLines(lines: string[], spaces = 2) {
+  const prefix = ' '.repeat(spaces);
+  return lines
+    .flatMap(line => line.split('\n'))
+    .map(line => `${prefix}${line}`)
+    .join('\n');
+}
+
 function fieldNames(schemaType: unknown) {
   const fields = (schemaType as { fields?: unknown })?.fields;
   if (!Array.isArray(fields)) return [];
@@ -394,21 +402,52 @@ function fieldNames(schemaType: unknown) {
     .slice(0, 48);
 }
 
-function selectionFieldsForType(typeRef: GraphqlIntrospectionTypeRef | null | undefined, byName: Map<string, unknown>) {
+function buildGraphqlSelectionFields(
+  typeRef: GraphqlIntrospectionTypeRef | null | undefined,
+  byName: Map<string, unknown>,
+  input: {
+    depth: number;
+    path: Set<string>;
+    maxFields: number;
+  }
+): string[] {
   const namedType = namedGraphqlType(typeRef);
   const schemaType = byName.get(namedType);
   const kind = schemaTypeKind(schemaType);
   if (!namedType || kind === 'SCALAR' || kind === 'ENUM') return [];
-  const selected = leafSelectionsForType(typeRef, byName, 6);
+
+  const selected = leafSelectionsForType(typeRef, byName, Math.min(6, input.maxFields));
+  if (input.depth <= 0 || selected.length >= input.maxFields) {
+    return selected.length > 0 ? selected : ['__typename'];
+  }
+
+  const nextPath = new Set([...input.path, namedType]);
   const nested = selectableGraphqlFields(typeRef, byName)
     .filter(field => !isGraphqlLeafType(field.type, byName))
-    .slice(0, Math.max(0, 8 - selected.length))
+    .slice(0, Math.max(0, input.maxFields - selected.length))
     .map(field => {
-      const childSelections = leafSelectionsForType(field.type, byName, 4);
-      return `${String(field.name)} { ${childSelections.length > 0 ? childSelections.join(' ') : '__typename'} }`;
+      const fieldName = String(field.name);
+      const childType = namedGraphqlType(field.type);
+      const childSelection = nextPath.has(childType)
+        ? leafSelectionsForType(field.type, byName, 4)
+        : buildGraphqlSelectionFields(field.type, byName, {
+            depth: input.depth - 1,
+            path: nextPath,
+            maxFields: 6
+          });
+      return `${fieldName} {\n${indentGraphqlLines(childSelection.length > 0 ? childSelection : ['__typename'], 2)}\n}`;
     });
+
   selected.push(...nested);
   return selected.length > 0 ? selected : ['__typename'];
+}
+
+function selectionFieldsForType(typeRef: GraphqlIntrospectionTypeRef | null | undefined, byName: Map<string, unknown>) {
+  return buildGraphqlSelectionFields(typeRef, byName, {
+    depth: 2,
+    path: new Set(),
+    maxFields: 8
+  });
 }
 
 function operationFields(schemaType: unknown, byName: Map<string, unknown>): GraphqlOperationFieldSummary[] {
@@ -561,7 +600,7 @@ export function buildGraphqlOperationDraft(
   const variableDefinitions = field.args.map(arg => `$${arg.name}: ${arg.type}`).join(', ');
   const callArguments = field.args.map(arg => `${arg.name}: $${arg.name}`).join(', ');
   const selection = field.selection.length > 0
-    ? ` {\n    ${field.selection.join('\n    ')}\n  }`
+    ? ` {\n${indentGraphqlLines(field.selection, 4)}\n  }`
     : '';
   const variables = Object.fromEntries(field.args.map(arg => [arg.name, placeholderForGraphqlType(arg.type, arg.defaultValue)]));
   return {
