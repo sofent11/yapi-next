@@ -61,6 +61,16 @@ export async function chooseDirectory() {
   return typeof result === 'string' ? result : null;
 }
 
+export async function chooseBrunoExportDirectory() {
+  const result = await open({
+    directory: true,
+    multiple: false,
+    title: 'Select Bruno Export Directory'
+  });
+
+  return typeof result === 'string' ? result : null;
+}
+
 export async function chooseImportFile() {
   const result = await open({
     multiple: false,

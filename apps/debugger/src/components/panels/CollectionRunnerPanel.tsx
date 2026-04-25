@@ -93,6 +93,7 @@ export function CollectionRunnerPanel(props: {
   onOpenCase?: (requestId: string, caseId: string) => void;
   onExtractValue?: (target: 'local' | 'runtime' | 'collection', input: { suggestedName: string; value: string }) => void;
   onExportReport?: (format: 'json' | 'html' | 'junit') => void;
+  onExportBruno?: () => void;
   onCopyText?: (value: string, successMessage: string) => void;
 }) {
   const [reportFilter, setReportFilter] = useState('');
@@ -361,9 +362,14 @@ export function CollectionRunnerPanel(props: {
                     <Text className="section-kicker">Design</Text>
                     <h3 className="section-title">Collection settings and run policy</h3>
                   </div>
-                  <Badge variant="light" color="gray">
-                    {draftCollection.steps.length} steps · {selectedCollectionReportCount} reports
-                  </Badge>
+                  <Group gap={6}>
+                    <Button size="xs" variant="default" onClick={props.onExportBruno} disabled={!props.onExportBruno}>
+                      Export Bruno
+                    </Button>
+                    <Badge variant="light" color="gray">
+                      {draftCollection.steps.length} steps · {selectedCollectionReportCount} reports
+                    </Badge>
+                  </Group>
                 </div>
                 <Text size="sm" c="dimmed" mb={12}>
                   Define the reusable flow here: environment defaults, retries, required paths, and the execution rules that should travel with the collection.

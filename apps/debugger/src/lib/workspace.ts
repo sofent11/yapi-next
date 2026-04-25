@@ -6,6 +6,7 @@ import {
   inspectResolvedRequest,
   interpolateString,
   materializeCollectionDocument,
+  materializeBrunoCollectionExport,
   materializeEnvironmentDocuments,
   materializeProjectDocument,
   materializeRequestDocuments,
@@ -736,6 +737,20 @@ export async function saveCollectionRecord(
 
   const writes = materializeCollectionDocument(collection, root, dataText);
   await Promise.all(writes.map(item => writeDocument(item.path, item.content)));
+}
+
+export async function exportBrunoCollection(
+  workspace: WorkspaceIndex,
+  targetRoot: string,
+  collection?: CollectionDocument
+) {
+  const writes = materializeBrunoCollectionExport({
+    project: workspace.project,
+    requests: workspace.requests,
+    collection
+  });
+  await Promise.all(writes.map(item => writeDocument(`${targetRoot}/${item.path}`, item.content)));
+  return writes;
 }
 
 export async function createRequestInWorkspace(root: string, folderPath: string | null) {

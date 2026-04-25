@@ -11,6 +11,7 @@ import { SCHEMA_VERSION, createCollectionStep, createEmptyCase, createEmptyColle
 import '@mantine/spotlight/styles.css';
 import {
   chooseDirectory,
+  chooseBrunoExportDirectory,
   chooseImportFile,
   clearBrowserCaptureSession,
   clearSession,
@@ -51,6 +52,7 @@ import {
   deleteRequestInWorkspace,
   duplicateCaseInWorkspace,
   duplicateRequestInWorkspace,
+  exportBrunoCollection,
   loadCollectionRunReports,
   loadRunHistory,
   importFromFile,
@@ -2008,6 +2010,22 @@ export function App() {
     notifications.show({ color: 'teal', message: `Collection report exported as ${format.toUpperCase()}` });
   }
 
+  async function handleExportSelectedCollectionBruno() {
+    if (!store.workspace || !draftCollection) {
+      notifications.show({ color: 'blue', message: 'Select a collection first.' });
+      return;
+    }
+
+    const targetRoot = await chooseBrunoExportDirectory();
+    if (!targetRoot) return;
+
+    const writes = await exportBrunoCollection(store.workspace, targetRoot, draftCollection);
+    notifications.show({
+      color: 'teal',
+      message: `Bruno collection exported with ${writes.length} files.`
+    });
+  }
+
   async function handleRefreshGitStatus() {
     if (!store.workspace) return;
     try {
@@ -3240,6 +3258,7 @@ export function App() {
                   onOpenCase={handleSelectCase}
                   onExtractValue={handleExtractCollectionReportValue}
                   onExportReport={handleExportSelectedCollectionReport}
+                  onExportBruno={handleExportSelectedCollectionBruno}
                   onCopyText={(value, successMessage) => {
                     void copyToClipboard(value, successMessage);
                   }}

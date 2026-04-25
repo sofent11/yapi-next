@@ -1169,6 +1169,150 @@ export function serializeRequestToBruno(input: RequestDocument) {
   return `${blocks.join('\n\n')}\n`;
 }
 
+function brunoJsonDocument(name: string) {
+  return JSON.stringify({
+    version: '1',
+    name,
+    type: 'collection'
+  }, null, 2) + '\n';
+}
+
+function brunoCollectionBru(collection: CollectionDocument | undefined, project: ProjectDocument) {
+  if (!collection) {
+    return bruTextBlock('docs', `${project.name} exported from YAPI Debugger.`) + '\n';
+  }
+
+  const variableRows = [
+    ...Object.entries(collection.vars || {}).map(([name, value]) => ({
+      ...emptyParameterRow(),
+      name,
+      value,
+      enabled: true
+    })),
+    ...collection.variableRows
+      .filter(row => row.scope === 'collection' || row.scope === 'request')
+      .map(row => ({
+        ...emptyParameterRow(),
+        ...row
+      }))
+  ];
+  const blocks = [
+    bruRowsBlock('headers', collection.headers),
+    bruDictionaryBlock('auth', [['mode', bruAuthMode(collection.auth)]]),
+    bruAuthBlock(collection.auth),
+    bruRowsBlock('vars:pre-request', variableRows),
+    collection.scripts.preRequest.trim() ? bruTextBlock('script:pre-request', collection.scripts.preRequest.trim()) : '',
+    collection.scripts.postResponse.trim() ? bruTextBlock('script:post-response', collection.scripts.postResponse.trim()) : '',
+    collection.scripts.tests.trim() ? bruTextBlock('tests', collection.scripts.tests.trim()) : '',
+    collection.docs.trim() ? bruTextBlock('docs', collection.docs.trim()) : bruTextBlock('docs', `${collection.name} exported from YAPI Debugger.`)
+  ].filter(Boolean);
+
+  return `${blocks.join('\n\n')}\n`;
+}
+
+function brunoFolderBru(name: string, seq: number) {
+  return `${bruDictionaryBlock('meta', [
+    ['name', name],
+    ['seq', seq]
+  ])}\n`;
+}
+
+function orderedBrunoRequestRecords(
+  requests: WorkspaceRequestRecord[],
+  collection?: CollectionDocument
+) {
+  if (!collection) {
+    return requests
+      .slice()
+      .sort((left, right) => {
+        const orderDiff = (left.request.order || 0) - (right.request.order || 0);
+        return orderDiff || left.requestFilePath.localeCompare(right.requestFilePath, 'zh-CN');
+      })
+      .map((record, index) => ({ record, seq: index + 1 }));
+  }
+
+  const byId = new Map(requests.map(record => [record.request.id, record]));
+  const orderedSteps = [
+    ...collection.setupSteps,
+    ...collection.steps,
+    ...collection.teardownSteps
+  ].filter(step => step.enabled !== false);
+  const seen = new Set<string>();
+  return orderedSteps
+    .map(step => byId.get(step.requestId))
+    .filter((record): record is WorkspaceRequestRecord => Boolean(record))
+    .filter(record => {
+      if (seen.has(record.request.id)) return false;
+      seen.add(record.request.id);
+      return true;
+    })
+    .map((record, index) => ({ record, seq: index + 1 }));
+}
+
+function uniqueBrunoPath(used: Set<string>, folderSegments: string[], requestName: string) {
+  const folder = folderSegments.map(segment => slugify(segment)).filter(Boolean);
+  const base = slugify(requestName || 'request') || 'request';
+  let candidate = [...folder, `${base}.bru`].join('/');
+  let suffix = 2;
+  while (used.has(candidate)) {
+    candidate = [...folder, `${base}-${suffix}.bru`].join('/');
+    suffix += 1;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
+export function materializeBrunoCollectionExport(input: {
+  project: ProjectDocument;
+  requests: WorkspaceRequestRecord[];
+  collection?: CollectionDocument;
+}) {
+  const collection = input.collection ? collectionDocumentSchema.parse(input.collection) : undefined;
+  const project = projectDocumentSchema.parse(input.project);
+  const name = collection?.name || project.name;
+  const ordered = orderedBrunoRequestRecords(input.requests, collection);
+  const writes: WorkspaceFileWrite[] = [
+    { path: 'bruno.json', content: brunoJsonDocument(name) },
+    { path: 'collection.bru', content: brunoCollectionBru(collection, project) }
+  ];
+  const folders = new Map<string, { name: string; seq: number }>();
+  const usedPaths = new Set(writes.map(write => write.path));
+
+  ordered.forEach(({ record }) => {
+    let currentPath = '';
+    record.folderSegments.forEach((segment, index) => {
+      currentPath = currentPath ? `${currentPath}/${slugify(segment)}` : slugify(segment);
+      if (!folders.has(currentPath)) {
+        folders.set(currentPath, { name: segment, seq: folders.size + index + 1 });
+      }
+    });
+  });
+
+  [...folders.entries()]
+    .sort(([left], [right]) => left.localeCompare(right, 'zh-CN'))
+    .forEach(([folderPath, folder]) => {
+      const path = `${folderPath}/folder.bru`;
+      usedPaths.add(path);
+      writes.push({
+        path,
+        content: brunoFolderBru(folder.name, folder.seq)
+      });
+    });
+
+  ordered.forEach(({ record, seq }) => {
+    const request = requestDocumentSchema.parse({
+      ...record.request,
+      order: seq
+    });
+    writes.push({
+      path: uniqueBrunoPath(usedPaths, record.folderSegments, request.name),
+      content: serializeRequestToBruno(request)
+    });
+  });
+
+  return writes;
+}
+
 export function materializeRequestDocuments(
   records: Array<{
     folderSegments: string[];

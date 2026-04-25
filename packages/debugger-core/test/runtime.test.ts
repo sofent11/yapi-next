@@ -11,6 +11,7 @@ import {
   executeRequestScript,
   inspectCollectionDataText,
   inspectResolvedRequest,
+  materializeBrunoCollectionExport,
   renderCollectionRunReportHtml,
   renderCollectionRunReportJunit,
   rerunFailedStepKeys,
@@ -152,6 +153,62 @@ test('buildCurlCommand emits a runnable curl string', () => {
   assert.match(curl, /curl -X POST/);
   assert.match(curl, /Authorization: Bearer token/);
   assert.match(curl, /--data-raw/);
+});
+
+test('materializeBrunoCollectionExport writes Bruno collection files for ordered steps', () => {
+  const project = createDefaultProject('Demo API');
+  const first = createEmptyRequest('Create User');
+  first.id = 'req_create_user';
+  first.method = 'POST';
+  first.url = '{{baseUrl}}/users';
+  first.body = {
+    mode: 'json',
+    mimeType: 'application/json',
+    text: '{"name":"Ada"}',
+    fields: []
+  };
+  const second = createEmptyRequest('Get User');
+  second.id = 'req_get_user';
+  second.url = '{{baseUrl}}/users/{{userId}}';
+  second.query = [{ name: 'expand', value: 'roles', enabled: true, kind: 'text' }];
+  const collection = createEmptyCollection('Smoke Flow');
+  collection.vars = { userId: 'u_1' };
+  collection.headers = [{ name: 'x-suite', value: 'smoke', enabled: true, kind: 'text' }];
+  collection.steps = [
+    createCollectionStep({ requestId: second.id, name: 'Fetch user' }),
+    createCollectionStep({ requestId: first.id, name: 'Create user' })
+  ];
+
+  const writes = materializeBrunoCollectionExport({
+    project,
+    collection,
+    requests: [
+      {
+        request: first,
+        cases: [],
+        folderSegments: ['users'],
+        requestFilePath: '/workspace/requests/users/create.request.yaml',
+        resourceDirPath: '/workspace/requests/users/create'
+      },
+      {
+        request: second,
+        cases: [],
+        folderSegments: ['users'],
+        requestFilePath: '/workspace/requests/users/get.request.yaml',
+        resourceDirPath: '/workspace/requests/users/get'
+      }
+    ]
+  });
+
+  const map = new Map(writes.map(write => [write.path, write.content]));
+
+  assert.equal(JSON.parse(map.get('bruno.json') || '{}').name, 'Smoke Flow');
+  assert.match(map.get('collection.bru') || '', /headers \{/);
+  assert.match(map.get('collection.bru') || '', /vars:pre-request \{/);
+  assert.match(map.get('users\/folder.bru') || '', /name: users/);
+  assert.match(map.get('users\/get-user.bru') || '', /seq: 1/);
+  assert.match(map.get('users\/create-user.bru') || '', /seq: 2/);
+  assert.match(map.get('users\/create-user.bru') || '', /body:json \{/);
 });
 
 test('schema v3 preserves Bruno parity request metadata', () => {
