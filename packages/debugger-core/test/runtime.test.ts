@@ -27,7 +27,8 @@ import {
   createDefaultEnvironment,
   createDefaultProject,
   createEmptyCase,
-  createEmptyRequest
+  createEmptyRequest,
+  requestDocumentSchema
 } from '../../debugger-schema/src/index';
 
 test('resolveRequest interpolates step and data variables with correct priority', () => {
@@ -228,7 +229,23 @@ test('schema v3 preserves Bruno parity request metadata', () => {
     fields: [],
     graphql: {
       query: 'query Ping { ping }',
-      variables: '{}'
+      variables: '{}',
+      schemaUrl: 'https://api.example.com/graphql',
+      schemaCache: {
+        endpoint: 'https://api.example.com/graphql',
+        checkedAt: '12:00:00',
+        summary: {
+          ok: true,
+          typeCount: 3,
+          queries: ['ping'],
+          mutations: [],
+          subscriptions: [],
+          queryFields: [],
+          mutationFields: [],
+          subscriptionFields: [],
+          warnings: []
+        }
+      }
     }
   };
   request.auth = {
@@ -242,6 +259,7 @@ test('schema v3 preserves Bruno parity request metadata', () => {
   assert.equal(request.schemaVersion, SCHEMA_VERSION);
   assert.equal(request.kind, 'graphql');
   assert.equal(request.body.mode, 'graphql');
+  assert.equal(requestDocumentSchema.parse(request).body.graphql?.schemaCache?.endpoint, 'https://api.example.com/graphql');
   assert.equal(request.auth.type, 'awsv4');
 });
 

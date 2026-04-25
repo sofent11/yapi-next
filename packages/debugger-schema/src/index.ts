@@ -148,7 +148,12 @@ export const requestBodySchema = z.object({
     query: z.string().default(''),
     variables: z.string().default(''),
     operationName: z.string().optional(),
-    schemaUrl: z.string().optional()
+    schemaUrl: z.string().optional(),
+    schemaCache: z.object({
+      endpoint: z.string().optional(),
+      checkedAt: z.string().optional(),
+      summary: z.unknown()
+    }).optional()
   }).optional(),
   grpc: z.object({
     protoFile: z.string().optional(),

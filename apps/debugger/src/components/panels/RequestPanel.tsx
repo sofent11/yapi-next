@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, Group, NumberInput, Select, Tabs, Text, TextInput, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { 
@@ -112,6 +112,28 @@ type GraphqlIntrospectionState = {
   error?: string;
 };
 
+function isGraphqlSchemaSummary(value: unknown): value is GraphqlSchemaSummary {
+  const candidate = value as GraphqlSchemaSummary | undefined;
+  return Boolean(candidate) &&
+    typeof candidate?.ok === 'boolean' &&
+    typeof candidate?.typeCount === 'number' &&
+    Array.isArray(candidate?.queryFields) &&
+    Array.isArray(candidate?.mutationFields) &&
+    Array.isArray(candidate?.subscriptionFields) &&
+    Array.isArray(candidate?.warnings);
+}
+
+function graphqlIntrospectionStateFromBody(body: RequestBody): GraphqlIntrospectionState {
+  const cache = body.graphql?.schemaCache;
+  if (!cache || !isGraphqlSchemaSummary(cache.summary)) return { loading: false };
+  return {
+    loading: false,
+    endpoint: cache.endpoint || body.graphql?.schemaUrl,
+    checkedAt: cache.checkedAt,
+    summary: cache.summary
+  };
+}
+
 type WebSocketRunState = {
   loading: boolean;
   result?: WebSocketRunResult;
@@ -217,8 +239,20 @@ export function RequestPanel(props: {
   const attentionDiagnostics = resolvedInsight.diagnostics.filter(item => !item.blocking);
   const activeSection = requestSectionForTab(props.activeTab);
   const visibleTabs = new Set<RequestTab>(tabOptionsForSection(activeSection));
-  const [graphqlIntrospection, setGraphqlIntrospection] = useState<GraphqlIntrospectionState>({ loading: false });
+  const [graphqlIntrospection, setGraphqlIntrospection] = useState<GraphqlIntrospectionState>(() => graphqlIntrospectionStateFromBody(body));
   const [websocketRun, setWebsocketRun] = useState<WebSocketRunState>({ loading: false });
+
+  useEffect(() => {
+    setGraphqlIntrospection(current => {
+      if (current.loading) return current;
+      return graphqlIntrospectionStateFromBody(body);
+    });
+  }, [
+    requestDocument.id,
+    selectedCase?.id,
+    body.graphql?.schemaCache?.endpoint,
+    body.graphql?.schemaCache?.checkedAt
+  ]);
 
   function updateSelectedCase(updater: (current: CaseDocument) => CaseDocument) {
     if (!selectedCase) return;
@@ -303,6 +337,19 @@ export function RequestPanel(props: {
       };
       setGraphqlIntrospection(nextState);
       if (response.ok && summary.ok) {
+        updateBody({
+          ...body,
+          mode: 'graphql',
+          mimeType: 'application/json',
+          graphql: {
+            ...graphqlBody,
+            schemaCache: {
+              endpoint: introspectionRequest.url,
+              checkedAt: nextState.checkedAt,
+              summary
+            }
+          }
+        });
         notifications.show({ color: 'teal', message: `GraphQL schema loaded: ${summary.typeCount} types` });
       } else {
         notifications.show({ color: 'orange', message: summary.warnings[0] || nextState.error || 'GraphQL schema response needs review' });
@@ -333,6 +380,16 @@ export function RequestPanel(props: {
       }
     });
     notifications.show({ color: 'teal', message: `${draft.operationName} inserted` });
+  }
+
+  function clearGraphqlSchemaCache() {
+    const { schemaCache: _schemaCache, ...nextGraphql } = graphqlBody;
+    updateBody({
+      ...body,
+      graphql: nextGraphql
+    });
+    setGraphqlIntrospection({ loading: false });
+    notifications.show({ color: 'blue', message: 'GraphQL schema cache cleared' });
   }
 
   function updateWebSocketMessages(messages: NonNullable<RequestBody['websocket']>['messages']) {
@@ -996,6 +1053,14 @@ export function RequestPanel(props: {
                     >
                       Fetch Schema
                     </Button>
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      disabled={!graphqlBody.schemaCache}
+                      onClick={clearGraphqlSchemaCache}
+                    >
+                      Clear Cache
+                    </Button>
                   </div>
                 </div>
                 <div className="graphql-editor-stack">
@@ -1030,6 +1095,11 @@ export function RequestPanel(props: {
                       {graphqlIntrospection.checkedAt ? (
                         <Badge variant="light" color={graphqlIntrospection.summary?.ok ? 'teal' : 'orange'}>
                           {graphqlIntrospection.checkedAt}
+                        </Badge>
+                      ) : null}
+                      {graphqlBody.schemaCache && graphqlIntrospection.summary ? (
+                        <Badge variant="light" color="blue">
+                          cached
                         </Badge>
                       ) : null}
                     </div>
