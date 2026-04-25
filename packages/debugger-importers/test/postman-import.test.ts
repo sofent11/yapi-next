@@ -507,6 +507,79 @@ test('WSDL import creates SOAP requests from services, bindings, and port types'
   assert.equal(result.warnings.some(warning => warning.code === 'wsdl-import'), true);
 });
 
+test('Bruno JSON collection import maps WSDL converter output into requests and collection steps', () => {
+  const brunoJson = JSON.stringify({
+    uid: 'TestServiceCollection',
+    version: '1',
+    name: 'TestWSDLServiceJSON',
+    items: [
+      {
+        uid: 'UserServiceFolder',
+        name: 'UserService',
+        type: 'folder',
+        items: [
+          {
+            uid: 'GetUserRequest',
+            name: 'GetUser',
+            type: 'http-request',
+            seq: 1,
+            request: {
+              url: 'http://example.com/soap/userservice',
+              method: 'POST',
+              auth: { mode: 'none' },
+              headers: [
+                { name: 'Content-Type', value: 'text/xml; charset=utf-8', enabled: true },
+                { name: 'SOAPAction', value: 'http://example.com/testservice/GetUser', enabled: true }
+              ],
+              params: [],
+              body: {
+                mode: 'xml',
+                xml: '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><GetUserRequest xmlns="http://example.com/testservice"><userId>string</userId></GetUserRequest></soap:Body></soap:Envelope>'
+              },
+              script: { res: null }
+            }
+          },
+          {
+            uid: 'CreateUserRequest',
+            name: 'CreateUser',
+            type: 'http-request',
+            seq: 2,
+            request: {
+              url: 'http://example.com/soap/userservice',
+              method: 'POST',
+              auth: { mode: 'none' },
+              headers: [
+                { name: 'Content-Type', value: 'text/xml; charset=utf-8', enabled: true },
+                { name: 'SOAPAction', value: 'http://example.com/testservice/CreateUser', enabled: true }
+              ],
+              params: [],
+              body: {
+                mode: 'xml',
+                xml: '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><CreateUserRequest xmlns="http://example.com/testservice"><name>string</name></CreateUserRequest></soap:Body></soap:Envelope>'
+              },
+              script: { res: null }
+            }
+          }
+        ]
+      }
+    ]
+  });
+
+  const result = importSourceText(brunoJson);
+  const getUser = result.requests.find(item => item.request.name === 'GetUser')?.request;
+
+  assert.equal(result.detectedFormat, 'bruno');
+  assert.equal(result.project.name, 'TestWSDLServiceJSON');
+  assert.equal(result.requests.length, 2);
+  assert.deepEqual(result.requests[0]?.folderSegments, ['UserService']);
+  assert.equal(getUser?.url, 'http://example.com/soap/userservice');
+  assert.equal(getUser?.body.mode, 'xml');
+  assert.match(getUser?.body.text || '', /GetUserRequest/);
+  assert.equal(getUser?.headers.find(item => item.name === 'SOAPAction')?.value, 'http://example.com/testservice/GetUser');
+  assert.equal(result.collections[0]?.collection.steps.length, 2);
+  assert.equal(result.warnings.some(warning => warning.code === 'bruno-json-import'), true);
+});
+
 test('Bruno import maps a .bru HTTP request into a debugger request', () => {
   const bru = `meta {
   name: create-example

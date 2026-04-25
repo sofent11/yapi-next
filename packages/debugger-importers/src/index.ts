@@ -75,6 +75,12 @@ function looksLikeOpenCollection(document: Record<string, any>) {
     document.info && typeof document.info === 'object';
 }
 
+function looksLikeBrunoJsonCollection(document: Record<string, any>) {
+  return Array.isArray(document.items) &&
+    typeof document.name === 'string' &&
+    (document.version === '1' || document.uid || document.items.some((item: any) => String(item?.type || '').includes('request') || item?.type === 'folder'));
+}
+
 function looksLikeWsdl(content: string) {
   return /<\s*(?:\w+:)?definitions\b/i.test(content) &&
     /<\s*(?:\w+:)?(?:portType|binding|service)\b/i.test(content);
@@ -2060,6 +2066,300 @@ function importWsdl(content: string): ImportResult {
   };
 }
 
+function brunoJsonRows(items: unknown) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map(item => item as Record<string, any>)
+    .map(item => ({
+      name: String(item.name || ''),
+      value: Array.isArray(item.value) ? item.value.map(String).join(',') : String(item.value ?? ''),
+      enabled: item.enabled !== false,
+      description: String(item.description || ''),
+      kind: item.type === 'file' ? 'file' as const : 'text' as const,
+      filePath: item.type === 'file' ? String(Array.isArray(item.value) ? item.value[0] || '' : item.value || '') : undefined
+    }))
+    .filter(row => row.name);
+}
+
+function brunoJsonAuth(auth: any): RequestDocument['auth'] {
+  const mode = String(auth?.mode || auth?.type || '').toLowerCase();
+  if (!mode || mode === 'none') return { type: 'none' };
+  if (mode === 'inherit') return { type: 'inherit' };
+  if (mode === 'bearer') {
+    return {
+      type: 'bearer',
+      token: String(auth?.bearer?.token || auth?.token || '')
+    };
+  }
+  if (mode === 'basic') {
+    return {
+      type: 'basic',
+      username: String(auth?.basic?.username || auth?.username || ''),
+      password: String(auth?.basic?.password || auth?.password || '')
+    };
+  }
+  if (mode === 'apikey' || mode === 'api-key') {
+    return {
+      type: 'apikey',
+      key: String(auth?.apikey?.key || auth?.apiKey?.key || auth?.key || 'X-API-Key'),
+      value: String(auth?.apikey?.value || auth?.apiKey?.value || auth?.value || ''),
+      addTo: auth?.apikey?.placement === 'query' || auth?.apiKey?.placement === 'query' ? 'query' : 'header'
+    };
+  }
+  if (mode === 'digest') {
+    return {
+      type: 'digest',
+      username: String(auth?.digest?.username || auth?.username || ''),
+      password: String(auth?.digest?.password || auth?.password || '')
+    };
+  }
+  if (mode === 'oauth1') {
+    const source = auth?.oauth1 || auth;
+    return {
+      type: 'oauth1',
+      consumerKey: String(source.consumerKey || ''),
+      consumerSecret: String(source.consumerSecret || ''),
+      token: String(source.accessToken || source.token || ''),
+      secretKey: String(source.accessTokenSecret || source.secretKey || ''),
+      signatureMethod: String(source.signatureMethod || 'HMAC-SHA1'),
+      version: String(source.version || '1.0'),
+      realm: String(source.realm || '')
+    };
+  }
+  if (mode === 'oauth2') {
+    const source = auth?.oauth2 || auth;
+    return {
+      type: 'oauth2',
+      oauthFlow: source.grantType === 'client_credentials' ? 'client_credentials' : undefined,
+      tokenUrl: String(source.tokenUrl || source.accessTokenUrl || ''),
+      clientId: String(source.clientId || ''),
+      clientSecret: String(source.clientSecret || ''),
+      scope: String(source.scope || '')
+    };
+  }
+  return { type: 'inherit' };
+}
+
+function brunoJsonBody(body: any): RequestDocument['body'] {
+  const mode = String(body?.mode || 'none');
+  if (mode === 'json' || mode === 'text' || mode === 'xml' || mode === 'sparql') {
+    const text = mode === 'json'
+      ? typeof body.json === 'string' ? body.json : JSON.stringify(body.json ?? '', null, 2)
+      : String(body[mode] || body.text || '');
+    return {
+      mode: mode as 'json' | 'text' | 'xml' | 'sparql',
+      mimeType: mode === 'json' ? 'application/json' : mode === 'xml' ? 'application/xml' : 'text/plain',
+      text,
+      fields: []
+    };
+  }
+  if (mode === 'graphql') {
+    const graphql = body.graphql || {};
+    const query = String(graphql.query || '');
+    const variables = typeof graphql.variables === 'string'
+      ? graphql.variables
+      : JSON.stringify(graphql.variables ?? {}, null, 2);
+    return {
+      mode: 'graphql',
+      mimeType: 'application/json',
+      text: JSON.stringify({ query, variables: parseGraphqlVariablesForImport(variables) }, null, 2),
+      fields: [],
+      graphql: {
+        query,
+        variables,
+        operationName: graphql.operationName ? String(graphql.operationName) : undefined,
+        schemaUrl: graphql.schemaUrl ? String(graphql.schemaUrl) : undefined
+      }
+    };
+  }
+  if (mode === 'formUrlEncoded' || mode === 'form-urlencoded') {
+    return {
+      mode: 'form-urlencoded',
+      mimeType: 'application/x-www-form-urlencoded',
+      text: '',
+      fields: brunoJsonRows(body.formUrlEncoded || body.fields)
+    };
+  }
+  if (mode === 'multipartForm' || mode === 'multipart') {
+    return {
+      mode: 'multipart',
+      mimeType: 'multipart/form-data',
+      text: '',
+      fields: brunoJsonRows(body.multipartForm || body.fields)
+    };
+  }
+  if (mode === 'file') {
+    const file = Array.isArray(body.file) ? body.file.find((item: any) => item?.selected !== false) || body.file[0] : body.file;
+    return {
+      mode: 'file',
+      mimeType: file?.contentType || 'application/octet-stream',
+      text: '',
+      file: String(file?.filePath || file || ''),
+      fields: []
+    };
+  }
+  if (mode === 'ws') {
+    return {
+      mode: 'none',
+      mimeType: '',
+      text: '',
+      fields: [],
+      websocket: {
+        messages: (Array.isArray(body.ws) ? body.ws : []).map((message: any, index: number) => ({
+          name: String(message.name || `message ${index + 1}`),
+          body: String(message.content || message.body || ''),
+          enabled: message.enabled !== false
+        }))
+      }
+    };
+  }
+  if (mode === 'grpc') {
+    const message = Array.isArray(body.grpc) ? body.grpc.find((item: any) => item?.enabled !== false) || body.grpc[0] : null;
+    return {
+      mode: 'none',
+      mimeType: 'application/grpc',
+      text: '',
+      fields: [],
+      grpc: {
+        importPaths: [],
+        message: String(message?.content || message?.body || '')
+      }
+    };
+  }
+  return {
+    mode: 'none',
+    mimeType: '',
+    text: '',
+    fields: []
+  };
+}
+
+function parseGraphqlVariablesForImport(text: string) {
+  if (!text.trim()) return {};
+  try {
+    return JSON.parse(text);
+  } catch (_error) {
+    return text;
+  }
+}
+
+function brunoJsonScripts(request: any) {
+  return {
+    preRequest: String(request?.script?.req || ''),
+    postResponse: String(request?.script?.res || ''),
+    tests: String(request?.tests || '')
+  };
+}
+
+function walkBrunoJsonItems(
+  items: any[],
+  folderSegments: string[],
+  requests: ImportedRequestRecord[]
+) {
+  items.forEach(item => {
+    const type = String(item?.type || '').toLowerCase();
+    if (type === 'folder') {
+      walkBrunoJsonItems(Array.isArray(item.items) ? item.items : [], [...folderSegments, String(item.name || 'Folder')], requests);
+      return;
+    }
+    if (type === 'js') {
+      const request: RequestDocument = {
+        ...createEmptyRequest(String(item.name || 'script.js')),
+        kind: 'script',
+        name: String(item.name || 'script.js'),
+        body: {
+          mode: 'text',
+          mimeType: 'application/javascript',
+          text: String(item.fileContent || ''),
+          fields: []
+        },
+        scripts: {
+          preRequest: String(item.fileContent || ''),
+          postResponse: '',
+          tests: ''
+        }
+      };
+      requests.push({ folderSegments, request, cases: [] });
+      return;
+    }
+    if (!['http-request', 'graphql-request', 'ws-request', 'grpc-request'].includes(type)) return;
+
+    const source = item.request || {};
+    const kind: RequestDocument['kind'] =
+      type === 'graphql-request' ? 'graphql' :
+        type === 'ws-request' ? 'websocket' :
+          type === 'grpc-request' ? 'grpc' :
+            'http';
+    const body = brunoJsonBody(source.body);
+    const grpcParts = kind === 'grpc' ? splitGrpcMethod(String(source.method || '')) : { service: '', method: '' };
+    const params = Array.isArray(source.params) ? source.params : [];
+    const paramsRows = brunoJsonRows(params);
+    const request: RequestDocument = {
+      ...createEmptyRequest(String(item.name || source.url || 'Bruno Request')),
+      kind,
+      name: String(item.name || normalizePath(String(source.url || ''))),
+      method: kind === 'websocket' ? 'GET' : methodLabel(String(source.method || (kind === 'graphql' ? 'POST' : 'GET'))),
+      url: String(source.url || ''),
+      path: normalizePath(String(source.url || '')),
+      description: String(source.docs || ''),
+      tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
+      headers: brunoJsonRows(source.headers),
+      query: paramsRows.filter(row => String(params.find((param: any) => param?.name === row.name)?.type || 'query') === 'query'),
+      pathParams: paramsRows.filter(row => String(params.find((param: any) => param?.name === row.name)?.type || '') === 'path'),
+      body: kind === 'grpc'
+        ? {
+            ...body,
+            grpc: {
+              ...(body.grpc || { importPaths: [], message: '' }),
+              protoFile: source.protoPath ? String(source.protoPath) : body.grpc?.protoFile,
+              service: grpcParts.service || body.grpc?.service,
+              method: grpcParts.method || body.grpc?.method
+            }
+          }
+        : body,
+      auth: brunoJsonAuth(source.auth),
+      scripts: brunoJsonScripts(source),
+      docs: String(source.docs || ''),
+      order: Number(item.seq || 0) || 0
+    };
+    requests.push({ folderSegments, request, cases: [] });
+  });
+}
+
+function importBrunoJsonCollection(document: Record<string, any>): ImportResult {
+  const projectName = String(document.name || 'Imported Bruno Collection');
+  const requests: ImportedRequestRecord[] = [];
+  walkBrunoJsonItems(Array.isArray(document.items) ? document.items : [], [], requests);
+  const collection = createEmptyCollection(projectName);
+  collection.steps = requests.map((record, index) =>
+    createCollectionStep({
+      key: `step_${index + 1}`,
+      requestId: record.request.id,
+      name: record.request.name
+    })
+  );
+  const warnings: ImportWarning[] = [{
+    level: 'info',
+    scope: 'project',
+    code: 'bruno-json-import',
+    status: 'compatible',
+    message: `${projectName}: Bruno JSON collection imported with ${requests.length} item${requests.length === 1 ? '' : 's'}.`
+  }];
+  return {
+    detectedFormat: 'bruno',
+    summary: {
+      requests: requests.length,
+      folders: new Set(requests.map(item => item.folderSegments.join('/')).filter(Boolean)).size,
+      environments: 1
+    },
+    project: createDefaultProject(projectName),
+    environments: [createDefaultEnvironment('shared')],
+    requests,
+    collections: [{ collection, dataText: '' }],
+    warnings
+  };
+}
+
 function importBruno(content: string): ImportResult {
   const { sections, prelude } = parseBruSections(content);
   const metadata = parseBruKeyValueBlock(findBruSection(sections, 'meta')?.content || '');
@@ -2316,6 +2616,9 @@ export function importSourceText(content: string): ImportResult {
   }
   if (looksLikeInsomnia(document)) {
     return importInsomnia(document);
+  }
+  if (looksLikeBrunoJsonCollection(document)) {
+    return importBrunoJsonCollection(document);
   }
   if (document.info?.schema || document.info?.name || document.item) {
     return importPostman(document);
