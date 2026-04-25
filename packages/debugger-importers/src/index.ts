@@ -1782,6 +1782,12 @@ type WsdlElement = {
   children: WsdlElement[];
 };
 
+type WsdlMessagePart = {
+  name: string;
+  element: string;
+  type: string;
+};
+
 type WsdlOperation = {
   name: string;
   inputMessage: string;
@@ -1882,42 +1888,116 @@ function wsdlIsBuiltinType(type: string) {
   ].includes(normalized);
 }
 
-function wsdlParseElement(node: XmlNode, complexTypes: Map<string, WsdlElement[]>): WsdlElement {
+type WsdlTypeContext = {
+  complexTypeNodes: Map<string, XmlNode>;
+  complexTypes: Map<string, WsdlElement[]>;
+  resolvingTypes: Set<string>;
+  elementNodes: Map<string, XmlNode>;
+  elements: Map<string, WsdlElement>;
+  resolvingElements: Set<string>;
+};
+
+function wsdlParticleContainer(node: XmlNode | undefined) {
+  if (!node) return undefined;
+  const direct = xmlFirst(node, 'sequence') || xmlFirst(node, 'all') || xmlFirst(node, 'choice');
+  if (direct) return direct;
+  const extension = xmlFirst(xmlFirst(node, 'complexContent'), 'extension') || xmlFirst(xmlFirst(node, 'simpleContent'), 'extension');
+  return xmlFirst(extension, 'sequence') || xmlFirst(extension, 'all') || xmlFirst(extension, 'choice');
+}
+
+function wsdlExtensionBase(node: XmlNode | undefined) {
+  const extension = xmlFirst(xmlFirst(node, 'complexContent'), 'extension') || xmlFirst(xmlFirst(node, 'simpleContent'), 'extension');
+  return cleanQName(xmlAttr(extension?.attrs || {}, 'base'));
+}
+
+function wsdlResolveComplexType(typeName: string, context: WsdlTypeContext): WsdlElement[] {
+  const normalized = cleanQName(typeName);
+  if (!normalized || wsdlIsBuiltinType(normalized)) return [];
+  const cached = context.complexTypes.get(normalized);
+  if (cached) return cached;
+  const node = context.complexTypeNodes.get(normalized);
+  if (!node || context.resolvingTypes.has(normalized)) return [];
+
+  context.resolvingTypes.add(normalized);
+  const baseChildren = wsdlResolveComplexType(wsdlExtensionBase(node), context);
+  const container = wsdlParticleContainer(node);
+  const ownChildren = xmlChildren(container, 'element').map(child => wsdlParseElement(child, context));
+  const children = [...baseChildren, ...ownChildren];
+  context.resolvingTypes.delete(normalized);
+  context.complexTypes.set(normalized, children);
+  return children;
+}
+
+function wsdlParseElement(node: XmlNode, context: WsdlTypeContext): WsdlElement {
   const type = xmlAttr(node.attrs, 'type');
+  const ref = xmlAttr(node.attrs, 'ref');
+  if (ref) {
+    const referenced = wsdlResolveElement(ref, context);
+    if (referenced) {
+      return {
+        ...referenced,
+        minOccurs: xmlAttr(node.attrs, 'minOccurs') || referenced.minOccurs,
+        maxOccurs: xmlAttr(node.attrs, 'maxOccurs') || referenced.maxOccurs
+      };
+    }
+  }
   const inlineComplex = xmlFirst(node, 'complexType');
-  const sequence = xmlFirst(inlineComplex, 'sequence') || xmlFirst(inlineComplex, 'all') || xmlFirst(inlineComplex, 'choice');
-  const inlineChildren = xmlChildren(sequence, 'element').map(child => wsdlParseElement(child, complexTypes));
-  const typeChildren = type && !wsdlIsBuiltinType(type) ? complexTypes.get(cleanQName(type)) || [] : [];
+  const inlineContainer = wsdlParticleContainer(inlineComplex);
+  const inlineBaseChildren = wsdlResolveComplexType(wsdlExtensionBase(inlineComplex), context);
+  const inlineChildren = xmlChildren(inlineContainer, 'element').map(child => wsdlParseElement(child, context));
+  const typeChildren = wsdlResolveComplexType(type, context);
   return {
-    name: xmlAttr(node.attrs, 'name') || cleanQName(xmlAttr(node.attrs, 'ref')),
+    name: xmlAttr(node.attrs, 'name') || cleanQName(ref),
     type,
     minOccurs: xmlAttr(node.attrs, 'minOccurs') || undefined,
     maxOccurs: xmlAttr(node.attrs, 'maxOccurs') || undefined,
-    children: inlineChildren.length > 0 ? inlineChildren : typeChildren
+    children: inlineChildren.length > 0 || inlineBaseChildren.length > 0 ? [...inlineBaseChildren, ...inlineChildren] : typeChildren
   };
 }
 
+function wsdlResolveElement(elementName: string, context: WsdlTypeContext): WsdlElement | undefined {
+  const normalized = cleanQName(elementName);
+  if (!normalized) return undefined;
+  const cached = context.elements.get(normalized);
+  if (cached) return cached;
+  const node = context.elementNodes.get(normalized);
+  if (!node || context.resolvingElements.has(normalized)) return undefined;
+
+  context.resolvingElements.add(normalized);
+  const parsed = wsdlParseElement(node, context);
+  context.resolvingElements.delete(normalized);
+  if (parsed.name) context.elements.set(parsed.name, parsed);
+  return parsed.name ? parsed : undefined;
+}
+
 function wsdlParseTypes(definitions: XmlNode) {
-  const complexTypes = new Map<string, WsdlElement[]>();
-  const elements = new Map<string, WsdlElement>();
+  const context: WsdlTypeContext = {
+    complexTypeNodes: new Map(),
+    complexTypes: new Map(),
+    resolvingTypes: new Set(),
+    elementNodes: new Map(),
+    elements: new Map(),
+    resolvingElements: new Set()
+  };
   const schemas = xmlChildren(xmlFirst(definitions, 'types'), 'schema');
 
   schemas.forEach(schema => {
     xmlChildren(schema, 'complexType').forEach(complexType => {
       const name = xmlAttr(complexType.attrs, 'name');
-      const sequence = xmlFirst(complexType, 'sequence') || xmlFirst(complexType, 'all') || xmlFirst(complexType, 'choice');
-      complexTypes.set(name, xmlChildren(sequence, 'element').map(child => wsdlParseElement(child, complexTypes)));
+      if (name) context.complexTypeNodes.set(name, complexType);
     });
   });
 
   schemas.forEach(schema => {
     xmlChildren(schema, 'element').forEach(element => {
-      const parsed = wsdlParseElement(element, complexTypes);
-      if (parsed.name) elements.set(parsed.name, parsed);
+      const name = xmlAttr(element.attrs, 'name');
+      if (name) context.elementNodes.set(name, element);
     });
   });
 
-  return { complexTypes, elements };
+  [...context.elementNodes.keys()].forEach(name => wsdlResolveElement(name, context));
+
+  return { complexTypes: context.complexTypes, elements: context.elements };
 }
 
 function wsdlElementSample(element: WsdlElement, depth = 0): string {
@@ -1929,16 +2009,40 @@ function wsdlElementSample(element: WsdlElement, depth = 0): string {
   return `${optional}<${element.name}>${element.children.map(child => wsdlElementSample(child, depth + 1)).join('')}</${element.name}>`;
 }
 
-function wsdlSoapEnvelope(operation: WsdlOperation, messages: Map<string, string>, elements: Map<string, WsdlElement>, targetNamespace: string) {
-  const inputElementName = cleanQName(messages.get(cleanQName(operation.inputMessage)) || '');
-  const inputElement = elements.get(inputElementName);
-  const body = inputElement
-    ? wsdlElementSample(inputElement)
-    : `<!-- Element ${inputElementName || operation.name} not found -->`;
+function wsdlAddNamespaceToFirstElement(body: string, targetNamespace: string) {
+  if (!targetNamespace.trim()) return body;
+  return body.replace(/<([A-Za-z_][\w:.-]*)(?=[\s>])/, `<$1 xmlns="${targetNamespace}"`);
+}
+
+function wsdlSoapBody(operation: WsdlOperation, messages: Map<string, WsdlMessagePart[]>, elements: Map<string, WsdlElement>, targetNamespace: string) {
+  const parts = messages.get(cleanQName(operation.inputMessage)) || [];
+  const elementParts = parts.filter(part => part.element && elements.has(cleanQName(part.element)));
+  if (elementParts.length > 0) {
+    return wsdlAddNamespaceToFirstElement(
+      elementParts.map(part => wsdlElementSample(elements.get(cleanQName(part.element))!)).join(''),
+      targetNamespace
+    );
+  }
+
+  if (parts.length > 0) {
+    const namespace = targetNamespace ? ` xmlns="${targetNamespace}"` : '';
+    const children = parts.map(part => {
+      const name = part.name || cleanQName(part.element) || cleanQName(part.type) || 'parameter';
+      const type = part.type || part.element;
+      return `<${name}>${wsdlSimpleValue(type)}</${name}>`;
+    }).join('');
+    return `<${operation.name}${namespace}>${children}</${operation.name}>`;
+  }
+
+  return `<!-- Element ${cleanQName(operation.inputMessage) || operation.name} not found -->`;
+}
+
+function wsdlSoapEnvelope(operation: WsdlOperation, messages: Map<string, WsdlMessagePart[]>, elements: Map<string, WsdlElement>, targetNamespace: string) {
+  const body = wsdlSoapBody(operation, messages, elements, targetNamespace);
   const namespace = targetNamespace ? ` xmlns="${targetNamespace}"` : '';
-  const namespacedBody = inputElement && targetNamespace
-    ? body.replace(`<${inputElement.name}>`, `<${inputElement.name}${namespace}>`)
-    : body;
+  const namespacedBody = body.includes(' xmlns=') || !targetNamespace
+    ? body
+    : body.replace(/<([A-Za-z_][\w:.-]*)(?=[\s>])/, `<$1${namespace}`);
   return `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>${namespacedBody}</soap:Body></soap:Envelope>`;
 }
 
@@ -1966,10 +2070,16 @@ function importWsdl(content: string): ImportResult {
   const projectName = xmlAttr(definitions.attrs, 'name') || 'Imported WSDL';
   const targetNamespace = xmlAttr(definitions.attrs, 'targetNamespace');
   const { elements } = wsdlParseTypes(definitions);
-  const messages = new Map<string, string>();
+  const messages = new Map<string, WsdlMessagePart[]>();
   xmlChildren(definitions, 'message').forEach(message => {
-    const part = xmlFirst(message, 'part');
-    messages.set(xmlAttr(message.attrs, 'name'), xmlAttr(part?.attrs || {}, 'element') || xmlAttr(part?.attrs || {}, 'type'));
+    messages.set(
+      xmlAttr(message.attrs, 'name'),
+      xmlChildren(message, 'part').map(part => ({
+        name: xmlAttr(part.attrs, 'name'),
+        element: xmlAttr(part.attrs, 'element'),
+        type: xmlAttr(part.attrs, 'type')
+      }))
+    );
   });
 
   const portTypes = new Map<string, WsdlOperation[]>();

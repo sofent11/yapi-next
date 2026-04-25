@@ -507,6 +507,86 @@ test('WSDL import creates SOAP requests from services, bindings, and port types'
   assert.equal(result.warnings.some(warning => warning.code === 'wsdl-import'), true);
 });
 
+test('WSDL import expands complex type references, extensions, and typed message parts', () => {
+  const wsdl = `<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions
+  name="AdvancedWSDLService"
+  targetNamespace="http://example.com/advanced"
+  xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+  xmlns:tns="http://example.com/advanced"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <wsdl:types>
+    <xsd:schema targetNamespace="http://example.com/advanced">
+      <xsd:element name="SubmitAccountRequest" type="tns:SubmitAccountRequestType"/>
+      <xsd:complexType name="SubmitAccountRequestType">
+        <xsd:sequence>
+          <xsd:element name="account" type="tns:AccountType"/>
+          <xsd:element ref="tns:traceId" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:complexType>
+      <xsd:complexType name="AuditedType">
+        <xsd:sequence>
+          <xsd:element name="auditId" type="xsd:string"/>
+        </xsd:sequence>
+      </xsd:complexType>
+      <xsd:complexType name="AccountType">
+        <xsd:complexContent>
+          <xsd:extension base="tns:AuditedType">
+            <xsd:sequence>
+              <xsd:element name="balance" type="xsd:decimal"/>
+              <xsd:element name="active" type="xsd:boolean"/>
+            </xsd:sequence>
+          </xsd:extension>
+        </xsd:complexContent>
+      </xsd:complexType>
+      <xsd:element name="traceId" type="xsd:string"/>
+    </xsd:schema>
+  </wsdl:types>
+  <wsdl:message name="SubmitAccountMessage">
+    <wsdl:part name="parameters" element="tns:SubmitAccountRequest"/>
+  </wsdl:message>
+  <wsdl:message name="PingMessage">
+    <wsdl:part name="sessionId" type="xsd:string"/>
+    <wsdl:part name="dryRun" type="xsd:boolean"/>
+  </wsdl:message>
+  <wsdl:portType name="AdvancedPortType">
+    <wsdl:operation name="SubmitAccount">
+      <wsdl:input message="tns:SubmitAccountMessage"/>
+    </wsdl:operation>
+    <wsdl:operation name="Ping">
+      <wsdl:input message="tns:PingMessage"/>
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="AdvancedBinding" type="tns:AdvancedPortType">
+    <soap:binding style="rpc" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="SubmitAccount">
+      <soap:operation soapAction="http://example.com/advanced/SubmitAccount"/>
+    </wsdl:operation>
+    <wsdl:operation name="Ping">
+      <soap:operation soapAction="http://example.com/advanced/Ping"/>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="AdvancedService">
+    <wsdl:port name="AdvancedPort" binding="tns:AdvancedBinding">
+      <soap:address location="https://example.com/soap/advanced"/>
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>`;
+
+  const result = importSourceText(wsdl);
+  const submit = result.requests.find(item => item.request.name === 'SubmitAccount')?.request;
+  const ping = result.requests.find(item => item.request.name === 'Ping')?.request;
+
+  assert.equal(result.detectedFormat, 'wsdl');
+  assert.equal(result.summary.requests, 2);
+  assert.match(submit?.body.text || '', /<SubmitAccountRequest xmlns="http:\/\/example\.com\/advanced">/);
+  assert.match(submit?.body.text || '', /<account><auditId>string<\/auditId><balance>0\.0<\/balance><active>true<\/active><\/account>/);
+  assert.match(submit?.body.text || '', /<!--Optional:--><traceId>string<\/traceId>/);
+  assert.match(ping?.body.text || '', /<Ping xmlns="http:\/\/example\.com\/advanced"><sessionId>string<\/sessionId><dryRun>true<\/dryRun><\/Ping>/);
+  assert.equal(ping?.headers.find(item => item.name === 'SOAPAction')?.value, 'http://example.com/advanced/Ping');
+});
+
 test('Bruno JSON collection import maps WSDL converter output into requests and collection steps', () => {
   const brunoJson = JSON.stringify({
     uid: 'TestServiceCollection',
