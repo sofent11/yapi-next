@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Badge, Button, Group, Select, Tabs, Text, TextInput } from '@mantine/core';
 import { IconAlertCircle, IconBraces, IconCookie, IconDownload, IconEye, IconGitCompare, IconPlayerPlay, IconSearch } from '@tabler/icons-react';
 import type {
@@ -108,19 +108,72 @@ function searchBodyLines(text: string, needle: string, limit = 12) {
     .slice(0, limit);
 }
 
-function compareLineRows(left: string, right: string, limit = 24) {
+function compareLineRows(left: string, right: string, limit = 200) {
   const leftLines = left.split('\n');
   const rightLines = right.split('\n');
   const length = Math.max(leftLines.length, rightLines.length);
-  const rows: Array<{ lineNumber: number; live: string; saved: string }> = [];
+  const rows: Array<{ lineNumber: number; live: string; saved: string; type: 'added' | 'removed' | 'changed' }> = [];
   for (let index = 0; index < length; index += 1) {
     const live = leftLines[index] || '';
     const saved = rightLines[index] || '';
     if (live === saved) continue;
-    rows.push({ lineNumber: index + 1, live, saved });
+    rows.push({
+      lineNumber: index + 1,
+      live,
+      saved,
+      type: live && !saved ? 'added' : !live && saved ? 'removed' : 'changed'
+    });
     if (rows.length >= limit) break;
   }
   return rows;
+}
+
+function diffSegmentBounds(left: string, right: string) {
+  let start = 0;
+  while (start < left.length && start < right.length && left[start] === right[start]) start += 1;
+  let leftEnd = left.length - 1;
+  let rightEnd = right.length - 1;
+  while (leftEnd >= start && rightEnd >= start && left[leftEnd] === right[rightEnd]) {
+    leftEnd -= 1;
+    rightEnd -= 1;
+  }
+  return {
+    prefix: left.slice(0, start),
+    changed: left.slice(start, leftEnd + 1),
+    suffix: left.slice(leftEnd + 1)
+  };
+}
+
+function renderHighlightedText(text: string, needle: string): ReactNode {
+  if (!needle) return text;
+  const lowerText = text.toLowerCase();
+  const fragments: ReactNode[] = [];
+  let cursor = 0;
+  while (cursor < text.length) {
+    const matchIndex = lowerText.indexOf(needle, cursor);
+    if (matchIndex === -1) {
+      fragments.push(text.slice(cursor));
+      break;
+    }
+    if (matchIndex > cursor) {
+      fragments.push(text.slice(cursor, matchIndex));
+    }
+    const matched = text.slice(matchIndex, matchIndex + needle.length);
+    fragments.push(<mark key={`${matchIndex}-${matched}`}>{matched}</mark>);
+    cursor = matchIndex + needle.length;
+  }
+  return fragments;
+}
+
+function renderDiffValue(value: string, otherValue: string, needle: string) {
+  const bounds = diffSegmentBounds(value, otherValue);
+  return (
+    <>
+      {renderHighlightedText(bounds.prefix, needle)}
+      {bounds.changed ? <span className="response-inline-diff">{renderHighlightedText(bounds.changed, needle)}</span> : null}
+      {renderHighlightedText(bounds.suffix, needle)}
+    </>
+  );
 }
 
 function compareStats(left: string, right: string) {
@@ -206,6 +259,7 @@ export function ResponsePanel(props: {
 }) {
   const [prettifyJson, setPrettifyJson] = useState(true);
   const [searchText, setSearchText] = useState('');
+  const [compareFilter, setCompareFilter] = useState<'all' | 'changed' | 'added' | 'removed'>('all');
   const examples = props.requestDocument?.examples || [];
   const selectedExample = examples.find(item => item.name === props.selectedExampleName) || null;
   const liveBody = props.response?.bodyText ?? '';
@@ -256,12 +310,28 @@ export function ResponsePanel(props: {
     () => compareStats(liveBody, selectedExample?.text || ''),
     [liveBody, selectedExample]
   );
+  const allDiffRows = useMemo(
+    () => compareLineRows(liveBody, selectedExample?.text || ''),
+    [liveBody, selectedExample]
+  );
+  const diffCounts = useMemo(
+    () =>
+      allDiffRows.reduce(
+        (acc, row) => {
+          acc[row.type] += 1;
+          return acc;
+        },
+        { changed: 0, added: 0, removed: 0 }
+      ),
+    [allDiffRows]
+  );
   const diffRows = useMemo(
     () =>
-      compareLineRows(liveBody, selectedExample?.text || '').filter(row =>
+      allDiffRows.filter(row =>
+        (compareFilter === 'all' || row.type === compareFilter) &&
         matchesSearch([row.lineNumber, row.live, row.saved], searchNeedle)
       ),
-    [liveBody, searchNeedle, selectedExample]
+    [allDiffRows, compareFilter, searchNeedle]
   );
 
   return (
@@ -427,7 +497,7 @@ export function ResponsePanel(props: {
                 {bodyMatches.map(match => (
                   <div key={`${match.lineNumber}-${match.text}`} className="response-search-result-row">
                     <strong>L{match.lineNumber}</strong>
-                    <span>{match.text}</span>
+                    <span>{renderHighlightedText(match.text, searchNeedle)}</span>
                   </div>
                 ))}
               </div>
@@ -610,7 +680,7 @@ export function ResponsePanel(props: {
               </Tabs.Panel>
               <Tabs.Panel value="headers">
                 <div className="json-inspector-list">
-                  {(props.response?.headers || []).map(header => (
+                  {filteredHeaders.map(header => (
                     <div key={`${header.name}:${header.value}`} className="json-inspector-row">
                       <div className="json-inspector-copy">
                         <strong>{header.name}</strong>
@@ -666,8 +736,10 @@ export function ResponsePanel(props: {
                       </Group>
                     </div>
                   ))}
-                  {!props.response?.headers.length ? (
-                    <div className="empty-tab-state">当前没有采集到响应头。</div>
+                  {filteredHeaders.length === 0 ? (
+                    <div className="empty-tab-state">
+                      {searchNeedle ? '当前搜索词没有命中响应头。' : '当前没有采集到响应头。'}
+                    </div>
                   ) : null}
                   <CodeEditor value={displayHeaders} readOnly language="text" minHeight="180px" />
                 </div>
@@ -676,11 +748,13 @@ export function ResponsePanel(props: {
                 <div className="response-cookie-grid">
                   <div className="check-card">
                     <Text fw={700}>响应 Set-Cookie</Text>
-                    {responseCookies.length === 0 ? (
-                      <div className="empty-tab-state">当前响应没有返回 Set-Cookie。</div>
+                    {filteredResponseCookies.length === 0 ? (
+                      <div className="empty-tab-state">
+                        {searchNeedle ? '当前搜索词没有命中响应 Set-Cookie。' : '当前响应没有返回 Set-Cookie。'}
+                      </div>
                     ) : (
                       <div className="json-inspector-list">
-                        {responseCookies.map(cookie => (
+                        {filteredResponseCookies.map(cookie => (
                           <div key={`${cookie.name}:${cookie.value}`} className="json-inspector-row">
                             <div className="json-inspector-copy">
                               <strong>{cookie.name}</strong>
@@ -711,11 +785,13 @@ export function ResponsePanel(props: {
                   </div>
                   <div className="check-card">
                     <Text fw={700}>当前会话 Cookies</Text>
-                    {sessionCookies.length === 0 ? (
-                      <div className="empty-tab-state">当前请求 URL 还没有可复用的会话 Cookie。</div>
+                    {filteredSessionCookies.length === 0 ? (
+                      <div className="empty-tab-state">
+                        {searchNeedle ? '当前搜索词没有命中会话 Cookie。' : '当前请求 URL 还没有可复用的会话 Cookie。'}
+                      </div>
                     ) : (
                       <div className="json-inspector-list">
-                        {sessionCookies.map(cookie => (
+                        {filteredSessionCookies.map(cookie => (
                           <div key={`${cookie.name}:${cookie.value}`} className="json-inspector-row">
                             <div className="json-inspector-copy">
                               <strong>{cookie.name}</strong>
@@ -761,6 +837,30 @@ export function ResponsePanel(props: {
                     </Text>
                   ) : null}
                 </div>
+                {selectedExample ? (
+                  <div className="response-search-summary-grid">
+                    <div className="compare-summary-card">
+                      <Text fw={700}>Diff Breakdown</Text>
+                      <Text size="sm" c="dimmed">
+                        changed {diffCounts.changed} · added {diffCounts.added} · removed {diffCounts.removed}
+                      </Text>
+                    </div>
+                    <div className="compare-summary-card">
+                      <Text fw={700}>Diff Filter</Text>
+                      <Select
+                        size="xs"
+                        value={compareFilter}
+                        data={[
+                          { value: 'all', label: 'All differences' },
+                          { value: 'changed', label: 'Changed lines' },
+                          { value: 'added', label: 'Added in live response' },
+                          { value: 'removed', label: 'Missing from live response' }
+                        ]}
+                        onChange={value => setCompareFilter((value as typeof compareFilter) || 'all')}
+                      />
+                    </div>
+                  </div>
+                ) : null}
                 <div className="response-compare-grid">
                   <div className="check-card">
                     <Text fw={700}>实时响应</Text>
@@ -786,20 +886,27 @@ export function ResponsePanel(props: {
                 {selectedExample ? (
                   <div className="json-inspector-list">
                     {(searchNeedle ? diffRows : diffRows.slice(0, 12)).map(row => (
-                      <div key={`diff-${row.lineNumber}`} className="response-diff-row">
+                      <div key={`diff-${row.lineNumber}`} className={`response-diff-row response-diff-row-${row.type}`}>
                         <div className="response-diff-meta">
-                          <Badge size="xs" variant="light" color="indigo">
+                          <Badge
+                            size="xs"
+                            variant="light"
+                            color={row.type === 'added' ? 'green' : row.type === 'removed' ? 'red' : 'indigo'}
+                          >
                             L{row.lineNumber}
+                          </Badge>
+                          <Badge size="xs" variant="dot" color={row.type === 'added' ? 'green' : row.type === 'removed' ? 'red' : 'yellow'}>
+                            {row.type}
                           </Badge>
                         </div>
                         <div className="response-diff-columns">
                           <div className="response-diff-column">
                             <strong>实时响应</strong>
-                            <span>{row.live || '∅'}</span>
+                            <span>{renderDiffValue(row.live || '∅', row.saved || '', searchNeedle)}</span>
                           </div>
                           <div className="response-diff-column">
                             <strong>已选结果</strong>
-                            <span>{row.saved || '∅'}</span>
+                            <span>{renderDiffValue(row.saved || '∅', row.live || '', searchNeedle)}</span>
                           </div>
                         </div>
                       </div>
