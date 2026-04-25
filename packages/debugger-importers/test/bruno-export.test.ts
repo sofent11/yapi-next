@@ -331,7 +331,10 @@ test('OpenCollection export imports back with mixed request kinds and environmen
     postResponse: '',
     tests: 'expect(res.status).to.equal(201);'
   };
-  createUser.vars.req = [{ name: 'traceId', value: 'abc-123', enabled: true, kind: 'text', scope: 'request', secret: false }];
+  createUser.vars.req = [
+    { name: 'traceId', value: 'abc-123', enabled: true, kind: 'text', scope: 'request', secret: false },
+    { name: 'approvalCode', value: '0000', enabled: true, kind: 'text', scope: 'prompt', secret: false }
+  ];
   createUser.docs = 'Create a user.';
 
   const graphql = createEmptyRequest('GraphQL User');
@@ -441,6 +444,7 @@ test('OpenCollection export imports back with mixed request kinds and environmen
   assert.equal(importedCreate?.pathParams.find(item => item.name === 'userId')?.value, '42');
   assert.match(importedCreate?.scripts.preRequest || '', /trace/);
   assert.equal(importedCreate?.vars.req.find(item => item.name === 'traceId')?.value, 'abc-123');
+  assert.equal(importedCreate?.vars.req.find(item => item.name === 'approvalCode')?.scope, 'prompt');
   assert.equal(importedGraphql?.body.mode, 'graphql');
   assert.match(importedGraphql?.body.graphql?.query || '', /query User/);
   assert.equal(importedGraphql?.body.graphql?.operationName, 'User');

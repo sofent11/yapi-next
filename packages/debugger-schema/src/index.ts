@@ -599,6 +599,7 @@ export const sendRequestResultSchema = z.object({
   sizeBytes: z.number().int(),
   headers: z.array(responseHeaderSchema).default([]),
   bodyText: z.string(),
+  bodyBase64: z.string().optional(),
   timestamp: z.string()
 });
 export type SendRequestResult = z.infer<typeof sendRequestResultSchema>;

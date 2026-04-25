@@ -35,7 +35,7 @@ export function nodeToId(node: SelectedNode): string {
 }
 
 export type RequestTab = 'query' | 'headers' | 'body' | 'auth' | 'checks' | 'scripts' | 'settings' | 'preview';
-export type ResponseTab = 'body' | 'headers' | 'json' | 'cookies' | 'compare' | 'raw';
+export type ResponseTab = 'preview' | 'body' | 'headers' | 'json' | 'cookies' | 'compare' | 'raw';
 
 export type WorkspaceUiState = {
   treeWidth: number;

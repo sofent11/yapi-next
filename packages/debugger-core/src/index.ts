@@ -2005,6 +2005,7 @@ function openCollectionVariables(request: RequestDocument) {
     .map(row => ({
       name: row.name,
       value: row.value,
+      ...(row.scope && row.scope !== 'request' ? { scope: row.scope } : {}),
       ...(row.enabled === false ? { disabled: true } : {}),
       ...(row.secret ? { secret: true } : {}),
       ...(row.description?.trim() ? { description: row.description.trim() } : {})

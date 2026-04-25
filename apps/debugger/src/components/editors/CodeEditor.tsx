@@ -1,6 +1,8 @@
 import CodeMirror from '@uiw/react-codemirror';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { yamlLanguage } from '@codemirror/lang-yaml';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { useComputedColorScheme } from '@mantine/core';
 
 export function CodeEditor(props: {
   value: string;
@@ -9,6 +11,7 @@ export function CodeEditor(props: {
   language?: 'json' | 'yaml' | 'text';
   minHeight?: string;
 }) {
+  const colorScheme = useComputedColorScheme('light', { getInitialValueInEffect: false });
   const extensions =
     props.language === 'yaml' ? [yamlLanguage] : props.language === 'json' ? [jsonLanguage] : [];
 
@@ -20,7 +23,7 @@ export function CodeEditor(props: {
         height={props.minHeight || '180px'}
         extensions={extensions}
         onChange={value => props.onChange?.(value)}
-        theme="light"
+        theme={colorScheme === 'dark' ? oneDark : 'light'}
         basicSetup={{
           lineNumbers: true,
           foldGutter: false,

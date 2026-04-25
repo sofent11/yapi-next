@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Badge, Button, Group, Select, Tabs, Text } from '@mantine/core';
-import { IconAlertCircle, IconBraces, IconCookie, IconGitCompare, IconPlayerPlay } from '@tabler/icons-react';
+import { IconAlertCircle, IconBraces, IconCookie, IconDownload, IconEye, IconGitCompare, IconPlayerPlay } from '@tabler/icons-react';
 import type {
   CheckResult,
   RequestDocument,
@@ -21,6 +21,64 @@ type GeneratedCheckInput =
 function responseHeadersText(res: SendRequestResult | null) {
   if (!res) return '';
   return res.headers.map(h => `${h.name}: ${h.value}`).join('\n');
+}
+
+function responseHeaderValue(response: SendRequestResult | null, name: string) {
+  return response?.headers.find(header => header.name.toLowerCase() === name.toLowerCase())?.value || '';
+}
+
+function responseMimeType(response: SendRequestResult | null, selectedExampleMimeType?: string) {
+  return (selectedExampleMimeType || responseHeaderValue(response, 'content-type') || '').split(';')[0].trim().toLowerCase();
+}
+
+function responsePreviewKind(mimeType: string, parsedJson: unknown, bodyBase64?: string) {
+  if (parsedJson != null || mimeType.includes('json')) return 'json';
+  if (mimeType.includes('html')) return 'html';
+  if (mimeType.startsWith('image/')) return bodyBase64 ? 'image' : 'binary';
+  if (mimeType.startsWith('audio/')) return bodyBase64 ? 'audio' : 'binary';
+  if (mimeType.startsWith('video/')) return bodyBase64 ? 'video' : 'binary';
+  if (mimeType.includes('pdf')) return bodyBase64 ? 'pdf' : 'binary';
+  if (mimeType.startsWith('text/') || mimeType.includes('xml') || mimeType.includes('javascript') || mimeType.includes('svg')) return 'text';
+  return bodyBase64 ? 'binary' : 'text';
+}
+
+function mimeExtension(mimeType: string) {
+  if (mimeType.includes('json')) return 'json';
+  if (mimeType.includes('html')) return 'html';
+  if (mimeType.includes('xml')) return 'xml';
+  if (mimeType.includes('pdf')) return 'pdf';
+  if (mimeType.startsWith('image/')) return mimeType.split('/')[1] || 'img';
+  if (mimeType.startsWith('audio/')) return mimeType.split('/')[1] || 'audio';
+  if (mimeType.startsWith('video/')) return mimeType.split('/')[1] || 'video';
+  if (mimeType.startsWith('text/')) return 'txt';
+  return 'bin';
+}
+
+function suggestedResponseFilename(url: string | undefined, mimeType: string) {
+  const rawName = url?.split('?')[0].split('/').filter(Boolean).pop() || 'response';
+  const safeName = rawName.replace(/[^a-zA-Z0-9._-]+/g, '-');
+  if (safeName.includes('.')) return safeName;
+  return `${safeName}.${mimeExtension(mimeType)}`;
+}
+
+function downloadResponsePayload(input: { bodyText: string; bodyBase64?: string; mimeType: string; url?: string }) {
+  const blob =
+    input.bodyBase64
+      ? new Blob(
+          [
+            Uint8Array.from(window.atob(input.bodyBase64), char => char.charCodeAt(0))
+          ],
+          { type: input.mimeType || 'application/octet-stream' }
+        )
+      : new Blob([input.bodyText], { type: input.mimeType || 'text/plain;charset=utf-8' });
+  const downloadUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = downloadUrl;
+  anchor.download = suggestedResponseFilename(input.url, input.mimeType);
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(downloadUrl);
 }
 
 function responseBodyLanguage(body: string) {
@@ -90,8 +148,8 @@ export function ResponsePanel(props: {
   scriptLogs: ScriptLog[];
   sessionSnapshot: SessionSnapshot | null;
   selectedExampleName: string | null;
-  activeTab: ResponseTab | 'json' | 'cookies' | 'compare';
-  onTabChange: (tab: ResponseTab | 'json' | 'cookies' | 'compare') => void;
+  activeTab: ResponseTab;
+  onTabChange: (tab: ResponseTab) => void;
   onSelectExample: (name: string | null) => void;
   onCopyBody: () => void;
   onCopyCurl: () => void;
@@ -119,6 +177,12 @@ export function ResponsePanel(props: {
     [displayBody, parsedJson]
   );
   const bodyView = parsedJson != null && prettifyJson ? prettyBody : displayBody;
+  const mimeType = responseMimeType(props.response, selectedExample?.mimeType);
+  const previewKind = responsePreviewKind(mimeType, parsedJson, props.response?.bodyBase64);
+  const previewDataUrl =
+    props.response?.bodyBase64 && mimeType
+      ? `data:${mimeType};base64,${props.response.bodyBase64}`
+      : null;
   const jsonRows = useMemo(() => flattenJsonPaths(parsedJson).slice(0, 80), [parsedJson]);
   const responseCookies = useMemo(() => parseSetCookies(props.response), [props.response]);
   const sessionCookies = props.sessionSnapshot?.cookies || [];
@@ -170,6 +234,22 @@ export function ResponsePanel(props: {
               <Button size="xs" variant="default" onClick={props.onCopyCurl} disabled={!props.requestPreview}>复制 cURL</Button>
               <Button size="xs" variant="default" onClick={props.onCopyBruno} disabled={!props.onCopyBruno || !props.requestDocument}>
                 复制 Bruno
+              </Button>
+              <Button
+                size="xs"
+                variant="default"
+                leftSection={<IconDownload size={14} />}
+                onClick={() =>
+                  downloadResponsePayload({
+                    bodyText: displayBody,
+                    bodyBase64: selectedExample ? undefined : props.response?.bodyBase64,
+                    mimeType: mimeType || 'text/plain',
+                    url: props.response?.url
+                  })
+                }
+                disabled={!displayBody && !props.response?.bodyBase64}
+              >
+                下载响应
               </Button>
               <Button size="xs" variant="filled" color="indigo" onClick={props.onSaveAs} disabled={!props.onSaveAs}>
                 Save As
@@ -247,8 +327,9 @@ export function ResponsePanel(props: {
         </div>
       ) : null}
 
-      <Tabs value={props.activeTab} onChange={value => props.onTabChange(value as ResponseTab | 'json' | 'cookies' | 'compare')} className="response-tabs-ide">
+      <Tabs value={props.activeTab} onChange={value => props.onTabChange(value as ResponseTab)} className="response-tabs-ide">
         <Tabs.List>
+          <Tabs.Tab value="preview" leftSection={<IconEye size={14} />}>预览</Tabs.Tab>
           <Tabs.Tab value="body">正文</Tabs.Tab>
           <Tabs.Tab value="json" leftSection={<IconBraces size={14} />}>JSON</Tabs.Tab>
           <Tabs.Tab value="headers">响应头</Tabs.Tab>
@@ -299,6 +380,57 @@ export function ResponsePanel(props: {
             </div>
           ) : (
             <>
+              <Tabs.Panel value="preview">
+                <div className="response-adaptive-preview">
+                  <div className="compare-summary-card">
+                    <Text fw={700}>Content Preview</Text>
+                    <Text size="sm" c="dimmed">
+                      {mimeType || 'unknown'} · {previewKind} · {props.response?.sizeBytes || displayBody.length} bytes
+                    </Text>
+                  </div>
+                  {previewKind === 'html' ? (
+                    <iframe
+                      title="HTML response preview"
+                      className="response-preview-frame"
+                      sandbox=""
+                      srcDoc={displayBody}
+                    />
+                  ) : previewKind === 'image' && previewDataUrl ? (
+                    <div className="response-preview-media-shell">
+                      <img src={previewDataUrl} alt="Response preview" className="response-preview-image" />
+                    </div>
+                  ) : previewKind === 'audio' && previewDataUrl ? (
+                    <div className="response-preview-media-shell">
+                      <audio controls src={previewDataUrl} className="response-preview-media" />
+                    </div>
+                  ) : previewKind === 'video' && previewDataUrl ? (
+                    <div className="response-preview-media-shell">
+                      <video controls src={previewDataUrl} className="response-preview-video" />
+                    </div>
+                  ) : previewKind === 'pdf' && previewDataUrl ? (
+                    <iframe
+                      title="PDF response preview"
+                      className="response-preview-frame"
+                      src={previewDataUrl}
+                    />
+                  ) : previewKind === 'binary' ? (
+                    <div className="check-card">
+                      <Text fw={700}>Binary Response</Text>
+                      <Text size="sm" c="dimmed">
+                        This response is best handled as a file. Use download to inspect it in an external viewer.
+                      </Text>
+                      <CodeEditor
+                        value={displayBody.slice(0, 2000)}
+                        readOnly
+                        language="text"
+                        minHeight="140px"
+                      />
+                    </div>
+                  ) : (
+                    <CodeEditor value={bodyView} readOnly language={responseBodyLanguage(bodyView)} minHeight="400px" />
+                  )}
+                </div>
+              </Tabs.Panel>
               <Tabs.Panel value="body">
                 <CodeEditor value={bodyView} readOnly language={responseBodyLanguage(bodyView)} minHeight="400px" />
               </Tabs.Panel>

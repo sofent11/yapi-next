@@ -268,6 +268,32 @@ function savePreferences(preferences: PreferencesState) {
   savePersistedJson(PREFERENCES_STORAGE_KEY, preferences);
 }
 
+type RequestVariableRow = RequestDocument['vars']['req'][number];
+
+function requestVariableRows(request: RequestDocument): RequestVariableRow[] {
+  return request.vars?.req || [];
+}
+
+function requestVariableSource(rows: RequestVariableRow[], scope: 'request' | 'prompt') {
+  const entries = rows
+    .filter(row => row.enabled !== false && row.name.trim() && (scope === 'prompt' ? row.scope === 'prompt' : row.scope !== 'prompt'))
+    .map(row => [row.name.trim(), row.value] as const);
+  return entries.length > 0 ? Object.fromEntries(entries) : {};
+}
+
+function requestExtraSources(request: RequestDocument, promptValues?: Record<string, string>) {
+  const rows = requestVariableRows(request);
+  const sources: Array<Record<string, unknown>> = [];
+  if (promptValues && Object.keys(promptValues).length > 0) {
+    sources.push(createNamedTemplateSource('prompt variables', promptValues, 'runtime'));
+  }
+  const requestValues = requestVariableSource(rows, 'request');
+  if (Object.keys(requestValues).length > 0) {
+    sources.push(createNamedTemplateSource('request variables', requestValues, 'runtime'));
+  }
+  return sources;
+}
+
 function applyPreferencesToDocument(preferences: PreferencesState) {
   document.documentElement.dataset.debuggerTheme = preferences.theme;
   document.documentElement.style.setProperty('--ui-scale', String(preferences.uiScale));
@@ -864,6 +890,28 @@ export function App() {
     [runtimeVariables]
   );
 
+  async function collectPromptVariablesForRequest(request: RequestDocument, actionLabel: string) {
+    const promptRows = requestVariableRows(request).filter(row => row.enabled !== false && row.name.trim() && row.scope === 'prompt');
+    if (promptRows.length === 0) return {};
+    const values: Record<string, string> = {};
+    for (const row of promptRows) {
+      const value = await promptForText({
+        title: `Prompt · ${row.name}`,
+        label: row.name,
+        description: row.description?.trim() || `Provide a value for {{${row.name}}} before ${actionLabel}.`,
+        defaultValue: row.value || '',
+        placeholder: `Value for ${row.name}`,
+        confirmLabel: 'Use Value'
+      });
+      if (value === null) {
+        notifications.show({ color: 'blue', message: `${actionLabel} cancelled` });
+        return null;
+      }
+      values[row.name.trim()] = value;
+    }
+    return values;
+  }
+
   const currentRequestInsight = useMemo(() => {
     if (!store.workspace || !requestId || !store.draftRequest) return null;
     try {
@@ -872,7 +920,7 @@ export function App() {
         applyRuntimeDefaultsToRequest(store.draftRequest),
         store.draftCases.find(item => item.id === caseId),
         selectedRuntimeEnvironment || undefined,
-        [namedRuntimeSource]
+        [...requestExtraSources(applyRuntimeDefaultsToRequest(store.draftRequest)), namedRuntimeSource]
       );
     } catch (_error) {
       return null;
@@ -889,7 +937,7 @@ export function App() {
         applyRuntimeDefaultsToRequest(currentScratch.request),
         undefined,
         selectedRuntimeEnvironment || undefined,
-        [namedRuntimeSource]
+        [...requestExtraSources(applyRuntimeDefaultsToRequest(currentScratch.request)), namedRuntimeSource]
       );
     } catch (_error) {
       return null;
@@ -1046,15 +1094,19 @@ export function App() {
     mutationFn: async () => {
       if (!store.workspace || !requestId || !store.draftRequest) return;
       const environment = ensureWorkspaceEnvironment(store.activeEnvironmentName, store.workspace);
+      const request = applyRuntimeDefaultsToRequest(store.draftRequest);
+      const promptValues = await collectPromptVariablesForRequest(request, 'request run');
+      if (promptValues === null) return null;
       return runPreparedRequest(store.workspace, {
-        request: applyRuntimeDefaultsToRequest(store.draftRequest),
+        request,
         caseDocument: store.draftCases.find(item => item.id === caseId),
         sessionId: store.workspace.root,
         context: {
           state: {
             variables: runtimeVariables,
             environment: structuredClone(selectedRuntimeEnvironment || environment)
-          }
+          },
+          extraSources: requestExtraSources(request, promptValues)
         }
       });
     },
@@ -1086,14 +1138,18 @@ export function App() {
     mutationFn: async () => {
       if (!store.workspace || !currentScratch) return null;
       const environment = ensureWorkspaceEnvironment(store.activeEnvironmentName, store.workspace);
+      const request = applyRuntimeDefaultsToRequest(currentScratch.request);
+      const promptValues = await collectPromptVariablesForRequest(request, 'scratch run');
+      if (promptValues === null) return null;
       return runPreparedRequest(store.workspace, {
-        request: applyRuntimeDefaultsToRequest(currentScratch.request),
+        request,
         sessionId: store.workspace.root,
         context: {
           state: {
             variables: runtimeVariables,
             environment: structuredClone(selectedRuntimeEnvironment || environment)
-          }
+          },
+          extraSources: requestExtraSources(request, promptValues)
         }
       });
     },
@@ -1844,9 +1900,13 @@ export function App() {
   async function handleRefreshRequestAuth(forceRefresh = true) {
     if (!store.workspace || !requestId) return;
     try {
+      const request = store.draftRequest ? applyRuntimeDefaultsToRequest(store.draftRequest) : null;
+      const promptValues = request ? await collectPromptVariablesForRequest(request, 'auth refresh') : {};
+      if (promptValues === null) return;
       const refreshed = await refreshResolvedRequestAuth(store.workspace, requestId, caseId || undefined, {
         environmentName: store.activeEnvironmentName,
         runtimeVariables,
+        extraSources: request ? requestExtraSources(request, promptValues) : [],
         forceRefresh
       });
       cacheRuntimeEnvironment(refreshed.environment);

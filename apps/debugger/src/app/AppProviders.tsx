@@ -1,8 +1,10 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { MantineProvider, createTheme } from '@mantine/core';
 import { ModalsProvider } from '@mantine/modals';
 import { Notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const PREFERENCES_STORAGE_KEY = 'yapi-debugger.preferences';
 
 const queryClient = new QueryClient();
 const theme = createTheme({
@@ -66,10 +68,33 @@ const theme = createTheme({
   }
 });
 
+function loadInitialColorScheme(): 'light' | 'dark' {
+  if (typeof window === 'undefined') return 'light';
+  try {
+    const raw = window.localStorage.getItem(PREFERENCES_STORAGE_KEY);
+    if (!raw) return 'light';
+    const parsed = JSON.parse(raw) as { theme?: string };
+    return parsed.theme === 'dark' ? 'dark' : 'light';
+  } catch (_err) {
+    return 'light';
+  }
+}
+
 export function AppProviders(props: { children: ReactNode }) {
+  const [colorScheme, setColorScheme] = useState<'light' | 'dark'>(loadInitialColorScheme);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const syncColorScheme = () => setColorScheme(root.dataset.debuggerTheme === 'dark' ? 'dark' : 'light');
+    syncColorScheme();
+    const observer = new MutationObserver(syncColorScheme);
+    observer.observe(root, { attributes: true, attributeFilter: ['data-debugger-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
-      <MantineProvider forceColorScheme="light" theme={theme}>
+      <MantineProvider forceColorScheme={colorScheme} theme={theme}>
         <ModalsProvider>
           <Notifications position="top-right" />
           {props.children}

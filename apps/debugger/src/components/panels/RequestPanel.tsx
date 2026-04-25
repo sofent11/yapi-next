@@ -168,6 +168,7 @@ type WebSocketLiveState = {
 };
 
 type WebSocketMessageDraft = NonNullable<NonNullable<RequestBody['websocket']>['messages']>[number];
+type RequestVariableRow = RequestDocument['vars']['req'][number];
 
 function looksLikeBase64Payload(value: string) {
   const normalized = value.trim();
@@ -206,6 +207,37 @@ function websocketStateFromBody(body: RequestBody): WebSocketRunState {
   return body.websocket?.lastRun
     ? { loading: false, result: body.websocket.lastRun }
     : { loading: false };
+}
+
+function normalizeRequestVariableRow(
+  row: Partial<RequestVariableRow>,
+  scope: 'request' | 'prompt' = 'request'
+): RequestVariableRow {
+  return {
+    name: row.name || '',
+    value: row.value || '',
+    enabled: row.enabled ?? true,
+    kind: 'text',
+    filePath: undefined,
+    scope: row.scope === 'prompt' ? 'prompt' : scope,
+    secret: row.secret ?? false,
+    description: row.description || ''
+  };
+}
+
+function splitRequestVariableRows(rows: RequestVariableRow[]) {
+  return rows.reduce(
+    (output, row) => {
+      const normalized = normalizeRequestVariableRow(row, row.scope === 'prompt' ? 'prompt' : 'request');
+      if (normalized.scope === 'prompt') {
+        output.promptRows.push(normalized);
+      } else {
+        output.requestRows.push(normalized);
+      }
+      return output;
+    },
+    { requestRows: [] as RequestVariableRow[], promptRows: [] as RequestVariableRow[] }
+  );
 }
 
 function requestSectionForTab(tab: RequestTab): RequestSection {
@@ -358,6 +390,7 @@ export function RequestPanel(props: {
     ...requestDocument.runtime,
     ...(selectedCase?.overrides.runtime || {})
   };
+  const { requestRows: requestVariableRows, promptRows: promptVariableRows } = splitRequestVariableRows(requestDocument.vars?.req || []);
 
   const resolvedInsight = useMemo(
     () =>
@@ -516,6 +549,17 @@ export function RequestPanel(props: {
       return;
     }
     props.onRequestChange({ ...requestDocument, runtime: nextRuntime });
+  }
+
+  function updateRequestVariableSection(scope: 'request' | 'prompt', rows: RequestVariableRow[]) {
+    const normalizedRows = rows.map(row => normalizeRequestVariableRow(row, scope));
+    props.onRequestChange({
+      ...requestDocument,
+      vars: {
+        req: scope === 'prompt' ? [...requestVariableRows, ...normalizedRows] : [...normalizedRows, ...promptVariableRows],
+        res: requestDocument.vars?.res || []
+      }
+    });
   }
 
   async function handlePickBodyFile(index: number) {
@@ -2312,6 +2356,44 @@ export function RequestPanel(props: {
                 onChange={event => props.onRequestChange({ ...requestDocument, description: event.currentTarget.value })}
                 minRows={3}
               />
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div className="checks-list">
+                  <div className="check-card">
+                    <Text fw={700}>Request Variables</Text>
+                    <Text size="xs" c="dimmed">
+                      These values resolve with the request preview and runtime before environment/project fallbacks.
+                    </Text>
+                    <KeyValueEditor
+                      rows={requestVariableRows}
+                      onChange={rows =>
+                        updateRequestVariableSection(
+                          'request',
+                          rows.map(row => normalizeRequestVariableRow(row, 'request'))
+                        )
+                      }
+                      nameLabel="Variable"
+                      valueLabel="Value"
+                    />
+                  </div>
+                  <div className="check-card">
+                    <Text fw={700}>Prompt Variables</Text>
+                    <Text size="xs" c="dimmed">
+                      Prompt rows ask for a value right before run. The editor value acts as the default for that prompt.
+                    </Text>
+                    <KeyValueEditor
+                      rows={promptVariableRows}
+                      onChange={rows =>
+                        updateRequestVariableSection(
+                          'prompt',
+                          rows.map(row => normalizeRequestVariableRow(row, 'prompt'))
+                        )
+                      }
+                      nameLabel="Prompt"
+                      valueLabel="Default Value"
+                    />
+                  </div>
+                </div>
+              </div>
               {selectedCase ? (
                 <>
                   <Select

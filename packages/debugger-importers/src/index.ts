@@ -1546,7 +1546,7 @@ function openCollectionVariables(runtime: any): RequestDocument['vars'] {
           enabled: variable.disabled !== true,
           description: openCollectionDescription(variable.description),
           kind: 'text' as const,
-          scope: 'request' as const,
+          scope: variable.scope === 'prompt' ? 'prompt' as const : 'request' as const,
           secret: variable.secret === true
         }))
         .filter((variable: { name: string }) => variable.name)

@@ -148,6 +148,7 @@ struct SendRequestResult {
     size_bytes: usize,
     headers: Vec<ResponseHeader>,
     body_text: String,
+    body_base64: Option<String>,
     timestamp: String,
 }
 
@@ -1195,6 +1196,7 @@ async fn request_send(input: SendRequestInput) -> Result<SendRequestResult, Stri
         size_bytes: bytes.len(),
         headers,
         body_text,
+        body_base64: Some(general_purpose::STANDARD.encode(&bytes)),
         timestamp: chrono_timestamp(),
     })
 }
