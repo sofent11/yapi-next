@@ -19,6 +19,13 @@ export type GitStatusPayload = {
   changedFiles: string[];
 };
 
+export type GitCloneProgressPayload = {
+  cloneId: string;
+  stage: 'starting' | 'progress' | 'complete' | 'error';
+  message: string;
+  targetPath?: string;
+};
+
 export type MenuAction =
   | { action: 'open-project' }
   | { action: 'new-project' }
@@ -230,6 +237,15 @@ export async function gitClone(parent: string, repoUrl: string, folderName: stri
   return invoke('git_clone', { parent, repoUrl, folderName });
 }
 
+export async function gitCloneWithProgress(
+  parent: string,
+  repoUrl: string,
+  folderName: string,
+  cloneId: string
+): Promise<string> {
+  return invoke('git_clone', { parent, repoUrl, folderName, cloneId });
+}
+
 export async function openTerminal(root: string) {
   await invoke('open_terminal', { root });
 }
@@ -276,6 +292,12 @@ export function listenCaptureEvents(handlers: {
 
 export function listenMenuActions(handler: (action: MenuAction) => void) {
   return listen<MenuAction>('menu://action', event => {
+    handler(event.payload);
+  });
+}
+
+export function listenGitCloneProgress(handler: (payload: GitCloneProgressPayload) => void) {
+  return listen<GitCloneProgressPayload>('git://clone-progress', event => {
     handler(event.payload);
   });
 }

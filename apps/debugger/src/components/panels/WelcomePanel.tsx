@@ -90,6 +90,9 @@ export function WelcomePanel(props: {
               <Text size="xs" c="dimmed">
                 API 导入发生在进入工作区之后，这样请求、环境、Case 和 Collection 才会落在同一个本地项目里。
               </Text>
+              <Text size="xs" c="dimmed">
+                私有仓库建议使用 SSH 地址，或先在系统 Git 凭据助手中配置 HTTPS/PAT；桌面端 clone 会直接反馈进度与认证错误，但不会弹出交互式密码提示。
+              </Text>
             </div>
           </div>
 

@@ -2988,6 +2988,65 @@ mark {
   border-radius: 2px;
 }
 
+.response-merge-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.response-merge-toolbar {
+  align-items: center;
+}
+
+.response-merge-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.response-merge-column {
+  min-width: 0;
+}
+
+.response-merge-body {
+  display: grid;
+  gap: 4px;
+  max-height: 420px;
+  overflow: auto;
+  margin-top: 10px;
+}
+
+.response-merge-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+
+.response-merge-row strong {
+  font-size: 0.74rem;
+  color: var(--muted-strong);
+  font-family: var(--font-mono);
+}
+
+.response-merge-row span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+}
+
+.response-merge-row.is-changed {
+  background: color-mix(in srgb, var(--orange-soft) 30%, var(--surface));
+}
+
+.response-merge-row.is-active {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
 .response-search-input {
   width: min(320px, 100%);
 }
@@ -3097,6 +3156,10 @@ mark {
   }
 
   .response-diff-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .response-merge-grid {
     grid-template-columns: 1fr;
   }
 }

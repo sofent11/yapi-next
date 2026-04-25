@@ -17,7 +17,7 @@ import {
   clearBrowserCaptureSession,
   clearSession,
   deleteEntry,
-  gitClone,
+  gitCloneWithProgress,
   gitDiff,
   gitPull,
   gitPush,
@@ -26,6 +26,7 @@ import {
   launchCaptureBrowser,
   listCaptureTargets,
   listenCaptureEvents,
+  listenGitCloneProgress,
   listenMenuActions,
   openTerminal,
   startBrowserCapture,
@@ -1909,12 +1910,53 @@ export function App() {
       validate: value => (value.trim() ? null : '请输入目标文件夹名。')
     });
     if (!folderName) return;
+    const cloneId = crypto.randomUUID();
+    const notificationId = `git-clone:${cloneId}`;
+    const unlistenProgressPromise = listenGitCloneProgress(payload => {
+      if (payload.cloneId !== cloneId) return;
+      notifications.update({
+        id: notificationId,
+        loading: payload.stage !== 'complete' && payload.stage !== 'error',
+        autoClose: payload.stage === 'complete' ? 3000 : false,
+        withCloseButton: payload.stage === 'complete' || payload.stage === 'error',
+        color: payload.stage === 'error' ? 'red' : payload.stage === 'complete' ? 'teal' : 'blue',
+        title: payload.stage === 'error' ? 'Clone failed' : payload.stage === 'complete' ? 'Clone complete' : 'Cloning repository',
+        message: payload.message
+      });
+    });
+    notifications.show({
+      id: notificationId,
+      loading: true,
+      autoClose: false,
+      withCloseButton: false,
+      color: 'blue',
+      title: 'Cloning repository',
+      message: `Contacting ${repoUrl.trim()}`
+    });
     try {
-      const root = await gitClone(parent, repoUrl, folderName.trim());
-      notifications.show({ color: 'teal', message: `Repository cloned into ${folderName.trim()}` });
+      const root = await gitCloneWithProgress(parent, repoUrl, folderName.trim(), cloneId);
+      notifications.update({
+        id: notificationId,
+        loading: false,
+        autoClose: 3000,
+        withCloseButton: true,
+        color: 'teal',
+        title: 'Clone complete',
+        message: `Repository cloned into ${folderName.trim()}`
+      });
       openExistingWorkspace(root);
     } catch (error) {
-      notifications.show({ color: 'red', message: `Failed to clone repository: ${(error as Error).message}` });
+      notifications.update({
+        id: notificationId,
+        loading: false,
+        autoClose: false,
+        withCloseButton: true,
+        color: 'red',
+        title: 'Clone failed',
+        message: (error as Error).message
+      });
+    } finally {
+      unlistenProgressPromise.then(unlisten => unlisten()).catch(() => undefined);
     }
   }
 
@@ -2279,6 +2321,47 @@ export function App() {
           : collectionReportHtml(report);
     await writeDocument(targetPath, content);
     notifications.show({ color: 'teal', message: `Collection report exported as ${format.toUpperCase()}` });
+  }
+
+  async function handleExportConfiguredCollectionReports() {
+    const report = collectionReports.find(item => item.id === selectedCollectionReportId) || collectionReports[0];
+    const sourceCollection = draftCollection || selectedCollectionRecord?.document || null;
+    if (!report) {
+      notifications.show({ color: 'blue', message: 'Select a collection report first.' });
+      return;
+    }
+    const enabledReporters = sourceCollection?.reporters || ['json', 'html'];
+    if (enabledReporters.length === 0) {
+      notifications.show({ color: 'blue', message: 'Enable at least one reporter format first.' });
+      return;
+    }
+
+    const targetPath = await saveFile({
+      title: 'Export Configured Collection Reports',
+      defaultPath: `${slugify(report.collectionName || 'collection-report')}.json`,
+      filters: [
+        { name: 'JSON', extensions: ['json'] },
+        { name: 'HTML', extensions: ['html'] },
+        { name: 'XML', extensions: ['xml'] }
+      ]
+    });
+    if (!targetPath) return;
+
+    const basePath = targetPath.replace(/\.(json|html|xml)$/i, '');
+    for (const reporter of enabledReporters) {
+      const content =
+        reporter === 'json'
+          ? collectionReportJson(report)
+          : reporter === 'junit'
+            ? collectionReportJunit(report)
+            : collectionReportHtml(report);
+      const extension = reporter === 'junit' ? 'xml' : reporter;
+      await writeDocument(`${basePath}.${extension}`, content);
+    }
+    notifications.show({
+      color: 'teal',
+      message: `Exported ${enabledReporters.length} configured report format${enabledReporters.length > 1 ? 's' : ''}`
+    });
   }
 
   async function handleExportSelectedCollectionBruno(format: 'folder' | 'json' = 'folder') {
@@ -3630,6 +3713,7 @@ export function App() {
                   onOpenCase={handleSelectCase}
                   onExtractValue={handleExtractCollectionReportValue}
                   onExportReport={handleExportSelectedCollectionReport}
+                  onExportConfiguredReports={handleExportConfiguredCollectionReports}
                   onExportBruno={handleExportSelectedCollectionBruno}
                   onExportOpenCollection={handleExportSelectedCollectionOpenCollection}
                   onCopyText={(value, successMessage) => {

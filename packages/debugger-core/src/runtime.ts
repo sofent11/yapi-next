@@ -164,6 +164,18 @@ function buildResponseHeaderMap(response: SendRequestResult) {
   return new Map(response.headers.map(item => [item.name.toLowerCase(), item.value]));
 }
 
+function buildResponseCookieMap(response: SendRequestResult) {
+  return new Map(
+    response.headers
+      .filter(header => header.name.toLowerCase() === 'set-cookie')
+      .map(header => {
+        const [cookiePart] = header.value.split(';');
+        const [name, ...rest] = cookiePart.split('=');
+        return [name?.trim() || 'cookie', rest.join('=').trim()] as const;
+      })
+  );
+}
+
 function scriptRowIndex(rows: ParameterRow[], key: string) {
   const normalized = key.trim().toLowerCase();
   return rows.findIndex(row => row.name.trim().toLowerCase() === normalized);
@@ -300,22 +312,38 @@ function createScriptLog(phase: ScriptLog['phase'], level: ScriptLog['level'], m
 
 function createScriptResponse(response: SendRequestResult) {
   const responseHeaders = buildResponseHeaderMap(response);
+  const responseCookies = buildResponseCookieMap(response);
   const responseBody = safeJsonParse(response.bodyText);
   return {
     code: response.status,
     status: response.status,
     statusText: response.statusText,
     text: () => response.bodyText,
-    json: () => responseBody,
+    json: (path?: string) => path ? readPathValue(responseBody, path) : responseBody,
     headers: {
       get: (key: string) => responseHeaders.get(key.toLowerCase()) || '',
-      has: (key: string) => responseHeaders.has(key.toLowerCase())
+      has: (key: string) => responseHeaders.has(key.toLowerCase()),
+      toObject: () => Object.fromEntries(response.headers.map(header => [header.name.toLowerCase(), header.value]))
+    },
+    cookies: {
+      get: (key: string) => responseCookies.get(key) || '',
+      has: (key: string) => responseCookies.has(key),
+      toObject: () => Object.fromEntries(responseCookies.entries())
     },
     to: {
       have: {
         status(expected: number) {
           if (response.status !== expected) {
             throw new Error(`Expected response status ${response.status} to equal ${expected}`);
+          }
+        },
+        header(name: string, expected?: string) {
+          const actual = responseHeaders.get(name.toLowerCase());
+          if (!actual) {
+            throw new Error(`Expected response to have header ${name}`);
+          }
+          if (expected !== undefined && actual !== expected) {
+            throw new Error(`Expected response header ${name} to equal ${expected}, got ${actual}`);
           }
         }
       }
@@ -432,6 +460,27 @@ function buildExpect(actual: unknown) {
       if (!(Number(actual) < expected)) {
         throw new Error(`Expected ${stringifyValue(actual)} to be less than ${expected}`);
       }
+    },
+    true() {
+      if (actual !== true) {
+        throw new Error(`Expected ${stringifyValue(actual)} to be true`);
+      }
+    },
+    false() {
+      if (actual !== false) {
+        throw new Error(`Expected ${stringifyValue(actual)} to be false`);
+      }
+    },
+    lengthOf(expected: number) {
+      const actualLength = normalizeLength(actual);
+      if (actualLength !== expected) {
+        throw new Error(`Expected length ${actualLength} to equal ${expected}`);
+      }
+    },
+    property(expected: string) {
+      if (!actual || typeof actual !== 'object' || !(expected in (actual as Record<string, unknown>))) {
+        throw new Error(`Expected ${stringifyValue(actual)} to have property ${expected}`);
+      }
     }
   };
 
@@ -442,8 +491,14 @@ function buildExpect(actual: unknown) {
       contain: chain.contain,
       match: chain.match,
       exist: chain.exist,
+      have: {
+        lengthOf: chain.lengthOf,
+        property: chain.property
+      },
       be: {
-        lessThan: chain.lessThan
+        lessThan: chain.lessThan,
+        true: chain.true,
+        false: chain.false
       }
     }
   };
@@ -490,6 +545,11 @@ function createPmApi(input: {
     variables: variablesApi,
     collectionVariables: variablesApi,
     environment: environmentApi,
+    cookies: responseApi?.cookies || {
+      get: (_key: string) => '',
+      has: (_key: string) => false,
+      toObject: () => ({})
+    },
     sendRequest: (requestInput: unknown, callback?: (error: Error | null, response?: ReturnType<typeof createScriptResponse>) => void) => {
       if (input.phase !== 'pre-request') {
         throw new Error('pm.sendRequest lite is only available during pre-request scripts.');

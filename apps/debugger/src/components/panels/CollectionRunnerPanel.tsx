@@ -93,6 +93,7 @@ export function CollectionRunnerPanel(props: {
   onOpenCase?: (requestId: string, caseId: string) => void;
   onExtractValue?: (target: 'local' | 'runtime' | 'collection', input: { suggestedName: string; value: string }) => void;
   onExportReport?: (format: 'json' | 'html' | 'junit') => void;
+  onExportConfiguredReports?: () => void;
   onExportBruno?: (format: 'folder' | 'json') => void;
   onExportOpenCollection?: () => void;
   onCopyText?: (value: string, successMessage: string) => void;
@@ -316,6 +317,14 @@ export function CollectionRunnerPanel(props: {
                   disabled={!selectedReport || !enabledReporters.includes('junit')}
                 >
                   JUnit
+                </Button>
+                <Button
+                  size="xs"
+                  variant="default"
+                  onClick={props.onExportConfiguredReports}
+                  disabled={!selectedReport || enabledReporters.length === 0 || !props.onExportConfiguredReports}
+                >
+                  Configured
                 </Button>
                 <Button size="xs" variant="subtle" color="red" onClick={props.onClearReports}>
                   Clear

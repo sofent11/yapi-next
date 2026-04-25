@@ -14,8 +14,9 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs,
+    io::Read,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -252,6 +253,15 @@ struct GitStatusPayload {
     ahead: usize,
     behind: usize,
     changed_files: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitCloneProgressPayload {
+    clone_id: String,
+    stage: String,
+    message: String,
+    target_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -858,6 +868,49 @@ fn null_device() -> &'static str {
     }
 }
 
+fn emit_git_clone_progress<R: Runtime>(
+    app: &AppHandle<R>,
+    clone_id: &str,
+    stage: &str,
+    message: impl Into<String>,
+    target_path: Option<String>,
+) {
+    let _ = app.emit(
+        "git://clone-progress",
+        GitCloneProgressPayload {
+            clone_id: clone_id.to_string(),
+            stage: stage.to_string(),
+            message: message.into(),
+            target_path,
+        },
+    );
+}
+
+fn format_git_clone_error(stderr: &str) -> String {
+    let trimmed = stderr.trim();
+    let detail = trimmed
+        .lines()
+        .rev()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or("git clone failed")
+        .trim();
+    let normalized = trimmed.to_ascii_lowercase();
+    let auth_error = normalized.contains("authentication failed")
+        || normalized.contains("terminal prompts disabled")
+        || normalized.contains("could not read username")
+        || normalized.contains("permission denied (publickey)")
+        || normalized.contains("repository not found")
+        || normalized.contains("access denied");
+
+    if auth_error {
+        return format!(
+            "Clone authentication failed. This desktop flow does not open an interactive git prompt, so use an SSH remote or configure HTTPS credentials/PAT in your git credential helper first. Detail: {detail}"
+        );
+    }
+
+    detail.to_string()
+}
+
 #[tauri::command]
 fn git_status(root: String) -> Result<GitStatusPayload, String> {
     let branch_output = run_git(&root, &["status", "--short", "--branch"])?;
@@ -970,7 +1023,13 @@ fn git_diff(root: String, path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn git_clone(parent: String, repo_url: String, folder_name: String) -> Result<String, String> {
+fn git_clone(
+    app: AppHandle,
+    parent: String,
+    repo_url: String,
+    folder_name: String,
+    clone_id: Option<String>,
+) -> Result<String, String> {
     let parent_path = PathBuf::from(&parent);
     if !parent_path.exists() {
         return Err("Clone parent directory does not exist".into());
@@ -983,21 +1042,129 @@ fn git_clone(parent: String, repo_url: String, folder_name: String) -> Result<St
     if target.exists() {
         return Err("Clone target already exists".into());
     }
-    let output = Command::new("git")
+    let clone_id = clone_id.unwrap_or_else(|| normalize_path(&target.to_string_lossy()));
+    let normalized_target = normalize_path(&target.to_string_lossy());
+    emit_git_clone_progress(
+        &app,
+        &clone_id,
+        "starting",
+        format!("Preparing clone into {}", folder),
+        Some(normalized_target.clone()),
+    );
+
+    let mut child = Command::new("git")
         .arg("clone")
+        .arg("--progress")
         .arg(repo_url.trim())
         .arg(&target)
-        .output()
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|error| error.to_string())?;
+
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "Failed to capture git clone stderr".to_string())?;
+    let progress_log = Arc::new(Mutex::new(Vec::<String>::new()));
+    let progress_log_handle = Arc::clone(&progress_log);
+    let progress_app = app.clone();
+    let progress_clone_id = clone_id.clone();
+    let progress_target = normalized_target.clone();
+    let stderr_thread = std::thread::spawn(move || {
+        let mut stream = stderr;
+        let mut buffer = [0_u8; 1024];
+        let mut pending = String::new();
+
+        loop {
+            match stream.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(read) => {
+                    pending.push_str(&String::from_utf8_lossy(&buffer[..read]));
+                    loop {
+                        let Some((index, separator)) = pending
+                            .char_indices()
+                            .find(|(_, ch)| *ch == '\r' || *ch == '\n')
+                        else {
+                            break;
+                        };
+                        let line = pending[..index].trim().to_string();
+                        pending.drain(..index + separator.len_utf8());
+                        if line.is_empty() {
+                            continue;
+                        }
+                        if let Ok(mut log) = progress_log_handle.lock() {
+                            log.push(line.clone());
+                        }
+                        emit_git_clone_progress(
+                            &progress_app,
+                            &progress_clone_id,
+                            "progress",
+                            line,
+                            Some(progress_target.clone()),
+                        );
+                    }
+                }
+                Err(error) => {
+                    let message = format!("Failed to read git clone progress: {error}");
+                    if let Ok(mut log) = progress_log_handle.lock() {
+                        log.push(message.clone());
+                    }
+                    emit_git_clone_progress(
+                        &progress_app,
+                        &progress_clone_id,
+                        "error",
+                        message,
+                        Some(progress_target.clone()),
+                    );
+                    break;
+                }
+            }
+        }
+
+        let tail = pending.trim().to_string();
+        if !tail.is_empty() {
+            if let Ok(mut log) = progress_log_handle.lock() {
+                log.push(tail.clone());
+            }
+            emit_git_clone_progress(
+                &progress_app,
+                &progress_clone_id,
+                "progress",
+                tail,
+                Some(progress_target),
+            );
+        }
+    });
+
+    let output = child.wait_with_output().map_err(|error| error.to_string())?;
+    let _ = stderr_thread.join();
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if stderr.is_empty() {
-            "git clone failed".into()
-        } else {
-            stderr
-        });
+        let stderr = progress_log
+            .lock()
+            .ok()
+            .map(|log| log.join("\n"))
+            .unwrap_or_default();
+        let message = format_git_clone_error(&stderr);
+        emit_git_clone_progress(
+            &app,
+            &clone_id,
+            "error",
+            message.clone(),
+            Some(normalized_target),
+        );
+        return Err(message);
     }
-    Ok(normalize_path(&target.to_string_lossy()))
+
+    emit_git_clone_progress(
+        &app,
+        &clone_id,
+        "complete",
+        format!("Clone complete: {}", folder),
+        Some(normalized_target.clone()),
+    );
+    Ok(normalized_target)
 }
 
 #[tauri::command]

@@ -43,6 +43,29 @@ function insightResolvedAuthHeader(value: string) {
   };
 }
 
+function createNtlmType2Header() {
+  const signature = Buffer.from('NTLMSSP\0', 'utf8');
+  const targetInfo = Buffer.alloc(16);
+  targetInfo.writeUInt16LE(7, 0);
+  targetInfo.writeUInt16LE(8, 2);
+  targetInfo.writeBigUInt64LE(133801632000000000n, 4);
+  targetInfo.writeUInt16LE(0, 12);
+  targetInfo.writeUInt16LE(0, 14);
+  const bytes = Buffer.alloc(48 + targetInfo.length);
+  signature.copy(bytes, 0);
+  bytes.writeUInt32LE(2, 8);
+  bytes.writeUInt16LE(0, 12);
+  bytes.writeUInt16LE(0, 14);
+  bytes.writeUInt32LE(48 + targetInfo.length, 16);
+  bytes.writeUInt32LE(0xA0880201, 20);
+  Buffer.from([1, 35, 69, 103, 137, 171, 205, 239]).copy(bytes, 24);
+  bytes.writeUInt16LE(targetInfo.length, 40);
+  bytes.writeUInt16LE(targetInfo.length, 42);
+  bytes.writeUInt32LE(48, 44);
+  targetInfo.copy(bytes, 48);
+  return `NTLM ${bytes.toString('base64')}`;
+}
+
 test('resolveRequest interpolates step and data variables with correct priority', () => {
   const project = createDefaultProject('Demo');
   project.runtime.baseUrl = 'https://api.example.com';
@@ -206,6 +229,52 @@ test('executeRequestScript exposes richer request and response helpers', async (
   assert.equal(post.testResults[0]?.ok, true);
 });
 
+test('executeRequestScript supports deeper sandbox assertions and cookie helpers', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Sandbox');
+  request.url = 'https://example.com/cookies';
+  const preview = resolveRequest(project, request, undefined, environment);
+
+  const result = await executeRequestScript({
+    phase: 'post-response',
+    script: `
+      pm.test('sandbox helpers', () => {
+        pm.response.to.have.status(200);
+        pm.response.to.have.header('content-type', 'application/json');
+        pm.expect(pm.response.json('$.ok')).to.equal(true);
+        pm.expect(pm.cookies.has('sid')).to.equal(true);
+        pm.expect(pm.cookies.get('sid')).to.equal('abc123');
+        pm.expect(pm.response.headers.toObject()).to.have.property('content-type');
+        pm.expect([1, 2, 3]).to.have.lengthOf(3);
+        pm.expect(true).to.be.true();
+        pm.expect(false).to.be.false();
+      });
+    `,
+    state: {
+      variables: {},
+      environment
+    },
+    request: preview,
+    response: {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      url: preview.url,
+      durationMs: 11,
+      sizeBytes: 12,
+      headers: [
+        { name: 'content-type', value: 'application/json' },
+        { name: 'set-cookie', value: 'sid=abc123; Path=/; HttpOnly' }
+      ],
+      bodyText: '{"ok":true}',
+      timestamp: new Date().toISOString()
+    }
+  });
+
+  assert.equal(result.testResults[0]?.ok, true);
+});
+
 test('runPreparedRequest executes request-level scripts before case-level scripts', async () => {
   const project = createDefaultProject('Demo');
   const environment = createDefaultEnvironment('shared');
@@ -272,6 +341,68 @@ test('runPreparedRequest executes request-level scripts before case-level script
     'request-post',
     'case-post'
   ]);
+});
+
+test('runPreparedRequest executes native script items without requiring an HTTP url', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Script Item');
+  request.kind = 'script';
+  request.body = {
+    mode: 'text',
+    mimeType: 'application/javascript',
+    text: `
+      pm.variables.set('token', 'script-ok');
+      pm.test('script check', () => pm.expect(pm.variables.get('token')).to.equal('script-ok'));
+      console.log('script-main');
+    `,
+    fields: []
+  };
+  request.scripts = {
+    preRequest: 'pm.environment.set("scriptFlag", "ready"); console.log("script-pre");',
+    postResponse: 'console.log("script-post");',
+    tests: 'pm.test("synthetic response", () => pm.expect(pm.response?.code).to.equal(200));'
+  };
+  const workspace = {
+    root: '/tmp/script-item-workspace',
+    project,
+    environments: [{ document: environment, filePath: '/tmp/script-item-workspace/environments/shared.yaml' }],
+    requests: [
+      {
+        request,
+        cases: [],
+        folderSegments: [],
+        requestFilePath: '/tmp/script-item-workspace/requests/script-item.request.yaml',
+        resourceDirPath: '/tmp/script-item-workspace/requests/script-item'
+      }
+    ],
+    folders: [],
+    collections: [],
+    tree: []
+  };
+
+  const result = await runPreparedRequest({
+    workspace,
+    request,
+    sendRequest: async preview => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      url: preview.url,
+      durationMs: 1,
+      sizeBytes: 2,
+      headers: [],
+      bodyText: '{}',
+      timestamp: new Date().toISOString()
+    })
+  });
+
+  assert.equal(result.preview.url, `script://${request.id}`);
+  assert.equal(result.response.status, 200);
+  assert.equal(result.state.variables.token, 'script-ok');
+  assert.equal(result.state.environment.vars.scriptFlag, 'ready');
+  assert.deepEqual(result.checkResults.map(item => item.label), ['script check', 'synthetic response']);
+  assert.deepEqual(result.scriptLogs.map(item => item.message), ['script-pre', 'script-main', 'script-post']);
 });
 
 test('buildCurlCommand emits a runnable curl string', () => {
@@ -759,6 +890,85 @@ test('resolveRequest builds NTLM negotiate headers', () => {
   const insight = inspectResolvedRequest(project, request, undefined, environment);
   assert.equal(insight.authPreview.some(item => item.name === 'Authorization' && item.status === 'ready'), true);
   assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-ntlm-auth'), false);
+});
+
+test('runPreparedRequest retries NTLM auth after WWW-Authenticate challenge', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('NTLM Feed');
+  request.method = 'GET';
+  request.url = 'https://api.example.com/feed';
+  request.auth = {
+    type: 'ntlm',
+    username: 'alice',
+    password: 'secret',
+    domain: 'ACME',
+    workstation: 'WS-01'
+  };
+  const workspace = {
+    root: '/Users/sofent/work/yapi/.test-workspaces/ntlm-runtime',
+    project,
+    environments: [{ document: environment, filePath: '/Users/sofent/work/yapi/.test-workspaces/ntlm-runtime/environments/shared.yaml' }],
+    requests: [
+      {
+        request,
+        cases: [],
+        folderSegments: [],
+        requestFilePath: '/Users/sofent/work/yapi/.test-workspaces/ntlm-runtime/requests/ntlm.request.yaml',
+        resourceDirPath: '/Users/sofent/work/yapi/.test-workspaces/ntlm-runtime/requests/ntlm'
+      }
+    ],
+    folders: [],
+    collections: [],
+    tree: []
+  };
+  const sentAuthorization: string[] = [];
+  const sentSessions: string[] = [];
+
+  const result = await runPreparedRequest({
+    workspace,
+    request,
+    sendRequest: async preview => {
+      sentSessions.push(preview.sessionId || '');
+      sentAuthorization.push(preview.headers.find(header => header.name === 'Authorization')?.value || '');
+      if (sentAuthorization.length === 1) {
+        return {
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          url: preview.url,
+          durationMs: 10,
+          sizeBytes: 0,
+          headers: [
+            {
+              name: 'www-authenticate',
+              value: `Negotiate, ${createNtlmType2Header()}`
+            }
+          ],
+          bodyText: '',
+          timestamp: new Date().toISOString()
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: preview.url,
+        durationMs: 12,
+        sizeBytes: 11,
+        headers: [],
+        bodyText: '{"ok":true}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.equal(result.response.status, 200);
+  assert.equal(sentAuthorization.length, 2);
+  assert.equal(insightResolvedAuthHeader(sentAuthorization[0]).messageType, 1);
+  assert.equal(insightResolvedAuthHeader(sentAuthorization[1]).messageType, 3);
+  assert.equal(insightResolvedAuthHeader(result.preview.headers.find(header => header.name === 'Authorization')?.value || '').messageType, 3);
+  assert.deepEqual(sentSessions, [workspace.root, workspace.root]);
 });
 
 test('inspectResolvedRequest blocks incomplete NTLM auth', () => {

@@ -1080,6 +1080,13 @@ export function RequestPanel(props: {
                           examples: []
                         }
                       }
+                    : nextKind === 'script'
+                      ? {
+                          ...body,
+                          mode: 'text' as const,
+                          mimeType: 'application/javascript',
+                          text: body.text || requestDocument.scripts.preRequest || ''
+                        }
                     : body;
               const nextMethod = nextKind === 'graphql' ? 'POST' : nextKind === 'websocket' ? 'GET' : effectiveMethod;
               if (selectedCase) {
@@ -1126,7 +1133,7 @@ export function RequestPanel(props: {
             </Button>
           ) : null}
           <Button size="sm" variant="filled" leftSection={<IconPlayerPlay size={14} />} loading={props.isRunning} onClick={props.onRun}>
-            发送请求
+            {effectiveKind === 'script' ? '运行脚本' : '发送请求'}
           </Button>
         </div>
       </div>
@@ -1645,6 +1652,21 @@ export function RequestPanel(props: {
                     ) : null}
                   </div>
                 ) : null}
+              </div>
+            ) : effectiveKind === 'script' ? (
+              <div className="graphql-body-grid">
+                <div className="preview-note">
+                  <Text size="xs" c="dimmed">
+                    Script items run directly in the debugger sandbox. Use <code>pm.variables</code>, <code>pm.environment</code>,
+                    <code> pm.test</code>, and lite <code>pm.sendRequest</code> to orchestrate follow-up HTTP calls.
+                  </Text>
+                </div>
+                <CodeEditor
+                  value={body.text || requestDocument.scripts.preRequest || ''}
+                  language="text"
+                  onChange={value => updateBody({ ...body, mode: 'text', mimeType: 'application/javascript', text: value })}
+                  minHeight="320px"
+                />
               </div>
             ) : (
               <>

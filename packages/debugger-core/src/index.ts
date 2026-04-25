@@ -30,6 +30,7 @@ import {
   resolvedRequestPreviewSchema,
   runtimeSettingsSchema,
   sendRequestInputSchema,
+  sendRequestResultSchema,
   requestBodySchema,
   requestDocumentSchema,
   slugify,
@@ -2993,6 +2994,25 @@ function base64Bytes(bytes: number[]) {
   return output;
 }
 
+function bytesFromBase64(input: string) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const cleaned = input.replace(/\s+/g, '').replace(/=+$/g, '');
+  let bits = 0;
+  let bitCount = 0;
+  const output: number[] = [];
+  for (const char of cleaned) {
+    const value = alphabet.indexOf(char);
+    if (value === -1) continue;
+    bits = (bits << 6) | value;
+    bitCount += 6;
+    while (bitCount >= 8) {
+      bitCount -= 8;
+      output.push((bits >> bitCount) & 0xff);
+    }
+  }
+  return output;
+}
+
 function hexBytes(bytes: number[]) {
   return bytes.map(byte => byte.toString(16).padStart(2, '0')).join('');
 }
@@ -3066,6 +3086,75 @@ function md5Bytes(input: number[]) {
 
 function md5Hex(value: string) {
   return hexBytes(md5Bytes(utf8Bytes(value)));
+}
+
+const MD4_ROUND2_ORDER = [0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15];
+const MD4_ROUND3_ORDER = [0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15];
+
+function rotateLeft(value: number, shift: number) {
+  return ((value << shift) | (value >>> (32 - shift))) >>> 0;
+}
+
+function md4Bytes(input: number[]) {
+  const bytes = [...input];
+  const bitLength = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  for (let shift = 0; shift <= 56; shift += 8) {
+    bytes.push((bitLength / 2 ** shift) & 0xff);
+  }
+
+  let a0 = 0x67452301;
+  let b0 = 0xefcdab89;
+  let c0 = 0x98badcfe;
+  let d0 = 0x10325476;
+
+  for (let offset = 0; offset < bytes.length; offset += 64) {
+    const words = Array.from({ length: 16 }, (_, index) => {
+      const start = offset + index * 4;
+      return (
+        bytes[start] |
+        (bytes[start + 1] << 8) |
+        (bytes[start + 2] << 16) |
+        (bytes[start + 3] << 24)
+      ) >>> 0;
+    });
+    let a = a0;
+    let b = b0;
+    let c = c0;
+    let d = d0;
+    const f = (x: number, y: number, z: number) => ((x & y) | (~x & z)) >>> 0;
+    const g = (x: number, y: number, z: number) => ((x & y) | (x & z) | (y & z)) >>> 0;
+    const h = (x: number, y: number, z: number) => (x ^ y ^ z) >>> 0;
+
+    for (let index = 0; index < 16; index += 4) {
+      a = rotateLeft((a + f(b, c, d) + words[index]) >>> 0, 3);
+      d = rotateLeft((d + f(a, b, c) + words[index + 1]) >>> 0, 7);
+      c = rotateLeft((c + f(d, a, b) + words[index + 2]) >>> 0, 11);
+      b = rotateLeft((b + f(c, d, a) + words[index + 3]) >>> 0, 19);
+    }
+
+    for (let index = 0; index < 16; index += 4) {
+      a = rotateLeft((a + g(b, c, d) + words[MD4_ROUND2_ORDER[index]] + 0x5a827999) >>> 0, 3);
+      d = rotateLeft((d + g(a, b, c) + words[MD4_ROUND2_ORDER[index + 1]] + 0x5a827999) >>> 0, 5);
+      c = rotateLeft((c + g(d, a, b) + words[MD4_ROUND2_ORDER[index + 2]] + 0x5a827999) >>> 0, 9);
+      b = rotateLeft((b + g(c, d, a) + words[MD4_ROUND2_ORDER[index + 3]] + 0x5a827999) >>> 0, 13);
+    }
+
+    for (let index = 0; index < 16; index += 4) {
+      a = rotateLeft((a + h(b, c, d) + words[MD4_ROUND3_ORDER[index]] + 0x6ed9eba1) >>> 0, 3);
+      d = rotateLeft((d + h(a, b, c) + words[MD4_ROUND3_ORDER[index + 1]] + 0x6ed9eba1) >>> 0, 9);
+      c = rotateLeft((c + h(d, a, b) + words[MD4_ROUND3_ORDER[index + 2]] + 0x6ed9eba1) >>> 0, 11);
+      b = rotateLeft((b + h(c, d, a) + words[MD4_ROUND3_ORDER[index + 3]] + 0x6ed9eba1) >>> 0, 15);
+    }
+
+    a0 = (a0 + a) >>> 0;
+    b0 = (b0 + b) >>> 0;
+    c0 = (c0 + c) >>> 0;
+    d0 = (d0 + d) >>> 0;
+  }
+
+  return [a0, b0, c0, d0].flatMap(word => [word & 0xff, (word >>> 8) & 0xff, (word >>> 16) & 0xff, (word >>> 24) & 0xff]);
 }
 
 function sha1Bytes(input: number[]) {
@@ -3299,8 +3388,78 @@ function littleEndian32(value: number) {
   return [value & 0xff, (value >> 8) & 0xff, (value >> 16) & 0xff, (value >> 24) & 0xff];
 }
 
+function littleEndian64(value: bigint) {
+  return Array.from({ length: 8 }, (_, index) => Number((value >> BigInt(index * 8)) & 0xffn));
+}
+
+function readLittleEndian16(bytes: number[], offset: number) {
+  return (bytes[offset] || 0) | ((bytes[offset + 1] || 0) << 8);
+}
+
+function readLittleEndian32(bytes: number[], offset: number) {
+  return (
+    (bytes[offset] || 0) |
+    ((bytes[offset + 1] || 0) << 8) |
+    ((bytes[offset + 2] || 0) << 16) |
+    ((bytes[offset + 3] || 0) << 24)
+  ) >>> 0;
+}
+
+function readLittleEndian64(bytes: number[], offset: number) {
+  let output = 0n;
+  for (let index = 0; index < 8; index += 1) {
+    output |= BigInt(bytes[offset + index] || 0) << BigInt(index * 8);
+  }
+  return output;
+}
+
 function ntlmSecurityBuffer(length: number, offset: number) {
   return [...littleEndian16(length), ...littleEndian16(length), ...littleEndian32(offset)];
+}
+
+function ntlmSecurityBufferValue(bytes: number[], offset: number) {
+  const length = readLittleEndian16(bytes, offset);
+  const valueOffset = readLittleEndian32(bytes, offset + 4);
+  return bytes.slice(valueOffset, valueOffset + length);
+}
+
+function randomByteArray(length: number) {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi?.getRandomValues) {
+    return Array.from(cryptoApi.getRandomValues(new Uint8Array(length)));
+  }
+  return Array.from({ length }, () => Math.floor(Math.random() * 256));
+}
+
+function currentNtlmTimestamp() {
+  return (BigInt(Date.now()) + 11644473600000n) * 10000n;
+}
+
+function parseNtlmChallenge(header: string) {
+  const match = /(?:^|,\s*)NTLM\s+([A-Za-z0-9+/=]+)/i.exec(header);
+  if (!match) return undefined;
+  const bytes = bytesFromBase64(match[1]);
+  if (bytes.length < 48 || String.fromCharCode(...bytes.slice(0, 8)) !== 'NTLMSSP\0') return undefined;
+  if (readLittleEndian32(bytes, 8) !== 2) return undefined;
+  const targetInfo = ntlmSecurityBufferValue(bytes, 40);
+  let timestamp: bigint | undefined;
+  for (let offset = 0; offset + 4 <= targetInfo.length;) {
+    const avId = readLittleEndian16(targetInfo, offset);
+    const avLength = readLittleEndian16(targetInfo, offset + 2);
+    const valueOffset = offset + 4;
+    if (avId === 0) break;
+    if (avId === 7 && avLength === 8) {
+      timestamp = readLittleEndian64(targetInfo, valueOffset);
+    }
+    offset = valueOffset + avLength;
+  }
+  return {
+    token: match[1],
+    flags: readLittleEndian32(bytes, 20),
+    serverChallenge: bytes.slice(24, 32),
+    targetInfo,
+    timestamp
+  };
 }
 
 function buildNtlmNegotiateHeader(input: {
@@ -3347,6 +3506,92 @@ function buildNtlmNegotiateHeader(input: {
   return {
     header: `NTLM ${base64Bytes(bytes)}`,
     sourceLabel: [username.sourceLabel, password.sourceLabel, domain ? 'domain' : '', workstation ? 'workstation' : '']
+      .filter(Boolean)
+      .join('; '),
+    missing
+  };
+}
+
+function buildNtlmAuthenticateHeader(input: {
+  auth: AuthConfig;
+  challenge: ReturnType<typeof parseNtlmChallenge>;
+  project: ProjectDocument;
+  environment: EnvironmentDocument | undefined;
+  extraSources: Array<Record<string, unknown>>;
+}) {
+  const username = resolveAuthValue(input.auth.username, input.auth.usernameFromVar, input.project, input.environment, input.extraSources);
+  const password = resolveAuthValue(input.auth.password || '', input.auth.passwordFromVar, input.project, input.environment, input.extraSources);
+  const domain = applyProjectVariables(input.auth.domain || '', input.project, input.environment, input.extraSources).trim();
+  const workstation = applyProjectVariables(input.auth.workstation || 'YAPI-DEBUGGER', input.project, input.environment, input.extraSources).trim();
+  const missing = [
+    ...(username.value.trim() ? [] : [input.auth.usernameFromVar?.trim() || 'username']),
+    ...(password.value.trim() ? [] : [input.auth.passwordFromVar?.trim() || 'password']),
+    ...(input.challenge ? [] : ['challenge'])
+  ];
+  if (missing.length > 0 || !input.challenge) {
+    return {
+      header: '',
+      sourceLabel: `${username.sourceLabel}; ${password.sourceLabel}`,
+      missing
+    };
+  }
+
+  const domainBytes = utf16leBytes(domain);
+  const usernameBytes = utf16leBytes(username.value);
+  const workstationBytes = utf16leBytes(workstation);
+  const clientChallenge = randomByteArray(8);
+  const targetInfo = input.challenge.targetInfo.length > 0 ? input.challenge.targetInfo : [0x00, 0x00, 0x00, 0x00];
+  const timestamp = littleEndian64(input.challenge.timestamp || currentNtlmTimestamp());
+  const blob = [
+    0x01, 0x01, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    ...timestamp,
+    ...clientChallenge,
+    0x00, 0x00, 0x00, 0x00,
+    ...targetInfo,
+    0x00, 0x00, 0x00, 0x00
+  ];
+  const ntHash = md4Bytes(utf16leBytes(password.value));
+  const ntlmV2Hash = hmacBytes(ntHash, utf16leBytes(`${username.value.toUpperCase()}${domain}`), md5Bytes);
+  const ntProof = hmacBytes(ntlmV2Hash, [...input.challenge.serverChallenge, ...blob], md5Bytes);
+  const ntResponse = [...ntProof, ...blob];
+  const lmResponse = [
+    ...hmacBytes(ntlmV2Hash, [...input.challenge.serverChallenge, ...clientChallenge], md5Bytes),
+    ...clientChallenge
+  ];
+  const payloadOffset = 64;
+  const payload = [
+    ...domainBytes,
+    ...usernameBytes,
+    ...workstationBytes,
+    ...lmResponse,
+    ...ntResponse
+  ];
+  const domainOffset = payloadOffset;
+  const userOffset = domainOffset + domainBytes.length;
+  const workstationOffset = userOffset + usernameBytes.length;
+  const lmOffset = workstationOffset + workstationBytes.length;
+  const ntOffset = lmOffset + lmResponse.length;
+  const flags =
+    (input.challenge.flags & (0x00000001 | 0x00000200 | 0x00008000 | 0x00080000 | 0x20000000 | 0x80000000)) |
+    0x00000001 |
+    0x00000200;
+  const bytes = [
+    ...utf8Bytes('NTLMSSP\0'),
+    ...littleEndian32(3),
+    ...ntlmSecurityBuffer(lmResponse.length, lmOffset),
+    ...ntlmSecurityBuffer(ntResponse.length, ntOffset),
+    ...ntlmSecurityBuffer(domainBytes.length, domainOffset),
+    ...ntlmSecurityBuffer(usernameBytes.length, userOffset),
+    ...ntlmSecurityBuffer(workstationBytes.length, workstationOffset),
+    ...ntlmSecurityBuffer(0, ntOffset + ntResponse.length),
+    ...littleEndian32(flags),
+    ...payload
+  ];
+
+  return {
+    header: `NTLM ${base64Bytes(bytes)}`,
+    sourceLabel: [username.sourceLabel, password.sourceLabel, domain ? 'domain' : '', workstation ? 'workstation' : '', 'ntlm challenge']
       .filter(Boolean)
       .join('; '),
     missing
@@ -3679,6 +3924,7 @@ function formatOauth1AuthorizationHeader(params: Array<{ name: string; value: st
 
 function buildPreflightDiagnostics(
   preview: ResolvedRequestPreview,
+  kind: RequestKind,
   auth: AuthConfig,
   authSource: string,
   body: RequestBody,
@@ -3706,25 +3952,27 @@ function buildPreflightDiagnostics(
     });
   }
 
-  if (!preview.url.trim()) {
-    diagnostics.push({
-      code: 'missing-url',
-      level: 'error',
-      blocking: true,
-      message: 'Request URL is empty after resolution.',
-      field: 'url'
-    });
-  } else if (!preview.url.includes('://')) {
-    diagnostics.push({
-      code: 'missing-base-url',
-      level: 'error',
-      blocking: true,
-      message: 'Resolved URL is missing protocol/baseUrl. Configure the environment baseUrl before sending.',
-      field: 'url'
-    });
+  if (kind !== 'script') {
+    if (!preview.url.trim()) {
+      diagnostics.push({
+        code: 'missing-url',
+        level: 'error',
+        blocking: true,
+        message: 'Request URL is empty after resolution.',
+        field: 'url'
+      });
+    } else if (!preview.url.includes('://')) {
+      diagnostics.push({
+        code: 'missing-base-url',
+        level: 'error',
+        blocking: true,
+        message: 'Resolved URL is missing protocol/baseUrl. Configure the environment baseUrl before sending.',
+        field: 'url'
+      });
+    }
   }
 
-  if (authSource.startsWith('missing profile')) {
+  if (kind !== 'script' && authSource.startsWith('missing profile')) {
     diagnostics.push({
       code: 'missing-auth-profile',
       level: 'error',
@@ -3734,7 +3982,11 @@ function buildPreflightDiagnostics(
     });
   }
 
-  if (auth.type === 'bearer' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')) {
+  if (
+    kind !== 'script' &&
+    auth.type === 'bearer' &&
+    !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')
+  ) {
     diagnostics.push({
       code: 'incomplete-bearer-auth',
       level: 'error',
@@ -3744,7 +3996,11 @@ function buildPreflightDiagnostics(
     });
   }
 
-  if (auth.type === 'basic' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')) {
+  if (
+    kind !== 'script' &&
+    auth.type === 'basic' &&
+    !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')
+  ) {
     diagnostics.push({
       code: 'incomplete-basic-auth',
       level: 'error',
@@ -3754,7 +4010,11 @@ function buildPreflightDiagnostics(
     });
   }
 
-  if (auth.type === 'apikey' && (!auth.key || !preview.headers.concat(preview.query).some(item => item.enabled && item.name === auth.key))) {
+  if (
+    kind !== 'script' &&
+    auth.type === 'apikey' &&
+    (!auth.key || !preview.headers.concat(preview.query).some(item => item.enabled && item.name === auth.key))
+  ) {
     diagnostics.push({
       code: 'incomplete-api-key-auth',
       level: 'error',
@@ -3764,7 +4024,7 @@ function buildPreflightDiagnostics(
     });
   }
 
-  if (auth.type === 'oauth2') {
+  if (kind !== 'script' && auth.type === 'oauth2') {
     const authState = preview.authState;
     if (authState?.missing.length) {
       diagnostics.push({
@@ -3786,7 +4046,7 @@ function buildPreflightDiagnostics(
     }
   }
 
-  if (auth.type === 'oauth1' && (!auth.consumerKey || !auth.consumerSecret)) {
+  if (kind !== 'script' && auth.type === 'oauth1' && (!auth.consumerKey || !auth.consumerSecret)) {
     diagnostics.push({
       code: 'incomplete-oauth1-auth',
       level: 'error',
@@ -3796,7 +4056,11 @@ function buildPreflightDiagnostics(
     });
   }
 
-  if (auth.type === 'awsv4' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')) {
+  if (
+    kind !== 'script' &&
+    auth.type === 'awsv4' &&
+    !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')
+  ) {
     diagnostics.push({
       code: 'incomplete-awsv4-auth',
       level: 'error',
@@ -3806,7 +4070,11 @@ function buildPreflightDiagnostics(
     });
   }
 
-  if (auth.type === 'digest' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')) {
+  if (
+    kind !== 'script' &&
+    auth.type === 'digest' &&
+    !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')
+  ) {
     const hasCredentials = Boolean((auth.username || auth.usernameFromVar) && (auth.password || auth.passwordFromVar));
     diagnostics.push({
       code: hasCredentials ? 'digest-challenge-pending' : 'incomplete-digest-auth',
@@ -3819,7 +4087,11 @@ function buildPreflightDiagnostics(
     });
   }
 
-  if (auth.type === 'ntlm' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')) {
+  if (
+    kind !== 'script' &&
+    auth.type === 'ntlm' &&
+    !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'authorization')
+  ) {
     diagnostics.push({
       code: 'incomplete-ntlm-auth',
       level: 'error',
@@ -3829,7 +4101,11 @@ function buildPreflightDiagnostics(
     });
   }
 
-  if (auth.type === 'wsse' && !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'x-wsse')) {
+  if (
+    kind !== 'script' &&
+    auth.type === 'wsse' &&
+    !preview.headers.some(item => item.enabled && item.name.toLowerCase() === 'x-wsse')
+  ) {
     diagnostics.push({
       code: 'incomplete-wsse-auth',
       level: 'error',
@@ -3839,7 +4115,7 @@ function buildPreflightDiagnostics(
     });
   }
 
-  if (body.mode === 'multipart') {
+  if (kind !== 'script' && body.mode === 'multipart') {
     const missingFiles = (preview.body.fields || []).filter(
       row => row.enabled && row.kind === 'file' && !String(row.filePath || row.value || '').trim()
     );
@@ -3854,7 +4130,7 @@ function buildPreflightDiagnostics(
     }
   }
 
-  if (hasInvalidGraphqlVariables(body)) {
+  if (kind !== 'script' && hasInvalidGraphqlVariables(body)) {
     diagnostics.push({
       code: 'invalid-graphql-variables',
       level: 'error',
@@ -3867,6 +4143,53 @@ function buildPreflightDiagnostics(
   return diagnostics;
 }
 
+function effectiveRequestKind(request: RequestDocument, caseDocument?: CaseDocument) {
+  return (caseDocument?.overrides.kind || request.kind) as RequestKind;
+}
+
+function scriptRequestSource(request: RequestDocument, caseDocument?: CaseDocument) {
+  const body = caseDocument?.overrides.body ?? request.body;
+  return body.text || request.scripts.preRequest || '';
+}
+
+function scriptRequestUsesLegacyPreRequestSource(request: RequestDocument, caseDocument?: CaseDocument) {
+  const body = caseDocument?.overrides.body ?? request.body;
+  return effectiveRequestKind(request, caseDocument) === 'script' && !body.text.trim() && Boolean(request.scripts.preRequest.trim());
+}
+
+function buildScriptRunResponse(input: {
+  request: RequestDocument;
+  preview: ResolvedRequestPreview;
+  logs: ScriptLog[];
+  checkResults: CheckResult[];
+}) {
+  const bodyText = JSON.stringify({
+    runtime: 'script',
+    requestId: input.request.id,
+    requestName: input.request.name,
+    checks: {
+      total: input.checkResults.length,
+      failed: input.checkResults.filter(item => !item.ok).length
+    },
+    logs: input.logs.length
+  }, null, 2);
+  const response: SendRequestResult = {
+    ok: true,
+    status: 200,
+    statusText: 'Script Executed',
+    url: input.preview.url,
+    durationMs: 0,
+    sizeBytes: utf8Bytes(bodyText).length,
+    headers: [
+      { name: 'content-type', value: 'application/json' },
+      { name: 'x-debugger-runtime', value: 'script' }
+    ],
+    bodyText,
+    timestamp: new Date().toISOString()
+  };
+  return response;
+}
+
 export function inspectResolvedRequest(
   project: ProjectDocument,
   request: RequestDocument,
@@ -3874,11 +4197,14 @@ export function inspectResolvedRequest(
   environment: EnvironmentDocument | undefined,
   extraSources: Array<Record<string, unknown>> = []
 ) {
+  const kind = effectiveRequestKind(request, caseDocument);
+  const legacyScriptSource = scriptRequestUsesLegacyPreRequestSource(request, caseDocument);
   const preview = resolveRequest(project, request, caseDocument, environment, extraSources);
   const body = caseDocument?.overrides.body ?? request.body;
   const authInput = caseDocument?.overrides.auth || request.auth;
   const scriptSource = joinScriptBlocks(
-    request.scripts.preRequest,
+    kind === 'script' ? scriptRequestSource(request, caseDocument) : '',
+    legacyScriptSource ? '' : request.scripts.preRequest,
     request.scripts.postResponse,
     request.scripts.tests,
     caseDocument?.scripts?.preRequest,
@@ -4158,7 +4484,7 @@ export function inspectResolvedRequest(
     });
   }
 
-  const diagnostics = buildPreflightDiagnostics(preview, auth, authSource, body, variables);
+  const diagnostics = buildPreflightDiagnostics(preview, kind, auth, authSource, body, variables);
   const scriptSignals = inspectScriptSource(scriptSource);
   scriptSignals.forEach(signal => {
     warnings.push({
@@ -4198,6 +4524,7 @@ export function resolveRequest(
   environment: EnvironmentDocument | undefined,
   extraSources: Array<Record<string, unknown>> = []
 ): ResolvedRequest {
+  const kind = effectiveRequestKind(request, caseDocument);
   const body = caseDocument?.overrides.body ?? request.body;
   const { auth, authSource, profileName } = mergeAuth(request.auth, caseDocument?.overrides.auth, environment);
   const runtime = mergeRuntime(request, caseDocument);
@@ -4262,6 +4589,28 @@ export function resolveRequest(
     }))
   };
   const mergedBody = materializeGraphqlBody(requestBodySchema.parse(interpolatedBody));
+  if (kind === 'script') {
+    const syntheticUrl = resolvedUrl.trim() || `script://${request.id}`;
+    return interpolateResolvedRequest(resolvedRequestPreviewSchema.parse({
+      name: caseDocument ? `${request.name} / ${caseDocument.name}` : request.name,
+      environmentName: caseDocument?.environment || environment?.name,
+      authSource,
+      requestPath: path || request.path || '/',
+      method: caseDocument?.overrides.method || request.method,
+      url: syntheticUrl,
+      headers,
+      query,
+      body: requestBodySchema.parse({
+        ...mergedBody,
+        mode: 'text',
+        mimeType: mergedBody.mimeType || 'application/javascript',
+        text: scriptRequestSource(request, caseDocument)
+      }),
+      timeoutMs: runtime.timeoutMs,
+      followRedirects: runtime.followRedirects,
+      authState: buildResolvedAuthState(auth, authSource, profileName, project, environment, extraSources)
+    }), extraSources);
+  }
 
   const mergedVariables = mergeVariableSources(project, environment, extraSources);
   let candidateUrl = urlParts.url;
@@ -4638,6 +4987,25 @@ function responseHeaderValue(response: SendRequestResult, name: string) {
   return response.headers.find(header => header.name.toLowerCase() === lower)?.value || '';
 }
 
+function upsertResolvedHeader(headers: ParameterRow[], name: string, value: string) {
+  const normalized = name.trim().toLowerCase();
+  const next = headers.map(header =>
+    header.name.trim().toLowerCase() === normalized
+      ? { ...header, name, value, enabled: true, kind: header.kind || 'text' }
+      : header
+  );
+  if (next.some(header => header.name.trim().toLowerCase() === normalized)) return next;
+  return [...next, { name, value, enabled: true, kind: 'text', filePath: undefined }];
+}
+
+function ntlmHeaderMessageType(value: string) {
+  const match = /^NTLM\s+([A-Za-z0-9+/=]+)$/i.exec(value.trim());
+  if (!match) return undefined;
+  const bytes = bytesFromBase64(match[1]);
+  if (bytes.length < 12 || String.fromCharCode(...bytes.slice(0, 8)) !== 'NTLMSSP\0') return undefined;
+  return readLittleEndian32(bytes, 8);
+}
+
 function splitChallengeParameters(input: string) {
   const parts: string[] = [];
   let current = '';
@@ -4739,6 +5107,8 @@ function applyStepOverrides(request: RequestDocument, caseDocument: CaseDocument
 }
 
 export async function runPreparedRequest(input: PreparedRequestRunInput): Promise<PreparedRequestRunResult> {
+  const kind = effectiveRequestKind(input.request, input.caseDocument);
+  const legacyScriptSource = scriptRequestUsesLegacyPreRequestSource(input.request, input.caseDocument);
   const context = input.context || {};
   const envName =
     input.caseDocument?.environment || context.state?.environment.name || input.workspace.project.defaultEnvironment;
@@ -4755,7 +5125,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
   state.environment = initialEnvironment;
   const preRequestScript = joinScriptBlocks(
     input.context?.collectionScripts?.preRequest,
-    input.request.scripts.preRequest,
+    legacyScriptSource ? '' : input.request.scripts.preRequest,
     input.caseDocument?.scripts?.preRequest
   );
   const postResponseScript = joinScriptBlocks(
@@ -4809,6 +5179,41 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     ...insight.preview,
     sessionId: input.sessionId || input.workspace.root
   });
+  if (kind === 'script') {
+    const mainScript = await executeRequestScript({
+      phase: 'pre-request',
+      script: scriptRequestSource(input.request, input.caseDocument),
+      state: preScript.state,
+      request: preview,
+      sendRequest: request => input.sendRequest(sendRequestInputSchema.parse({
+        ...request,
+        sessionId: input.sessionId || preview.sessionId
+      }))
+    });
+    const response = buildScriptRunResponse({
+      request: input.request,
+      preview,
+      logs: [...preScript.logs, ...mainScript.logs],
+      checkResults: mainScript.testResults
+    });
+    const postScript = await executeRequestScript({
+      phase: 'post-response',
+      script: postResponseScript,
+      state: mainScript.state,
+      request: preview,
+      response
+    });
+    return {
+      preview,
+      response,
+      checkResults: [...mainScript.testResults, ...postScript.testResults],
+      scriptLogs: [...preScript.logs, ...mainScript.logs, ...postScript.logs],
+      state: {
+        variables: { ...postScript.state.variables },
+        environment: structuredClone(postScript.state.environment || initialEnvironment)
+      }
+    };
+  }
   let finalPreview = preview;
   let response = await input.sendRequest(preview);
   const { auth: effectiveAuth } = mergeAuth(input.request.auth, input.caseDocument?.overrides.auth, preScript.state.environment || initialEnvironment);
@@ -4846,6 +5251,28 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
         });
         response = await input.sendRequest(finalPreview);
       }
+    }
+  }
+  if (
+    effectiveAuth.type === 'ntlm' &&
+    response.status === 401 &&
+    ntlmHeaderMessageType(preview.headers.find(header => header.enabled && header.name.toLowerCase() === 'authorization')?.value || '') === 1
+  ) {
+    const challenge = parseNtlmChallenge(responseHeaderValue(response, 'www-authenticate'));
+    const retryAuth = buildNtlmAuthenticateHeader({
+      auth: effectiveAuth,
+      challenge,
+      project: input.workspace.project,
+      environment: preScript.state.environment || initialEnvironment,
+      extraSources: runtimeSources
+    });
+    if (retryAuth.header) {
+      finalPreview = resolvedRequestPreviewSchema.parse({
+        ...preview,
+        headers: upsertResolvedHeader(preview.headers, 'Authorization', retryAuth.header),
+        sessionId: input.sessionId || input.workspace.root
+      });
+      response = await input.sendRequest(finalPreview);
     }
   }
   const builtinChecks = input.caseDocument ? evaluateChecks(response, input.caseDocument.checks || [], { examples: input.request.examples }) : [];

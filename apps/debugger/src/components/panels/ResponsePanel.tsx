@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Badge, Button, Group, Select, Tabs, Text, TextInput } from '@mantine/core';
 import { IconAlertCircle, IconBraces, IconCookie, IconDownload, IconEye, IconGitCompare, IconPlayerPlay, IconSearch } from '@tabler/icons-react';
 import type {
@@ -126,6 +126,26 @@ function compareLineRows(left: string, right: string, limit = 200) {
     if (rows.length >= limit) break;
   }
   return rows;
+}
+
+function buildWorkbenchRows(left: string, right: string, limit = 500) {
+  const leftLines = left.split('\n');
+  const rightLines = right.split('\n');
+  const totalLines = Math.max(leftLines.length, rightLines.length);
+  return {
+    totalLines,
+    truncated: totalLines > limit,
+    rows: Array.from({ length: Math.min(totalLines, limit) }, (_, index) => {
+      const live = leftLines[index] || '';
+      const saved = rightLines[index] || '';
+      return {
+        lineNumber: index + 1,
+        live,
+        saved,
+        changed: live !== saved
+      };
+    })
+  };
 }
 
 function diffSegmentBounds(left: string, right: string) {
@@ -260,6 +280,8 @@ export function ResponsePanel(props: {
   const [prettifyJson, setPrettifyJson] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [compareFilter, setCompareFilter] = useState<'all' | 'changed' | 'added' | 'removed'>('all');
+  const [compareView, setCompareView] = useState<'overview' | 'workbench'>('overview');
+  const [selectedDiffIndex, setSelectedDiffIndex] = useState(0);
   const examples = props.requestDocument?.examples || [];
   const selectedExample = examples.find(item => item.name === props.selectedExampleName) || null;
   const liveBody = props.response?.bodyText ?? '';
@@ -333,6 +355,15 @@ export function ResponsePanel(props: {
       ),
     [allDiffRows, compareFilter, searchNeedle]
   );
+  const workbench = useMemo(
+    () => buildWorkbenchRows(liveBody, selectedExample?.text || ''),
+    [liveBody, selectedExample]
+  );
+  const activeDiffRow = diffRows[selectedDiffIndex] || null;
+
+  useEffect(() => {
+    setSelectedDiffIndex(0);
+  }, [selectedExample?.name, compareFilter, searchNeedle]);
 
   return (
     <div className="response-panel">
@@ -859,30 +890,124 @@ export function ResponsePanel(props: {
                         onChange={value => setCompareFilter((value as typeof compareFilter) || 'all')}
                       />
                     </div>
+                    <div className="compare-summary-card">
+                      <Text fw={700}>Compare View</Text>
+                      <Select
+                        size="xs"
+                        value={compareView}
+                        data={[
+                          { value: 'overview', label: 'Overview cards' },
+                          { value: 'workbench', label: 'Merge workbench' }
+                        ]}
+                        onChange={value => setCompareView((value as typeof compareView) || 'overview')}
+                      />
+                    </div>
                   </div>
                 ) : null}
-                <div className="response-compare-grid">
-                  <div className="check-card">
-                    <Text fw={700}>实时响应</Text>
-                    <CodeEditor value={liveBody} readOnly language={responseBodyLanguage(liveBody)} minHeight="320px" />
+                {compareView === 'workbench' && selectedExample ? (
+                  <div className="response-merge-shell">
+                    <div className="compare-summary-card response-merge-toolbar">
+                      <div>
+                        <Text fw={700}>Diff Navigation</Text>
+                        <Text size="sm" c="dimmed">
+                          {diffRows.length > 0
+                            ? `Focused diff ${selectedDiffIndex + 1} / ${diffRows.length} · line ${activeDiffRow?.lineNumber}`
+                            : 'No diff rows match the current filter.'}
+                        </Text>
+                      </div>
+                      <Group gap={8}>
+                        <Button size="xs" variant="default" onClick={() => setSelectedDiffIndex(current => Math.max(current - 1, 0))} disabled={selectedDiffIndex <= 0 || diffRows.length === 0}>
+                          上一个差异
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="default"
+                          onClick={() => setSelectedDiffIndex(current => Math.min(current + 1, Math.max(diffRows.length - 1, 0)))}
+                          disabled={selectedDiffIndex >= diffRows.length - 1 || diffRows.length === 0}
+                        >
+                          下一个差异
+                        </Button>
+                      </Group>
+                    </div>
+                    <div className="response-merge-grid">
+                      <div className="check-card response-merge-column">
+                        <Text fw={700}>实时响应</Text>
+                        <div className="response-merge-body">
+                          {workbench.rows.map(row => (
+                            <div
+                              key={`live-${row.lineNumber}`}
+                              className={
+                                activeDiffRow?.lineNumber === row.lineNumber
+                                  ? 'response-merge-row is-active'
+                                  : row.changed
+                                    ? 'response-merge-row is-changed'
+                                    : 'response-merge-row'
+                              }
+                            >
+                              <strong>{row.lineNumber}</strong>
+                              <span>{row.changed ? renderDiffValue(row.live || '∅', row.saved || '', searchNeedle) : renderHighlightedText(row.live || '∅', searchNeedle)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="check-card response-merge-column">
+                        <Group justify="space-between">
+                          <Text fw={700}>已选结果</Text>
+                          {selectedExample?.role === 'baseline' ? (
+                            <Badge color="indigo" variant="light">
+                              Baseline
+                            </Badge>
+                          ) : null}
+                        </Group>
+                        <div className="response-merge-body">
+                          {workbench.rows.map(row => (
+                            <div
+                              key={`saved-${row.lineNumber}`}
+                              className={
+                                activeDiffRow?.lineNumber === row.lineNumber
+                                  ? 'response-merge-row is-active'
+                                  : row.changed
+                                    ? 'response-merge-row is-changed'
+                                    : 'response-merge-row'
+                              }
+                            >
+                              <strong>{row.lineNumber}</strong>
+                              <span>{row.changed ? renderDiffValue(row.saved || '∅', row.live || '', searchNeedle) : renderHighlightedText(row.saved || '∅', searchNeedle)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {workbench.truncated ? (
+                      <div className="empty-tab-state">
+                        Workbench 视图当前展示前 500 行，共 {workbench.totalLines} 行；请结合下方差异卡片继续定位。
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="check-card">
-                    <Group justify="space-between">
-                      <Text fw={700}>已选结果</Text>
-                      {selectedExample?.role === 'baseline' ? (
-                        <Badge color="indigo" variant="light">
-                          Baseline
-                        </Badge>
-                      ) : null}
-                    </Group>
-                    <CodeEditor
-                      value={selectedExample?.text || ''}
-                      readOnly
-                      language={responseBodyLanguage(selectedExample?.text || '')}
-                      minHeight="320px"
-                    />
+                ) : (
+                  <div className="response-compare-grid">
+                    <div className="check-card">
+                      <Text fw={700}>实时响应</Text>
+                      <CodeEditor value={liveBody} readOnly language={responseBodyLanguage(liveBody)} minHeight="320px" />
+                    </div>
+                    <div className="check-card">
+                      <Group justify="space-between">
+                        <Text fw={700}>已选结果</Text>
+                        {selectedExample?.role === 'baseline' ? (
+                          <Badge color="indigo" variant="light">
+                            Baseline
+                          </Badge>
+                        ) : null}
+                      </Group>
+                      <CodeEditor
+                        value={selectedExample?.text || ''}
+                        readOnly
+                        language={responseBodyLanguage(selectedExample?.text || '')}
+                        minHeight="320px"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
                 {selectedExample ? (
                   <div className="json-inspector-list">
                     {(searchNeedle ? diffRows : diffRows.slice(0, 12)).map(row => (
