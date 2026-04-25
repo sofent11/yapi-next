@@ -54,6 +54,7 @@ import {
   duplicateCaseInWorkspace,
   duplicateRequestInWorkspace,
   exportBrunoCollection,
+  exportBrunoJsonCollection,
   loadCollectionRunReports,
   loadRunHistory,
   importFromBrunoDirectory,
@@ -2023,9 +2024,29 @@ export function App() {
     notifications.show({ color: 'teal', message: `Collection report exported as ${format.toUpperCase()}` });
   }
 
-  async function handleExportSelectedCollectionBruno() {
+  async function handleExportSelectedCollectionBruno(format: 'folder' | 'json' = 'folder') {
     if (!store.workspace || !draftCollection) {
       notifications.show({ color: 'blue', message: 'Select a collection first.' });
+      return;
+    }
+
+    if (format === 'json') {
+      const targetPath = await saveFile({
+        title: 'Export Bruno JSON Collection',
+        defaultPath: `${slugify(draftCollection.name || store.workspace.project.name || 'bruno-collection')}.bruno.json`,
+        filters: [
+          {
+            name: 'Bruno JSON',
+            extensions: ['json']
+          }
+        ]
+      });
+      if (!targetPath) return;
+      await writeDocument(targetPath, exportBrunoJsonCollection(store.workspace, draftCollection));
+      notifications.show({
+        color: 'teal',
+        message: 'Bruno JSON collection exported.'
+      });
       return;
     }
 

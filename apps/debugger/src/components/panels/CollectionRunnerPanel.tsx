@@ -93,7 +93,7 @@ export function CollectionRunnerPanel(props: {
   onOpenCase?: (requestId: string, caseId: string) => void;
   onExtractValue?: (target: 'local' | 'runtime' | 'collection', input: { suggestedName: string; value: string }) => void;
   onExportReport?: (format: 'json' | 'html' | 'junit') => void;
-  onExportBruno?: () => void;
+  onExportBruno?: (format: 'folder' | 'json') => void;
   onCopyText?: (value: string, successMessage: string) => void;
 }) {
   const [reportFilter, setReportFilter] = useState('');
@@ -363,8 +363,11 @@ export function CollectionRunnerPanel(props: {
                     <h3 className="section-title">Collection settings and run policy</h3>
                   </div>
                   <Group gap={6}>
-                    <Button size="xs" variant="default" onClick={props.onExportBruno} disabled={!props.onExportBruno}>
-                      Export Bruno
+                    <Button size="xs" variant="default" onClick={() => props.onExportBruno?.('folder')} disabled={!props.onExportBruno}>
+                      Export Bruno folder
+                    </Button>
+                    <Button size="xs" variant="subtle" onClick={() => props.onExportBruno?.('json')} disabled={!props.onExportBruno}>
+                      Export JSON
                     </Button>
                     <Badge variant="light" color="gray">
                       {draftCollection.steps.length} steps · {selectedCollectionReportCount} reports

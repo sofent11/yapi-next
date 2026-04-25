@@ -12,6 +12,7 @@ import {
   materializeRequestDocuments,
   mergeTemplateSources,
   renderCollectionRunReportJunit,
+  serializeBrunoJsonCollection,
   serializeRequestToBruno,
   filtersFromCollectionReport,
   rerunFailedStepKeys as rerunFailedStepKeysCore,
@@ -764,6 +765,17 @@ export async function exportBrunoCollection(
   });
   await Promise.all(writes.map(item => writeDocument(`${targetRoot}/${item.path}`, item.content)));
   return writes;
+}
+
+export function exportBrunoJsonCollection(
+  workspace: WorkspaceIndex,
+  collection?: CollectionDocument
+) {
+  return serializeBrunoJsonCollection({
+    project: workspace.project,
+    requests: workspace.requests,
+    collection
+  });
 }
 
 export async function createRequestInWorkspace(root: string, folderPath: string | null) {

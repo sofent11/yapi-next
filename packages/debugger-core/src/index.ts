@@ -1468,9 +1468,9 @@ function brunoJsonItem(record: WorkspaceRequestRecord, seq: number) {
         res: request.scripts.postResponse || null
       },
       tests: request.scripts.tests || null,
-      docs: request.docs || ''
-    },
-    ...(request.kind === 'grpc' && request.body.grpc?.protoFile ? { protoPath: request.body.grpc.protoFile } : {})
+      docs: request.docs || '',
+      ...(request.kind === 'grpc' && request.body.grpc?.protoFile ? { protoPath: request.body.grpc.protoFile } : {})
+    }
   };
 }
 
