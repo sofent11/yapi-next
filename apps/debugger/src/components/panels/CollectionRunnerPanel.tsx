@@ -55,6 +55,13 @@ function stepSelectionValue(iterationIndex: number, stepKey: string) {
   return `${iterationIndex}:${stepKey}`;
 }
 
+function parseTagList(text: string) {
+  return text
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
 export function CollectionRunnerPanel(props: {
   workspace: WorkspaceIndex;
   selectedCollectionId: string | null;
@@ -77,7 +84,7 @@ export function CollectionRunnerPanel(props: {
   onAddCurrentSelection?: () => void;
   onDeleteCollection: () => void;
   onSaveCollection: () => void;
-  onRunCollection: () => void;
+  onRunCollection: (filters?: { tags?: string[] }) => void;
   onRerunFailed: () => void;
   onClearReports: () => void;
   onSelectReport: (id: string | null) => void;
@@ -90,6 +97,7 @@ export function CollectionRunnerPanel(props: {
 }) {
   const [reportFilter, setReportFilter] = useState('');
   const [activeStudioTab, setActiveStudioTab] = useState<'design' | 'data' | 'reports'>('design');
+  const [runTagText, setRunTagText] = useState('');
   const requestChoices = useMemo(() => requestOptions(props.workspace), [props.workspace]);
   const dataInspection = useMemo(() => {
     if (!props.collectionDataText.trim()) {
@@ -201,6 +209,12 @@ export function CollectionRunnerPanel(props: {
     }
   }, [props.preferredTab]);
 
+  useEffect(() => {
+    setRunTagText((props.draftCollection?.runnerTags || []).join(', '));
+  }, [props.draftCollection?.id]);
+
+  const runTags = parseTagList(runTagText);
+
   return (
     <section className="workspace-main">
       <div className="panel-toolbar">
@@ -227,7 +241,7 @@ export function CollectionRunnerPanel(props: {
               Delete
             </Button>
           ) : null}
-          <Button size="xs" color="dark" onClick={props.onRunCollection} disabled={!draftCollection}>
+          <Button size="xs" color="dark" onClick={() => props.onRunCollection({ tags: runTags })} disabled={!draftCollection}>
             Run
           </Button>
           {showReportsView ? (
@@ -325,6 +339,10 @@ export function CollectionRunnerPanel(props: {
                   <span>Iterations</span>
                   <strong>{selectedReport.iterationCount}</strong>
                 </div>
+                <div className="summary-chip">
+                  <span>Tag Filter</span>
+                  <strong>{selectedReport.filters.tags.length > 0 ? selectedReport.filters.tags.join(', ') : 'none'}</strong>
+                </div>
               </div>
             ) : (
               <div className="empty-tab-state" style={{ marginTop: 12 }}>
@@ -350,6 +368,14 @@ export function CollectionRunnerPanel(props: {
                 <Text size="sm" c="dimmed" mb={12}>
                   Define the reusable flow here: environment defaults, retries, required paths, and the execution rules that should travel with the collection.
                 </Text>
+                {runTags.length > 0 ? (
+                  <div className="repair-tag-list" style={{ marginBottom: 12 }}>
+                    <span>Run filter</span>
+                    {runTags.map(tag => (
+                      <Badge key={tag} variant="light" color="indigo">{tag}</Badge>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="settings-grid">
                   <TextInput
                     label="Name"
@@ -444,9 +470,22 @@ export function CollectionRunnerPanel(props: {
                     onChange={event =>
                       props.onCollectionChange({
                         ...draftCollection,
-                        tags: event.currentTarget.value.split(',').map(item => item.trim()).filter(Boolean)
+                        tags: parseTagList(event.currentTarget.value)
                       })
                     }
+                  />
+                  <TextInput
+                    label="Run Tags"
+                    placeholder="smoke, contract"
+                    value={runTagText}
+                    onChange={event => {
+                      const nextText = event.currentTarget.value;
+                      setRunTagText(nextText);
+                      props.onCollectionChange({
+                        ...draftCollection,
+                        runnerTags: parseTagList(nextText)
+                      });
+                    }}
                   />
                   <TextInput
                     label="Environment Matrix"
@@ -455,7 +494,7 @@ export function CollectionRunnerPanel(props: {
                     onChange={event =>
                       props.onCollectionChange({
                         ...draftCollection,
-                        envMatrix: event.currentTarget.value.split(',').map(item => item.trim()).filter(Boolean)
+                        envMatrix: parseTagList(event.currentTarget.value)
                       })
                     }
                   />
@@ -649,7 +688,7 @@ export function CollectionRunnerPanel(props: {
                                   item.key === step.key
                                     ? {
                                         ...item,
-                                        tags: event.currentTarget.value.split(',').map(tag => tag.trim()).filter(Boolean)
+                                        tags: parseTagList(event.currentTarget.value)
                                       }
                                     : item
                                 )

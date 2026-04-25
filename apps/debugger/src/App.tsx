@@ -1320,12 +1320,13 @@ export function App() {
   });
 
   const runCollectionMutation = useMutation({
-    mutationFn: async (options?: { stepKeys?: string[]; seedReport?: CollectionRunReport | null; collectionId?: string }) => {
+    mutationFn: async (options?: { stepKeys?: string[]; seedReport?: CollectionRunReport | null; collectionId?: string; tags?: string[] }) => {
       if (!store.workspace || !(options?.collectionId || selectedCollectionId)) throw new Error('No collection selected');
       return runCollection(store.workspace, options?.collectionId || selectedCollectionId!, {
         environmentName: store.activeEnvironmentName,
         stepKeys: options?.stepKeys,
-        seedReport: options?.seedReport
+        seedReport: options?.seedReport,
+        filters: options?.tags && options.tags.length > 0 ? { tags: options.tags } : undefined
       });
     },
     onSuccess: async report => {
@@ -2259,8 +2260,10 @@ export function App() {
     reloadWorkspace();
   }
 
-  function handleRunCollection() {
-    runCollectionMutation.mutate(undefined);
+  function handleRunCollection(filters?: { tags?: string[] }) {
+    runCollectionMutation.mutate({
+      tags: filters?.tags
+    });
   }
 
   function handleRunLatestCollection() {

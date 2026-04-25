@@ -783,6 +783,93 @@ test('runCollection executes serial env matrix with retry and baseline checks', 
   assert.equal(report.iterations[0]?.stepRuns[0]?.checkResults.some(result => result.source === 'baseline'), true);
 });
 
+test('runCollection filters steps by step and request tags', async () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  const environment = createDefaultEnvironment('shared');
+
+  const smokeRequest = createEmptyRequest('Smoke Health');
+  smokeRequest.url = '{{baseUrl}}/health';
+  smokeRequest.tags = ['request-smoke'];
+  const nightlyRequest = createEmptyRequest('Nightly Audit');
+  nightlyRequest.url = '{{baseUrl}}/audit';
+
+  const collection = createEmptyCollection('Tagged Suite');
+  collection.steps = [
+    createCollectionStep({
+      key: 'health',
+      requestId: smokeRequest.id,
+      name: 'Health'
+    }),
+    createCollectionStep({
+      key: 'audit',
+      requestId: nightlyRequest.id,
+      name: 'Audit',
+      tags: ['nightly']
+    })
+  ];
+
+  const workspace = {
+    root: '/tmp/debugger-suite-tags',
+    project,
+    environments: [{ document: environment, filePath: '/tmp/debugger-suite-tags/environments/shared.yaml' }],
+    requests: [
+      {
+        request: smokeRequest,
+        cases: [],
+        folderSegments: [],
+        requestFilePath: '/tmp/debugger-suite-tags/requests/health.request.yaml',
+        resourceDirPath: '/tmp/debugger-suite-tags/requests/health'
+      },
+      {
+        request: nightlyRequest,
+        cases: [],
+        folderSegments: [],
+        requestFilePath: '/tmp/debugger-suite-tags/requests/audit.request.yaml',
+        resourceDirPath: '/tmp/debugger-suite-tags/requests/audit'
+      }
+    ],
+    collections: [
+      {
+        document: collection,
+        filePath: '/tmp/debugger-suite-tags/collections/tagged.collection.yaml',
+        dataText: ''
+      }
+    ],
+    tree: []
+  };
+
+  const seen: string[] = [];
+  const report = await runCollection({
+    workspace,
+    collectionId: collection.id,
+    options: {
+      filters: {
+        tags: ['request-smoke']
+      }
+    },
+    sendRequest: async preview => {
+      seen.push(preview.name);
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: preview.url,
+        durationMs: 12,
+        sizeBytes: 2,
+        headers: [],
+        bodyText: '{}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.deepEqual(seen, ['Smoke Health']);
+  assert.deepEqual(report.filters.tags, ['request-smoke']);
+  assert.equal(report.iterations[0]?.stepRuns.length, 1);
+  assert.equal(report.iterations[0]?.stepRuns[0]?.stepKey, 'health');
+});
+
 test('renderCollectionRunReportJunit and rerunFailedStepKeys encode failures for CI', () => {
   const report = {
     id: 'colrun_ci',

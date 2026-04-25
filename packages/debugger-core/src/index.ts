@@ -2256,7 +2256,7 @@ function shouldRunCollectionStep(input: {
   if (filters.caseIds && filters.caseIds.length > 0 && (!step.caseId || !filters.caseIds.includes(step.caseId))) return false;
   if (filters.tags && filters.tags.length > 0) {
     const caseDocument = requestRecord?.cases.find(item => item.id === step.caseId);
-    const tags = new Set([...(step.tags || []), ...(caseDocument?.tags || [])]);
+    const tags = new Set([...(step.tags || []), ...(requestRecord?.request.tags || []), ...(caseDocument?.tags || [])]);
     if (!filters.tags.some(tag => tags.has(tag))) return false;
   }
   return true;

@@ -13,7 +13,8 @@ import {
   renderCollectionRunReportJunit,
   rerunFailedStepKeys as rerunFailedStepKeysCore,
   runCollection as runCollectionCore,
-  runPreparedRequest as runPreparedRequestCore
+  runPreparedRequest as runPreparedRequestCore,
+  type CollectionRunFilters
 } from '@yapi-debugger/core';
 import {
   DEFAULT_GITIGNORE,
@@ -1166,6 +1167,7 @@ export type CollectionRunOptions = {
   environmentName?: string;
   stepKeys?: string[];
   seedReport?: CollectionRunReport | null;
+  filters?: CollectionRunFilters;
 };
 
 export async function runCollection(
