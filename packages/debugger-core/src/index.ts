@@ -13,6 +13,7 @@ import {
   collectionDocumentSchema,
   collectionStepSchema,
   authConfigSchema,
+  checkResultSchema,
   caseCheckSchema,
   caseDocumentSchema,
   createDefaultEnvironment,
@@ -74,7 +75,8 @@ import {
   interpolateResolvedRequest,
   interpolateString,
   mergeTemplateSources,
-  readPathValue
+  readPathValue,
+  type ScriptExecutionFlow
 } from './runtime';
 
 export type FileEntry = {
@@ -97,6 +99,8 @@ export type ProjectSeed = {
 export type ResolvedRequest = ResolvedRequestPreview;
 
 const VARIABLE_PATTERN = /\{\{\s*([^}]+?)\s*\}\}/g;
+const NTLM_DESKTOP_CONSTRAINT_DETAIL =
+  'Desktop NTLM currently supports explicit username/password credentials only. Native OS/integrated enterprise flows (SSPI, GSSAPI, Negotiate/Kerberos) are not available in this build.';
 const UNSUPPORTED_SCRIPT_PATTERNS = [
   {
     token: 'pm.sendRequest',
@@ -106,15 +110,9 @@ const UNSUPPORTED_SCRIPT_PATTERNS = [
   },
   {
     token: 'pm.execution.setNextRequest',
-    code: 'script-unsupported-set-next-request',
+    code: 'script-limited-set-next-request',
     level: 'warning' as const,
-    message: 'pm.execution.setNextRequest is not supported by the local debugger runtime yet.'
-  },
-  {
-    token: 'pm.execution.skipRequest',
-    code: 'script-unsupported-skip-request',
-    level: 'warning' as const,
-    message: 'pm.execution.skipRequest is not supported by the local debugger runtime yet.'
+    message: 'pm.execution.setNextRequest is supported only during collection runs, and only for forward step key/name/request targets or null stop.'
   },
   {
     token: 'pm.globals',
@@ -142,9 +140,9 @@ const UNSUPPORTED_SCRIPT_PATTERNS = [
   },
   {
     token: 'postman.setNextRequest',
-    code: 'script-legacy-set-next-request',
+    code: 'script-limited-legacy-set-next-request',
     level: 'warning' as const,
-    message: 'postman.setNextRequest is not supported by the local debugger runtime yet.'
+    message: 'postman.setNextRequest is supported only during collection runs, with the same forward-only target limits as pm.execution.setNextRequest.'
   },
   {
     token: 'postman.',
@@ -397,9 +395,12 @@ export type GraphqlOperationDraft = {
   operationName: string;
 };
 
+export type GraphqlFragmentStyle = 'inline' | 'named';
+
 export type GraphqlOperationDraftOptions = {
   selectedFields?: string[];
   selectedFragments?: string[];
+  fragmentStyle?: GraphqlFragmentStyle;
 };
 
 function ensureHeader(rows: ParameterRow[], name: string, value: string) {
@@ -675,6 +676,121 @@ function renderGraphqlSelectionFragments(
     .filter((line): line is string => Boolean(line));
 }
 
+type GraphqlRenderedSelectionResult = {
+  lines: string[];
+  fragmentDefinitions: Map<string, string>;
+};
+
+function graphqlNamedFragmentName(operationName: string, fragmentPath: string, typeName: string) {
+  const cleanedPath = fragmentPath.replace(/::/g, ' ').replace(/\./g, ' ').trim();
+  const suffix = cleanedPath ? capitalizeGraphqlName(cleanedPath) : capitalizeGraphqlName(typeName);
+  return `${operationName}${suffix}Fragment`;
+}
+
+function renderGraphqlNamedSelectionNode(
+  node: GraphqlSelectionFieldSummary,
+  input: {
+    operationName: string;
+    basePath: string;
+    selectedFields?: Set<string>;
+    selectedFragments?: Set<string>;
+  }
+): { line: string | null; fragmentDefinitions: Map<string, string> } {
+  const nodePath = graphqlSelectionPath(input.basePath, node.name);
+  if (input.selectedFields && !input.selectedFields.has(nodePath)) {
+    return { line: null, fragmentDefinitions: new Map() };
+  }
+  const childResult = renderGraphqlNamedSelectionNodes(node.children, {
+    operationName: input.operationName,
+    basePath: nodePath,
+    selectedFields: input.selectedFields,
+    selectedFragments: input.selectedFragments
+  });
+  const fragmentResult = renderGraphqlNamedSelectionFragments(node.fragments, {
+    operationName: input.operationName,
+    basePath: nodePath,
+    selectedFields: input.selectedFields,
+    selectedFragments: input.selectedFragments
+  });
+  const fragmentDefinitions = new Map([
+    ...childResult.fragmentDefinitions,
+    ...fragmentResult.fragmentDefinitions
+  ]);
+  const selectionLines = [...childResult.lines, ...fragmentResult.lines];
+  if (selectionLines.length === 0) {
+    if (node.kind === 'scalar' || node.kind === 'enum') {
+      return { line: node.name, fragmentDefinitions };
+    }
+    return {
+      line: `${node.name} {\n  __typename\n}`,
+      fragmentDefinitions
+    };
+  }
+  return {
+    line: `${node.name} {\n${indentGraphqlLines(selectionLines, 2)}\n}`,
+    fragmentDefinitions
+  };
+}
+
+function renderGraphqlNamedSelectionNodes(
+  nodes: GraphqlSelectionFieldSummary[],
+  input: {
+    operationName: string;
+    basePath: string;
+    selectedFields?: Set<string>;
+    selectedFragments?: Set<string>;
+  }
+): GraphqlRenderedSelectionResult {
+  return nodes.reduce<GraphqlRenderedSelectionResult>(
+    (output, node) => {
+      const rendered = renderGraphqlNamedSelectionNode(node, input);
+      if (rendered.line) {
+        output.lines.push(rendered.line);
+      }
+      rendered.fragmentDefinitions.forEach((definition, name) => output.fragmentDefinitions.set(name, definition));
+      return output;
+    },
+    { lines: [], fragmentDefinitions: new Map() }
+  );
+}
+
+function renderGraphqlNamedSelectionFragments(
+  fragments: GraphqlSelectionFragmentSummary[],
+  input: {
+    operationName: string;
+    basePath: string;
+    selectedFields?: Set<string>;
+    selectedFragments?: Set<string>;
+  }
+): GraphqlRenderedSelectionResult {
+  return fragments.reduce<GraphqlRenderedSelectionResult>(
+    (output, fragment) => {
+      const fragmentPath = graphqlFragmentPath(input.basePath, fragment.typeName);
+      if (input.selectedFragments && !input.selectedFragments.has(fragmentPath)) {
+        return output;
+      }
+      const childResult = renderGraphqlNamedSelectionNodes(fragment.selection, {
+        operationName: input.operationName,
+        basePath: fragmentPath,
+        selectedFields: input.selectedFields,
+        selectedFragments: input.selectedFragments
+      });
+      childResult.fragmentDefinitions.forEach((definition, name) => output.fragmentDefinitions.set(name, definition));
+      const fragmentName = graphqlNamedFragmentName(input.operationName, fragmentPath, fragment.typeName);
+      output.fragmentDefinitions.set(
+        fragmentName,
+        `fragment ${fragmentName} on ${fragment.typeName} {\n${indentGraphqlLines(
+          childResult.lines.length > 0 ? childResult.lines : ['__typename'],
+          2
+        )}\n}`
+      );
+      output.lines.push(`...${fragmentName}`);
+      return output;
+    },
+    { lines: [], fragmentDefinitions: new Map() }
+  );
+}
+
 function defaultSelectionFieldsForType(typeRef: GraphqlIntrospectionTypeRef | null | undefined, byName: Map<string, unknown>) {
   const tree = buildGraphqlSelectionTree(typeRef, byName, {
     depth: 2,
@@ -921,21 +1037,52 @@ export function buildGraphqlOperationDraft(
   const callArguments = field.args.map(arg => `${arg.name}: $${arg.name}`).join(', ');
   const selectedFields = options.selectedFields ? new Set(options.selectedFields) : undefined;
   const selectedFragments = options.selectedFragments ? new Set(options.selectedFragments) : undefined;
+  const fragmentStyle = options.fragmentStyle || 'inline';
+  const namedSelection =
+    selectedFields || selectedFragments
+      ? fragmentStyle === 'named'
+        ? {
+            ...renderGraphqlNamedSelectionNodes(field.selectionTree || [], {
+              operationName,
+              basePath: '',
+              selectedFields,
+              selectedFragments
+            }),
+            rootFragments: renderGraphqlNamedSelectionFragments(field.selectionFragments || [], {
+              operationName,
+              basePath: '',
+              selectedFields,
+              selectedFragments
+            })
+          }
+        : null
+      : null;
   const selectionLines =
     selectedFields || selectedFragments
-      ? [
-          ...renderGraphqlSelectionNodes(field.selectionTree || [], {
-            basePath: '',
-            selectedFields,
-            selectedFragments
-          }),
-          ...renderGraphqlSelectionFragments(field.selectionFragments || [], {
-            basePath: '',
-            selectedFields,
-            selectedFragments
-          })
-        ]
+      ? fragmentStyle === 'named' && namedSelection
+        ? [...namedSelection.lines, ...namedSelection.rootFragments.lines]
+        : [
+            ...renderGraphqlSelectionNodes(field.selectionTree || [], {
+              basePath: '',
+              selectedFields,
+              selectedFragments
+            }),
+            ...renderGraphqlSelectionFragments(field.selectionFragments || [], {
+              basePath: '',
+              selectedFields,
+              selectedFragments
+            })
+          ]
       : field.selection;
+  const fragmentDefinitions =
+    fragmentStyle === 'named' && namedSelection
+      ? [
+          ...new Map([
+            ...namedSelection.fragmentDefinitions,
+            ...namedSelection.rootFragments.fragmentDefinitions
+          ]).values()
+        ]
+      : [];
   const selection = selectionLines.length > 0
     ? ` {\n${indentGraphqlLines(selectionLines, 4)}\n  }`
     : '';
@@ -947,7 +1094,10 @@ export function buildGraphqlOperationDraft(
   );
   return {
     operationName,
-    query: `${operation} ${operationName}${variableDefinitions ? `(${variableDefinitions})` : ''} {\n  ${field.name}${callArguments ? `(${callArguments})` : ''}${selection}\n}`,
+    query: [
+      `${operation} ${operationName}${variableDefinitions ? `(${variableDefinitions})` : ''} {\n  ${field.name}${callArguments ? `(${callArguments})` : ''}${selection}\n}`,
+      ...fragmentDefinitions
+    ].join('\n\n'),
     variables: JSON.stringify(variables, null, 2)
   };
 }
@@ -1833,7 +1983,8 @@ function brunoJsonBody(body: RequestBody, kind: RequestKind) {
       mode: 'grpc',
       grpc: [{
         name: 'message 1',
-        content: normalized.grpc?.message || ''
+        content: normalized.grpc?.message || '',
+        ...(normalized.grpc?.rpcKind && normalized.grpc.rpcKind !== 'unary' ? { rpcKind: normalized.grpc.rpcKind } : {})
       }]
     };
   }
@@ -2245,6 +2396,7 @@ function openCollectionItem(record: WorkspaceRequestRecord, seq: number) {
         method: service && method ? `${service}/${method}` : method,
         ...(request.body.grpc?.protoFile ? { protoFilePath: request.body.grpc.protoFile } : {}),
         ...(request.body.grpc?.importPaths?.length ? { importPaths: request.body.grpc.importPaths.filter(Boolean) } : {}),
+        ...(request.body.grpc?.rpcKind && request.body.grpc.rpcKind !== 'unary' ? { rpcKind: request.body.grpc.rpcKind } : {}),
         ...(request.headers.length > 0 ? { metadata: request.headers.map(row => openCollectionRow(row)) } : {}),
         message: request.body.grpc?.message || '',
         auth: openCollectionAuth(request.auth)
@@ -2950,7 +3102,9 @@ function buildAuthPreview(
         value: token.header,
         sourceLabel: token.sourceLabel,
         status: token.header ? 'ready' : 'missing',
-        detail: token.header ? 'NTLM negotiate header (Type 1)' : `missing ${token.missing.join(', ')}`
+        detail: token.header
+          ? `NTLM negotiate header (Type 1) · explicit credentials only`
+          : `missing ${token.missing.join(', ')} · explicit credentials only`
       })
     );
   }
@@ -4159,6 +4313,15 @@ function buildPreflightDiagnostics(
       field: 'auth'
     });
   }
+  if (kind !== 'script' && auth.type === 'ntlm') {
+    diagnostics.push({
+      code: 'ntlm-native-credentials-unsupported',
+      level: 'warning',
+      blocking: false,
+      message: NTLM_DESKTOP_CONSTRAINT_DETAIL,
+      field: 'auth'
+    });
+  }
 
   if (
     kind !== 'script' &&
@@ -4284,6 +4447,37 @@ function buildScriptRunResponse(input: {
     timestamp: new Date().toISOString()
   };
   return response;
+}
+
+function buildSkippedRunResponse(input: {
+  request: RequestDocument;
+  preview: ResolvedRequestPreview;
+}) {
+  const bodyText = JSON.stringify(
+    {
+      runtime: 'script-flow',
+      action: 'skip-request',
+      requestId: input.request.id,
+      requestName: input.request.name
+    },
+    null,
+    2
+  );
+  return sendRequestResultSchema.parse({
+    ok: true,
+    status: 200,
+    statusText: 'Skipped by Script',
+    url: input.preview.url,
+    durationMs: 0,
+    sizeBytes: utf8Bytes(bodyText).length,
+    headers: [
+      { name: 'content-type', value: 'application/json' },
+      { name: 'x-debugger-runtime', value: 'script-flow' },
+      { name: 'x-debugger-skip-request', value: 'true' }
+    ],
+    bodyText,
+    timestamp: new Date().toISOString()
+  });
 }
 
 export function inspectResolvedRequest(
@@ -5050,6 +5244,8 @@ export type PreparedRequestRunResult = {
   response: SendRequestResult;
   checkResults: CheckResult[];
   scriptLogs: ScriptLog[];
+  skipped?: boolean;
+  execution: ScriptExecutionFlow;
   state: {
     variables: Record<string, string>;
     environment: EnvironmentDocument;
@@ -5076,6 +5272,21 @@ function joinScriptBlocks(...sources: Array<string | undefined>) {
     .map(source => source?.trim() || '')
     .filter(Boolean)
     .join('\n\n');
+}
+
+function mergeScriptExecutionFlows(...flows: ScriptExecutionFlow[]): ScriptExecutionFlow {
+  return flows.reduce<ScriptExecutionFlow>(
+    (merged, flow) => ({
+      skipRequest: merged.skipRequest || flow.skipRequest,
+      nextRequestSet: flow.nextRequestSet ? true : merged.nextRequestSet,
+      nextRequest: flow.nextRequestSet ? flow.nextRequest : merged.nextRequest
+    }),
+    {
+      skipRequest: false,
+      nextRequestSet: false,
+      nextRequest: null
+    }
+  );
 }
 
 function delay(ms: number) {
@@ -5374,7 +5585,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     runtimeSources
   );
   const blockingDiagnostics = insight.diagnostics.filter(item => item.blocking);
-  if (blockingDiagnostics.length > 0) {
+  if (!preScript.execution.skipRequest && blockingDiagnostics.length > 0) {
     throw Object.assign(new Error(blockingDiagnostics.map(item => item.message).join(' ')), {
       failureType: 'blocking-diagnostic' as const
     });
@@ -5384,6 +5595,23 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     ...insight.preview,
     sessionId: input.sessionId || input.workspace.root
   });
+  if (preScript.execution.skipRequest) {
+    return {
+      preview,
+      response: buildSkippedRunResponse({
+        request: input.request,
+        preview
+      }),
+      checkResults: [...preScript.testResults],
+      scriptLogs: [...preScript.logs],
+      skipped: true,
+      execution: preScript.execution,
+      state: {
+        variables: { ...preScript.state.variables },
+        environment: structuredClone(preScript.state.environment || initialEnvironment)
+      }
+    };
+  }
   if (kind === 'script') {
     const mainScript = await executeRequestScript({
       phase: 'pre-request',
@@ -5396,6 +5624,24 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
         sessionId: input.sessionId || preview.sessionId
       }))
     });
+    const scriptExecution = mergeScriptExecutionFlows(preScript.execution, mainScript.execution);
+    if (scriptExecution.skipRequest) {
+      return {
+        preview,
+        response: buildSkippedRunResponse({
+          request: input.request,
+          preview
+        }),
+        checkResults: [...mainScript.testResults],
+        scriptLogs: [...preScript.logs, ...mainScript.logs],
+        skipped: true,
+        execution: scriptExecution,
+        state: {
+          variables: { ...mainScript.state.variables },
+          environment: structuredClone(mainScript.state.environment || initialEnvironment)
+        }
+      };
+    }
     const response = buildScriptRunResponse({
       request: input.request,
       preview,
@@ -5415,6 +5661,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
       response,
       checkResults: [...mainScript.testResults, ...postScript.testResults],
       scriptLogs: [...preScript.logs, ...mainScript.logs, ...postScript.logs],
+      execution: mergeScriptExecutionFlows(scriptExecution, postScript.execution),
       state: {
         variables: { ...postScript.state.variables },
         environment: structuredClone(postScript.state.environment || initialEnvironment)
@@ -5516,6 +5763,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     response,
     checkResults: [...builtinChecks, ...collectionChecks, ...baselineChecks, ...postScript.testResults],
     scriptLogs: [...preScript.logs, ...postScript.logs],
+    execution: mergeScriptExecutionFlows(preScript.execution, postScript.execution),
     state: {
       variables: { ...postScript.state.variables },
       environment: structuredClone(postScript.state.environment || initialEnvironment)
@@ -5621,6 +5869,31 @@ async function runCollectionStepWithRetry(input: {
         }
         delete nextVariables[key];
       });
+      if (result.skipped) {
+        return {
+          stepRun: {
+            stepKey: input.step.key,
+            stepName: input.step.name || input.step.key,
+            requestId: input.step.requestId,
+            caseId: input.step.caseId,
+            ok: false,
+            skipped: true,
+            request: result.preview,
+            response: result.response,
+            checkResults: result.checkResults,
+            scriptLogs: result.scriptLogs,
+            error: 'Skipped by pm.execution.skipRequest()',
+            failureType: 'skipped',
+            baselineName: caseDocument?.baselineRef || undefined,
+            attempts: []
+          } satisfies CollectionStepRun,
+          nextState: {
+            variables: nextVariables,
+            environment: result.state.environment
+          },
+          execution: result.execution
+        };
+      }
       const ok = result.checkResults.every(check => check.ok);
       attempts.push({
         attempt,
@@ -5650,7 +5923,8 @@ async function runCollectionStepWithRetry(input: {
             variables: nextVariables,
             environment: result.state.environment
           },
-          output: buildStepOutput(result.preview, result.response)
+          output: buildStepOutput(result.preview, result.response),
+          execution: result.execution
         };
       }
     } catch (error) {
@@ -5706,6 +5980,72 @@ async function runCollectionStepWithRetry(input: {
   };
 }
 
+function createFlowControlFailure(message: string) {
+  return checkResultSchema.parse({
+    id: createId('script'),
+    label: 'Script flow control',
+    ok: false,
+    message,
+    source: 'script'
+  });
+}
+
+function resolveNextCollectionStepIndex(input: {
+  phases: Array<CollectionStep & { name?: string }>;
+  requestRecords: WorkspaceRequestRecord[];
+  currentIndex: number;
+  target: string | null;
+  filters: CollectionRunFilters;
+  explicitStepKeys?: string[];
+}) {
+  if (input.target === null) {
+    return { stop: true as const };
+  }
+
+  const normalizedTarget = input.target.trim();
+  const matchesTarget = (step: CollectionStep & { name?: string }, index: number) => {
+    const requestName = input.requestRecords.find(item => item.request.id === step.requestId)?.request.name || '';
+    const names = new Set([
+      step.key,
+      step.key.replace(/^(setup:|teardown:)/, ''),
+      step.name || '',
+      step.requestId,
+      requestName
+    ].filter(Boolean));
+    return names.has(normalizedTarget) ? index : -1;
+  };
+
+  const matchedIndexes = input.phases
+    .map((step, index) => {
+      const requestRecord = input.requestRecords.find(item => item.request.id === step.requestId);
+      if (!requestRecord || !shouldRunCollectionStep({
+        step,
+        requestRecord,
+        filters: input.filters,
+        explicitStepKeys: input.explicitStepKeys
+      })) {
+        return -1;
+      }
+      return matchesTarget(step, index);
+    })
+    .filter(index => index >= 0);
+
+  if (matchedIndexes.length === 0) {
+    return {
+      error: `pm.execution.setNextRequest("${normalizedTarget}") could not find a matching future collection step.`
+    };
+  }
+
+  const nextIndex = matchedIndexes.find(index => index > input.currentIndex);
+  if (nextIndex == null) {
+    return {
+      error: `pm.execution.setNextRequest("${normalizedTarget}") only supports forward jumps in the local debugger runtime.`
+    };
+  }
+
+  return { nextIndex };
+}
+
 export async function runCollection(input: {
   workspace: WorkspaceIndex;
   collectionId: string;
@@ -5745,8 +6085,10 @@ export async function runCollection(input: {
         ...(collection.teardownSteps || []).map(step => ({ ...step, key: `teardown:${step.key}`, name: step.name || step.key }))
       ];
       let stop = false;
+      let stepIndex = 0;
 
-      for (const step of phases) {
+      while (stepIndex < phases.length) {
+        const step = phases[stepIndex];
         const requestRecord = input.workspace.requests.find(item => item.request.id === step.requestId);
         if (!requestRecord || !shouldRunCollectionStep({
           step,
@@ -5754,6 +6096,7 @@ export async function runCollection(input: {
           filters: effectiveFilters,
           explicitStepKeys: input.options?.stepKeys
         })) {
+          stepIndex += 1;
           continue;
         }
         if (stop) {
@@ -5771,6 +6114,7 @@ export async function runCollection(input: {
             attempts: []
           });
           skippedSteps += 1;
+          stepIndex += 1;
           continue;
         }
 
@@ -5790,6 +6134,55 @@ export async function runCollection(input: {
         if (executed.output) {
           seeded[step.key.replace(/^(setup:|teardown:)/, '')] = executed.output;
         }
+        if (executed.execution?.nextRequestSet) {
+          const nextStepResolution = resolveNextCollectionStepIndex({
+            phases,
+            requestRecords: input.workspace.requests,
+            currentIndex: stepIndex,
+            target: executed.execution.nextRequest,
+            filters: effectiveFilters,
+            explicitStepKeys: input.options?.stepKeys
+          });
+          if (nextStepResolution.error) {
+            const flowFailure = createFlowControlFailure(nextStepResolution.error);
+            executed.stepRun.ok = false;
+            executed.stepRun.skipped = false;
+            executed.stepRun.error = nextStepResolution.error;
+            executed.stepRun.failureType = 'assertion-failed';
+            executed.stepRun.checkResults = [...executed.stepRun.checkResults, flowFailure];
+            const lastAttempt = executed.stepRun.attempts[executed.stepRun.attempts.length - 1];
+            if (lastAttempt) {
+              lastAttempt.ok = false;
+              lastAttempt.failureType = 'assertion-failed';
+              lastAttempt.error = nextStepResolution.error;
+              lastAttempt.checkResults = [...lastAttempt.checkResults, flowFailure];
+            }
+          } else if (nextStepResolution.stop) {
+            stepRuns.push(executed.stepRun);
+            if (executed.stepRun.ok) {
+              passedSteps += 1;
+            } else if (executed.stepRun.skipped) {
+              skippedSteps += 1;
+            } else {
+              failedSteps += 1;
+            }
+            break;
+          } else {
+            stepRuns.push(executed.stepRun);
+            if (executed.stepRun.ok) {
+              passedSteps += 1;
+            } else if (executed.stepRun.skipped) {
+              skippedSteps += 1;
+            } else {
+              failedSteps += 1;
+              if (input.options?.failFast || (!step.continueOnFailure && !collection.continueOnFailure && collection.stopOnFailure)) {
+                stop = true;
+              }
+            }
+            stepIndex = nextStepResolution.nextIndex!;
+            continue;
+          }
+        }
         stepRuns.push(executed.stepRun);
         if (executed.stepRun.ok) {
           passedSteps += 1;
@@ -5801,6 +6194,7 @@ export async function runCollection(input: {
             stop = true;
           }
         }
+        stepIndex += 1;
       }
 
       reportIterations.push({

@@ -109,6 +109,7 @@ import { collectionReportHtml, collectionReportJson, collectionReportJunit } fro
 import { Resizer } from './components/primitives/Resizer';
 import { StatusBar } from './components/layout/StatusBar';
 import { createScratchSession, loadScratchSessions, normalizeScratchTitle, saveScratchSessions, type ScratchSession } from './lib/scratch';
+import { buildVariableAuthoringAudit } from './lib/variable-audit';
 import {
   captureEntriesToImportResult,
   formatCaptureStepName,
@@ -1052,6 +1053,24 @@ export function App() {
   }, [store.workspace, store.draftRequest, store.draftCases, caseId, selectedRuntimeEnvironment, requestId, namedRuntimeSource, currentRequestFolderSources, preferences.runtimeDefaults]);
 
   const currentRequestPreview = currentRequestInsight?.preview || null;
+  const currentVariableAudit = useMemo(() => {
+    if (!store.workspace) return null;
+    return buildVariableAuthoringAudit({
+      project: store.workspace.project,
+      request: store.draftRequest,
+      environment: selectedRuntimeEnvironment,
+      insight: currentRequestInsight,
+      runtimeVariables,
+      folderSources: currentRequestFolderSources
+    });
+  }, [
+    store.workspace,
+    store.draftRequest,
+    selectedRuntimeEnvironment,
+    currentRequestInsight,
+    runtimeVariables,
+    currentRequestFolderSources
+  ]);
 
   const currentScratchInsight = useMemo(() => {
     if (!store.workspace || !currentScratch) return null;
@@ -3824,6 +3843,8 @@ export function App() {
                   draftProject={store.draftProject}
                   activeEnvironmentName={store.activeEnvironmentName}
                   selectedEnvironment={selectedEnvironment}
+                  activeRequestName={store.draftRequest?.name || null}
+                  variableAudit={currentVariableAudit}
                   runtimeVariables={runtimeVariables}
                   promptVariables={promptVariables}
                   sessionSnapshot={sessionSnapshot}

@@ -392,6 +392,12 @@ export function ResponsePanel(props: {
     [liveBody, selectedExample]
   );
   const activeDiffRow = diffRows[selectedDiffIndex] || null;
+  const responseSourceLabel = selectedExample
+    ? `Viewing ${selectedExample.role === 'baseline' ? 'baseline' : 'saved example'} · ${selectedExample.name}`
+    : props.response
+      ? 'Viewing latest live response'
+      : 'Waiting for a response';
+  const surfacedSearchMatches = bodyMatches.length + jsonRows.length + filteredHeaders.length + filteredResponseCookies.length + filteredSessionCookies.length;
 
   useEffect(() => {
     setSelectedDiffIndex(0);
@@ -420,9 +426,16 @@ export function ResponsePanel(props: {
     <div className="response-panel">
       <div className="response-header-ide">
         <div className="response-status-group">
-          <Text size="xs" fw={700} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            响应结果
-          </Text>
+          <div className="response-status-copy">
+            <Text size="xs" fw={700} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              响应结果
+            </Text>
+            <Text size="xs" c="dimmed">
+              {responseSourceLabel}
+              {(mimeType || previewKind) ? ` · ${mimeType || previewKind}` : ''}
+              {searchNeedle ? ` · ${surfacedSearchMatches} surfaced matches` : ''}
+            </Text>
+          </div>
           {props.response ? (
             <div className="response-metrics">
               <Badge color={props.response.ok ? 'green' : 'red'} variant="light" size="sm">
@@ -436,25 +449,27 @@ export function ResponsePanel(props: {
           ) : null}
         </div>
         <Group gap="xs" wrap="wrap" className="response-header-actions">
-          <TextInput
-            size="xs"
-            className="response-search-input"
-            leftSection={<IconSearch size={14} />}
-            placeholder="搜索 body / JSON / header / cookie"
-            value={searchText}
-            onChange={event => setSearchText(event.currentTarget.value)}
-          />
-          <Select
-            size="xs"
-            className="response-example-select"
-            placeholder="查看实时响应"
-            value={props.selectedExampleName || '__live__'}
-            data={[
-              { value: '__live__', label: '实时响应' },
-              ...examples.map(example => ({ value: example.name, label: exampleOptionLabel(example.name, example.role) }))
-            ]}
-            onChange={value => props.onSelectExample(value === '__live__' ? null : value || null)}
-          />
+          <div className="response-toolbar-primary">
+            <TextInput
+              size="xs"
+              className="response-search-input"
+              leftSection={<IconSearch size={14} />}
+              placeholder="搜索 body / JSON / header / cookie"
+              value={searchText}
+              onChange={event => setSearchText(event.currentTarget.value)}
+            />
+            <Select
+              size="xs"
+              className="response-example-select"
+              placeholder="查看实时响应"
+              value={props.selectedExampleName || '__live__'}
+              data={[
+                { value: '__live__', label: '实时响应' },
+                ...examples.map(example => ({ value: example.name, label: exampleOptionLabel(example.name, example.role) }))
+              ]}
+              onChange={value => props.onSelectExample(value === '__live__' ? null : value || null)}
+            />
+          </div>
           {props.response && parsedJson != null ? (
             <Button
               size="xs"
@@ -466,7 +481,7 @@ export function ResponsePanel(props: {
             </Button>
           ) : null}
           {props.response ? (
-            <Group gap={6} wrap="wrap" className="response-header-actions-secondary">
+            <Group gap={6} wrap="wrap" className="response-header-actions-secondary response-toolbar-secondary">
               <Button size="xs" variant="default" onClick={props.onCopyBody} disabled={!displayBody}>复制响应</Button>
               <Button size="xs" variant="default" onClick={props.onCopyCurl} disabled={!props.requestPreview}>复制 cURL</Button>
               <Button size="xs" variant="default" onClick={props.onCopyBruno} disabled={!props.onCopyBruno || !props.requestDocument}>

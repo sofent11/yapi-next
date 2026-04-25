@@ -23,6 +23,7 @@ import {
   graphqlSelectionPath,
   inspectResolvedRequest,
   summarizeGraphqlSchema,
+  type GraphqlFragmentStyle,
   type GraphqlOperationFieldSummary,
   type GraphqlOperationKind,
   type GraphqlSelectionFieldSummary,
@@ -59,6 +60,10 @@ import { KeyValueEditor } from '../primitives/KeyValueEditor';
 
 const REQUEST_METHODS: RequestDocument['method'][] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const REQUEST_KINDS: RequestDocument['kind'][] = ['http', 'graphql', 'grpc', 'websocket', 'script'];
+const GRPC_RPC_KINDS = [
+  { value: 'unary', label: 'Unary' },
+  { value: 'server-streaming', label: 'Server Streaming' }
+] as const;
 
 function bodyModeOptions() {
   return [
@@ -399,7 +404,14 @@ export function RequestPanel(props: {
   const headerRows = selectedCase?.overrides.headers ?? requestDocument.headers;
   const body = selectedCase?.overrides.body || requestDocument.body;
   const graphqlBody = body.graphql || { query: '', variables: '{}', operationName: '', schemaUrl: '', savedOperations: [] };
-  const grpcBody = body.grpc || { protoFile: '', importPaths: [], service: '', method: '', message: '{}' };
+  const grpcBody = body.grpc || {
+    protoFile: '',
+    importPaths: [],
+    service: '',
+    method: '',
+    rpcKind: 'unary' as const,
+    message: '{}'
+  };
   const websocketMessages = body.websocket?.messages?.length
     ? body.websocket.messages
     : [{ name: 'Message 1', body: '', kind: 'json' as const, enabled: true }];
@@ -418,6 +430,11 @@ export function RequestPanel(props: {
     [props.requestInsight, workspace.project, requestDocument, selectedCase, selectedEnvironment]
   );
   const resolvedPreview = resolvedInsight.preview;
+  const requestHeaderSummary = [
+    effectiveKind.toUpperCase(),
+    props.activeEnvironmentName ? `Env ${props.activeEnvironmentName}` : 'No environment',
+    selectedCase ? `Case ${selectedCase.name}` : allowCases ? 'Base request' : 'Scratch-only'
+  ].join(' · ');
   const resolvedWebSocketUrl = appendEnabledQueryRows(resolvedPreview.url, resolvedPreview.query);
   const blockingDiagnostics = resolvedInsight.diagnostics.filter(item => item.blocking);
   const attentionDiagnostics = resolvedInsight.diagnostics.filter(item => !item.blocking);
@@ -428,6 +445,7 @@ export function RequestPanel(props: {
     graphqlIntrospection.summary ? firstGraphqlExplorerState(graphqlIntrospection.summary) : null
   );
   const [graphqlSchemaSearch, setGraphqlSchemaSearch] = useState('');
+  const [graphqlFragmentStyle, setGraphqlFragmentStyle] = useState<GraphqlFragmentStyle>('inline');
   const [selectedGraphqlSavedOperation, setSelectedGraphqlSavedOperation] = useState<string | null>(
     () => graphqlBody.savedOperations?.[0]?.name || null
   );
@@ -724,7 +742,8 @@ export function RequestPanel(props: {
       selectedFragments:
         graphqlExplorer?.operation === operation && graphqlExplorer.fieldName === fieldName
           ? graphqlExplorer.selectedFragments
-          : undefined
+          : undefined,
+      fragmentStyle: graphqlFragmentStyle
     });
     updateBody({
       ...body,
@@ -1139,6 +1158,9 @@ export function RequestPanel(props: {
             <Text size="sm" fw={700}>
               {selectedCase ? `${requestDocument.name} · ${selectedCase.name}` : requestDocument.name}
             </Text>
+            <Text size="xs" c="dimmed" className="request-header-caption">
+              {requestHeaderSummary}
+            </Text>
           </div>
           <Group gap="xs" wrap="wrap" className="request-header-meta-pills">
             {props.activeEnvironmentName ? (
@@ -1202,7 +1224,14 @@ export function RequestPanel(props: {
                         ...body,
                         mode: 'none' as const,
                         mimeType: 'application/grpc',
-                        grpc: body.grpc || { protoFile: '', importPaths: [], service: '', method: '', message: '{}' }
+                        grpc: body.grpc || {
+                          protoFile: '',
+                          importPaths: [],
+                          service: '',
+                          method: '',
+                          rpcKind: 'unary',
+                          message: '{}'
+                        }
                       }
                   : nextKind === 'websocket'
                     ? {
@@ -1364,6 +1393,7 @@ export function RequestPanel(props: {
                             endpoint: resolvedPreview.url,
                             service: resolvedPreview.body.grpc?.service || '',
                             method: resolvedPreview.body.grpc?.method || '',
+                            rpcKind: resolvedPreview.body.grpc?.rpcKind || 'unary',
                             protoFile: resolvedPreview.body.grpc?.protoFile || '',
                             importPaths: resolvedPreview.body.grpc?.importPaths || [],
                             message: resolvedPreview.body.grpc?.message || ''
@@ -1609,6 +1639,22 @@ export function RequestPanel(props: {
                     placeholder="UnaryMethod"
                     onChange={event => updateBody({ ...body, mode: 'none', mimeType: 'application/grpc', grpc: { ...grpcBody, method: event.currentTarget.value } })}
                   />
+                  <Select
+                    label="RPC Kind"
+                    value={grpcBody.rpcKind || 'unary'}
+                    data={GRPC_RPC_KINDS.map(item => ({ value: item.value, label: item.label }))}
+                    onChange={value =>
+                      updateBody({
+                        ...body,
+                        mode: 'none',
+                        mimeType: 'application/grpc',
+                        grpc: {
+                          ...grpcBody,
+                          rpcKind: (value as 'unary' | 'server-streaming') || 'unary'
+                        }
+                      })
+                    }
+                  />
                   <div className="preview-note">
                     <Button
                       size="xs"
@@ -1629,7 +1675,11 @@ export function RequestPanel(props: {
                   </div>
                 </div>
                 <div>
-                  <Text size="xs" fw={700} c="dimmed">Unary Message (JSON or protobuf text format)</Text>
+                  <Text size="xs" fw={700} c="dimmed">
+                    {grpcBody.rpcKind === 'server-streaming'
+                      ? 'Request Message (server-streaming aggregates all response messages into one JSON result)'
+                      : 'Unary Message (JSON or protobuf text format)'}
+                  </Text>
                   <CodeEditor
                     value={grpcBody.message || '{}'}
                     language="json"
@@ -2199,6 +2249,24 @@ export function RequestPanel(props: {
                                 </Badge>
                               ) : null}
                             </div>
+                            <div className="graphql-explorer-controls">
+                              <Select
+                                size="xs"
+                                label="Fragment style"
+                                className="graphql-explorer-fragment-mode"
+                                value={graphqlFragmentStyle}
+                                data={[
+                                  { value: 'inline', label: 'Inline fragments' },
+                                  { value: 'named', label: 'Reusable named fragments' }
+                                ]}
+                                onChange={value => setGraphqlFragmentStyle((value as GraphqlFragmentStyle) || 'inline')}
+                              />
+                              <Text size="xs" c="dimmed">
+                                {graphqlFragmentStyle === 'named'
+                                  ? 'Insert Selection appends fragment definitions and spreads for the checked interface or union branches.'
+                                  : 'Insert Selection keeps fragment bodies inline inside the generated operation.'}
+                              </Text>
+                            </div>
                             {graphqlExplorerField.selectionTree.length > 0 ? (
                               <div className="graphql-explorer-tree">
                                 {renderGraphqlExplorerNodes(graphqlExplorerField.selectionTree)}
@@ -2444,6 +2512,11 @@ export function RequestPanel(props: {
                     <>
                       <TextInput label="Domain" value={auth.domain || ''} onChange={event => updateAuth({ ...auth, domain: event.currentTarget.value })} />
                       <TextInput label="Workstation" value={auth.workstation || ''} onChange={event => updateAuth({ ...auth, workstation: event.currentTarget.value })} />
+                      <div className="preview-note">
+                        <Text size="xs" c="dimmed">
+                          Desktop NTLM uses explicit username/password credentials only. Native OS/integrated enterprise flows are not available in this build.
+                        </Text>
+                      </div>
                     </>
                   ) : null}
                   {auth.type === 'digest' ? (

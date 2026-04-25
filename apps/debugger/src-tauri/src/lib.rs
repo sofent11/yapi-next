@@ -13,7 +13,7 @@ use reqwest::{
     Client, Url,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
     fs,
@@ -129,6 +129,8 @@ struct GrpcBody {
     import_paths: Vec<String>,
     service: Option<String>,
     method: Option<String>,
+    #[serde(default = "default_grpc_rpc_kind")]
+    rpc_kind: String,
     #[serde(default)]
     message: String,
 }
@@ -143,6 +145,28 @@ struct RequestBody {
     fields: Vec<ParameterRow>,
     #[serde(default)]
     grpc: Option<GrpcBody>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GrpcRuntimeKind {
+    Unary,
+    ServerStreaming,
+}
+
+impl GrpcRuntimeKind {
+    fn rpc_kind(self) -> &'static str {
+        match self {
+            Self::Unary => "unary",
+            Self::ServerStreaming => "server-streaming",
+        }
+    }
+
+    fn runtime_header(self) -> &'static str {
+        match self {
+            Self::Unary => "grpc",
+            Self::ServerStreaming => "grpc-server-streaming",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -360,6 +384,10 @@ struct RunHistoryEntry {
 
 fn default_parameter_kind() -> String {
     "text".into()
+}
+
+fn default_grpc_rpc_kind() -> String {
+    "unary".into()
 }
 
 fn normalize_path(path: &str) -> String {
@@ -876,11 +904,7 @@ fn run_git(root: &str, args: &[&str]) -> Result<std::process::Output, String> {
 }
 
 fn git_display_path(path: &str) -> String {
-    path.split(" -> ")
-        .last()
-        .unwrap_or(path)
-        .trim()
-        .to_string()
+    path.split(" -> ").last().unwrap_or(path).trim().to_string()
 }
 
 fn null_device() -> &'static str {
@@ -1022,7 +1046,10 @@ fn git_diff(root: String, path: String) -> Result<String, String> {
         sections.push(String::from_utf8_lossy(&unstaged.stdout).trim().to_string());
     }
 
-    let staged = run_git(&root, &["--no-pager", "diff", "--cached", "--", &normalized_path])?;
+    let staged = run_git(
+        &root,
+        &["--no-pager", "diff", "--cached", "--", &normalized_path],
+    )?;
     if !staged.stdout.is_empty() {
         sections.push(String::from_utf8_lossy(&staged.stdout).trim().to_string());
     }
@@ -1037,7 +1064,11 @@ fn git_diff(root: String, path: String) -> Result<String, String> {
             .output()
             .map_err(|error| error.to_string())?;
         if !untracked.stdout.is_empty() {
-            sections.push(String::from_utf8_lossy(&untracked.stdout).trim().to_string());
+            sections.push(
+                String::from_utf8_lossy(&untracked.stdout)
+                    .trim()
+                    .to_string(),
+            );
         }
     }
 
@@ -1164,7 +1195,9 @@ fn git_clone(
         }
     });
 
-    let output = child.wait_with_output().map_err(|error| error.to_string())?;
+    let output = child
+        .wait_with_output()
+        .map_err(|error| error.to_string())?;
     let _ = stderr_thread.join();
     if !output.status.success() {
         let stderr = progress_log
@@ -1413,11 +1446,7 @@ impl Encoder for DynamicMessageEncoder {
     type Item = DynamicMessage;
     type Error = Status;
 
-    fn encode(
-        &mut self,
-        item: Self::Item,
-        dst: &mut EncodeBuf<'_>,
-    ) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item, dst: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
         item.encode(dst)
             .map_err(|error| Status::internal(error.to_string()))
     }
@@ -1431,10 +1460,7 @@ impl Decoder for DynamicMessageDecoder {
     type Item = DynamicMessage;
     type Error = Status;
 
-    fn decode(
-        &mut self,
-        src: &mut DecodeBuf<'_>,
-    ) -> Result<Option<Self::Item>, Self::Error> {
+    fn decode(&mut self, src: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
         DynamicMessage::decode(self.descriptor.clone(), src)
             .map(Some)
             .map_err(|error| Status::internal(error.to_string()))
@@ -1551,7 +1577,11 @@ fn grpc_proto_context(
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| "gRPC requests require a proto file".to_string())?;
     let session_root = session_root_path(input.session_id.as_deref());
-    let proto_path = resolve_workspace_path(input.session_id.as_deref(), proto_raw, session_root.as_deref());
+    let proto_path = resolve_workspace_path(
+        input.session_id.as_deref(),
+        proto_raw,
+        session_root.as_deref(),
+    );
     if !proto_path.exists() {
         return Err(format!("Proto file not found: {}", proto_path.display()));
     }
@@ -1574,7 +1604,8 @@ fn grpc_proto_context(
         if raw_path.trim().is_empty() {
             continue;
         }
-        let resolved = resolve_workspace_path(input.session_id.as_deref(), raw_path, proto_dir.as_deref());
+        let resolved =
+            resolve_workspace_path(input.session_id.as_deref(), raw_path, proto_dir.as_deref());
         push_include(resolved);
     }
     let file_descriptors =
@@ -1598,10 +1629,44 @@ fn grpc_method_descriptor(
         .methods()
         .find(|item| item.name() == method_name)
         .ok_or_else(|| format!("gRPC method not found on service {service_name}: {method_name}"))?;
-    if method.is_client_streaming() || method.is_server_streaming() {
-        return Err("Only unary gRPC methods are supported right now.".to_string());
-    }
     Ok(method)
+}
+
+fn grpc_runtime_kind(
+    grpc: &GrpcBody,
+    method: &prost_reflect::MethodDescriptor,
+) -> Result<GrpcRuntimeKind, String> {
+    if method.is_client_streaming() {
+        return Err("Client and bidi gRPC streaming are not supported right now.".to_string());
+    }
+    let requested = if grpc.rpc_kind.trim().is_empty() {
+        "unary"
+    } else {
+        grpc.rpc_kind.trim()
+    };
+    match requested {
+        "unary" => {
+            if method.is_server_streaming() {
+                return Err(format!(
+                    "gRPC method {}.{} is server-streaming. Set RPC Kind to Server Streaming to run it.",
+                    method.parent_service().full_name(),
+                    method.name()
+                ));
+            }
+            Ok(GrpcRuntimeKind::Unary)
+        }
+        "server-streaming" => {
+            if !method.is_server_streaming() {
+                return Err(format!(
+                    "gRPC method {}.{} is unary. Switch RPC Kind back to Unary to run it.",
+                    method.parent_service().full_name(),
+                    method.name()
+                ));
+            }
+            Ok(GrpcRuntimeKind::ServerStreaming)
+        }
+        other => Err(format!("Unsupported gRPC RPC kind: {other}")),
+    }
 }
 
 fn grpc_request_message(
@@ -1644,8 +1709,8 @@ fn grpc_request_metadata(
             continue;
         }
         let key = MetadataKey::<Ascii>::from_str(&name).map_err(|error| error.to_string())?;
-        let value =
-            MetadataValue::<Ascii>::from_str(row.value.trim()).map_err(|error| error.to_string())?;
+        let value = MetadataValue::<Ascii>::from_str(row.value.trim())
+            .map_err(|error| error.to_string())?;
         request.metadata_mut().insert(key, value);
     }
     Ok(())
@@ -1662,69 +1727,65 @@ async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult,
     let endpoint_url = normalize_grpc_endpoint(&input.url)?;
     let (pool, _proto_path) = grpc_proto_context(&input, &grpc)?;
     let method = grpc_method_descriptor(&pool, &grpc)?;
+    let runtime_kind = grpc_runtime_kind(&grpc, &method)?;
     let input_message = grpc_request_message(method.input(), grpc.message.as_str())?;
-    let rpc_path = format!("/{}/{}", method.parent_service().full_name(), method.name());
+    let service_name = method.parent_service().full_name().to_string();
+    let method_name = method.name().to_string();
+    let rpc_path = format!("/{}/{}", service_name, method_name);
     let path =
         PathAndQuery::from_str(&rpc_path).map_err(|error| format!("Invalid gRPC path: {error}"))?;
     let mut rpc_url = endpoint_url.clone();
     rpc_url.set_query(None);
     rpc_url.set_path(&rpc_path);
+    let rpc_url_text = rpc_url.to_string();
     let endpoint = Endpoint::from_shared(endpoint_url.to_string())
         .map_err(|error| error.to_string())?
         .connect_timeout(Duration::from_millis(timeout_ms))
         .timeout(Duration::from_millis(timeout_ms));
-    let channel = endpoint.connect().await.map_err(|error| error.to_string())?;
+    let channel = endpoint
+        .connect()
+        .await
+        .map_err(|error| error.to_string())?;
     let mut request = GrpcRequest::new(input_message);
     grpc_request_metadata(&mut request, &input.headers)?;
     let mut client = Grpc::new(channel);
-    let result = client
-        .unary(request, path, DynamicMessageCodec::new(method.output()))
-        .await;
 
-    match result {
-        Ok(response) => {
-            let body_text = serde_json::to_string_pretty(&response.into_inner())
-                .map_err(|error| error.to_string())?;
-            Ok(SendRequestResult {
-                ok: true,
-                status: 200,
-                status_text: "OK".into(),
-                url: rpc_url.to_string(),
-                duration_ms: start.elapsed().as_millis() as u64,
-                size_bytes: body_text.as_bytes().len(),
-                headers: vec![
-                    ResponseHeader {
-                        name: "content-type".into(),
-                        value: "application/json; charset=utf-8".into(),
+    let failure_result =
+        |status: Status, partial_messages: Vec<Value>| -> Result<SendRequestResult, String> {
+            let body_value = if runtime_kind == GrpcRuntimeKind::ServerStreaming {
+                json!({
+                    "grpc": {
+                        "rpcKind": runtime_kind.rpc_kind(),
+                        "service": service_name.clone(),
+                        "method": method_name.clone(),
+                        "code": format!("{:?}", status.code()),
+                        "message": status.message(),
+                        "detailsBase64": (!status.details().is_empty())
+                            .then(|| general_purpose::STANDARD.encode(status.details())),
+                        "partialMessageCount": partial_messages.len()
                     },
-                    ResponseHeader {
-                        name: "grpc-status".into(),
-                        value: "0".into(),
-                    },
-                    ResponseHeader {
-                        name: "x-debugger-runtime".into(),
-                        value: "grpc".into(),
-                    },
-                ],
-                body_text,
-                body_base64: None,
-                timestamp: chrono_timestamp(),
-            })
-        }
-        Err(status) => {
-            let body_text = serde_json::to_string_pretty(&json!({
-                "grpc": {
-                    "code": format!("{:?}", status.code()),
-                    "message": status.message(),
-                    "detailsBase64": (!status.details().is_empty()).then(|| general_purpose::STANDARD.encode(status.details()))
-                }
-            }))
-            .map_err(|error| error.to_string())?;
+                    "messages": partial_messages
+                })
+            } else {
+                json!({
+                    "grpc": {
+                        "rpcKind": runtime_kind.rpc_kind(),
+                        "service": service_name.clone(),
+                        "method": method_name.clone(),
+                        "code": format!("{:?}", status.code()),
+                        "message": status.message(),
+                        "detailsBase64": (!status.details().is_empty())
+                            .then(|| general_purpose::STANDARD.encode(status.details()))
+                    }
+                })
+            };
+            let body_text =
+                serde_json::to_string_pretty(&body_value).map_err(|error| error.to_string())?;
             Ok(SendRequestResult {
                 ok: false,
                 status: grpc_status_to_http_status(status.code()),
                 status_text: format!("{:?}", status.code()),
-                url: rpc_url.to_string(),
+                url: rpc_url_text.clone(),
                 duration_ms: start.elapsed().as_millis() as u64,
                 size_bytes: body_text.as_bytes().len(),
                 headers: vec![
@@ -1742,14 +1803,115 @@ async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult,
                     },
                     ResponseHeader {
                         name: "x-debugger-runtime".into(),
-                        value: "grpc".into(),
+                        value: runtime_kind.runtime_header().into(),
                     },
                 ],
                 body_text,
                 body_base64: None,
                 timestamp: chrono_timestamp(),
             })
-        }
+        };
+
+    match runtime_kind {
+        GrpcRuntimeKind::Unary => match client
+            .unary(request, path, DynamicMessageCodec::new(method.output()))
+            .await
+        {
+            Ok(response) => {
+                let body_text = serde_json::to_string_pretty(&response.into_inner())
+                    .map_err(|error| error.to_string())?;
+                Ok(SendRequestResult {
+                    ok: true,
+                    status: 200,
+                    status_text: "OK".into(),
+                    url: rpc_url_text,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    size_bytes: body_text.as_bytes().len(),
+                    headers: vec![
+                        ResponseHeader {
+                            name: "content-type".into(),
+                            value: "application/json; charset=utf-8".into(),
+                        },
+                        ResponseHeader {
+                            name: "grpc-status".into(),
+                            value: "0".into(),
+                        },
+                        ResponseHeader {
+                            name: "x-debugger-runtime".into(),
+                            value: runtime_kind.runtime_header().into(),
+                        },
+                    ],
+                    body_text,
+                    body_base64: None,
+                    timestamp: chrono_timestamp(),
+                })
+            }
+            Err(status) => failure_result(status, vec![]),
+        },
+        GrpcRuntimeKind::ServerStreaming => match client
+            .server_streaming(request, path, DynamicMessageCodec::new(method.output()))
+            .await
+        {
+            Ok(response) => {
+                let mut stream = response.into_inner();
+                let mut messages = Vec::new();
+                loop {
+                    match stream.message().await {
+                        Ok(Some(message)) => {
+                            messages.push(
+                                serde_json::to_value(&message)
+                                    .map_err(|error| error.to_string())?,
+                            );
+                        }
+                        Ok(None) => break,
+                        Err(status) => return failure_result(status, messages),
+                    }
+                }
+                if let Err(status) = stream.trailers().await {
+                    return failure_result(status, messages);
+                }
+                let body_text = serde_json::to_string_pretty(&json!({
+                    "grpc": {
+                        "rpcKind": runtime_kind.rpc_kind(),
+                        "service": service_name.clone(),
+                        "method": method_name.clone(),
+                        "messageCount": messages.len()
+                    },
+                    "messages": messages
+                }))
+                .map_err(|error| error.to_string())?;
+                Ok(SendRequestResult {
+                    ok: true,
+                    status: 200,
+                    status_text: "OK".into(),
+                    url: rpc_url_text,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    size_bytes: body_text.as_bytes().len(),
+                    headers: vec![
+                        ResponseHeader {
+                            name: "content-type".into(),
+                            value: "application/json; charset=utf-8".into(),
+                        },
+                        ResponseHeader {
+                            name: "grpc-status".into(),
+                            value: "0".into(),
+                        },
+                        ResponseHeader {
+                            name: "x-debugger-runtime".into(),
+                            value: runtime_kind.runtime_header().into(),
+                        },
+                        ResponseHeader {
+                            name: "x-grpc-message-count".into(),
+                            value: messages.len().to_string(),
+                        },
+                    ],
+                    body_text,
+                    body_base64: None,
+                    timestamp: chrono_timestamp(),
+                })
+            }
+            Err(status) => failure_result(status, vec![]),
+        },
     }
 }
 
@@ -2322,8 +2484,8 @@ mod tests {
 
     #[test]
     fn websocket_message_body_includes_binary_base64_preview() {
-        let (_, body) = websocket_message_body(Message::Binary(vec![104, 105].into()))
-            .expect("binary preview");
+        let (_, body) =
+            websocket_message_body(Message::Binary(vec![104, 105].into())).expect("binary preview");
         assert!(body.contains("2 bytes"));
         assert!(body.contains("base64=aGk="));
     }

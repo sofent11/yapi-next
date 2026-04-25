@@ -1,6 +1,7 @@
 import { Badge, Button, Checkbox, Code, Group, Select, Text, TextInput } from '@mantine/core';
 import type { AuthConfig, EnvironmentDocument, ProjectDocument, SessionSnapshot, WorkspaceIndex } from '@yapi-debugger/schema';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
+import type { VariableAuthoringAudit } from '../../lib/variable-audit';
 
 function authTypeOptions() {
   return [
@@ -64,6 +65,8 @@ export function EnvironmentCenterPanel(props: {
   draftProject: ProjectDocument | null;
   activeEnvironmentName: string;
   selectedEnvironment: EnvironmentDocument | null;
+  activeRequestName?: string | null;
+  variableAudit?: VariableAuthoringAudit | null;
   runtimeVariables: Record<string, string>;
   promptVariables: Record<string, string>;
   sessionSnapshot: SessionSnapshot | null;
@@ -90,6 +93,8 @@ export function EnvironmentCenterPanel(props: {
   const localHeaderCount = (selectedEnvironment?.localHeaders || []).length;
   const authProfileCount = selectedEnvironment?.authProfiles.length || 0;
   const hasOverlay = localVarCount > 0 || localHeaderCount > 0 || Boolean(selectedEnvironment?.localFilePath);
+  const variableAudit = props.variableAudit || null;
+  const activeEnvironmentLabel = selectedEnvironment?.name || props.activeEnvironmentName || 'No environment selected';
 
   return (
     <section className="workspace-main environment-center">
@@ -109,6 +114,24 @@ export function EnvironmentCenterPanel(props: {
         <Text size="sm" c="dimmed">
           Keep shared configuration, local secrets, and runtime session state separate so the team can collaborate safely without losing fast local debugging.
         </Text>
+        <div className="summary-grid center-summary-grid">
+          <div className="summary-chip">
+            <span>Active Env</span>
+            <strong>{activeEnvironmentLabel}</strong>
+          </div>
+          <div className="summary-chip">
+            <span>Overlay</span>
+            <strong>{selectedEnvironment ? (hasOverlay ? 'Local overrides on' : 'Shared only') : 'Not available'}</strong>
+          </div>
+          <div className="summary-chip">
+            <span>Request Focus</span>
+            <strong>{props.activeRequestName || 'Select a request'}</strong>
+          </div>
+          <div className="summary-chip">
+            <span>Runtime State</span>
+            <strong>{runtimeEntries.length} vars · {props.sessionSnapshot?.cookies.length || 0} cookies</strong>
+          </div>
+        </div>
       </div>
 
       <div className="environment-layout">
@@ -209,6 +232,104 @@ export function EnvironmentCenterPanel(props: {
                     <strong>{authProfileCount}</strong>
                   </div>
                 </div>
+              </section>
+
+              <section className="inspector-section">
+                <div className="checks-head">
+                  <div>
+                    <Text className="section-kicker">Variable Audit</Text>
+                    <h3 className="section-title">Current request precedence</h3>
+                  </div>
+                  {variableAudit ? (
+                    <Badge color={variableAudit.missingCount > 0 ? 'red' : variableAudit.conflictCount > 0 ? 'orange' : 'teal'} variant="light">
+                      {variableAudit.missingCount} missing · {variableAudit.conflictCount} shadowed
+                    </Badge>
+                  ) : null}
+                </div>
+                {variableAudit ? (
+                  <>
+                    <Text size="sm" c="dimmed">
+                      Review which layer currently wins for <strong>{variableAudit.requestName}</strong>, which duplicate values are shadowed,
+                      and where to edit the active source without changing runtime precedence.
+                    </Text>
+                    <Text size="xs" c="dimmed" mt="sm">
+                      Precedence: {variableAudit.precedenceLabels.join(' → ') || 'No variable layers are active for the current request.'}
+                    </Text>
+                    <div className="summary-grid" style={{ marginTop: 12 }}>
+                      <div className="summary-chip">
+                        <span>Detected Tokens</span>
+                        <strong>{variableAudit.entries.length}</strong>
+                      </div>
+                      <div className="summary-chip">
+                        <span>Missing</span>
+                        <strong>{variableAudit.missingCount}</strong>
+                      </div>
+                      <div className="summary-chip">
+                        <span>Shadowed</span>
+                        <strong>{variableAudit.conflictCount}</strong>
+                      </div>
+                    </div>
+                    {variableAudit.entries.length === 0 ? (
+                      <div className="empty-tab-state" style={{ marginTop: 12 }}>
+                        The current request does not reference any template variables yet.
+                      </div>
+                    ) : (
+                      <div className="variable-authoring-list">
+                        {variableAudit.entries.map(variable => (
+                          <div key={variable.token} className="variable-authoring-card">
+                            <div className="variable-authoring-head">
+                              <div className="variable-authoring-copy">
+                                <strong>{variable.token}</strong>
+                                <span>{variable.sourceLabel}</span>
+                              </div>
+                              <Group gap="xs">
+                                <Badge color={variable.missing ? 'red' : variable.conflict ? 'orange' : 'teal'} variant="light">
+                                  {variable.missing ? 'missing' : variable.conflict ? 'shadowed' : 'resolved'}
+                                </Badge>
+                                <Code>{variable.missing ? 'unresolved' : variable.value || 'empty'}</Code>
+                              </Group>
+                            </div>
+                            <Text size="xs" c="dimmed">
+                              Used in {variable.locations.join(' · ') || 'request preview'}
+                            </Text>
+                            {!variable.missing ? (
+                              <Text size="xs" c="dimmed">
+                                Winning edit path: {variable.winnerHint}
+                              </Text>
+                            ) : null}
+                            {variable.definitions.length > 0 ? (
+                              <div className="variable-definition-list">
+                                {variable.definitions.map(definition => (
+                                  <div
+                                    key={`${variable.token}:${definition.layerId}`}
+                                    className={definition.winner ? 'variable-definition-row is-winning' : 'variable-definition-row'}
+                                  >
+                                    <div className="variable-authoring-copy">
+                                      <strong>{definition.label}</strong>
+                                      <span>{definition.editHint}</span>
+                                    </div>
+                                    <div className="variable-definition-meta">
+                                      <Code>{definition.value || 'empty'}</Code>
+                                      <Badge variant="light" color={definition.winner ? 'teal' : 'gray'}>
+                                        {definition.winner ? 'winning' : 'shadowed'}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="empty-tab-state">
+                    {props.activeRequestName
+                      ? 'Resolve the active request preview first to inspect variable precedence and shadowing.'
+                      : 'Select a request to inspect variable precedence, conflicts, and edit ownership.'}
+                  </div>
+                )}
               </section>
 
               <section className="inspector-section">
@@ -771,6 +892,11 @@ export function EnvironmentCenterPanel(props: {
                                   )
                                 }))
                               } />
+                              {profile.auth.type === 'ntlm' ? (
+                                <Text size="xs" c="dimmed">
+                                  Desktop NTLM uses explicit username/password credentials only. Native OS/integrated enterprise flows are not available in this build.
+                                </Text>
+                              ) : null}
                               {profile.auth.type === 'digest' ? (
                                 <>
                                   <TextInput label="Realm" value={profile.auth.realm || ''} onChange={event =>

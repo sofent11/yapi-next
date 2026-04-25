@@ -21,6 +21,8 @@ export type HttpMethod = z.infer<typeof httpMethodSchema>;
 
 export const requestKindSchema = z.enum(['http', 'graphql', 'grpc', 'websocket', 'script']);
 export type RequestKind = z.infer<typeof requestKindSchema>;
+export const grpcRpcKindSchema = z.enum(['unary', 'server-streaming']);
+export type GrpcRpcKind = z.infer<typeof grpcRpcKindSchema>;
 
 export const parameterRowSchema = z.object({
   name: z.string().default(''),
@@ -177,6 +179,7 @@ export const requestBodySchema = z.object({
     importPaths: z.array(z.string()).default([]),
     service: z.string().optional(),
     method: z.string().optional(),
+    rpcKind: grpcRpcKindSchema.default('unary'),
     message: z.string().default('')
   }).optional(),
   websocket: z.object({

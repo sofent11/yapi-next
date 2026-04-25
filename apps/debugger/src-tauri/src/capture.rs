@@ -1,3 +1,4 @@
+use base64::Engine as _;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,6 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::{sync::oneshot, time::sleep};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use base64::Engine as _;
 
 const BODY_LIMIT_BYTES: usize = 1024 * 1024;
 const CAPTURE_STATE_EVENT: &str = "capture://state";
@@ -165,7 +165,9 @@ fn capture_profile_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String
         .path()
         .app_cache_dir()
         .map_err(|error| error.to_string())?;
-    let profile_dir = cache_dir.join("capture-browser").join(format!("{}", now_ms()));
+    let profile_dir = cache_dir
+        .join("capture-browser")
+        .join(format!("{}", now_ms()));
     fs::create_dir_all(&profile_dir).map_err(|error| error.to_string())?;
     Ok(profile_dir)
 }
@@ -177,7 +179,10 @@ fn browser_status() -> CaptureRuntimeState {
         running: store.runtime.is_some(),
         browser_port: store.browser.as_ref().map(|browser| browser.port),
         mode: store.runtime.as_ref().map(|runtime| runtime.mode.clone()),
-        target_id: store.runtime.as_ref().and_then(|runtime| runtime.target_id.clone()),
+        target_id: store
+            .runtime
+            .as_ref()
+            .and_then(|runtime| runtime.target_id.clone()),
         entry_count: store.entries.len(),
         error: store.error.clone(),
     }
@@ -189,12 +194,14 @@ fn emit_capture_state<R: Runtime>(app: &AppHandle<R>) {
 
 fn persist_capture_entry<R: Runtime>(app: &AppHandle<R>, entry: &CapturedNetworkEntry) {
     if let Ok(mut store) = capture_store().lock() {
-      if let Some(index) = store.entries.iter().position(|item| item.id == entry.id) {
-          store.entries[index] = entry.clone();
-      } else {
-          store.entries.push(entry.clone());
-      }
-      store.entries.sort_by(|left, right| right.started_at_ms.cmp(&left.started_at_ms));
+        if let Some(index) = store.entries.iter().position(|item| item.id == entry.id) {
+            store.entries[index] = entry.clone();
+        } else {
+            store.entries.push(entry.clone());
+        }
+        store
+            .entries
+            .sort_by(|left, right| right.started_at_ms.cmp(&left.started_at_ms));
     }
     let _ = app.emit(CAPTURE_ENTRY_EVENT, entry);
     emit_capture_state(app);
@@ -205,7 +212,8 @@ fn parse_browser_version_payload(value: Value) -> Result<BrowserVersionPayload, 
 }
 
 fn parse_target_list_payload(value: Value) -> Result<Vec<BrowserTargetSummary>, String> {
-    let targets: Vec<TargetListPayload> = serde_json::from_value(value).map_err(|error| error.to_string())?;
+    let targets: Vec<TargetListPayload> =
+        serde_json::from_value(value).map_err(|error| error.to_string())?;
     Ok(targets
         .into_iter()
         .filter(|target| target.target_type == "page")
@@ -312,7 +320,10 @@ fn decode_body_text(result: &Value, mime_type: Option<&str>) -> (Option<String>,
     (Some(text), truncated)
 }
 
-async fn fetch_browser_version(client: &Client, port: u16) -> Result<BrowserVersionPayload, String> {
+async fn fetch_browser_version(
+    client: &Client,
+    port: u16,
+) -> Result<BrowserVersionPayload, String> {
     let response = client
         .get(format!("http://127.0.0.1:{port}/json/version"))
         .send()
@@ -467,13 +478,30 @@ fn target_from_summary(summary: &BrowserTargetSummary) -> SessionTarget {
 fn target_from_attached(params: &Value) -> Option<(String, SessionTarget)> {
     let session_id = params.get("sessionId")?.as_str()?.to_string();
     let target_info = params.get("targetInfo")?;
-    if target_info.get("type").and_then(Value::as_str).unwrap_or_default() != "page" {
+    if target_info
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        != "page"
+    {
         return None;
     }
     let target = SessionTarget {
-        target_id: target_info.get("targetId").and_then(Value::as_str).unwrap_or_default().to_string(),
-        title: target_info.get("title").and_then(Value::as_str).unwrap_or_default().to_string(),
-        url: target_info.get("url").and_then(Value::as_str).unwrap_or_default().to_string(),
+        target_id: target_info
+            .get("targetId")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        title: target_info
+            .get("title")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        url: target_info
+            .get("url")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
     };
     Some((session_id, target))
 }
@@ -812,7 +840,10 @@ pub async fn capture_target_list() -> Result<Vec<BrowserTargetSummary>, String> 
 }
 
 #[tauri::command]
-pub async fn capture_start(app: AppHandle, input: CaptureStartInput) -> Result<CaptureRuntimeState, String> {
+pub async fn capture_start(
+    app: AppHandle,
+    input: CaptureStartInput,
+) -> Result<CaptureRuntimeState, String> {
     let browser = {
         let store = capture_store()
             .lock()
@@ -861,7 +892,14 @@ pub async fn capture_start(app: AppHandle, input: CaptureStartInput) -> Result<C
 
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        let result = run_capture_loop(app_handle.clone(), browser.websocket_url, input.mode, initial_targets, stop_rx).await;
+        let result = run_capture_loop(
+            app_handle.clone(),
+            browser.websocket_url,
+            input.mode,
+            initial_targets,
+            stop_rx,
+        )
+        .await;
         finalize_runtime(&app_handle, runtime_id, result.err());
     });
 
@@ -896,7 +934,10 @@ mod tests {
         }))
         .expect("version payload should parse");
         assert_eq!(payload.browser, "Chrome/135.0.0.0");
-        assert_eq!(payload.websocket_url, "ws://127.0.0.1:9222/devtools/browser/abc");
+        assert_eq!(
+            payload.websocket_url,
+            "ws://127.0.0.1:9222/devtools/browser/abc"
+        );
     }
 
     #[test]
@@ -922,9 +963,18 @@ mod tests {
 
     #[test]
     fn host_filter_supports_exact_and_suffix() {
-        assert!(host_matches_filter("api.example.com", &[String::from("api.example.com")]));
-        assert!(host_matches_filter("edge.api.example.com", &[String::from(".example.com")]));
-        assert!(!host_matches_filter("example.net", &[String::from(".example.com")]));
+        assert!(host_matches_filter(
+            "api.example.com",
+            &[String::from("api.example.com")]
+        ));
+        assert!(host_matches_filter(
+            "edge.api.example.com",
+            &[String::from(".example.com")]
+        ));
+        assert!(!host_matches_filter(
+            "example.net",
+            &[String::from(".example.com")]
+        ));
     }
 
     #[test]

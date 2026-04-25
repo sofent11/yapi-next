@@ -41,6 +41,12 @@ export type ScriptRuntimeContext = {
   };
 };
 
+export type ScriptExecutionFlow = {
+  skipRequest: boolean;
+  nextRequestSet: boolean;
+  nextRequest: string | null;
+};
+
 type ScriptSendRequestInput = {
   method: string;
   url: string;
@@ -417,6 +423,14 @@ function createScriptResponse(response: SendRequestResult) {
   };
 }
 
+function createScriptExecutionFlow(): ScriptExecutionFlow {
+  return {
+    skipRequest: false,
+    nextRequestSet: false,
+    nextRequest: null
+  };
+}
+
 function normalizeScriptRows(
   rows: unknown,
   keyName: 'key' | 'name',
@@ -585,6 +599,7 @@ function createPmApi(input: {
   sendRequest?: (request: ScriptSendRequestInput) => Promise<SendRequestResult>;
   pendingRequests: Array<Promise<SendRequestResult>>;
   context?: ScriptRuntimeContext;
+  execution: ScriptExecutionFlow;
 }) {
   function recordTest(label: string, ok: boolean, message: string, expected?: string, actual?: string) {
     input.testResults.push(
@@ -617,12 +632,25 @@ function createPmApi(input: {
   const iterationDataApi = createReadonlyVariableApi(iterationData, [input.state.variables, input.state.environment?.vars || {}]);
   const responseApi = input.response ? createScriptResponse(input.response) : undefined;
   const globalsApi = createUnsupportedVariableApi('pm.globals', [input.state.variables, input.state.environment?.vars || {}]);
-  const unsupportedExecutionApi = {
-    setNextRequest: (_name?: string | null) => {
-      throw createUnsupportedApiError('pm.execution.setNextRequest', 'Collection-flow branching is not implemented yet.');
+  const setNextRequest = (apiName: 'pm.execution.setNextRequest' | 'postman.setNextRequest', name?: string | null) => {
+    if (!input.context?.sourceCollection) {
+      throw createUnsupportedApiError(apiName, 'Only collection runs can redirect flow.');
+    }
+    if (name != null && !String(name).trim()) {
+      throw new Error(`${apiName} requires a non-empty step target or null.`);
+    }
+    input.execution.nextRequestSet = true;
+    input.execution.nextRequest = name == null ? null : String(name).trim();
+  };
+  const executionApi = {
+    setNextRequest: (name?: string | null) => {
+      setNextRequest('pm.execution.setNextRequest', name);
     },
     skipRequest: () => {
-      throw createUnsupportedApiError('pm.execution.skipRequest', 'Conditional request skipping is not implemented yet.');
+      if (input.phase !== 'pre-request') {
+        throw createUnsupportedApiError('pm.execution.skipRequest', 'Only pre-request scripts can skip the current request.');
+      }
+      input.execution.skipRequest = true;
     }
   };
 
@@ -643,7 +671,7 @@ function createPmApi(input: {
       collectionName: input.context?.sourceCollection?.name || '',
       stepKey: input.context?.sourceCollection?.stepKey || ''
     },
-    execution: unsupportedExecutionApi,
+    execution: executionApi,
     vault: {
       get: (_key: string) => {
         throw createUnsupportedApiError('pm.vault');
@@ -714,9 +742,10 @@ export async function executeRequestScript(input: {
 }) {
   const logs: ScriptLog[] = [];
   const testResults: CheckResult[] = [];
+  const execution = createScriptExecutionFlow();
   const normalizedScript = input.script.trim();
   if (!normalizedScript) {
-    return { request: input.request, state: input.state, logs, testResults };
+    return { request: input.request, state: input.state, logs, testResults, execution };
   }
 
   const pendingRequests: Array<Promise<SendRequestResult>> = [];
@@ -730,11 +759,19 @@ export async function executeRequestScript(input: {
     testResults,
     sendRequest: input.sendRequest,
     pendingRequests,
-    context: input.context
+    context: input.context,
+    execution
   });
   const postman = {
-    setNextRequest: (_name?: string | null) => {
-      throw createUnsupportedApiError('postman.setNextRequest', 'Collection-flow branching is not implemented yet.');
+    setNextRequest: (name?: string | null) => {
+      if (!input.context?.sourceCollection) {
+        throw createUnsupportedApiError('postman.setNextRequest', 'Only collection runs can redirect flow.');
+      }
+      if (name != null && !String(name).trim()) {
+        throw new Error('postman.setNextRequest requires a non-empty step target or null.');
+      }
+      execution.nextRequestSet = true;
+      execution.nextRequest = name == null ? null : String(name).trim();
     }
   };
   const scriptConsole = {
@@ -752,12 +789,13 @@ export async function executeRequestScript(input: {
     if (pendingRequests.length > 0) {
       await Promise.all(pendingRequests);
     }
-    return {
-      request: resolvedRequestPreviewSchema.parse(input.request),
-      state: input.state,
-      logs,
-      testResults
-    };
+      return {
+        request: resolvedRequestPreviewSchema.parse(input.request),
+        state: input.state,
+        logs,
+        testResults,
+        execution
+      };
   } catch (error) {
     logs.push(createScriptLog(input.phase, 'error', (error as Error).message || 'Script execution failed'));
     testResults.push(
@@ -769,12 +807,13 @@ export async function executeRequestScript(input: {
         source: 'script'
       })
     );
-    return {
-      request: input.request,
-      state: input.state,
-      logs,
-      testResults
-    };
+      return {
+        request: input.request,
+        state: input.state,
+        logs,
+        testResults,
+        execution
+      };
   }
 }
 

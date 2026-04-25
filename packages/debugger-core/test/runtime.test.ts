@@ -350,7 +350,36 @@ test('executeRequestScript reports explicit unsupported api errors', async () =>
   });
 
   assert.equal(result.testResults[0]?.ok, false);
-  assert.match(result.testResults[0]?.message || '', /pm\.execution\.setNextRequest is not supported/);
+  assert.match(result.testResults[0]?.message || '', /Only collection runs can redirect flow/);
+});
+
+test('executeRequestScript supports script-flow directives when collection context is available', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Flow APIs');
+  request.url = 'https://example.com/flow';
+  const preview = resolveRequest(project, request, undefined, environment);
+
+  const result = await executeRequestScript({
+    phase: 'pre-request',
+    script: 'pm.execution.skipRequest(); pm.execution.setNextRequest("final-step");',
+    state: {
+      variables: {},
+      environment
+    },
+    request: preview,
+    context: {
+      sourceCollection: {
+        id: 'col_flow',
+        name: 'Flow',
+        stepKey: 'step_one'
+      }
+    }
+  });
+
+  assert.equal(result.execution.skipRequest, true);
+  assert.equal(result.execution.nextRequestSet, true);
+  assert.equal(result.execution.nextRequest, 'final-step');
 });
 
 test('resolveRequest interpolates grpc payload fields and derives rpc path', () => {
@@ -376,6 +405,7 @@ test('resolveRequest interpolates grpc payload fields and derives rpc path', () 
       importPaths: ['{{protoDir}}', '{{protoDir}}/common'],
       service: '{{package}}.UserService',
       method: '{{methodName}}',
+      rpcKind: 'unary',
       message: '{"id":"{{userId}}"}'
     }
   };
@@ -387,6 +417,7 @@ test('resolveRequest interpolates grpc payload fields and derives rpc path', () 
   assert.deepEqual(resolved.body.grpc?.importPaths, ['/workspace/protos', '/workspace/protos/common']);
   assert.equal(resolved.body.grpc?.service, 'demo.users.UserService');
   assert.equal(resolved.body.grpc?.method, 'GetUser');
+  assert.equal(resolved.body.grpc?.rpcKind, 'unary');
   assert.equal(resolved.body.grpc?.message, '{"id":"user-42"}');
 });
 
@@ -408,6 +439,7 @@ test('inspectResolvedRequest blocks grpc requests without proto or rpc target', 
       importPaths: [],
       service: '',
       method: '',
+      rpcKind: 'server-streaming',
       message: '{}'
     }
   };
@@ -417,6 +449,33 @@ test('inspectResolvedRequest blocks grpc requests without proto or rpc target', 
     insight.diagnostics.filter(item => item.blocking).map(item => item.code).sort(),
     ['missing-grpc-method', 'missing-grpc-proto', 'missing-grpc-service']
   );
+});
+
+test('resolveRequest preserves grpc server-streaming authoring state', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'grpc://localhost:50051';
+  const request = createEmptyRequest('Watch Users');
+  request.kind = 'grpc';
+  request.method = 'POST';
+  request.url = '{{baseUrl}}';
+  request.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: 'proto/user.proto',
+      importPaths: ['proto'],
+      service: 'demo.users.UserService',
+      method: 'WatchUsers',
+      rpcKind: 'server-streaming',
+      message: '{}'
+    }
+  };
+
+  const resolved = resolveRequest(project, request);
+  assert.equal(resolved.body.grpc?.rpcKind, 'server-streaming');
+  assert.equal(resolved.requestPath, '/demo.users.UserService/WatchUsers');
 });
 
 test('runPreparedRequest resolves grpc previews and exposes native runtime responses to scripts', async () => {
@@ -442,6 +501,7 @@ test('runPreparedRequest resolves grpc previews and exposes native runtime respo
       importPaths: ['{{protoDir}}', '{{protoDir}}/common'],
       service: '{{package}}.UserService',
       method: '{{methodName}}',
+      rpcKind: 'unary',
       message: '{"id":"{{userId}}"}'
     }
   };
@@ -500,6 +560,99 @@ test('runPreparedRequest resolves grpc previews and exposes native runtime respo
   assert.equal(result.preview.requestPath, '/demo.users.UserService/GetUser');
   assert.equal(result.response.url, 'http://localhost:50051/demo.users.UserService/GetUser');
   assert.equal(result.response.headers.find(item => item.name === 'x-debugger-runtime')?.value, 'grpc');
+  assert.equal(result.checkResults.every(item => item.ok), true);
+});
+
+test('runPreparedRequest keeps grpc server-streaming previews and aggregated responses script-visible', async () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'grpc://localhost:50051';
+  const environment = createDefaultEnvironment('shared');
+  environment.vars.protoDir = '/workspace/protos';
+  environment.vars.package = 'demo.users';
+
+  const request = createEmptyRequest('Watch Users');
+  request.kind = 'grpc';
+  request.method = 'POST';
+  request.url = '{{baseUrl}}';
+  request.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: '{{protoDir}}/user.proto',
+      importPaths: ['{{protoDir}}', '{{protoDir}}/common'],
+      service: '{{package}}.UserService',
+      method: 'WatchUsers',
+      rpcKind: 'server-streaming',
+      message: '{"team":"core"}'
+    }
+  };
+  request.scripts.tests = [
+    'pm.test("grpc stream kind", () => pm.expect(pm.response.json("grpc.rpcKind")).to.equal("server-streaming"));',
+    'pm.test("grpc stream count", () => pm.expect(pm.response.headers.get("x-grpc-message-count")).to.equal("2"));',
+    'pm.test("grpc stream payload", () => pm.expect(pm.response.json("messages.1.user.id")).to.equal("user-2"));'
+  ].join('\n');
+
+  const workspace = {
+    root: '/workspace/grpc-streaming-runtime',
+    project,
+    environments: [{ document: environment, filePath: '/workspace/grpc-streaming-runtime/environments/shared.yaml' }],
+    requests: [
+      {
+        request,
+        cases: [],
+        folderSegments: ['RPC'],
+        requestFilePath: '/workspace/grpc-streaming-runtime/requests/watch-users.request.yaml',
+        resourceDirPath: '/workspace/grpc-streaming-runtime/requests/watch-users'
+      }
+    ],
+    folders: [],
+    collections: [],
+    tree: []
+  };
+
+  const result = await runPreparedRequest({
+    workspace,
+    request,
+    sendRequest: async preview => {
+      assert.equal(preview.requestPath, '/demo.users.UserService/WatchUsers');
+      assert.equal(preview.body.grpc?.rpcKind, 'server-streaming');
+      assert.equal(preview.body.grpc?.protoFile, '/workspace/protos/user.proto');
+      assert.deepEqual(preview.body.grpc?.importPaths, ['/workspace/protos', '/workspace/protos/common']);
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: 'http://localhost:50051/demo.users.UserService/WatchUsers',
+        durationMs: 27,
+        sizeBytes: 182,
+        headers: [
+          { name: 'content-type', value: 'application/json; charset=utf-8' },
+          { name: 'grpc-status', value: '0' },
+          { name: 'x-debugger-runtime', value: 'grpc-server-streaming' },
+          { name: 'x-grpc-message-count', value: '2' }
+        ],
+        bodyText: JSON.stringify({
+          grpc: {
+            rpcKind: 'server-streaming',
+            service: 'demo.users.UserService',
+            method: 'WatchUsers',
+            messageCount: 2
+          },
+          messages: [
+            { user: { id: 'user-1' } },
+            { user: { id: 'user-2' } }
+          ]
+        }),
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.equal(result.preview.body.grpc?.rpcKind, 'server-streaming');
+  assert.equal(result.response.headers.find(item => item.name === 'x-debugger-runtime')?.value, 'grpc-server-streaming');
+  assert.equal(result.response.headers.find(item => item.name === 'x-grpc-message-count')?.value, '2');
   assert.equal(result.checkResults.every(item => item.ok), true);
 });
 
@@ -631,6 +784,57 @@ test('runPreparedRequest executes native script items without requiring an HTTP 
   assert.equal(result.state.environment.vars.scriptFlag, 'ready');
   assert.deepEqual(result.checkResults.map(item => item.label), ['script check', 'synthetic response']);
   assert.deepEqual(result.scriptLogs.map(item => item.message), ['script-pre', 'script-main', 'script-post']);
+});
+
+test('runPreparedRequest skips the request when pm.execution.skipRequest is called', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Skipped Request');
+  request.url = 'https://api.example.com/skip-me';
+  request.scripts.preRequest = 'pm.execution.skipRequest(); console.log("skip-now");';
+  const workspace = {
+    root: '/tmp/skip-request-workspace',
+    project,
+    environments: [{ document: environment, filePath: '/tmp/skip-request-workspace/environments/shared.yaml' }],
+    requests: [
+      {
+        request,
+        cases: [],
+        folderSegments: [],
+        requestFilePath: '/tmp/skip-request-workspace/requests/skipped.request.yaml',
+        resourceDirPath: '/tmp/skip-request-workspace/requests/skipped'
+      }
+    ],
+    folders: [],
+    collections: [],
+    tree: []
+  };
+  let sendCount = 0;
+
+  const result = await runPreparedRequest({
+    workspace,
+    request,
+    sendRequest: async preview => {
+      sendCount += 1;
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: preview.url,
+        durationMs: 1,
+        sizeBytes: 2,
+        headers: [],
+        bodyText: '{}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.equal(sendCount, 0);
+  assert.equal(result.skipped, true);
+  assert.equal(result.execution.skipRequest, true);
+  assert.equal(result.response.headers.find(item => item.name === 'x-debugger-skip-request')?.value, 'true');
+  assert.deepEqual(result.scriptLogs.map(item => item.message), ['skip-now']);
 });
 
 test('buildCurlCommand emits a runnable curl string', () => {
@@ -1118,6 +1322,8 @@ test('resolveRequest builds NTLM negotiate headers', () => {
   const insight = inspectResolvedRequest(project, request, undefined, environment);
   assert.equal(insight.authPreview.some(item => item.name === 'Authorization' && item.status === 'ready'), true);
   assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-ntlm-auth'), false);
+  assert.equal(insight.authPreview.some(item => item.name === 'Authorization' && item.detail?.includes('explicit credentials only')), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'ntlm-native-credentials-unsupported' && !item.blocking), true);
 });
 
 test('runPreparedRequest retries NTLM auth after WWW-Authenticate challenge', async () => {
@@ -1212,6 +1418,7 @@ test('inspectResolvedRequest blocks incomplete NTLM auth', () => {
   const insight = inspectResolvedRequest(project, request, undefined, environment);
   assert.equal(insight.authPreview.some(item => item.name === 'Authorization' && item.status === 'missing'), true);
   assert.equal(insight.diagnostics.some(item => item.code === 'incomplete-ntlm-auth' && item.blocking), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'ntlm-native-credentials-unsupported' && !item.blocking), true);
 });
 
 test('buildGraphqlIntrospectionRequest targets schemaUrl and preserves auth headers', () => {
@@ -1499,6 +1706,87 @@ test('buildGraphqlOperationDraft supports explorer field toggles and fragments',
   assert.match(draft.query, /node\(id: \$id\) \{\n    id\n    \.\.\. on User \{\n      email\n      profile \{\n        city\n      \}\n    \}\n  \}/);
   assert.doesNotMatch(draft.query, /\.\.\. on Admin/);
   assert.doesNotMatch(draft.query, /\n    name\n/);
+  assert.deepEqual(JSON.parse(draft.variables), { id: '' });
+});
+
+test('buildGraphqlOperationDraft can emit reusable named fragments', () => {
+  const summary = summarizeGraphqlSchema(JSON.stringify({
+    data: {
+      __schema: {
+        queryType: { name: 'Query' },
+        mutationType: null,
+        subscriptionType: null,
+        types: [
+          {
+            kind: 'OBJECT',
+            name: 'Query',
+            fields: [
+              {
+                name: 'node',
+                args: [{ name: 'id', type: { kind: 'NON_NULL', ofType: { kind: 'SCALAR', name: 'ID' } } }],
+                type: { kind: 'INTERFACE', name: 'Node' }
+              }
+            ]
+          },
+          {
+            kind: 'INTERFACE',
+            name: 'Node',
+            fields: [
+              { name: 'id', args: [], type: { kind: 'SCALAR', name: 'ID' } },
+              { name: 'name', args: [], type: { kind: 'SCALAR', name: 'String' } }
+            ],
+            possibleTypes: [{ kind: 'OBJECT', name: 'User' }, { kind: 'OBJECT', name: 'Admin' }]
+          },
+          {
+            kind: 'OBJECT',
+            name: 'User',
+            fields: [
+              { name: 'id', args: [], type: { kind: 'SCALAR', name: 'ID' } },
+              { name: 'name', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'email', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'profile', args: [], type: { kind: 'OBJECT', name: 'Profile' } }
+            ]
+          },
+          {
+            kind: 'OBJECT',
+            name: 'Admin',
+            fields: [
+              { name: 'id', args: [], type: { kind: 'SCALAR', name: 'ID' } },
+              { name: 'name', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'role', args: [], type: { kind: 'SCALAR', name: 'String' } }
+            ]
+          },
+          {
+            kind: 'OBJECT',
+            name: 'Profile',
+            fields: [
+              { name: 'city', args: [], type: { kind: 'SCALAR', name: 'String' } },
+              { name: 'timezone', args: [], type: { kind: 'SCALAR', name: 'String' } }
+            ]
+          },
+          { kind: 'SCALAR', name: 'ID', fields: null },
+          { kind: 'SCALAR', name: 'String', fields: null }
+        ]
+      }
+    }
+  }));
+
+  const userFragment = graphqlFragmentPath('', 'User');
+  const profilePath = graphqlSelectionPath(userFragment, 'profile');
+  const draft = buildGraphqlOperationDraft(summary, 'query', 'node', {
+    selectedFields: [
+      'id',
+      graphqlSelectionPath(userFragment, 'email'),
+      profilePath,
+      graphqlSelectionPath(profilePath, 'city')
+    ],
+    selectedFragments: [userFragment],
+    fragmentStyle: 'named'
+  });
+
+  assert.match(draft.query, /query QueryNode\(\$id: ID!\) \{\n  node\(id: \$id\) \{\n    id\n    \.\.\.QueryNodeUserFragment\n  \}\n\}/);
+  assert.match(draft.query, /fragment QueryNodeUserFragment on User \{\n  email\n  profile \{\n    city\n  \}\n\}/);
+  assert.doesNotMatch(draft.query, /\.\.\. on User/);
   assert.deepEqual(JSON.parse(draft.variables), { id: '' });
 });
 
@@ -1836,6 +2124,154 @@ test('runCollection executes collection-level scripts around each step', async (
   ]);
 });
 
+test('runCollection honors script skip and forward next-request directives', async () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  const environment = createDefaultEnvironment('shared');
+
+  const start = createEmptyRequest('Start');
+  start.id = 'req_flow_start';
+  start.url = '{{baseUrl}}/start';
+  start.scripts.preRequest = 'pm.execution.setNextRequest("final-step");';
+
+  const skipped = createEmptyRequest('Skipped');
+  skipped.id = 'req_flow_skipped';
+  skipped.url = '{{baseUrl}}/skipped';
+
+  const finalStep = createEmptyRequest('Final');
+  finalStep.id = 'req_flow_final';
+  finalStep.url = '{{baseUrl}}/final';
+  finalStep.scripts.preRequest = 'pm.execution.skipRequest(); postman.setNextRequest(null);';
+
+  const afterStop = createEmptyRequest('After Stop');
+  afterStop.id = 'req_flow_after_stop';
+  afterStop.url = '{{baseUrl}}/after-stop';
+
+  const collection = createEmptyCollection('Flow Control');
+  collection.id = 'col_flow_control';
+  collection.stopOnFailure = false;
+  collection.steps = [
+    createCollectionStep({ key: 'start-step', requestId: start.id, name: 'Start step' }),
+    createCollectionStep({ key: 'skip-me', requestId: skipped.id, name: 'Skip me' }),
+    createCollectionStep({ key: 'final-step', requestId: finalStep.id, name: 'Final step' }),
+    createCollectionStep({ key: 'after-stop', requestId: afterStop.id, name: 'After stop' })
+  ];
+  const seenUrls: string[] = [];
+
+  const report = await runCollection({
+    workspace: {
+      root: '/tmp/collection-flow',
+      project,
+      environments: [{ document: environment, filePath: '/tmp/collection-flow/environments/shared.yaml' }],
+      folders: [],
+      requests: [
+        {
+          request: start,
+          cases: [],
+          folderSegments: [],
+          requestFilePath: '/tmp/collection-flow/requests/start.request.yaml',
+          resourceDirPath: '/tmp/collection-flow/requests/start'
+        },
+        {
+          request: skipped,
+          cases: [],
+          folderSegments: [],
+          requestFilePath: '/tmp/collection-flow/requests/skipped.request.yaml',
+          resourceDirPath: '/tmp/collection-flow/requests/skipped'
+        },
+        {
+          request: finalStep,
+          cases: [],
+          folderSegments: [],
+          requestFilePath: '/tmp/collection-flow/requests/final.request.yaml',
+          resourceDirPath: '/tmp/collection-flow/requests/final'
+        },
+        {
+          request: afterStop,
+          cases: [],
+          folderSegments: [],
+          requestFilePath: '/tmp/collection-flow/requests/after-stop.request.yaml',
+          resourceDirPath: '/tmp/collection-flow/requests/after-stop'
+        }
+      ],
+      collections: [{ document: collection, filePath: '/tmp/collection-flow/collections/flow.collection.yaml', dataText: '' }],
+      tree: []
+    },
+    collectionId: collection.id,
+    sendRequest: async preview => {
+      seenUrls.push(preview.url);
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: preview.url,
+        durationMs: 10,
+        sizeBytes: 2,
+        headers: [],
+        bodyText: '{}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.deepEqual(seenUrls, ['https://api.example.com/start']);
+  assert.deepEqual(report.iterations[0]?.stepRuns.map(item => item.stepKey), ['start-step', 'final-step']);
+  assert.equal(report.iterations[0]?.stepRuns[1]?.skipped, true);
+  assert.equal(report.iterations[0]?.stepRuns[1]?.error, 'Skipped by pm.execution.skipRequest()');
+});
+
+test('runCollection reports invalid next-request targets explicitly', async () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Broken Flow');
+  request.id = 'req_flow_broken';
+  request.url = '{{baseUrl}}/broken-flow';
+  request.scripts.preRequest = 'pm.execution.setNextRequest("missing-step");';
+  const collection = createEmptyCollection('Broken Flow');
+  collection.id = 'col_flow_broken';
+  collection.stopOnFailure = false;
+  collection.steps = [createCollectionStep({ key: 'broken-step', requestId: request.id, name: 'Broken step' })];
+
+  const report = await runCollection({
+    workspace: {
+      root: '/tmp/collection-flow-broken',
+      project,
+      environments: [{ document: environment, filePath: '/tmp/collection-flow-broken/environments/shared.yaml' }],
+      folders: [],
+      requests: [
+        {
+          request,
+          cases: [],
+          folderSegments: [],
+          requestFilePath: '/tmp/collection-flow-broken/requests/broken.request.yaml',
+          resourceDirPath: '/tmp/collection-flow-broken/requests/broken'
+        }
+      ],
+      collections: [{ document: collection, filePath: '/tmp/collection-flow-broken/collections/flow.collection.yaml', dataText: '' }],
+      tree: []
+    },
+    collectionId: collection.id,
+    sendRequest: async preview => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      url: preview.url,
+      durationMs: 10,
+      sizeBytes: 2,
+      headers: [],
+      bodyText: '{}',
+      timestamp: new Date().toISOString()
+    })
+  });
+
+  const stepRun = report.iterations[0]?.stepRuns[0];
+  assert.equal(stepRun?.ok, false);
+  assert.equal(stepRun?.failureType, 'assertion-failed');
+  assert.match(stepRun?.error || '', /could not find a matching future collection step/);
+  assert.equal(stepRun?.checkResults.some(item => item.label === 'Script flow control'), true);
+});
+
 test('runCollection passes iteration data and metadata into scripts', async () => {
   const project = createDefaultProject('Demo');
   project.runtime.baseUrl = 'https://api.example.com';
@@ -1956,8 +2392,8 @@ test('inspectResolvedRequest surfaces unsupported script APIs before send', () =
 
   const insight = inspectResolvedRequest(project, request, caseDocument, environment);
   assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-send-request'), true);
-  assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-set-next-request'), true);
-  assert.equal(insight.warnings.some(item => item.code === 'script-legacy-set-next-request'), true);
+  assert.equal(insight.warnings.some(item => item.code === 'script-limited-set-next-request'), true);
+  assert.equal(insight.warnings.some(item => item.code === 'script-limited-legacy-set-next-request'), true);
   assert.equal(insight.diagnostics.some(item => item.code === 'script-unsupported-vault' && item.blocking === false), true);
 });
 

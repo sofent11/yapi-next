@@ -130,6 +130,20 @@ export function PreferencesCenterPanel(props: {
     { value: 'vscode', label: 'VS Code' },
     { value: 'custom', label: 'Custom (manual overrides)' }
   ];
+  const preferenceSummary = [
+    { label: 'Theme', value: preferences.theme === 'dark' ? 'Dark' : 'Light' },
+    { label: 'Zoom', value: `${Math.round(preferences.uiScale * 100)}%` },
+    { label: 'Code Font', value: `${preferences.codeFontSize}px` },
+    {
+      label: 'Shortcuts',
+      value:
+        preferences.keybindingPreset === 'custom'
+          ? 'Custom'
+          : preferences.keybindingPreset === 'vscode'
+            ? 'VS Code'
+            : 'Default'
+    }
+  ];
 
   function applyPreset(value: KeybindingPreset) {
     if (value === 'custom') {
@@ -168,6 +182,20 @@ export function PreferencesCenterPanel(props: {
       <div className="panel-toolbar">
         <div className="breadcrumb-list">
           <span className="breadcrumb-chip">Preferences</span>
+        </div>
+      </div>
+
+      <div className="center-intro">
+        <Text size="sm" c="dimmed">
+          Keep the debugger compact and predictable: visual scale, editor readability, shortcuts, and runtime defaults should all reinforce the same workbench rhythm.
+        </Text>
+        <div className="summary-grid center-summary-grid">
+          {preferenceSummary.map(item => (
+            <div key={item.label} className="summary-chip">
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </div>
+          ))}
         </div>
       </div>
 

@@ -1469,6 +1469,10 @@ function splitGrpcMethod(method: string) {
   };
 }
 
+function grpcRpcKind(value: unknown): 'unary' | 'server-streaming' {
+  return value === 'server-streaming' ? 'server-streaming' : 'unary';
+}
+
 function openCollectionGrpcBody(grpc: any): RequestDocument['body'] {
   const methodParts = splitGrpcMethod(String(grpc.method || ''));
   return {
@@ -1481,6 +1485,7 @@ function openCollectionGrpcBody(grpc: any): RequestDocument['body'] {
       importPaths: Array.isArray(grpc.importPaths) ? grpc.importPaths.map((item: any) => String(item.path || item)).filter(Boolean) : [],
       service: methodParts.service,
       method: methodParts.method,
+      rpcKind: grpcRpcKind(grpc.rpcKind),
       message: openCollectionGrpcMessage(grpc.message)
     }
   };
@@ -2372,6 +2377,7 @@ function brunoJsonBody(body: any): RequestDocument['body'] {
       fields: [],
       grpc: {
         importPaths: [],
+        rpcKind: grpcRpcKind(message?.rpcKind ?? body.rpcKind),
         message: String(message?.content || message?.body || '')
       }
     };
@@ -2474,11 +2480,12 @@ function walkBrunoJsonItems(
         ? {
             ...body,
             grpc: {
-              ...(body.grpc || { importPaths: [], message: '' }),
+              ...(body.grpc || { importPaths: [], rpcKind: 'unary' as const, message: '' }),
               importPaths: grpcImportPaths,
               protoFile: source.protoPath ? String(source.protoPath) : body.grpc?.protoFile,
               service: grpcParts.service || body.grpc?.service,
-              method: grpcParts.method || body.grpc?.method
+              method: grpcParts.method || body.grpc?.method,
+              rpcKind: body.grpc?.rpcKind || 'unary'
             }
           }
         : body,

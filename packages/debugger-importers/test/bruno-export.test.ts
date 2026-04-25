@@ -242,7 +242,7 @@ test('Bruno JSON collection export imports back with folders and collection step
     }
   };
 
-  const grpc = createEmptyRequest('User Service');
+  const grpc = createEmptyRequest('Watch Users');
   grpc.id = 'req_grpc_user_service';
   grpc.kind = 'grpc';
   grpc.method = 'POST';
@@ -257,7 +257,8 @@ test('Bruno JSON collection export imports back with folders and collection step
       protoFile: 'protos/user.proto',
       importPaths: ['protos', 'protos/common'],
       service: 'demo.users.UserService',
-      method: 'GetUser',
+      method: 'WatchUsers',
+      rpcKind: 'server-streaming',
       message: '{"id":"42"}'
     }
   };
@@ -316,12 +317,13 @@ test('Bruno JSON collection export imports back with folders and collection step
   assert.equal(parsed.items[3].items[0].type, 'grpc-request');
   assert.equal(parsed.items[3].items[0].request.protoPath, 'protos/user.proto');
   assert.deepEqual(parsed.items[3].items[0].request.importPaths, ['protos', 'protos/common']);
+  assert.equal(parsed.items[3].items[0].request.body.grpc[0].rpcKind, 'server-streaming');
 
   const imported = importSourceText(json);
   const importedCreate = imported.requests.find(item => item.request.name === 'Create User')?.request;
   const importedGraphql = imported.requests.find(item => item.request.name === 'GraphQL Search')?.request;
   const importedWebSocket = imported.requests.find(item => item.request.name === 'Live Feed')?.request;
-  const importedGrpc = imported.requests.find(item => item.request.name === 'User Service')?.request;
+  const importedGrpc = imported.requests.find(item => item.request.name === 'Watch Users')?.request;
 
   assert.equal(imported.detectedFormat, 'bruno');
   assert.equal(imported.project.name, 'JSON Smoke');
@@ -338,7 +340,8 @@ test('Bruno JSON collection export imports back with folders and collection step
   assert.equal(importedGrpc?.body.grpc?.protoFile, 'protos/user.proto');
   assert.deepEqual(importedGrpc?.body.grpc?.importPaths, ['protos', 'protos/common']);
   assert.equal(importedGrpc?.body.grpc?.service, 'demo.users.UserService');
-  assert.equal(importedGrpc?.body.grpc?.method, 'GetUser');
+  assert.equal(importedGrpc?.body.grpc?.method, 'WatchUsers');
+  assert.equal(importedGrpc?.body.grpc?.rpcKind, 'server-streaming');
   assert.equal(imported.collections[0]?.collection.steps.length, 4);
 });
 
@@ -423,7 +426,7 @@ test('OpenCollection export imports back with mixed request kinds and environmen
     }
   };
 
-  const grpc = createEmptyRequest('User Service');
+  const grpc = createEmptyRequest('Watch Users');
   grpc.id = 'req_oc_grpc';
   grpc.kind = 'grpc';
   grpc.method = 'POST';
@@ -438,7 +441,8 @@ test('OpenCollection export imports back with mixed request kinds and environmen
       protoFile: 'protos/user.proto',
       importPaths: ['protos', 'protos/common'],
       service: 'demo.users.UserService',
-      method: 'GetUser',
+      method: 'WatchUsers',
+      rpcKind: 'server-streaming',
       message: '{"id":"42"}'
     }
   };
@@ -495,6 +499,7 @@ test('OpenCollection export imports back with mixed request kinds and environmen
   assert.equal(exported.items[2].items[0].websocket.message[1].message.type, 'binary');
   assert.equal(exported.items[3].items[0].grpc.protoFilePath, 'protos/user.proto');
   assert.deepEqual(exported.items[3].items[0].grpc.importPaths, ['protos', 'protos/common']);
+  assert.equal(exported.items[3].items[0].grpc.rpcKind, 'server-streaming');
 
   const imported = importSourceText(json);
   const importedCreate = imported.requests.find(item => item.request.name === 'Create User')?.request;
@@ -522,5 +527,6 @@ test('OpenCollection export imports back with mixed request kinds and environmen
   assert.equal(importedGrpc?.body.grpc?.protoFile, 'protos/user.proto');
   assert.deepEqual(importedGrpc?.body.grpc?.importPaths, ['protos', 'protos/common']);
   assert.equal(importedGrpc?.body.grpc?.service, 'demo.users.UserService');
-  assert.equal(importedGrpc?.body.grpc?.method, 'GetUser');
+  assert.equal(importedGrpc?.body.grpc?.method, 'WatchUsers');
+  assert.equal(importedGrpc?.body.grpc?.rpcKind, 'server-streaming');
 });
