@@ -17,7 +17,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::{Arc, Mutex, OnceLock},
-    time::Instant,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{
     menu::{Menu, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
@@ -33,6 +33,8 @@ static WATCHERS: OnceLock<Mutex<HashMap<String, RecommendedWatcher>>> = OnceLock
 static RECENT_ROOTS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 static SESSION_JARS: OnceLock<Mutex<HashMap<String, Arc<Jar>>>> = OnceLock::new();
 static SESSION_CLIENTS: OnceLock<Mutex<HashMap<String, Client>>> = OnceLock::new();
+static WEBSOCKET_LIVE_SESSIONS: OnceLock<Mutex<HashMap<String, WebSocketLiveSession>>> =
+    OnceLock::new();
 
 fn watcher_store() -> &'static Mutex<HashMap<String, RecommendedWatcher>> {
     WATCHERS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -48,6 +50,10 @@ fn session_jar_store() -> &'static Mutex<HashMap<String, Arc<Jar>>> {
 
 fn session_client_store() -> &'static Mutex<HashMap<String, Client>> {
     SESSION_CLIENTS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn websocket_live_session_store() -> &'static Mutex<HashMap<String, WebSocketLiveSession>> {
+    WEBSOCKET_LIVE_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -163,6 +169,21 @@ struct WebSocketRunInput {
     timeout_ms: Option<u64>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSocketLiveConnectInput {
+    url: String,
+    headers: Vec<ParameterRow>,
+    timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSocketLiveSendInput {
+    session_id: String,
+    message: WebSocketMessageInput,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WebSocketTimelineEvent {
@@ -179,6 +200,31 @@ struct WebSocketRunResult {
     url: String,
     duration_ms: u64,
     events: Vec<WebSocketTimelineEvent>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSocketLiveSnapshot {
+    ok: bool,
+    session_id: String,
+    url: String,
+    duration_ms: u64,
+    events: Vec<WebSocketTimelineEvent>,
+}
+
+#[derive(Debug, Clone)]
+struct WebSocketLiveSession {
+    session_id: String,
+    url: String,
+    started_at: Instant,
+    events: Arc<Mutex<Vec<WebSocketTimelineEvent>>>,
+    command_tx: tokio::sync::mpsc::UnboundedSender<WebSocketLiveCommand>,
+}
+
+#[derive(Debug, Clone)]
+enum WebSocketLiveCommand {
+    Send(WebSocketMessageInput),
+    Close,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1167,12 +1213,73 @@ fn websocket_event(
     }
 }
 
+fn append_websocket_event(
+    events: &Arc<Mutex<Vec<WebSocketTimelineEvent>>>,
+    direction: &str,
+    label: &str,
+    body: String,
+    start: Instant,
+) {
+    if let Ok(mut items) = events.lock() {
+        items.push(websocket_event(direction, label, body, start));
+    }
+}
+
+fn websocket_live_session_id() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("ws-live-{}", nanos)
+}
+
+fn websocket_live_session_snapshot(session: &WebSocketLiveSession) -> WebSocketLiveSnapshot {
+    let events = session
+        .events
+        .lock()
+        .map(|items| items.clone())
+        .unwrap_or_default();
+    WebSocketLiveSnapshot {
+        ok: true,
+        session_id: session.session_id.clone(),
+        url: session.url.clone(),
+        duration_ms: session.started_at.elapsed().as_millis() as u64,
+        events,
+    }
+}
+
+fn websocket_request(
+    url: &str,
+    headers: &[ParameterRow],
+) -> Result<tokio_tungstenite::tungstenite::handshake::client::Request, String> {
+    let mut request = url
+        .to_string()
+        .into_client_request()
+        .map_err(|error| error.to_string())?;
+
+    for row in headers
+        .iter()
+        .filter(|row| row.enabled && !row.name.trim().is_empty())
+    {
+        let name = WsHeaderName::from_bytes(row.name.trim().as_bytes())
+            .map_err(|error| error.to_string())?;
+        let value = WsHeaderValue::from_str(row.value.trim()).map_err(|error| error.to_string())?;
+        request.headers_mut().append(name, value);
+    }
+
+    Ok(request)
+}
+
 fn websocket_message_body(message: Message) -> Option<(String, String)> {
     match message {
         Message::Text(text) => Some(("message".to_string(), text.to_string())),
         Message::Binary(bytes) => Some((
             "binary".to_string(),
-            format!("<{} bytes binary message>", bytes.len()),
+            format!(
+                "<{} bytes binary message; base64={}>",
+                bytes.len(),
+                general_purpose::STANDARD.encode(bytes)
+            ),
         )),
         Message::Ping(bytes) => Some(("ping".to_string(), format!("<{} bytes ping>", bytes.len()))),
         Message::Pong(bytes) => Some(("pong".to_string(), format!("<{} bytes pong>", bytes.len()))),
@@ -1186,8 +1293,16 @@ fn websocket_message_body(message: Message) -> Option<(String, String)> {
     }
 }
 
-fn websocket_outgoing_message(message: &WebSocketMessageInput) -> Result<(Message, String), String> {
-    match message.kind.as_deref().unwrap_or("json").to_ascii_lowercase().as_str() {
+fn websocket_outgoing_message(
+    message: &WebSocketMessageInput,
+) -> Result<(Message, String), String> {
+    match message
+        .kind
+        .as_deref()
+        .unwrap_or("json")
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "binary" => {
             let decoded = general_purpose::STANDARD
                 .decode(message.body.trim())
@@ -1195,7 +1310,10 @@ fn websocket_outgoing_message(message: &WebSocketMessageInput) -> Result<(Messag
             let preview = format!("<{} bytes binary frame>", decoded.len());
             Ok((Message::Binary(decoded.into()), preview))
         }
-        "text" | "json" | "" => Ok((Message::Text(message.body.clone().into()), message.body.clone())),
+        "text" | "json" | "" => Ok((
+            Message::Text(message.body.clone().into()),
+            message.body.clone(),
+        )),
         other => Err(format!("Unsupported WebSocket message type: {}", other)),
     }
 }
@@ -1242,22 +1360,7 @@ where
 async fn websocket_run(input: WebSocketRunInput) -> Result<WebSocketRunResult, String> {
     let timeout_ms = input.timeout_ms.unwrap_or(30_000).max(250);
     let start = Instant::now();
-    let mut request = input
-        .url
-        .clone()
-        .into_client_request()
-        .map_err(|error| error.to_string())?;
-
-    for row in input
-        .headers
-        .iter()
-        .filter(|row| row.enabled && !row.name.trim().is_empty())
-    {
-        let name = WsHeaderName::from_bytes(row.name.trim().as_bytes())
-            .map_err(|error| error.to_string())?;
-        let value = WsHeaderValue::from_str(row.value.trim()).map_err(|error| error.to_string())?;
-        request.headers_mut().append(name, value);
-    }
+    let request = websocket_request(&input.url, &input.headers)?;
 
     let mut events = Vec::new();
     let connect_result = tokio::time::timeout(
@@ -1282,12 +1385,7 @@ async fn websocket_run(input: WebSocketRunInput) -> Result<WebSocketRunResult, S
             .send(outgoing)
             .await
             .map_err(|error| error.to_string())?;
-        events.push(websocket_event(
-            "out",
-            &message.name,
-            preview,
-            start,
-        ));
+        events.push(websocket_event("out", &message.name, preview, start));
         collect_websocket_messages(&mut socket, start, &mut events, 250).await?;
     }
 
@@ -1302,8 +1400,146 @@ async fn websocket_run(input: WebSocketRunInput) -> Result<WebSocketRunResult, S
     })
 }
 
+#[tauri::command]
+async fn websocket_live_connect(
+    input: WebSocketLiveConnectInput,
+) -> Result<WebSocketLiveSnapshot, String> {
+    let timeout_ms = input.timeout_ms.unwrap_or(30_000).max(250);
+    let start = Instant::now();
+    let request = websocket_request(&input.url, &input.headers)?;
+
+    let connect_result = tokio::time::timeout(
+        Duration::from_millis(timeout_ms),
+        tokio_tungstenite::connect_async(request),
+    )
+    .await
+    .map_err(|_| "WebSocket connection timed out".to_string())?
+    .map_err(|error| error.to_string())?;
+
+    let (socket, response) = connect_result;
+    let session_id = websocket_live_session_id();
+    let events = Arc::new(Mutex::new(Vec::new()));
+    append_websocket_event(
+        &events,
+        "runtime",
+        "connected",
+        format!("HTTP {}", response.status()),
+        start,
+    );
+
+    let (command_tx, mut command_rx) = tokio::sync::mpsc::unbounded_channel();
+    let session = WebSocketLiveSession {
+        session_id: session_id.clone(),
+        url: input.url,
+        started_at: start,
+        events: events.clone(),
+        command_tx,
+    };
+
+    websocket_live_session_store()
+        .lock()
+        .map_err(|_| "Unable to access WebSocket live sessions".to_string())?
+        .insert(session_id.clone(), session.clone());
+
+    tokio::spawn(async move {
+        let (mut write, mut read) = socket.split();
+        loop {
+            tokio::select! {
+                command = command_rx.recv() => {
+                    match command {
+                        Some(WebSocketLiveCommand::Send(message)) => {
+                            match websocket_outgoing_message(&message) {
+                                Ok((outgoing, preview)) => {
+                                    match write.send(outgoing).await {
+                                        Ok(()) => append_websocket_event(&events, "out", &message.name, preview, start),
+                                        Err(error) => {
+                                            append_websocket_event(&events, "runtime", "error", error.to_string(), start);
+                                            break;
+                                        }
+                                    }
+                                }
+                                Err(error) => append_websocket_event(&events, "runtime", "error", error, start),
+                            }
+                        }
+                        Some(WebSocketLiveCommand::Close) | None => {
+                            let _ = write.send(Message::Close(None)).await;
+                            append_websocket_event(&events, "runtime", "closed", "Connection closed by client".to_string(), start);
+                            break;
+                        }
+                    }
+                }
+                item = read.next() => {
+                    match item {
+                        Some(Ok(message)) => {
+                            if let Some((label, body)) = websocket_message_body(message) {
+                                append_websocket_event(&events, "in", &label, body, start);
+                            }
+                        }
+                        Some(Err(error)) => {
+                            append_websocket_event(&events, "runtime", "error", error.to_string(), start);
+                            break;
+                        }
+                        None => {
+                            append_websocket_event(&events, "runtime", "closed", "Connection closed by server".to_string(), start);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Ok(mut sessions) = websocket_live_session_store().lock() {
+            sessions.remove(&session_id);
+        }
+    });
+
+    Ok(websocket_live_session_snapshot(&session))
+}
+
+#[tauri::command]
+async fn websocket_live_send(
+    input: WebSocketLiveSendInput,
+) -> Result<WebSocketLiveSnapshot, String> {
+    let session = websocket_live_session_store()
+        .lock()
+        .map_err(|_| "Unable to access WebSocket live sessions".to_string())?
+        .get(&input.session_id)
+        .cloned()
+        .ok_or_else(|| "WebSocket live session is not connected".to_string())?;
+
+    session
+        .command_tx
+        .send(WebSocketLiveCommand::Send(input.message))
+        .map_err(|_| "WebSocket live session is closed".to_string())?;
+    tokio::time::sleep(Duration::from_millis(80)).await;
+    Ok(websocket_live_session_snapshot(&session))
+}
+
+#[tauri::command]
+async fn websocket_live_snapshot(session_id: String) -> Result<WebSocketLiveSnapshot, String> {
+    let session = websocket_live_session_store()
+        .lock()
+        .map_err(|_| "Unable to access WebSocket live sessions".to_string())?
+        .get(&session_id)
+        .cloned()
+        .ok_or_else(|| "WebSocket live session is not connected".to_string())?;
+    Ok(websocket_live_session_snapshot(&session))
+}
+
+#[tauri::command]
+async fn websocket_live_close(session_id: String) -> Result<WebSocketLiveSnapshot, String> {
+    let session = websocket_live_session_store()
+        .lock()
+        .map_err(|_| "Unable to access WebSocket live sessions".to_string())?
+        .remove(&session_id)
+        .ok_or_else(|| "WebSocket live session is not connected".to_string())?;
+
+    let _ = session.command_tx.send(WebSocketLiveCommand::Close);
+    tokio::time::sleep(Duration::from_millis(80)).await;
+    Ok(websocket_live_session_snapshot(&session))
+}
+
 fn chrono_timestamp() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -1369,6 +1605,10 @@ pub fn run() {
             open_terminal,
             request_send,
             websocket_run,
+            websocket_live_connect,
+            websocket_live_send,
+            websocket_live_snapshot,
+            websocket_live_close,
             capture::capture_browser_launch,
             capture::capture_target_list,
             capture::capture_start,
@@ -1412,5 +1652,13 @@ mod tests {
 
         let error = websocket_outgoing_message(&input).expect_err("invalid base64 should fail");
         assert!(error.contains("broken is not valid base64"));
+    }
+
+    #[test]
+    fn websocket_message_body_includes_binary_base64_preview() {
+        let (_, body) = websocket_message_body(Message::Binary(vec![104, 105].into()))
+            .expect("binary preview");
+        assert!(body.contains("2 bytes"));
+        assert!(body.contains("base64=aGk="));
     }
 }

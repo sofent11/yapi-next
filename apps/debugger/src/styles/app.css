@@ -2065,10 +2065,12 @@ mark {
 
 .websocket-message-head {
   margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
 .websocket-message-head .mantine-TextInput-root {
   flex: 1;
+  min-width: 180px;
 }
 
 .websocket-timeline-event {

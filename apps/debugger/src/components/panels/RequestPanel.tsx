@@ -8,7 +8,10 @@ import {
   IconListCheck, 
   IconMessageCode, 
   IconPlayerPlay, 
+  IconPlugConnected,
+  IconPlugConnectedX,
   IconPlus, 
+  IconSend,
   IconSettings,
   IconVariable
 } from '@tabler/icons-react';
@@ -35,7 +38,17 @@ import type {
 } from '@yapi-debugger/schema';
 import type { RequestTab } from '../../store/workspace-store';
 import { parseCurlCommand } from '../../lib/curl';
-import { chooseRequestBodyFile, runWebSocketSession, sendRequest, type WebSocketRunResult } from '../../lib/desktop';
+import {
+  chooseRequestBodyFile,
+  closeWebSocketLive,
+  connectWebSocketLive,
+  loadWebSocketLiveSnapshot,
+  runWebSocketSession,
+  sendRequest,
+  sendWebSocketLiveMessage,
+  type WebSocketLiveSnapshot,
+  type WebSocketRunResult
+} from '../../lib/desktop';
 import { CodeEditor } from '../editors/CodeEditor';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
 
@@ -140,6 +153,15 @@ type WebSocketRunState = {
   error?: string;
 };
 
+type WebSocketLiveState = {
+  connecting: boolean;
+  closing: boolean;
+  sendingIndex?: number;
+  sessionId?: string;
+  snapshot?: WebSocketLiveSnapshot;
+  error?: string;
+};
+
 function websocketStateFromBody(body: RequestBody): WebSocketRunState {
   return body.websocket?.lastRun
     ? { loading: false, result: body.websocket.lastRun }
@@ -226,7 +248,7 @@ export function RequestPanel(props: {
   const graphqlBody = body.graphql || { query: '', variables: '{}', operationName: '', schemaUrl: '' };
   const websocketMessages = body.websocket?.messages?.length
     ? body.websocket.messages
-    : [{ name: 'Message 1', body: '', enabled: true }];
+    : [{ name: 'Message 1', body: '', kind: 'json' as const, enabled: true }];
   const auth = selectedCase?.overrides.auth || requestDocument.auth;
   const runtime = {
     ...requestDocument.runtime,
@@ -247,6 +269,7 @@ export function RequestPanel(props: {
   const visibleTabs = new Set<RequestTab>(tabOptionsForSection(activeSection));
   const [graphqlIntrospection, setGraphqlIntrospection] = useState<GraphqlIntrospectionState>(() => graphqlIntrospectionStateFromBody(body));
   const [websocketRun, setWebsocketRun] = useState<WebSocketRunState>(() => websocketStateFromBody(body));
+  const [websocketLive, setWebsocketLive] = useState<WebSocketLiveState>({ connecting: false, closing: false });
 
   useEffect(() => {
     setGraphqlIntrospection(current => {
@@ -271,6 +294,45 @@ export function RequestPanel(props: {
     body.websocket?.lastRun?.ranAt,
     body.websocket?.lastRun?.durationMs
   ]);
+
+  useEffect(() => {
+    if (!websocketLive.sessionId) return;
+    const sessionId = websocketLive.sessionId;
+    let active = true;
+    const interval = window.setInterval(() => {
+      loadWebSocketLiveSnapshot(sessionId)
+        .then(snapshot => {
+          if (!active) return;
+          setWebsocketLive(current =>
+            current.sessionId === snapshot.sessionId
+              ? { ...current, snapshot, error: undefined }
+              : current
+          );
+        })
+        .catch(error => {
+          if (!active) return;
+          const message = (error as Error).message || 'WebSocket live session ended';
+          setWebsocketLive(current =>
+            current.sessionId
+              ? { ...current, sessionId: undefined, snapshot: current.snapshot, error: message }
+              : current
+          );
+        });
+    }, 750);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [websocketLive.sessionId]);
+
+  useEffect(() => {
+    const sessionId = websocketLive.sessionId;
+    return () => {
+      if (sessionId) {
+        void closeWebSocketLive(sessionId).catch(() => undefined);
+      }
+    };
+  }, [websocketLive.sessionId]);
 
   function updateSelectedCase(updater: (current: CaseDocument) => CaseDocument) {
     if (!selectedCase) return;
@@ -420,6 +482,23 @@ export function RequestPanel(props: {
     });
   }
 
+  function persistWebSocketRun(result: WebSocketRunResult) {
+    updateBody({
+      ...body,
+      websocket: {
+        ...(body.websocket || {}),
+        messages: websocketMessages,
+        lastRun: {
+          ok: result.ok,
+          url: result.url,
+          durationMs: result.durationMs,
+          events: result.events,
+          ranAt: new Date().toISOString()
+        }
+      }
+    });
+  }
+
   async function handleWebSocketRun() {
     try {
       setWebsocketRun({ loading: true });
@@ -430,21 +509,70 @@ export function RequestPanel(props: {
         timeoutMs: resolvedPreview.timeoutMs
       });
       setWebsocketRun({ loading: false, result });
-      updateBody({
-        ...body,
-        websocket: {
-          ...(body.websocket || {}),
-          messages: websocketMessages,
-          lastRun: {
-            ...result,
-            ranAt: new Date().toISOString()
-          }
-        }
-      });
+      persistWebSocketRun(result);
       notifications.show({ color: 'teal', message: `WebSocket session captured ${result.events.length} events` });
     } catch (error) {
       const message = (error as Error).message || 'WebSocket session failed';
       setWebsocketRun({ loading: false, error: message });
+      notifications.show({ color: 'red', message });
+    }
+  }
+
+  async function handleWebSocketLiveConnect() {
+    try {
+      setWebsocketLive(current => ({ ...current, connecting: true, error: undefined }));
+      if (websocketLive.sessionId) {
+        await closeWebSocketLive(websocketLive.sessionId).catch(() => undefined);
+      }
+      const snapshot = await connectWebSocketLive({
+        url: resolvedWebSocketUrl,
+        headers: resolvedPreview.headers.filter(row => row.enabled),
+        timeoutMs: resolvedPreview.timeoutMs
+      });
+      setWebsocketLive({ connecting: false, closing: false, sessionId: snapshot.sessionId, snapshot });
+      setWebsocketRun({ loading: false, result: snapshot });
+      notifications.show({ color: 'teal', message: 'WebSocket connected' });
+    } catch (error) {
+      const message = (error as Error).message || 'WebSocket live connect failed';
+      setWebsocketLive({ connecting: false, closing: false, error: message });
+      notifications.show({ color: 'red', message });
+    }
+  }
+
+  async function handleWebSocketLiveSend(index: number) {
+    if (!websocketLive.sessionId) return;
+    try {
+      setWebsocketLive(current => ({ ...current, sendingIndex: index, error: undefined }));
+      const resolvedMessage = resolvedPreview.body.websocket?.messages?.[index] || websocketMessages[index];
+      const snapshot = await sendWebSocketLiveMessage({
+        sessionId: websocketLive.sessionId,
+        message: {
+          ...resolvedMessage,
+          kind: resolvedMessage.kind || 'json',
+          enabled: true
+        }
+      });
+      setWebsocketLive(current => ({ ...current, sendingIndex: undefined, snapshot }));
+      setWebsocketRun({ loading: false, result: snapshot });
+    } catch (error) {
+      const message = (error as Error).message || 'WebSocket live send failed';
+      setWebsocketLive(current => ({ ...current, sendingIndex: undefined, error: message }));
+      notifications.show({ color: 'red', message });
+    }
+  }
+
+  async function handleWebSocketLiveClose() {
+    if (!websocketLive.sessionId) return;
+    try {
+      setWebsocketLive(current => ({ ...current, closing: true, error: undefined }));
+      const snapshot = await closeWebSocketLive(websocketLive.sessionId);
+      setWebsocketLive({ connecting: false, closing: false, snapshot });
+      setWebsocketRun({ loading: false, result: snapshot });
+      persistWebSocketRun(snapshot);
+      notifications.show({ color: 'blue', message: 'WebSocket closed' });
+    } catch (error) {
+      const message = (error as Error).message || 'WebSocket live close failed';
+      setWebsocketLive(current => ({ ...current, closing: false, error: message }));
       notifications.show({ color: 'red', message });
     }
   }
@@ -456,6 +584,7 @@ export function RequestPanel(props: {
       websocket: nextWebSocket
     });
     setWebsocketRun({ loading: false });
+    setWebsocketLive(current => ({ ...current, snapshot: undefined, error: undefined }));
     notifications.show({ color: 'blue', message: 'WebSocket timeline cleared' });
   }
 
@@ -505,6 +634,9 @@ export function RequestPanel(props: {
     notifications.show({ color: 'teal', message: 'cURL imported into the current request' });
     return true;
   }
+
+  const websocketTimeline = websocketLive.snapshot || websocketRun.result;
+  const isWebSocketLiveConnected = Boolean(websocketLive.sessionId);
 
   return (
     <div className="request-panel">
@@ -938,7 +1070,29 @@ export function RequestPanel(props: {
                     <Button size="xs" leftSection={<IconPlayerPlay size={14} />} loading={websocketRun.loading} onClick={handleWebSocketRun}>
                       Run Session
                     </Button>
-                    <Button size="xs" variant="subtle" disabled={!websocketRun.result} onClick={clearWebSocketTimeline}>
+                    <Button
+                      size="xs"
+                      variant={isWebSocketLiveConnected ? 'light' : 'default'}
+                      color={isWebSocketLiveConnected ? 'teal' : undefined}
+                      leftSection={<IconPlugConnected size={14} />}
+                      loading={websocketLive.connecting}
+                      disabled={websocketRun.loading || isWebSocketLiveConnected}
+                      onClick={handleWebSocketLiveConnect}
+                    >
+                      Connect
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      color="red"
+                      leftSection={<IconPlugConnectedX size={14} />}
+                      loading={websocketLive.closing}
+                      disabled={!isWebSocketLiveConnected}
+                      onClick={handleWebSocketLiveClose}
+                    >
+                      Close
+                    </Button>
+                    <Button size="xs" variant="subtle" disabled={!websocketTimeline} onClick={clearWebSocketTimeline}>
                       Clear Timeline
                     </Button>
                   </Group>
@@ -982,6 +1136,16 @@ export function RequestPanel(props: {
                         />
                         <Button
                           size="xs"
+                          variant="light"
+                          leftSection={<IconSend size={14} />}
+                          loading={websocketLive.sendingIndex === index}
+                          disabled={!isWebSocketLiveConnected}
+                          onClick={() => handleWebSocketLiveSend(index)}
+                        >
+                          Send
+                        </Button>
+                        <Button
+                          size="xs"
                           variant="subtle"
                           color="red"
                           onClick={() => updateWebSocketMessages(websocketMessages.filter((_, messageIndex) => messageIndex !== index))}
@@ -1003,26 +1167,29 @@ export function RequestPanel(props: {
                     </div>
                   ))}
                 </div>
-                {websocketRun.error || websocketRun.result ? (
+                {websocketRun.error || websocketLive.error || websocketTimeline ? (
                   <div className="websocket-timeline">
                     <div className="websocket-timeline-head">
                       <Text size="xs" fw={700} c="dimmed">Timeline</Text>
                       <Group gap={6}>
-                        {body.websocket?.lastRun && websocketRun.result ? (
+                        {isWebSocketLiveConnected ? (
+                          <Badge variant="light" color="teal">live</Badge>
+                        ) : null}
+                        {body.websocket?.lastRun && websocketTimeline ? (
                           <Badge variant="light" color="blue">saved</Badge>
                         ) : null}
-                        {websocketRun.result ? (
-                          <Badge variant="light" color="teal">{websocketRun.result.durationMs} ms</Badge>
+                        {websocketTimeline ? (
+                          <Badge variant="light" color="teal">{websocketTimeline.durationMs} ms</Badge>
                         ) : null}
                       </Group>
                     </div>
-                    {websocketRun.error ? (
+                    {websocketRun.error || websocketLive.error ? (
                       <div className="request-preview-warning">
                         <strong>websocket</strong>
-                        <span>{websocketRun.error}</span>
+                        <span>{websocketRun.error || websocketLive.error}</span>
                       </div>
                     ) : null}
-                    {websocketRun.result?.events.map((event, index) => (
+                    {websocketTimeline?.events.map((event, index) => (
                       <div className={`websocket-timeline-event is-${event.direction}`} key={`${event.elapsedMs}:${index}`}>
                         <span>{event.elapsedMs} ms</span>
                         <strong>{event.direction}</strong>

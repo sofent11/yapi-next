@@ -40,6 +40,10 @@ export type WebSocketRunResult = {
   events: WebSocketTimelineEvent[];
 };
 
+export type WebSocketLiveSnapshot = WebSocketRunResult & {
+  sessionId: string;
+};
+
 export interface WorkspaceScanPayload {
   root: string;
   files: { path: string; content: string }[];
@@ -149,6 +153,29 @@ export async function runWebSocketSession(input: {
   timeoutMs?: number;
 }): Promise<WebSocketRunResult> {
   return invoke('websocket_run', { input });
+}
+
+export async function connectWebSocketLive(input: {
+  url: string;
+  headers: Array<{ name: string; value: string; enabled: boolean; kind?: string; filePath?: string }>;
+  timeoutMs?: number;
+}): Promise<WebSocketLiveSnapshot> {
+  return invoke('websocket_live_connect', { input });
+}
+
+export async function sendWebSocketLiveMessage(input: {
+  sessionId: string;
+  message: { name: string; body: string; kind?: 'json' | 'text' | 'binary'; enabled: boolean };
+}): Promise<WebSocketLiveSnapshot> {
+  return invoke('websocket_live_send', { input });
+}
+
+export async function loadWebSocketLiveSnapshot(sessionId: string): Promise<WebSocketLiveSnapshot> {
+  return invoke('websocket_live_snapshot', { sessionId });
+}
+
+export async function closeWebSocketLive(sessionId: string): Promise<WebSocketLiveSnapshot> {
+  return invoke('websocket_live_close', { sessionId });
 }
 
 export async function loadHistory(workspaceRoot?: string): Promise<any[]> {
