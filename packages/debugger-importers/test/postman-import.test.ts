@@ -251,6 +251,177 @@ test('Insomnia import maps workspace folders, environments, auth, and body', () 
   assert.equal(result.warnings.some(warning => warning.code === 'insomnia-import'), true);
 });
 
+test('OpenCollection import maps mixed request kinds, environments, scripts, and auth', () => {
+  const openCollection = `
+opencollection: "1"
+info:
+  name: OpenCollection Demo
+config:
+  environments:
+    - name: Local
+      variables:
+        - name: baseUrl
+          value: https://api.example.com
+        - name: token
+          value: secret-token
+          secret: true
+items:
+  - info:
+      name: Users
+      type: folder
+    items:
+      - info:
+          name: Create User
+          type: http
+          seq: 3
+          tags:
+            - smoke
+        http:
+          method: POST
+          url: "{{baseUrl}}/users/{{userId}}"
+          headers:
+            - name: Content-Type
+              value: application/json
+            - name: x-disabled
+              value: nope
+              disabled: true
+          params:
+            - name: verbose
+              value: "true"
+              type: query
+            - name: userId
+              value: "42"
+              type: path
+          body:
+            type: json
+            data: |
+              {"name":"Ada"}
+          auth:
+            type: oauth1
+            consumerKey: consumer_key_1
+            consumerSecret: consumer_secret_1
+            accessToken: access_token_1
+            accessTokenSecret: token_secret_1
+            signatureMethod: HMAC-SHA1
+            version: "1.0"
+        runtime:
+          variables:
+            - name: traceId
+              value: abc-123
+          scripts:
+            - type: before-request
+              code: bru.setVar("trace", "1");
+            - type: after-response
+              code: bru.setEnvVar("created", res.body.id);
+            - type: tests
+              code: expect(res.status).to.equal(201);
+          assertions:
+            - expression: res.status
+              operator: eq
+              value: "201"
+        docs:
+          content: Create user docs
+        examples:
+          - name: created
+            response:
+              status: 201
+              body:
+                type: json
+                data: '{"ok":true}'
+      - info:
+          name: Stream Users
+          type: websocket
+        websocket:
+          url: wss://api.example.com/users
+          message:
+            - title: subscribe
+              message:
+                type: json
+                data: '{"event":"subscribe"}'
+      - info:
+          name: GraphQL User
+          type: graphql
+        graphql:
+          method: POST
+          url: "{{baseUrl}}/graphql"
+          params:
+            - name: preview
+              value: "1"
+              type: query
+          body:
+            query: |
+              query User($id: ID!) { user(id: $id) { id name } }
+            variables:
+              id: "42"
+      - info:
+          name: User Service
+          type: grpc
+        grpc:
+          url: grpc.example.com:443
+          method: yapi.users.UserService/GetUser
+          protoFilePath: protos/user.proto
+          metadata:
+            - name: authorization
+              value: Bearer {{token}}
+          message: '{"id":"42"}'
+      - info:
+          name: setup.js
+          type: script
+        script: bru.setVar("fromScript", "1");
+`;
+
+  const result = importSourceText(openCollection);
+  const request = result.requests[0]?.request;
+  const websocket = result.requests.find(item => item.request.kind === 'websocket')?.request;
+  const graphql = result.requests.find(item => item.request.kind === 'graphql')?.request;
+  const grpc = result.requests.find(item => item.request.kind === 'grpc')?.request;
+  const script = result.requests.find(item => item.request.kind === 'script')?.request;
+
+  assert.equal(result.detectedFormat, 'opencollection');
+  assert.equal(result.requests.length, 5);
+  assert.equal(result.project.name, 'OpenCollection Demo');
+  assert.equal(result.environments[0]?.name, 'Local');
+  assert.equal(result.environments[0]?.vars.baseUrl, 'https://api.example.com');
+  assert.equal(result.environments[0]?.vars.token, '');
+  assert.deepEqual(result.requests[0]?.folderSegments, ['Users']);
+  assert.equal(request?.name, 'Create User');
+  assert.equal(request?.method, 'POST');
+  assert.equal(request?.url, '{{baseUrl}}/users/{{userId}}');
+  assert.equal(request?.tags.includes('smoke'), true);
+  assert.equal(request?.query.find(item => item.name === 'verbose')?.value, 'true');
+  assert.equal(request?.pathParams.find(item => item.name === 'userId')?.value, '42');
+  assert.equal(request?.headers.find(item => item.name === 'x-disabled')?.enabled, false);
+  assert.equal(request?.body.mode, 'json');
+  assert.match(request?.body.text || '', /Ada/);
+  assert.equal(request?.auth.type, 'oauth1');
+  assert.equal(request?.auth.consumerKey, 'consumer_key_1');
+  assert.equal(request?.auth.secretKey, 'token_secret_1');
+  assert.match(request?.scripts.preRequest || '', /bru\.setVar/);
+  assert.match(request?.scripts.postResponse || '', /created/);
+  assert.match(request?.scripts.tests || '', /expect\(res\.status\)/);
+  assert.match(request?.scripts.tests || '', /OpenCollection assertion/);
+  assert.equal(request?.vars.req.find(item => item.name === 'traceId')?.value, 'abc-123');
+  assert.equal(request?.docs, 'Create user docs');
+  assert.equal(request?.examples[0]?.status, 201);
+  assert.equal(websocket?.url, 'wss://api.example.com/users');
+  assert.equal(websocket?.body.websocket?.messages[0]?.body, '{"event":"subscribe"}');
+  assert.equal(graphql?.method, 'POST');
+  assert.equal(graphql?.body.mode, 'graphql');
+  assert.match(graphql?.body.graphql?.query || '', /query User/);
+  assert.match(graphql?.body.graphql?.variables || '', /"id": "42"/);
+  assert.equal(graphql?.query.find(item => item.name === 'preview')?.value, '1');
+  assert.equal(grpc?.url, 'grpc.example.com:443');
+  assert.equal(grpc?.headers.find(item => item.name === 'authorization')?.value, 'Bearer {{token}}');
+  assert.equal(grpc?.body.grpc?.protoFile, 'protos/user.proto');
+  assert.equal(grpc?.body.grpc?.service, 'yapi.users.UserService');
+  assert.equal(grpc?.body.grpc?.method, 'GetUser');
+  assert.equal(grpc?.body.grpc?.message, '{"id":"42"}');
+  assert.equal(script?.body.mimeType, 'application/javascript');
+  assert.match(script?.body.text || '', /fromScript/);
+  assert.equal(result.warnings.some(warning => warning.code === 'opencollection-import'), true);
+  assert.equal(result.warnings.some(warning => warning.code === 'opencollection-item-review'), false);
+});
+
 test('Bruno import maps a .bru HTTP request into a debugger request', () => {
   const bru = `meta {
   name: create-example

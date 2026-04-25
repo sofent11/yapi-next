@@ -70,6 +70,11 @@ function looksLikeInsomnia(document: Record<string, any>) {
     (Array.isArray(document.resources) && document.resources.some((item: any) => String(item?._type || '').startsWith('request')));
 }
 
+function looksLikeOpenCollection(document: Record<string, any>) {
+  return typeof document.opencollection === 'string' && document.opencollection.trim().length > 0 &&
+    document.info && typeof document.info === 'object';
+}
+
 function parseBruSections(content: string) {
   const lines = content.replace(/\r\n/g, '\n').split('\n');
   const sections: BruSection[] = [];
@@ -1220,6 +1225,536 @@ function importInsomnia(document: Record<string, any>): ImportResult {
   };
 }
 
+function openCollectionRows(items: unknown) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map(item => item as Record<string, any>)
+    .map(item => ({
+      name: String(item.name || item.key || ''),
+      value: Array.isArray(item.value) ? item.value.map(String).join(',') : String(item.value ?? ''),
+      enabled: item.disabled !== true,
+      description: typeof item.description === 'string' ? item.description : String(item.description?.content || item.desc || ''),
+      kind: item.type === 'file' ? 'file' as const : 'text' as const,
+      filePath: item.type === 'file' ? String(Array.isArray(item.value) ? item.value[0] || '' : item.value || '') : undefined
+    }))
+    .filter(item => item.name);
+}
+
+function openCollectionParamRows(items: unknown, type: 'query' | 'path') {
+  if (!Array.isArray(items)) return [];
+  return openCollectionRows(
+    items.filter((item: any) => String(item?.type || 'query').toLowerCase() === type)
+  );
+}
+
+function openCollectionScalar(value: unknown) {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object' && 'data' in (value as Record<string, unknown>)) {
+    return String((value as Record<string, unknown>).data ?? '');
+  }
+  if (value == null) return '';
+  return String(value);
+}
+
+function openCollectionDescription(value: unknown) {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object' && 'content' in (value as Record<string, unknown>)) {
+    return String((value as Record<string, unknown>).content ?? '');
+  }
+  return '';
+}
+
+function openCollectionAssertions(runtime: any) {
+  if (!Array.isArray(runtime?.assertions)) return '';
+  return runtime.assertions
+    .filter((assertion: any) => assertion?.disabled !== true && assertion?.expression)
+    .map((assertion: any) => {
+      const operator = String(assertion.operator || 'eq');
+      const value = openCollectionScalar(assertion.value);
+      return `// OpenCollection assertion: ${assertion.expression} ${operator} ${value}`;
+    })
+    .join('\n');
+}
+
+function openCollectionBody(body: any): RequestDocument['body'] {
+  if (!body) {
+    return {
+      mode: 'none',
+      mimeType: '',
+      text: '',
+      fields: []
+    };
+  }
+  const type = String(body.type || '').toLowerCase();
+  if (type === 'json' || type === 'text' || type === 'xml' || type === 'sparql') {
+    return {
+      mode: type as 'json' | 'text' | 'xml' | 'sparql',
+      mimeType: type === 'json' ? 'application/json' : type === 'xml' ? 'application/xml' : 'text/plain',
+      text: typeof body.data === 'string' ? body.data : JSON.stringify(body.data ?? '', null, 2),
+      fields: []
+    };
+  }
+  if (type === 'form-urlencoded' || type === 'multipart-form') {
+    const multipart = type === 'multipart-form';
+    return {
+      mode: multipart ? 'multipart' : 'form-urlencoded',
+      mimeType: multipart ? 'multipart/form-data' : 'application/x-www-form-urlencoded',
+      text: '',
+      fields: openCollectionRows(Array.isArray(body.data) ? body.data : []).map(row => ({
+        ...row,
+        kind: multipart && row.kind === 'file' ? 'file' : 'text'
+      }))
+    };
+  }
+  if (type === 'file') {
+    const file = Array.isArray(body.data) ? body.data.find((item: any) => item?.selected !== false) || body.data[0] : null;
+    return {
+      mode: 'file',
+      mimeType: file?.contentType || 'application/octet-stream',
+      text: '',
+      file: String(file?.filePath || ''),
+      fields: []
+    };
+  }
+  return {
+    mode: 'none',
+    mimeType: '',
+    text: '',
+    fields: []
+  };
+}
+
+function openCollectionSelectedBody<T extends Record<string, any>>(body: T | Array<{ selected?: boolean; body?: T }> | undefined): T | undefined {
+  if (!body) return undefined;
+  if (Array.isArray(body)) {
+    return body.find(item => item?.selected)?.body || body[0]?.body;
+  }
+  return body;
+}
+
+function openCollectionGraphqlBody(body: any): RequestDocument['body'] {
+  const selected = openCollectionSelectedBody(body) || {};
+  const query = String(selected.query || '');
+  const variables = selected.variables == null
+    ? '{}'
+    : typeof selected.variables === 'string'
+      ? selected.variables
+      : JSON.stringify(selected.variables, null, 2);
+  const operationName = selected.operationName ? String(selected.operationName) : undefined;
+  const payload: Record<string, unknown> = { query };
+  if (variables.trim()) {
+    try {
+      payload.variables = JSON.parse(variables);
+    } catch (_error) {
+      payload.variables = variables;
+    }
+  }
+  if (operationName) payload.operationName = operationName;
+  return {
+    mode: 'graphql',
+    mimeType: 'application/json',
+    text: JSON.stringify(payload, null, 2),
+    fields: [],
+    graphql: {
+      query,
+      variables,
+      operationName,
+      schemaUrl: selected.schemaUrl ? String(selected.schemaUrl) : undefined
+    }
+  };
+}
+
+function openCollectionWebsocketBody(message: any): RequestDocument['body'] {
+  const messages = (() => {
+    if (!message) return [];
+    if (Array.isArray(message)) {
+      return message.map((item: any, index: number) => ({
+        name: String(item.title || `message ${index + 1}`),
+        body: openCollectionScalar(item.message?.data),
+        enabled: item.selected !== false
+      }));
+    }
+    if (typeof message === 'object' && 'data' in message) {
+      return [{
+        name: 'message 1',
+        body: openCollectionScalar(message.data),
+        enabled: true
+      }];
+    }
+    return [];
+  })();
+  return {
+    mode: 'none',
+    mimeType: '',
+    text: '',
+    fields: [],
+    websocket: {
+      messages: messages.length > 0 ? messages : [{ name: 'Message 1', body: '', enabled: true }]
+    }
+  };
+}
+
+function openCollectionGrpcMessage(message: any) {
+  if (typeof message === 'string') return message;
+  if (Array.isArray(message)) {
+    const selected = message.find((item: any) => item?.selected !== false) || message[0];
+    return typeof selected?.message === 'string' ? selected.message : '';
+  }
+  return '';
+}
+
+function splitGrpcMethod(method: string) {
+  const normalized = method.replace(/^\/+/, '');
+  const slashIndex = normalized.lastIndexOf('/');
+  if (slashIndex !== -1) {
+    return {
+      service: normalized.slice(0, slashIndex),
+      method: normalized.slice(slashIndex + 1)
+    };
+  }
+  const dotIndex = normalized.lastIndexOf('.');
+  if (dotIndex !== -1) {
+    return {
+      service: normalized.slice(0, dotIndex),
+      method: normalized.slice(dotIndex + 1)
+    };
+  }
+  return {
+    service: '',
+    method: normalized
+  };
+}
+
+function openCollectionGrpcBody(grpc: any): RequestDocument['body'] {
+  const methodParts = splitGrpcMethod(String(grpc.method || ''));
+  return {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: grpc.protoFilePath ? String(grpc.protoFilePath) : undefined,
+      importPaths: Array.isArray(grpc.importPaths) ? grpc.importPaths.map((item: any) => String(item.path || item)).filter(Boolean) : [],
+      service: methodParts.service,
+      method: methodParts.method,
+      message: openCollectionGrpcMessage(grpc.message)
+    }
+  };
+}
+
+function openCollectionAuth(auth: any): RequestDocument['auth'] {
+  if (!auth) return { type: 'inherit' };
+  if (auth === 'inherit') return { type: 'inherit' };
+  const type = String(auth.type || '').toLowerCase();
+  if (!type) return { type: 'inherit' };
+  if (type === 'bearer') return { type: 'bearer', token: String(auth.token || '') };
+  if (type === 'basic') return { type: 'basic', username: String(auth.username || ''), password: String(auth.password || '') };
+  if (type === 'apikey') {
+    return {
+      type: 'apikey',
+      key: String(auth.key || 'X-API-Key'),
+      value: String(auth.value || ''),
+      addTo: auth.placement === 'query' ? 'query' : 'header'
+    };
+  }
+  if (type === 'digest') return { type: 'digest', username: String(auth.username || ''), password: String(auth.password || '') };
+  if (type === 'ntlm') return { type: 'ntlm', username: String(auth.username || ''), password: String(auth.password || ''), domain: String(auth.domain || '') };
+  if (type === 'wsse') return { type: 'wsse', username: String(auth.username || ''), password: String(auth.password || '') };
+  if (type === 'awsv4') {
+    return {
+      type: 'awsv4',
+      accessKey: String(auth.accessKeyId || ''),
+      secretKey: String(auth.secretAccessKey || ''),
+      sessionToken: String(auth.sessionToken || ''),
+      service: String(auth.service || ''),
+      region: String(auth.region || '')
+    };
+  }
+  if (type === 'oauth1') {
+    return {
+      type: 'oauth1',
+      consumerKey: String(auth.consumerKey || ''),
+      consumerSecret: String(auth.consumerSecret || ''),
+      token: String(auth.accessToken || ''),
+      secretKey: String(auth.accessTokenSecret || ''),
+      signatureMethod: String(auth.signatureMethod || 'HMAC-SHA1'),
+      version: String(auth.version || '1.0'),
+      realm: String(auth.realm || '')
+    };
+  }
+  if (type === 'oauth2') {
+    return {
+      type: 'oauth2',
+      oauthFlow: auth.grantType === 'client_credentials' ? 'client_credentials' : undefined,
+      tokenUrl: String(auth.tokenUrl || auth.accessTokenUrl || ''),
+      clientId: String(auth.clientId || ''),
+      clientSecret: String(auth.clientSecret || ''),
+      scope: String(auth.scope || '')
+    };
+  }
+  return { type: 'inherit' };
+}
+
+function openCollectionScripts(runtime: any) {
+  const scripts = runtime?.scripts || {};
+  if (Array.isArray(scripts)) {
+    const preRequest = scripts.find((script: any) => script?.type === 'before-request')?.code || '';
+    const postResponse = scripts.find((script: any) => script?.type === 'after-response')?.code || '';
+    const tests = [
+      scripts.find((script: any) => script?.type === 'tests')?.code || '',
+      openCollectionAssertions(runtime)
+    ].filter(Boolean).join('\n\n');
+    return {
+      preRequest: String(preRequest),
+      postResponse: String(postResponse),
+      tests
+    };
+  }
+  return {
+    preRequest: String(scripts.preRequest || scripts.req || ''),
+    postResponse: String(scripts.postResponse || scripts.res || ''),
+    tests: [String(scripts.tests || ''), openCollectionAssertions(runtime)].filter(Boolean).join('\n\n')
+  };
+}
+
+function openCollectionVariables(runtime: any): RequestDocument['vars'] {
+  const req = Array.isArray(runtime?.variables)
+    ? runtime.variables
+        .map((variable: any) => ({
+          name: String(variable.name || ''),
+          value: openCollectionScalar(variable.value),
+          enabled: variable.disabled !== true,
+          description: openCollectionDescription(variable.description),
+          kind: 'text' as const,
+          scope: 'request' as const,
+          secret: variable.secret === true
+        }))
+        .filter((variable: { name: string }) => variable.name)
+    : [];
+  return { req, res: [] };
+}
+
+function openCollectionRuntime(settings: any): RequestDocument['runtime'] {
+  const timeoutMs = Number(settings?.timeout || 0);
+  return {
+    timeoutMs: timeoutMs > 0 ? timeoutMs : 30000,
+    followRedirects: settings?.followRedirects !== false
+  };
+}
+
+function openCollectionBaseRequest(info: any, url: string, kind: RequestDocument['kind']): RequestDocument {
+  return {
+    ...createEmptyRequest(String(info.name || url || 'OpenCollection Request')),
+    kind,
+    name: String(info.name || normalizePath(url)),
+    url,
+    path: normalizePath(url),
+    description: '',
+    tags: Array.isArray(info.tags) ? info.tags.map(String) : [],
+    order: Number(info.seq || 0) || 0
+  };
+}
+
+function pushOpenCollectionRequest(
+  requests: ImportedRequestRecord[],
+  folderSegments: string[],
+  request: RequestDocument
+) {
+  requests.push({ folderSegments, request, cases: [] });
+}
+
+function walkOpenCollectionItems(
+  items: any[],
+  folderSegments: string[],
+  requests: ImportedRequestRecord[],
+  warnings: ImportWarning[]
+) {
+  items.forEach(item => {
+    const info = item?.info || {};
+    const type = String(
+      info.type ||
+      (item.items ? 'folder' : item.http ? 'http' : item.graphql ? 'graphql' : item.websocket ? 'websocket' : item.grpc ? 'grpc' : typeof item.script === 'string' ? 'script' : '')
+    ).toLowerCase();
+    if (type === 'folder') {
+      walkOpenCollectionItems(Array.isArray(item.items) ? item.items : [], [...folderSegments, String(info.name || 'Folder')], requests, warnings);
+      return;
+    }
+    if (type === 'http') {
+      const http = item.http || {};
+      const runtime = item.runtime || {};
+      const request: RequestDocument = {
+        ...openCollectionBaseRequest(info, String(http.url || ''), 'http'),
+        method: methodLabel(String(http.method || 'GET')),
+        description: openCollectionDescription(item.docs),
+        headers: openCollectionRows(http.headers),
+        query: openCollectionParamRows(http.params, 'query'),
+        pathParams: openCollectionParamRows(http.params, 'path'),
+        body: openCollectionBody(openCollectionSelectedBody(http.body) || http.body),
+        auth: openCollectionAuth(http.auth),
+        runtime: openCollectionRuntime(item.settings),
+        vars: openCollectionVariables(runtime),
+        scripts: openCollectionScripts(runtime),
+        docs: openCollectionDescription(item.docs),
+        examples: Array.isArray(item.examples)
+          ? item.examples.slice(0, 3).map((example: any, index: number) => ({
+              name: String(example.name || `example-${index + 1}`),
+              role: 'example' as const,
+              status: Number(example.response?.status || 0) || undefined,
+              mimeType: example.response?.body?.type === 'json' ? 'application/json' : 'text/plain',
+              text: typeof example.response?.body?.data === 'string'
+                ? example.response.body.data
+                : JSON.stringify(example.response?.body?.data ?? '', null, 2)
+            })).filter((example: ResponseExample) => example.text.trim())
+          : []
+      };
+      pushOpenCollectionRequest(requests, folderSegments, request);
+      return;
+    }
+
+    if (type === 'graphql') {
+      const graphql = item.graphql || {};
+      const runtime = item.runtime || {};
+      const request: RequestDocument = {
+        ...openCollectionBaseRequest(info, String(graphql.url || ''), 'graphql'),
+        method: methodLabel(String(graphql.method || 'POST')),
+        description: openCollectionDescription(item.docs),
+        headers: openCollectionRows(graphql.headers),
+        query: openCollectionParamRows(graphql.params, 'query'),
+        pathParams: openCollectionParamRows(graphql.params, 'path'),
+        body: openCollectionGraphqlBody(graphql.body),
+        auth: openCollectionAuth(graphql.auth),
+        runtime: openCollectionRuntime(item.settings),
+        vars: openCollectionVariables(runtime),
+        scripts: openCollectionScripts(runtime),
+        docs: openCollectionDescription(item.docs)
+      };
+      pushOpenCollectionRequest(requests, folderSegments, request);
+      return;
+    }
+
+    if (type === 'websocket') {
+      const websocket = item.websocket || {};
+      const runtime = item.runtime || {};
+      const request: RequestDocument = {
+        ...openCollectionBaseRequest(info, String(websocket.url || ''), 'websocket'),
+        method: 'GET',
+        description: openCollectionDescription(item.docs),
+        headers: openCollectionRows(websocket.headers),
+        body: openCollectionWebsocketBody(websocket.message),
+        auth: openCollectionAuth(websocket.auth),
+        vars: openCollectionVariables(runtime),
+        scripts: openCollectionScripts(runtime),
+        docs: openCollectionDescription(item.docs)
+      };
+      pushOpenCollectionRequest(requests, folderSegments, request);
+      return;
+    }
+
+    if (type === 'grpc') {
+      const grpc = item.grpc || {};
+      const runtime = item.runtime || {};
+      const request: RequestDocument = {
+        ...openCollectionBaseRequest(info, String(grpc.url || ''), 'grpc'),
+        method: 'POST',
+        description: openCollectionDescription(item.docs),
+        headers: openCollectionRows(grpc.metadata),
+        body: openCollectionGrpcBody(grpc),
+        auth: openCollectionAuth(grpc.auth),
+        vars: openCollectionVariables(runtime),
+        scripts: openCollectionScripts(runtime),
+        docs: openCollectionDescription(item.docs)
+      };
+      pushOpenCollectionRequest(requests, folderSegments, request);
+      return;
+    }
+
+    if (type === 'script') {
+      const request: RequestDocument = {
+        ...openCollectionBaseRequest(info, '', 'script'),
+        method: 'GET',
+        description: openCollectionDescription(item.docs),
+        body: {
+          mode: 'text',
+          mimeType: 'application/javascript',
+          text: String(item.script || ''),
+          fields: []
+        },
+        scripts: {
+          preRequest: String(item.script || ''),
+          postResponse: '',
+          tests: ''
+        },
+        docs: openCollectionDescription(item.docs)
+      };
+      pushOpenCollectionRequest(requests, folderSegments, request);
+      return;
+    }
+
+    if (type) {
+      warnings.push({
+        level: 'warning',
+        scope: 'request',
+        code: 'opencollection-item-review',
+        status: 'degraded',
+        message: `OpenCollection item type "${type}" was skipped in the current importer.`
+      });
+      return;
+    }
+  });
+}
+
+function importOpenCollection(document: Record<string, any>): ImportResult {
+  const projectName = String(document.info?.name || 'Imported OpenCollection');
+  const project = createDefaultProject(projectName);
+  const environments = Array.isArray(document.config?.environments)
+    ? document.config.environments.map((environment: any) => {
+        const vars = Object.fromEntries(
+          (Array.isArray(environment.variables) ? environment.variables : [])
+            .filter((variable: any) => variable?.disabled !== true)
+            .map((variable: any) => [
+              String(variable.name || ''),
+              variable.secret ? '' : typeof variable.value === 'object' ? String(variable.value?.data || '') : String(variable.value ?? '')
+            ])
+            .filter(([name]: [string, string]) => name)
+        );
+        return {
+          ...createDefaultEnvironment(String(environment.name || 'shared')),
+          name: String(environment.name || 'shared'),
+          vars,
+          sharedVars: vars,
+          headers: [],
+          sharedHeaders: [],
+          authProfiles: [],
+          overlayMode: 'standalone' as const
+        };
+      })
+    : [];
+  const requests: ImportedRequestRecord[] = [];
+  const warnings: ImportWarning[] = [];
+  walkOpenCollectionItems(Array.isArray(document.items) ? document.items : [], [], requests, warnings);
+  warnings.push({
+    level: 'info',
+    scope: 'project',
+    code: 'opencollection-import',
+    status: 'compatible',
+    message: `${projectName}: OpenCollection imported with ${requests.length} item${requests.length === 1 ? '' : 's'}.`
+  });
+
+  return {
+    detectedFormat: 'opencollection',
+    summary: {
+      requests: requests.length,
+      folders: new Set(requests.map(item => item.folderSegments.join('/')).filter(Boolean)).size,
+      environments: environments.length || 1
+    },
+    project,
+    environments: environments.length > 0 ? environments : [createDefaultEnvironment('shared')],
+    requests,
+    collections: [],
+    warnings
+  };
+}
+
 function importBruno(content: string): ImportResult {
   const { sections, prelude } = parseBruSections(content);
   const metadata = parseBruKeyValueBlock(findBruSection(sections, 'meta')?.content || '');
@@ -1467,6 +2002,9 @@ export function importSourceText(content: string): ImportResult {
   }
   if (document.log?.entries) {
     return importHar(document);
+  }
+  if (looksLikeOpenCollection(document)) {
+    return importOpenCollection(document);
   }
   if (looksLikeInsomnia(document)) {
     return importInsomnia(document);
