@@ -13,6 +13,7 @@ import type {
 } from '@yapi-debugger/schema';
 import type { ResponseTab } from '../../store/workspace-store';
 import { CodeEditor } from '../editors/CodeEditor';
+import { ResponseHeader } from './response/ResponseHeader';
 
 type GeneratedCheckInput =
   | { type: 'status-equals'; label: string; expected: string }
@@ -635,12 +636,12 @@ export function ResponsePanel(props: {
 
       <Tabs value={props.activeTab} onChange={value => props.onTabChange(value as ResponseTab)} className="response-tabs-ide">
         <Tabs.List>
-          <Tabs.Tab value="preview" leftSection={<IconEye size={14} />}>预览</Tabs.Tab>
+          <Tabs.Tab value="preview">预览</Tabs.Tab>
           <Tabs.Tab value="body">正文</Tabs.Tab>
-          <Tabs.Tab value="json" leftSection={<IconBraces size={14} />}>JSON</Tabs.Tab>
+          <Tabs.Tab value="json">JSON</Tabs.Tab>
           <Tabs.Tab value="headers">响应头</Tabs.Tab>
-          <Tabs.Tab value="cookies" leftSection={<IconCookie size={14} />}>Cookies</Tabs.Tab>
-          <Tabs.Tab value="compare" leftSection={<IconGitCompare size={14} />}>对比</Tabs.Tab>
+          <Tabs.Tab value="cookies">Cookies</Tabs.Tab>
+          <Tabs.Tab value="compare">对比</Tabs.Tab>
           <Tabs.Tab value="raw">Raw</Tabs.Tab>
         </Tabs.List>
 

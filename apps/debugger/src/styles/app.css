@@ -7,7 +7,7 @@
   --font-display: "Sora", "PingFang SC", sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Mono", monospace;
   --ui-scale: 1;
-  --code-font-size: 13px;
+  --code-font-size: 14px;
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 12px;
@@ -107,7 +107,7 @@ mark {
 .section-kicker {
   margin: 0;
   color: var(--muted);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -227,7 +227,7 @@ mark {
 
 .workspace-home-statusbar-item span {
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -322,7 +322,7 @@ mark {
   flex: 0 0 auto;
   padding: 3px 8px;
   border-radius: 999px;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.03em;
 }
@@ -436,7 +436,7 @@ mark {
 .workspace-topnav-path {
   min-width: 0;
   color: var(--topnav-muted);
-  font-size: 0.74rem;
+  font-size: 0.8rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -553,17 +553,16 @@ mark {
 .workspace-main {
   min-height: 0;
   border: none;
-  border-right: 1px solid var(--line);
+  box-shadow: inset -1px 0 0 var(--line);
   border-radius: 0;
   background: var(--surface);
-  box-shadow: none;
   overflow: hidden;
 }
 
 .resizer-handle {
   position: relative;
   background: var(--line);
-  transition: background 0.2s, width 0.2s, height 0.2s;
+  transition: background 0.2s;
   z-index: 10;
   flex-shrink: 0;
 }
@@ -744,7 +743,7 @@ mark {
   border-radius: 9px;
   background: color-mix(in oklch, var(--accent-soft) 72%, white);
   color: var(--accent);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 800;
   letter-spacing: 0.04em;
 }
@@ -782,7 +781,7 @@ mark {
   gap: 6px;
   flex: 0 0 auto;
   padding: 0;
-  font-size: 0.62rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -934,7 +933,7 @@ mark {
 }
 
 .tree-method-pill {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 700;
   padding: 1px 4px;
   border-radius: 3px;
@@ -987,7 +986,7 @@ mark {
 }
 
 .tree-count-badge {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   color: var(--muted);
   padding: 0 4px;
 }
@@ -1034,7 +1033,7 @@ mark {
   background: var(--surface-muted);
   display: flex;
   justify-content: space-between;
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   color: var(--muted);
 }
 
@@ -1111,26 +1110,17 @@ mark {
   flex: 1;
 }
 
-.request-header-compact {
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
-  flex-shrink: 0;
-  overflow-x: auto;
-  display: grid;
-  gap: 12px;
-}
-
 .request-header-meta {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
 }
 
 .request-header-meta-copy {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .request-header-caption {
@@ -1221,27 +1211,37 @@ mark {
 
 .request-tab-tier {
   display: flex;
-  gap: 8px;
-  padding: 10px 18px 0;
-  background: var(--surface);
+  gap: 4px;
+  padding: 12px 16px 0;
+  background: var(--surface-muted);
   border-bottom: 1px solid var(--line);
 }
 
 .request-tab-tier-button {
-  border: 1px solid var(--line);
-  background: color-mix(in oklch, var(--surface-muted) 75%, var(--surface));
-  color: var(--muted-strong);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 0.72rem;
-  font-weight: 700;
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-radius: 6px 6px 0 0;
+  padding: 8px 16px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
   cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 1;
+}
+
+.request-tab-tier-button:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--text) 5%, transparent);
+  color: var(--text);
 }
 
 .request-tab-tier-button.is-active {
-  background: var(--accent-soft);
+  background: var(--surface);
   color: var(--accent);
-  border-color: color-mix(in oklch, var(--accent) 22%, var(--line));
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 .request-tab-tier-button:disabled {
@@ -1275,10 +1275,11 @@ mark {
 }
 
 .compact-section-title {
-  font-size: 0.65rem;
-  font-weight: 700;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
+  letter-spacing: 0.05em;
   margin-bottom: 12px;
   margin-top: 24px;
 }
@@ -1288,31 +1289,31 @@ mark {
 }
 
 .response-header-ide {
-  min-height: 48px;
-  padding: 10px 18px;
+  min-height: 44px;
+  padding: 0 16px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   flex-shrink: 0;
   border-bottom: 1px solid var(--line);
-  background: color-mix(in oklch, var(--surface-muted) 92%, var(--surface));
+  background: var(--surface-muted);
   gap: 16px;
 }
 
 .response-status-group {
   display: flex;
   align-items: center;
-  flex: 1 1 260px;
+  flex: 1;
   min-width: 0;
-  flex-wrap: wrap;
-  gap: 12px;
+  gap: 16px;
 }
 
 .response-status-copy {
   min-width: 0;
-  display: grid;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .response-metrics {
@@ -1323,7 +1324,7 @@ mark {
 }
 
 .response-metrics .mantine-Text {
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--muted-strong);
 }
@@ -1333,15 +1334,15 @@ mark {
 }
 
 .response-header-actions {
-  flex: 1 1 420px;
+  flex: 0 1 auto;
   min-width: 0;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 12px;
 }
 
 .response-toolbar-primary {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
 }
@@ -1458,7 +1459,7 @@ mark {
 .debugger-spotlight-group::before {
   padding-inline-start: 10px;
   color: color-mix(in srgb, var(--muted) 82%, white);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -1536,7 +1537,7 @@ mark {
   border-radius: 11px;
   background: rgba(15, 23, 42, 0.06);
   color: var(--muted-strong);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1562,7 +1563,7 @@ mark {
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.06);
   color: var(--muted-strong);
-  font-size: 0.67rem;
+  font-size: 0.75rem;
   font-weight: 760;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1664,7 +1665,7 @@ mark {
   justify-content: flex-end;
   gap: 10px;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   white-space: nowrap;
 }
 
@@ -1812,7 +1813,7 @@ mark {
 
 .keybinding-row-copy span {
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: 0.8rem;
   line-height: 1.5;
 }
 
@@ -1981,7 +1982,7 @@ mark {
   top: 0;
   z-index: 1;
   background: var(--surface-muted);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
@@ -2074,10 +2075,17 @@ mark {
   width: min(100%, 640px);
 }
 
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  align-items: flex-end;
+}
+
 .graphql-body-grid,
 .graphql-editor-stack {
   display: grid;
-  gap: 12px;
+  gap: 16px;
 }
 
 .graphql-editor-stack > div {
@@ -2832,7 +2840,7 @@ mark {
   border-radius: 4px;
   background: color-mix(in oklch, var(--surface) 72%, transparent);
   color: var(--accent);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2885,7 +2893,7 @@ mark {
 
 .launchpad-capability span {
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: 0.8rem;
   line-height: 1.45;
 }
 
@@ -2943,7 +2951,7 @@ mark {
 
 .launchpad-sequence-row span {
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
@@ -3030,7 +3038,7 @@ mark {
 }
 
 .request-header-compact {
-  padding: 12px 16px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-muted);
   flex-shrink: 0;
@@ -3065,7 +3073,7 @@ mark {
 .request-kind-select-ide .mantine-Select-input,
 .method-select-ide .mantine-Select-input {
   border: none !important;
-  border-right: 1px solid var(--line) !important;
+  box-shadow: inset -1px 0 0 var(--line) !important;
   border-radius: 0 !important;
   font-weight: 700;
   color: var(--accent);
@@ -3086,7 +3094,7 @@ mark {
 .method-url-group .mantine-Button-root {
   flex: 0 0 auto;
   border-radius: 0 !important;
-  border-left: 1px solid var(--line) !important;
+  box-shadow: inset 1px 0 0 var(--line) !important;
   white-space: nowrap;
 }
 
@@ -3300,7 +3308,7 @@ mark {
 
 .summary-chip span {
   display: block;
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3463,7 +3471,7 @@ mark {
 
 .variable-cleanup-selection-chip span {
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: 0.8rem;
 }
 
 .variable-cleanup-selection-toolbar {
@@ -3494,7 +3502,7 @@ mark {
   padding: 10px;
   max-height: 220px;
   overflow: auto;
-  font-size: 0.74rem;
+  font-size: 0.8rem;
   line-height: 1.45;
   font-family: var(--font-mono);
   white-space: pre-wrap;
@@ -3545,7 +3553,7 @@ mark {
 
 .variable-cleanup-group-toggle span {
   color: var(--muted);
-  font-size: 0.73rem;
+  font-size: 0.8rem;
 }
 
 .variable-cleanup-group-body {
@@ -3749,7 +3757,7 @@ mark {
 }
 
 .response-merge-row strong {
-  font-size: 0.74rem;
+  font-size: 0.8rem;
   color: var(--muted-strong);
   font-family: var(--font-mono);
 }
@@ -3786,7 +3794,7 @@ mark {
 }
 
 .response-search-result-row strong {
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   color: var(--muted-strong);
 }
 
@@ -4035,13 +4043,14 @@ mark {
 
 /* Status Bar Styles */
 .app-status-bar {
-  height: 24px;
-  background: var(--accent);
-  color: white;
+  height: 26px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  border-top: 1px solid var(--line);
   display: flex;
   align-items: center;
   padding: 0 12px;
-  font-size: 11px;
+  font-size: 12px;
   user-select: none;
 }
 
@@ -4050,6 +4059,7 @@ mark {
   align-items: center;
   gap: 6px;
   height: 100%;
+  padding: 0 8px;
 }
 
 .status-item .mantine-Text-root {
@@ -4058,13 +4068,13 @@ mark {
 
 .status-item.clickable {
   cursor: pointer;
-  padding: 0 4px;
-  border-radius: 2px;
-  transition: background 0.2s;
+  border-radius: 4px;
+  transition: all 0.2s ease;
 }
 
 .status-item.clickable:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: color-mix(in oklch, var(--text) 8%, transparent);
+  color: var(--text);
 }
 
 .status-dot {
@@ -4075,15 +4085,7 @@ mark {
 }
 
 .status-dot.orange {
-  background: #ff9800;
-  box-shadow: 0 0 4px #ff9800;
-  animation: status-pulse 2s infinite;
-}
-
-@keyframes status-pulse {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.8); }
-  100% { opacity: 1; transform: scale(1); }
+  background: var(--orange);
 }
 
 .animate-in {
@@ -4093,25 +4095,47 @@ mark {
 .status-response-pill {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  min-height: 20px;
-  padding: 0 9px 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 999px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  gap: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+  height: 18px;
 }
 
-.status-response-pill.is-success {
-  background: rgba(236, 253, 243, 0.96);
-  border-color: rgba(22, 163, 74, 0.24);
-  color: #166534;
+.status-response-main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  color: var(--text);
 }
 
-.status-response-pill.is-error {
-  background: rgba(254, 242, 242, 0.96);
-  border-color: rgba(220, 38, 38, 0.22);
-  color: #b91c1c;
+.status-response-pill.is-success .status-response-main {
+  color: var(--green);
 }
+
+.status-response-pill.is-error .status-response-main {
+  color: var(--red);
+}
+
+.status-response-divider {
+  width: 1px;
+  height: 10px;
+  background: var(--line);
+}
+
+.status-response-latency {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  color: var(--muted);
+}
+
+
+
+
 
 .status-response-main,
 .status-response-latency {

@@ -64,6 +64,7 @@ import {
 import { normalizeRequestVariableRowDraft as normalizeRequestVariableRow } from '../../lib/variable-audit';
 import { CodeEditor } from '../editors/CodeEditor';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
+import { RequestUrlBar } from './request/RequestUrlBar';
 
 const REQUEST_METHODS: RequestDocument['method'][] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const REQUEST_KINDS: RequestDocument['kind'][] = ['http', 'graphql', 'grpc', 'websocket', 'script'];
@@ -593,11 +594,6 @@ export function RequestPanel(props: {
     [props.requestInsight, workspace.project, requestDocument, selectedCase, selectedEnvironment]
   );
   const resolvedPreview = resolvedInsight.preview;
-  const requestHeaderSummary = [
-    effectiveKind.toUpperCase(),
-    props.activeEnvironmentName ? `Env ${props.activeEnvironmentName}` : 'No environment',
-    selectedCase ? `Case ${selectedCase.name}` : allowCases ? 'Base request' : 'Scratch-only'
-  ].join(' · ');
   const resolvedWebSocketUrl = appendEnabledQueryRows(resolvedPreview.url, resolvedPreview.query);
   const blockingDiagnostics = resolvedInsight.diagnostics.filter(item => item.blocking);
   const attentionDiagnostics = resolvedInsight.diagnostics.filter(item => !item.blocking);
@@ -1501,29 +1497,18 @@ export function RequestPanel(props: {
       <div className="request-header-compact">
         <div className="request-header-meta">
           <div className="request-header-meta-copy">
-            <Text size="xs" fw={700} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {allowCases ? 'Workbench Request' : 'Scratch Request'}
-            </Text>
-            <Text size="sm" fw={700}>
+            <Text size="md" fw={700}>
               {selectedCase ? `${requestDocument.name} · ${selectedCase.name}` : requestDocument.name}
-            </Text>
-            <Text size="xs" c="dimmed" className="request-header-caption">
-              {requestHeaderSummary}
             </Text>
           </div>
           <Group gap="xs" wrap="wrap" className="request-header-meta-pills">
-            {props.activeEnvironmentName ? (
-              <Badge variant="light" color="gray">
-                Env · {props.activeEnvironmentName}
-              </Badge>
-            ) : null}
             {selectedCase ? (
-              <Badge variant="light" color="indigo">
+              <Badge variant="light" color="indigo" size="xs">
                 Case Active
               </Badge>
             ) : null}
             {props.isDirty ? (
-              <Badge variant="filled" color="orange">
+              <Badge variant="filled" color="orange" size="xs">
                 Unsaved
               </Badge>
             ) : null}
@@ -1552,103 +1537,74 @@ export function RequestPanel(props: {
           </div>
         ) : null}
 
-        <div className="method-url-group">
-          <Select
-            size="sm"
-            className="request-kind-select-ide"
-            value={effectiveKind}
-            data={REQUEST_KINDS.map(kind => ({ value: kind, label: kind.toUpperCase() }))}
-            onChange={value => {
-              const nextKind = (value as RequestDocument['kind']) || 'http';
-                const nextBody =
-                  nextKind === 'graphql' && body.mode !== 'graphql'
-                    ? {
-                        ...body,
-                        mode: 'graphql' as const,
-                        mimeType: 'application/json',
-                        graphql: body.graphql || { query: '', variables: '{}', operationName: '', schemaUrl: '', savedOperations: [] }
-                      }
-                  : nextKind === 'grpc'
-                    ? {
-                        ...body,
-                        mode: 'none' as const,
-                        mimeType: 'application/grpc',
-                        grpc: body.grpc || {
-                          protoFile: '',
-                          importPaths: [],
-                          service: '',
-                          method: '',
-                          rpcKind: 'unary',
-                          message: '{}',
-                          messages: []
-                        }
-                      }
-                  : nextKind === 'websocket'
-                    ? {
-                        ...body,
-                        mode: 'none' as const,
-                        websocket: body.websocket || {
-                          messages: [{ name: 'Message 1', body: '', kind: 'json', enabled: true }],
-                          examples: []
-                        }
-                      }
-                    : nextKind === 'script'
-                      ? {
-                          ...body,
-                          mode: 'text' as const,
-                          mimeType: 'application/javascript',
-                          text: body.text || requestDocument.scripts.preRequest || ''
-                        }
-                      : body;
-              const nextMethod = nextKind === 'graphql' || nextKind === 'grpc' ? 'POST' : nextKind === 'websocket' ? 'GET' : effectiveMethod;
-              if (selectedCase) {
-                updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, kind: nextKind, method: nextMethod, body: nextBody } }));
-              } else {
-                props.onRequestChange({ ...requestDocument, kind: nextKind, method: nextMethod, body: nextBody });
-              }
-            }}
-            variant="filled"
-          />
-          <Select
-            size="sm"
-            className="method-select-ide"
-            value={effectiveMethod}
-            data={REQUEST_METHODS.map(method => ({ value: method, label: method }))}
-            onChange={value => {
-              const nextMethod = value as RequestDocument['method'];
-              if (selectedCase) {
-                updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, method: nextMethod } }));
-              } else {
-                props.onRequestChange({ ...requestDocument, method: nextMethod });
-              }
-            }}
-            disabled={effectiveKind === 'grpc'}
-            variant="filled"
-          />
-          <TextInput
-            size="sm"
-            className="url-input-ide"
-            value={effectiveUrl}
-            placeholder="输入请求地址，支持直接粘贴 cURL"
-            onChange={event => applyUrlChange(event.currentTarget.value)}
-            onPaste={event => {
-              const pastedText = event.clipboardData.getData('text');
-              if (!pastedText) return;
-              if (applyPastedRequest(pastedText)) {
-                event.preventDefault();
-              }
-            }}
-            variant="filled"
-          />
-          {props.onSave ? (
-            <Button size="sm" variant="default" leftSection={<IconDeviceFloppy size={14} />} onClick={props.onSave}>
-              保存
-            </Button>
-          ) : null}
-          <Button size="sm" variant="filled" leftSection={<IconPlayerPlay size={14} />} loading={props.isRunning} onClick={props.onRun}>
-            {effectiveKind === 'script' ? '运行脚本' : '发送请求'}
-          </Button>
-        </div>
+        <RequestUrlBar
+          kind={effectiveKind}
+          method={effectiveMethod}
+          url={effectiveUrl}
+          isRunning={props.isRunning}
+          canSave={!!props.onSave}
+          onSave={props.onSave}
+          onRun={props.onRun}
+          onUrlChange={applyUrlChange}
+          onKindChange={value => {
+            const nextKind = value || 'http';
+            const nextBody =
+              nextKind === 'graphql' && body.mode !== 'graphql'
+                ? {
+                    ...body,
+                    mode: 'graphql' as const,
+                    mimeType: 'application/json',
+                    graphql: body.graphql || { query: '', variables: '{}', operationName: '', schemaUrl: '', savedOperations: [] }
+                  }
+                : nextKind === 'grpc'
+                ? {
+                    ...body,
+                    mode: 'none' as const,
+                    mimeType: 'application/grpc',
+                    grpc: body.grpc || {
+                      protoFile: '',
+                      importPaths: [],
+                      service: '',
+                      method: '',
+                      rpcKind: 'unary',
+                      message: '{}',
+                      messages: []
+                    }
+                  }
+                : nextKind === 'websocket'
+                ? {
+                    ...body,
+                    mode: 'none' as const,
+                    websocket: body.websocket || {
+                      messages: [{ name: 'Message 1', body: '', kind: 'json', enabled: true }],
+                      examples: []
+                    }
+                  }
+                : nextKind === 'script'
+                ? {
+                    ...body,
+                    mode: 'text' as const,
+                    mimeType: 'application/javascript',
+                    text: body.text || requestDocument.scripts.preRequest || ''
+                  }
+                : body;
+            const nextMethod = nextKind === 'graphql' || nextKind === 'grpc' ? 'POST' : nextKind === 'websocket' ? 'GET' : effectiveMethod;
+            if (selectedCase) {
+              updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, kind: nextKind, method: nextMethod, body: nextBody } }));
+            } else {
+              props.onRequestChange({ ...requestDocument, kind: nextKind, method: nextMethod, body: nextBody });
+            }
+          }}
+          onMethodChange={value => {
+            const nextMethod = value;
+            if (selectedCase) {
+              updateSelectedCase(current => ({ ...current, overrides: { ...current.overrides, method: nextMethod } }));
+            } else {
+              props.onRequestChange({ ...requestDocument, method: nextMethod });
+            }
+          }}
+          onPaste={applyPastedRequest}
+        />
       </div>
 
       {blockingDiagnostics.length > 0 || attentionDiagnostics.length > 0 ? (
@@ -1665,8 +1621,8 @@ export function RequestPanel(props: {
         </div>
       ) : null}
 
-      <Tabs value={props.activeTab} onChange={value => props.onTabChange(value as RequestTab)} className="request-tabs-ide">
-        <div className="request-tab-tier">
+      <Tabs value={props.activeTab} onChange={value => props.onTabChange(value as RequestTab)} className="request-tabs-ide" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <div className="request-tab-tier" style={{ display: 'flex', gap: '2px', padding: '12px 16px 0', borderBottom: '1px solid var(--line)', background: 'var(--surface-muted)' }}>
           <button
             type="button"
             className={activeSection === 'request' ? 'request-tab-tier-button is-active' : 'request-tab-tier-button'}
@@ -1692,14 +1648,14 @@ export function RequestPanel(props: {
           </button>
         </div>
         <Tabs.List>
-          {visibleTabs.has('query') ? <Tabs.Tab value="query" leftSection={<IconVariable size={14} />}>参数</Tabs.Tab> : null}
-          {visibleTabs.has('headers') ? <Tabs.Tab value="headers" leftSection={<IconListCheck size={14} />}>请求头</Tabs.Tab> : null}
-          {visibleTabs.has('body') ? <Tabs.Tab value="body" leftSection={<IconMessageCode size={14} />}>请求体</Tabs.Tab> : null}
-          {visibleTabs.has('auth') ? <Tabs.Tab value="auth" leftSection={<IconKey size={14} />}>认证</Tabs.Tab> : null}
-          {visibleTabs.has('checks') ? <Tabs.Tab value="checks" leftSection={<IconListCheck size={14} />} disabled={!allowCases}>断言</Tabs.Tab> : null}
-          {visibleTabs.has('scripts') ? <Tabs.Tab value="scripts" leftSection={<IconSettings size={14} />} disabled={!allowCases}>脚本</Tabs.Tab> : null}
-          {visibleTabs.has('settings') ? <Tabs.Tab value="settings" leftSection={<IconAdjustments size={14} />}>设置</Tabs.Tab> : null}
-          {visibleTabs.has('preview') ? <Tabs.Tab value="preview" leftSection={<IconPlayerPlay size={14} />}>预览</Tabs.Tab> : null}
+          {visibleTabs.has('query') ? <Tabs.Tab value="query">参数</Tabs.Tab> : null}
+          {visibleTabs.has('headers') ? <Tabs.Tab value="headers">请求头</Tabs.Tab> : null}
+          {visibleTabs.has('body') ? <Tabs.Tab value="body">请求体</Tabs.Tab> : null}
+          {visibleTabs.has('auth') ? <Tabs.Tab value="auth">认证</Tabs.Tab> : null}
+          {visibleTabs.has('checks') ? <Tabs.Tab value="checks" disabled={!allowCases}>断言</Tabs.Tab> : null}
+          {visibleTabs.has('scripts') ? <Tabs.Tab value="scripts" disabled={!allowCases}>脚本</Tabs.Tab> : null}
+          {visibleTabs.has('settings') ? <Tabs.Tab value="settings">设置</Tabs.Tab> : null}
+          {visibleTabs.has('preview') ? <Tabs.Tab value="preview">预览</Tabs.Tab> : null}
         </Tabs.List>
 
         <div className="request-tab-content">
