@@ -302,6 +302,8 @@ test('executeRequestScript supports deeper sandbox assertions and cookie helpers
         pm.expect([1, 2, 3]).to.include.members([2, 3]);
         pm.expect({ ok: true, count: 2 }).to.deep.equal({ ok: true, count: 2 });
         pm.expect({ ok: true, count: 2 }).to.have.keys('ok', 'count');
+        pm.expect({ ok: true, count: 2, page: 1 }).to.have.all.keys('ok', 'count');
+        pm.expect({ ok: true, count: 2 }).to.have.any.keys('missing', 'ok');
         pm.expect('debugger-runtime').to.contain('runtime');
         pm.expect('debugger-runtime').to.not.contain('bruno-cloud');
         pm.expect(pm.response.json('$.ok')).to.be.a('boolean');
@@ -315,6 +317,9 @@ test('executeRequestScript supports deeper sandbox assertions and cookie helpers
         pm.expect({ ok: true }).to.not.have.property('error');
         pm.expect([]).to.be.empty();
         pm.expect([1]).to.not.be.empty();
+        pm.expect('value').to.be.ok();
+        pm.expect(null).to.be.null();
+        pm.expect(undefined).to.be.undefined();
         pm.expect(true).to.be.true();
         pm.expect(false).to.be.false();
         pm.expect(false).to.not.be.true();

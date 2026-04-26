@@ -679,9 +679,14 @@ function buildExpect(actual: unknown) {
         throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to be a ${expected}`);
       }
     },
-    keys(expected: string[], negated = false) {
+    keys(expected: string[], negated = false, mode: 'exact' | 'all' | 'any' = 'exact') {
       const actualKeys = actual && typeof actual === 'object' ? Object.keys(actual as Record<string, unknown>) : [];
-      const ok = expected.length === actualKeys.length && expected.every(key => actualKeys.includes(key));
+      const ok =
+        mode === 'any'
+          ? expected.some(key => actualKeys.includes(key))
+          : mode === 'all'
+            ? expected.every(key => actualKeys.includes(key))
+            : expected.length === actualKeys.length && expected.every(key => actualKeys.includes(key));
       if (negated ? ok : !ok) {
         throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to have keys ${expected.join(', ')}`);
       }
@@ -699,6 +704,24 @@ function buildExpect(actual: unknown) {
         : objectIncludes(actual, expected);
       if (negated ? ok : !ok) {
         throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to deeply include ${stringifyValue(expected)}`);
+      }
+    },
+    ok(negated = false) {
+      const ok = Boolean(actual);
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to be truthy`);
+      }
+    },
+    null(negated = false) {
+      const ok = actual === null;
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to be null`);
+      }
+    },
+    undefined(negated = false) {
+      const ok = actual === undefined;
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to be undefined`);
       }
     }
   };
@@ -728,7 +751,13 @@ function buildExpect(actual: unknown) {
         property(expected: string, value?: unknown) {
           return chain.property(expected, value, negated, arguments.length > 1);
         },
-        keys: (...expected: unknown[]) => chain.keys(normalizeExpectedKeys(expected), negated)
+        keys: (...expected: unknown[]) => chain.keys(normalizeExpectedKeys(expected), negated),
+        all: {
+          keys: (...expected: unknown[]) => chain.keys(normalizeExpectedKeys(expected), negated, 'all')
+        },
+        any: {
+          keys: (...expected: unknown[]) => chain.keys(normalizeExpectedKeys(expected), negated, 'any')
+        }
       },
       be: {
         a: (expected: string) => chain.typeOf(expected, negated),
@@ -739,6 +768,9 @@ function buildExpect(actual: unknown) {
         above: (expected: number) => chain.greaterThan(expected, negated),
         true: () => chain.true(negated),
         false: () => chain.false(negated),
+        ok: () => chain.ok(negated),
+        null: () => chain.null(negated),
+        undefined: () => chain.undefined(negated),
         empty: () => chain.empty(negated),
         oneOf: (expected: unknown[]) => chain.oneOf(expected, negated)
       }

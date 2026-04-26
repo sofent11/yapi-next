@@ -8,4 +8,5 @@
 - [x] `script-assertion-chain-depth` — expand the local `pm.expect` subset with common Bruno/Postman chains such as `to.not`, `include`, `above/below`, `oneOf`, and `empty`.
 - [x] `script-deep-assertion-depth` — add common deep/type/member assertions including `to.deep.equal`, `to.deep.include`, `include.members`, `have.keys`, and `be.a/an`.
 - [x] `script-response-helper-depth` — add common `pm.response.to.be.*`, `pm.response.to.have.*`, and header/cookie `all()` helpers for imported Bruno/Postman tests.
+- [x] `script-truthy-key-assertion-depth` — add common `pm.expect` assertions for truthy/null/undefined values plus `have.all.keys` and `have.any.keys`.
 - [x] `preferences-shortcut-breadth` — broaden the Preferences-managed shortcut set with safe rail-navigation hotkeys for workbench, scratch, capture, collections, history, and sync while keeping the surface intentionally focused.
