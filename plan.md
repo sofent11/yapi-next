@@ -9,6 +9,8 @@
 - [x] `variables-workflow-bulk-selective-cleanup` — let shadow-cleanup confirmation present a scrollable selectable target list so authors can uncheck keepers before applying batch removals.
 - [x] `variables-workflow-bulk-searchable-review` — add token/layer search, layer filter, visible-scope select/clear actions, and layer impact stats inside selective shadow-cleanup review.
 - [x] `variables-workflow-bulk-grouped-review` — group cleanup review rows by token with per-token selection controls and expand/collapse so large conflict batches stay navigable.
+- [x] `variables-workflow-bulk-plan-export` — let selective cleanup review copy a markdown-ready cleanup plan (filters, counts, token/layer targets) to clipboard for team review.
+- [x] `variables-workflow-bulk-plan-save` — allow selective cleanup review to save the same markdown-ready cleanup plan to a user-selected `.md`/`.txt` file.
 - [x] `script-api-depth-2` — add in-memory `pm.globals` support across local request/collection flows, keep request interpolation aware of seeded globals, and narrow pre-send gap diagnostics to the remaining unsupported Bruno helpers.
 - [x] `script-variable-scope-depth` — make `pm.variables` resolve across runtime/collection variables, iteration data, environment vars, and in-memory globals while keeping writes scoped to the runtime variable store.
 - [x] `script-assertion-chain-depth` — expand the local `pm.expect` subset with common Bruno/Postman chains such as `to.not`, `include`, `above/below`, `oneOf`, and `empty`.

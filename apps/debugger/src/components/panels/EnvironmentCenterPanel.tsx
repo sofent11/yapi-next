@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, Code, Group, Menu, Select, Text, TextInput } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
+import { save as saveFile } from '@tauri-apps/plugin-dialog';
 import type { AuthConfig, EnvironmentDocument, ProjectDocument, SessionSnapshot, WorkspaceIndex } from '@yapi-debugger/schema';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
 import { confirmAction } from '../../lib/dialogs';
+import { writeDocument } from '../../lib/desktop';
 import {
   buildVariableWorkflowCatalog,
   type VariableAuthoringAudit,
@@ -172,6 +174,17 @@ function VariableCleanupSelectionModal(props: {
     [filteredItems, selectedSet]
   );
   const visibleTokenCount = filteredGroups.length;
+  const selectedItems = useMemo(
+    () =>
+      props.items
+        .filter(item => selectedSet.has(item.key))
+        .sort((left, right) =>
+          left.token === right.token
+            ? left.layerLabel.localeCompare(right.layerLabel)
+            : left.token.localeCompare(right.token)
+        ),
+    [props.items, selectedSet]
+  );
 
   useEffect(() => {
     const visibleTokens = new Set(filteredGroups.map(group => group.token));
@@ -226,6 +239,61 @@ function VariableCleanupSelectionModal(props: {
     setCollapsedTokens(current => (current.includes(token) ? current.filter(value => value !== token) : [...current, token]));
   }
 
+  function buildCleanupPlanText() {
+    const lines = [
+      '# Variable Cleanup Plan',
+      `Generated at: ${new Date().toISOString()}`,
+      `Selected: ${selectedItems.length}/${props.items.length}`,
+      `Visible in current filter: ${visibleSelectedCount}/${filteredItems.length} items`,
+      `Layer filter: ${layerFilter}`,
+      `Search query: ${query.trim() || '(none)'}`,
+      '',
+      'Selected targets:'
+    ];
+    selectedItems.forEach(item => {
+      lines.push(`- ${item.token} -> ${item.layerLabel}`);
+    });
+    return lines.join('\n');
+  }
+
+  async function copyCleanupPlan() {
+    if (selectedItems.length === 0) {
+      notifications.show({ color: 'orange', message: 'No selected cleanup items to export.' });
+      return;
+    }
+    const content = buildCleanupPlanText();
+    try {
+      await navigator.clipboard.writeText(content);
+      notifications.show({ color: 'teal', message: `Copied ${selectedItems.length} cleanup item(s) to clipboard.` });
+    } catch (_error) {
+      notifications.show({ color: 'red', message: 'Failed to copy cleanup plan to clipboard.' });
+    }
+  }
+
+  async function saveCleanupPlan() {
+    if (selectedItems.length === 0) {
+      notifications.show({ color: 'orange', message: 'No selected cleanup items to export.' });
+      return;
+    }
+    const stamp = new Date().toISOString().replace(/\..+$/, '').replace(/:/g, '-');
+    const targetPath = await saveFile({
+      title: 'Save Variable Cleanup Plan',
+      defaultPath: `variable-cleanup-plan-${stamp}.md`,
+      filters: [
+        { name: 'Markdown', extensions: ['md'] },
+        { name: 'Text', extensions: ['txt'] }
+      ]
+    });
+    if (!targetPath || typeof targetPath !== 'string') return;
+
+    try {
+      await writeDocument(targetPath, buildCleanupPlanText());
+      notifications.show({ color: 'teal', message: `Saved cleanup plan with ${selectedItems.length} item(s).` });
+    } catch (_error) {
+      notifications.show({ color: 'red', message: 'Failed to save cleanup plan.' });
+    }
+  }
+
   return (
     <div className="variable-cleanup-selection-shell">
       <Text size="sm">{props.message}</Text>
@@ -265,6 +333,12 @@ function VariableCleanupSelectionModal(props: {
           {selectedKeys.length} selected / {props.items.length} · {visibleSelectedCount} items in view · {visibleTokenCount} tokens in view
         </Text>
         <Group gap={6}>
+          <Button size="xs" variant="default" onClick={() => void saveCleanupPlan()} disabled={selectedItems.length === 0}>
+            Save plan
+          </Button>
+          <Button size="xs" variant="default" onClick={() => void copyCleanupPlan()} disabled={selectedItems.length === 0}>
+            Copy plan
+          </Button>
           <Button size="xs" variant="default" onClick={() => setVisibleTokenCollapse(false)} disabled={filteredGroups.length === 0}>
             Expand visible
           </Button>
