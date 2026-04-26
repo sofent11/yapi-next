@@ -1,11 +1,11 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
-import { ActionIcon, Badge, Drawer, Select, Text, TextInput } from '@mantine/core';
+import { Drawer, Text, TextInput } from '@mantine/core';
 import { useHotkeys, type HotkeyItem } from '@mantine/hooks';
 import { Spotlight, spotlight, type SpotlightActionData } from '@mantine/spotlight';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import { useMutation } from '@tanstack/react-query';
-import { IconRefresh, IconSearch } from '@tabler/icons-react';
+import { IconSearch } from '@tabler/icons-react';
 import { createEmptyCheck, createNamedTemplateSource, evaluateSyncGuard, inspectResolvedRequest, workspaceFolderVariableSources } from '@yapi-debugger/core';
 import { save as saveFile } from '@tauri-apps/plugin-dialog';
 import { SCHEMA_VERSION, createCollectionStep, createEmptyCase, createEmptyCollection, createEmptyRequest, type AuthConfig, type CollectionDocument, type CollectionRunReport, type EnvironmentDocument, type ImportWarning, type ParameterRow, type RequestDocument, type ResponseExample, type RunHistoryEntry, type SessionSnapshot, slugify, type WorkspaceIndex, type WorkspaceTreeNode } from '@yapi-debugger/schema';
@@ -108,6 +108,7 @@ import { confirmAction, promptForSaveAs, promptForText } from './lib/dialogs';
 import { collectionReportHtml, collectionReportJson, collectionReportJunit } from './lib/report-export';
 import { Resizer } from './components/primitives/Resizer';
 import { StatusBar } from './components/layout/StatusBar';
+import { WorkspaceTopNav } from './components/layout/WorkspaceTopNav';
 import { createScratchSession, loadScratchSessions, normalizeScratchTitle, saveScratchSessions, type ScratchSession } from './lib/scratch';
 import {
   buildVariableAuthoringAudit,
@@ -133,6 +134,7 @@ import {
 import {
   defaultWorkspaceUiState,
   ensureWorkspaceEnvironment,
+  nodeToId,
   type SelectedNode,
   type WorkspaceUiState,
   useWorkspaceStore
@@ -683,6 +685,9 @@ function collectGitRisks(workspace: WorkspaceIndex | null): GitRiskItem[] {
 export function App() {
   const store = useWorkspaceStore();
   const gridRef = useRef<HTMLDivElement>(null);
+  const isMacOS =
+    typeof navigator !== 'undefined' &&
+    /mac/i.test((navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform || navigator.platform || '');
   const [projectName, setProjectName] = useState('New API Workspace');
   const [importUrl, setImportUrl] = useState('');
   const [importOpened, setImportOpened] = useState(false);
@@ -822,6 +827,13 @@ export function App() {
   const requestId = selectedRequestId(store.selectedNode);
   const caseId = selectedCaseId(store.selectedNode);
   const categoryPath = selectedCategoryPath(store.selectedNode, store.workspace);
+  const selectedNodeId = nodeToId(store.selectedNode);
+  const selectedTabIndex = useMemo(
+    () => store.openTabs.findIndex(node => nodeToId(node) === selectedNodeId),
+    [selectedNodeId, store.openTabs]
+  );
+  const canNavigateTabsBack = selectedTabIndex > 0;
+  const canNavigateTabsForward = selectedTabIndex >= 0 && selectedTabIndex < store.openTabs.length - 1;
 
   const selectedEnvironment = store.workspace?.environments.find(
     item => item.document.name === store.activeEnvironmentName
@@ -1277,6 +1289,16 @@ export function App() {
     setActiveView('workspace');
     setActiveWorkbenchPane('import-tasks');
     store.selectNode({ kind: 'project' });
+  }
+
+  function navigateOpenTabs(direction: 'back' | 'forward') {
+    if (selectedTabIndex < 0) return;
+    const nextIndex = direction === 'back' ? selectedTabIndex - 1 : selectedTabIndex + 1;
+    if (nextIndex < 0 || nextIndex >= store.openTabs.length) return;
+    const nextNode = store.openTabs[nextIndex];
+    setActiveView('workspace');
+    setActiveWorkbenchPane('overview');
+    store.selectNode(nextNode);
   }
 
   function applyWorkspaceState(workspace: WorkspaceIndex) {
@@ -3676,45 +3698,30 @@ export function App() {
 
   return (
     <>
-      <div className="app-shell-native">
+      <div className={`app-shell-native${isMacOS ? ' is-macos' : ''}`}>
         <div className="workspace-frame">
-          <div className="workspace-contextbar">
-            <div className="workspace-context-copy">
-              <span className="workspace-context-label">本地调试工作区</span>
-              <strong className="workspace-context-title">{store.workspace.project.name}</strong>
-              <span className="workspace-context-path">{store.workspace.root}</span>
-            </div>
-
-            <div className="workspace-context-actions">
-              {activeView === 'workspace' && importTaskCount > 0 ? (
-                <Badge variant="light" color={activeWorkbenchPane === 'import-tasks' ? 'orange' : 'gray'} size="sm" style={{ cursor: 'pointer' }} onClick={openImportTasks}>
-                  Import Tasks · {importTaskCount}
-                </Badge>
-              ) : null}
-              <Select
-                size="xs"
-                className="compact-select"
-                value={store.activeEnvironmentName}
-                data={store.workspace.environments.map(item => ({
-                  value: item.document.name,
-                  label: item.document.name
-                }))}
-                onChange={value => value && store.setActiveEnvironment(value)}
-                style={{ width: 120 }}
-              />
-              <Badge variant="dot" color={runMutation.isPending || scratchRunMutation.isPending ? 'blue' : 'gray'} size="sm">
-                {runMutation.isPending || scratchRunMutation.isPending ? '运行中' : '空闲'}
-              </Badge>
-              {gitInfo?.isRepo ? (
-                <Badge variant="light" color={gitInfo.dirty ? 'orange' : 'teal'} size="sm">
-                  {gitInfo.branch || 'git'}{gitInfo.dirty ? ` · ${gitInfo.changedFiles.length} 未提交` : ' · 干净'}
-                </Badge>
-              ) : null}
-              <ActionIcon variant="subtle" color="gray" onClick={() => openMutation.mutate(store.workspace!.root)}>
-                <IconRefresh size={16} />
-              </ActionIcon>
-            </div>
-          </div>
+          <WorkspaceTopNav
+            workspace={store.workspace}
+            selectedNode={store.selectedNode}
+            activeEnvironmentName={store.activeEnvironmentName}
+            environments={store.workspace.environments.map(item => ({
+              value: item.document.name,
+              label: item.document.name
+            }))}
+            importTaskCount={importTaskCount}
+            showImportTaskBadge={activeView === 'workspace'}
+            importTasksActive={activeWorkbenchPane === 'import-tasks'}
+            isRunning={runMutation.isPending || scratchRunMutation.isPending}
+            gitStatus={gitInfo}
+            isMacOS={isMacOS}
+            canGoBack={canNavigateTabsBack}
+            canGoForward={canNavigateTabsForward}
+            onBack={() => navigateOpenTabs('back')}
+            onForward={() => navigateOpenTabs('forward')}
+            onOpenImportTasks={openImportTasks}
+            onChangeEnvironment={name => store.setActiveEnvironment(name)}
+            onRefreshWorkspace={() => openMutation.mutate(store.workspace!.root)}
+          />
 
           <main
             ref={gridRef}

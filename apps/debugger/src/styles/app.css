@@ -37,6 +37,12 @@
   --red-soft: #ffebe9;
   --purple: #8250df;
   --purple-soft: #f5f0ff;
+  --topnav-bg: linear-gradient(180deg, color-mix(in oklch, var(--surface) 92%, white), color-mix(in oklch, var(--surface-muted) 70%, var(--surface)));
+  --topnav-border: color-mix(in oklch, var(--line) 84%, white);
+  --topnav-text: var(--text);
+  --topnav-muted: color-mix(in oklch, var(--muted) 88%, black);
+  --topnav-pill-bg: color-mix(in oklch, var(--surface-muted) 78%, white);
+  --topnav-pill-border: color-mix(in oklch, var(--line) 80%, white);
   --shadow-sm: 0 1px 0 rgba(31, 35, 40, 0.04);
   --shadow-md: 0 3px 6px rgba(140, 149, 159, 0.15);
 }
@@ -54,6 +60,16 @@
   --muted: oklch(0.72 0.012 248);
   --muted-strong: oklch(0.82 0.012 248);
   --accent-soft: oklch(0.28 0.05 249);
+  --topnav-bg: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--surface) 64%, black),
+    color-mix(in oklch, var(--surface-muted) 68%, black)
+  );
+  --topnav-border: color-mix(in oklch, var(--line) 90%, black);
+  --topnav-text: color-mix(in oklch, var(--text) 92%, white);
+  --topnav-muted: color-mix(in oklch, var(--muted) 90%, white);
+  --topnav-pill-bg: color-mix(in oklch, var(--surface-muted) 74%, black);
+  --topnav-pill-border: color-mix(in oklch, var(--line) 88%, black);
   --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.28);
   --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.32);
 }
@@ -360,6 +376,10 @@ mark {
   padding: 0; /* Remove padding for edge-to-edge IDE look */
 }
 
+.app-shell-native.is-macos {
+  padding-top: env(titlebar-area-height, 0);
+}
+
 .workspace-frame {
   height: 100%;
   min-height: 0;
@@ -368,74 +388,96 @@ mark {
   gap: 0; /* No gap between sections for IDE feel */
 }
 
-.workspace-contextbar {
-  min-height: 48px;
-  display: flex;
-  justify-content: space-between;
+.workspace-topnav {
+  position: relative;
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
-  padding: 0 18px;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in oklch, var(--surface) 86%, var(--surface-muted));
+  gap: 10px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--topnav-border);
+  background: var(--topnav-bg);
+  color: var(--topnav-text);
 }
 
-.workspace-context-copy {
+.workspace-topnav.is-macos {
+  padding-left: max(88px, env(titlebar-area-x, 0) + env(titlebar-area-width, 72px) + 16px);
+}
+
+.workspace-topnav-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.workspace-topnav-center {
   min-width: 0;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  overflow: hidden;
 }
 
-.workspace-context-label {
-  color: var(--accent);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.workspace-context-title {
-  font-size: 0.9rem;
+.workspace-topnav-project {
+  color: var(--topnav-text);
+  font-size: 0.88rem;
   font-weight: 700;
   font-family: var(--font-display);
 }
 
-.workspace-context-path {
+.workspace-topnav-active {
+  color: var(--topnav-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.workspace-topnav-path {
   min-width: 0;
-  max-width: min(52vw, 720px);
+  color: var(--topnav-muted);
+  font-size: 0.74rem;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-  font-size: 0.72rem;
 }
 
-.workspace-context-actions {
+.workspace-topnav-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
 }
 
-.workspace-indicator {
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--muted-strong);
-  font-size: 0.74rem;
-  font-weight: 700;
+.workspace-topnav-env-select {
+  width: 126px;
 }
 
-.workspace-indicator.is-busy {
-  border-color: rgba(49, 96, 201, 0.24);
-  background: rgba(231, 238, 252, 0.92);
-  color: var(--accent);
+.workspace-topnav-pill {
+  border-color: var(--topnav-pill-border);
+  background: var(--topnav-pill-bg);
 }
 
-.workspace-indicator.is-dirty {
-  border-color: rgba(198, 118, 45, 0.24);
-  background: rgba(251, 242, 231, 0.92);
-  color: var(--orange);
+.workspace-topnav-right .mantine-ActionIcon-root {
+  color: var(--topnav-muted);
+}
+
+.workspace-topnav-right .mantine-ActionIcon-root:hover {
+  color: var(--topnav-text);
+  background: color-mix(in oklch, var(--surface-muted) 78%, var(--surface));
+}
+
+.workspace-topnav-overflow-trigger {
+  display: none;
+}
+
+.workspace-topnav-overflow-menu {
+  min-width: 240px;
+}
+
+.workspace-topnav [data-topnav-no-drag] {
+  position: relative;
+  z-index: 2;
 }
 
 @media (max-width: 1180px) {
@@ -500,7 +542,7 @@ mark {
 .workspace-grid {
   min-height: 0;
   display: grid;
-  grid-template-columns: 48px var(--tree-width) var(--tree-resizer-width, 1px) minmax(0, 1fr);
+  grid-template-columns: 44px var(--tree-width) var(--tree-resizer-width, 1px) minmax(0, 1fr);
   gap: 0;
   overflow: hidden;
   background: linear-gradient(180deg, color-mix(in oklch, var(--surface) 92%, var(--canvas)), var(--surface));
@@ -585,39 +627,49 @@ mark {
 }
 
 .app-rail {
-  padding: 14px 0;
+  padding: 10px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: color-mix(in oklch, var(--surface-muted) 92%, var(--surface));
+  background: color-mix(in oklch, var(--surface-muted) 88%, var(--surface));
   border-right: 1px solid var(--line);
 }
 
 .app-rail-brand {
-  width: 40px;
-  height: 40px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--accent);
-  margin-bottom: 12px;
-  border-radius: 12px;
-  background: color-mix(in oklch, var(--accent-soft) 70%, white);
+  color: color-mix(in oklch, var(--accent) 82%, var(--topnav-muted));
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--accent-soft) 64%, var(--surface));
 }
 
 .app-rail .mantine-ActionIcon-root {
   background: transparent;
-  color: var(--muted-strong);
+  color: var(--muted);
+  width: 30px;
+  height: 30px;
 }
 
 .app-rail .mantine-ActionIcon-root[data-variant="filled"] {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: color-mix(in oklch, var(--accent-soft) 72%, var(--surface));
+  color: color-mix(in oklch, var(--accent) 90%, var(--text));
 }
 
 .app-rail .mantine-ActionIcon-root:hover {
-  background: var(--surface);
+  background: color-mix(in oklch, var(--surface-muted) 78%, var(--surface));
   color: var(--accent);
+}
+
+.app-rail-dirty-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--orange) 90%, #ff8c00);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--surface-muted) 64%, transparent);
 }
 
 .app-rail-shortcut.is-dirty {
@@ -1837,13 +1889,13 @@ mark {
   }
   
   .app-rail-brand {
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     margin-bottom: 8px;
   }
 
-  .workspace-context-path {
-    max-width: 30vw;
+  .workspace-topnav-path {
+    max-width: 36vw;
   }
 }
 
@@ -1857,8 +1909,36 @@ mark {
     font-size: 0.75rem;
   }
 
-  .workspace-context-copy {
-    gap: 8px;
+  .workspace-topnav {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .workspace-topnav.is-macos {
+    padding-left: max(88px, env(titlebar-area-x, 0) + env(titlebar-area-width, 72px) + 8px);
+  }
+
+  .workspace-topnav-center {
+    order: -1;
+  }
+
+  .workspace-topnav-right {
+    justify-content: space-between;
+  }
+
+  .workspace-topnav-path {
+    max-width: none;
+  }
+}
+
+@media (max-width: 1280px) {
+  .workspace-topnav-optional {
+    display: none;
+  }
+
+  .workspace-topnav-overflow-trigger {
+    display: inline-flex;
   }
 }
 

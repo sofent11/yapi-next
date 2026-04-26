@@ -22,7 +22,7 @@ export function AppRail(props: {
   return (
     <aside className="app-rail" aria-label="Activity Bar">
       <div className="app-rail-brand" title={props.workspaceName}>
-        <IconApi size={24} stroke={2.5} />
+        <IconApi size={18} stroke={2.2} />
       </div>
 
       <Stack gap="xs" style={{ flex: 1, alignItems: 'center', marginTop: 12 }}>
@@ -34,51 +34,51 @@ export function AppRail(props: {
             offset={4}
             position="top-end"
           >
-            <ActionIcon variant={railVariant(props.activeView === 'workspace')} size="lg" radius="md" onClick={() => props.onChangeView('workspace')}>
-              <IconApi size={20} />
+            <ActionIcon variant={railVariant(props.activeView === 'workspace')} size="md" radius="sm" onClick={() => props.onChangeView('workspace')}>
+              <IconApi size={18} />
             </ActionIcon>
           </Indicator>
         </Tooltip>
 
         <Tooltip label={railLabel('Scratch', 'scratch')} position="right" withArrow>
-          <ActionIcon variant={railVariant(props.activeView === 'scratch')} size="lg" radius="md" onClick={() => props.onChangeView('scratch')}>
-            <IconSandbox size={20} />
+          <ActionIcon variant={railVariant(props.activeView === 'scratch')} size="md" radius="sm" onClick={() => props.onChangeView('scratch')}>
+            <IconSandbox size={18} />
           </ActionIcon>
         </Tooltip>
 
         <Tooltip label={railLabel('Capture', 'capture')} position="right" withArrow>
-          <ActionIcon variant={railVariant(props.activeView === 'capture')} size="lg" radius="md" onClick={() => props.onChangeView('capture')}>
-            <IconBug size={20} />
+          <ActionIcon variant={railVariant(props.activeView === 'capture')} size="md" radius="sm" onClick={() => props.onChangeView('capture')}>
+            <IconBug size={18} />
           </ActionIcon>
         </Tooltip>
 
         <Tooltip label={railLabel('Collections', 'collections')} position="right" withArrow>
-          <ActionIcon variant={railVariant(props.activeView === 'collections')} size="lg" radius="md" onClick={() => props.onChangeView('collections')}>
-            <IconFolders size={20} />
+          <ActionIcon variant={railVariant(props.activeView === 'collections')} size="md" radius="sm" onClick={() => props.onChangeView('collections')}>
+            <IconFolders size={18} />
           </ActionIcon>
         </Tooltip>
 
         <Tooltip label={railLabel('History', 'history')} position="right" withArrow>
-          <ActionIcon variant={railVariant(props.activeView === 'history')} size="lg" radius="md" color="gray" onClick={() => props.onChangeView('history')}>
-            <IconHistory size={20} />
+          <ActionIcon variant={railVariant(props.activeView === 'history')} size="md" radius="sm" color="gray" onClick={() => props.onChangeView('history')}>
+            <IconHistory size={18} />
           </ActionIcon>
         </Tooltip>
 
         <Tooltip label={railLabel('Environments', 'environments')} position="right" withArrow>
-          <ActionIcon variant={railVariant(props.activeView === 'environments')} size="lg" radius="md" color="gray" onClick={() => props.onChangeView('environments')}>
-            <IconPlugConnected size={20} />
+          <ActionIcon variant={railVariant(props.activeView === 'environments')} size="md" radius="sm" color="gray" onClick={() => props.onChangeView('environments')}>
+            <IconPlugConnected size={18} />
           </ActionIcon>
         </Tooltip>
 
         <Tooltip label={railLabel('Sync', 'sync')} position="right" withArrow>
-          <ActionIcon variant={railVariant(props.activeView === 'sync')} size="lg" radius="md" color="gray" onClick={() => props.onChangeView('sync')}>
-            <IconGitBranch size={20} />
+          <ActionIcon variant={railVariant(props.activeView === 'sync')} size="md" radius="sm" color="gray" onClick={() => props.onChangeView('sync')}>
+            <IconGitBranch size={18} />
           </ActionIcon>
         </Tooltip>
 
         <Tooltip label={railLabel('Preferences', 'preferences')} position="right" withArrow>
-          <ActionIcon variant={railVariant(props.activeView === 'preferences')} size="lg" radius="md" color="gray" onClick={() => props.onChangeView('preferences')}>
-            <IconSettings size={20} />
+          <ActionIcon variant={railVariant(props.activeView === 'preferences')} size="md" radius="sm" color="gray" onClick={() => props.onChangeView('preferences')}>
+            <IconSettings size={18} />
           </ActionIcon>
         </Tooltip>
       </Stack>
@@ -86,7 +86,7 @@ export function AppRail(props: {
       <Stack gap="xs" style={{ alignItems: 'center', marginBottom: 12 }}>
         {props.isDirty ? (
           <Tooltip label="Unsaved Changes" position="right" withArrow>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--orange)', margin: '4px 0' }} />
+            <span className="app-rail-dirty-dot" />
           </Tooltip>
         ) : null}
       </Stack>
