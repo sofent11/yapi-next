@@ -101,13 +101,8 @@ export type ResolvedRequest = ResolvedRequestPreview;
 const VARIABLE_PATTERN = /\{\{\s*([^}]+?)\s*\}\}/g;
 const NTLM_DESKTOP_CONSTRAINT_DETAIL =
   'Desktop NTLM currently supports explicit username/password credentials only. Native OS/integrated enterprise flows (SSPI, GSSAPI, Negotiate/Kerberos) are not available in this build.';
+const SUPPORTED_PM_REQUIRE_MODULES = ['uuid'] as const;
 const UNSUPPORTED_SCRIPT_PATTERNS = [
-  {
-    token: 'pm.sendRequest',
-    code: 'script-unsupported-send-request',
-    level: 'warning' as const,
-    message: 'pm.sendRequest is only supported in lite pre-request mode. Complex or post-response usage still needs review.'
-  },
   {
     token: 'pm.execution.setNextRequest',
     code: 'script-limited-set-next-request',
@@ -116,21 +111,9 @@ const UNSUPPORTED_SCRIPT_PATTERNS = [
   },
   {
     token: 'pm.vault',
-    code: 'script-unsupported-vault',
-    level: 'warning' as const,
-    message: 'pm.vault is not supported by the local debugger runtime yet.'
-  },
-  {
-    token: 'pm.visualizer',
-    code: 'script-unsupported-visualizer',
-    level: 'warning' as const,
-    message: 'pm.visualizer output is not surfaced by the local debugger runtime yet.'
-  },
-  {
-    token: 'pm.require',
-    code: 'script-unsupported-require',
-    level: 'warning' as const,
-    message: 'pm.require is not supported by the local debugger runtime yet because external package loading is disabled.'
+    code: 'script-local-vault',
+    level: 'info' as const,
+    message: 'pm.vault uses local-only debugger storage. Values stay in the current runtime state and are not synced or exported.'
   },
   {
     token: 'postman.setNextRequest',
@@ -5337,6 +5320,7 @@ export type RequestRunContext = {
   state?: {
     variables: Record<string, string>;
     globals?: Record<string, string>;
+    vault?: Record<string, string>;
     environment: EnvironmentDocument;
   };
   iterationData?: Record<string, unknown>;
@@ -5374,6 +5358,7 @@ export type PreparedRequestRunResult = {
   state: {
     variables: Record<string, string>;
     globals: Record<string, string>;
+    vault: Record<string, string>;
     environment: EnvironmentDocument;
   };
 };
@@ -5654,9 +5639,11 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
   const state = context.state || {
     variables: {},
     globals: {},
+    vault: {},
     environment: initialEnvironment
   };
   state.globals ||= {};
+  state.vault ||= {};
   state.environment = initialEnvironment;
   const preRequestScript = joinScriptBlocks(
     input.context?.collectionScripts?.preRequest,
@@ -5739,6 +5726,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
       state: {
         variables: { ...preScript.state.variables },
         globals: { ...(preScript.state.globals || {}) },
+        vault: { ...(preScript.state.vault || {}) },
         environment: structuredClone(preScript.state.environment || initialEnvironment)
       }
     };
@@ -5770,6 +5758,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
         state: {
           variables: { ...mainScript.state.variables },
           globals: { ...(mainScript.state.globals || {}) },
+          vault: { ...(mainScript.state.vault || {}) },
           environment: structuredClone(mainScript.state.environment || initialEnvironment)
         }
       };
@@ -5797,6 +5786,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
       state: {
         variables: { ...postScript.state.variables },
         globals: { ...(postScript.state.globals || {}) },
+        vault: { ...(postScript.state.vault || {}) },
         environment: structuredClone(postScript.state.environment || initialEnvironment)
       }
     };
@@ -5900,6 +5890,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     state: {
       variables: { ...postScript.state.variables },
       globals: { ...(postScript.state.globals || {}) },
+      vault: { ...(postScript.state.vault || {}) },
       environment: structuredClone(postScript.state.environment || initialEnvironment)
     }
   };
@@ -5910,7 +5901,7 @@ async function runCollectionStepWithRetry(input: {
   collection: CollectionDocument;
   step: CollectionStep;
   requestRecord: WorkspaceRequestRecord;
-  runtimeState: { variables: Record<string, string>; globals: Record<string, string>; environment: EnvironmentDocument };
+  runtimeState: { variables: Record<string, string>; globals: Record<string, string>; vault: Record<string, string>; environment: EnvironmentDocument };
   dataVars: Record<string, unknown>;
   iteration: number;
   iterationCount: number;
@@ -5982,10 +5973,11 @@ async function runCollectionStepWithRetry(input: {
           iteration: input.iteration,
           iterationCount: input.iterationCount,
           state: {
-            variables: stepVariables,
-            globals: input.runtimeState.globals,
-            environment: input.runtimeState.environment
-          },
+              variables: stepVariables,
+              globals: input.runtimeState.globals,
+              vault: input.runtimeState.vault,
+              environment: input.runtimeState.environment
+            },
           collectionRules: input.collection.rules,
           collectionScripts: input.collection.scripts,
           sourceCollection: {
@@ -6025,6 +6017,7 @@ async function runCollectionStepWithRetry(input: {
           nextState: {
             variables: nextVariables,
             globals: { ...result.state.globals },
+            vault: { ...result.state.vault },
             environment: result.state.environment
           },
           execution: result.execution
@@ -6058,6 +6051,7 @@ async function runCollectionStepWithRetry(input: {
           nextState: {
             variables: nextVariables,
             globals: { ...result.state.globals },
+            vault: { ...result.state.vault },
             environment: result.state.environment
           },
           output: buildStepOutput(result.preview, result.response),
@@ -6213,6 +6207,7 @@ export async function runCollection(input: {
       let runtimeState = {
         variables: { ...collection.vars },
         globals: {},
+        vault: {},
         environment: structuredClone(sourceEnvironment)
       };
       const seeded = seededStepOutputsFromReport(input.options?.seedReport || null);
@@ -6564,22 +6559,43 @@ export function parseCollectionDataText(text: string) {
 
 function inspectScriptSource(script: string) {
   const trimmed = script.trim();
-  if (!trimmed) return [] as Array<{ code: string; level: 'warning' | 'error'; message: string }>;
+  if (!trimmed) return [] as Array<{ code: string; level: 'info' | 'warning' | 'error'; message: string }>;
 
   const matchedPatterns = UNSUPPORTED_SCRIPT_PATTERNS
     .filter(pattern => trimmed.includes(pattern.token))
     .filter(pattern => !UNSUPPORTED_SCRIPT_PATTERNS.some(other => other !== pattern && trimmed.includes(other.token) && other.token.startsWith(pattern.token)))
-  const signals: Array<{ code: string; level: 'warning' | 'error'; message: string }> = matchedPatterns
+  const signals: Array<{ code: string; level: 'info' | 'warning' | 'error'; message: string }> = matchedPatterns
     .map(pattern => ({
       code: pattern.code,
       level: pattern.level,
       message: pattern.message
     }));
+  const pmRequireMatches = [...trimmed.matchAll(/pm\.require\(\s*(['"`])([^'"`]+)\1\s*\)/g)];
+  const pmRequireCalls = trimmed.match(/pm\.require\(/g)?.length || 0;
+  if (pmRequireCalls > 0) {
+    const unsupportedModules = Array.from(
+      new Set(
+        pmRequireMatches
+          .map(match => match[2].trim().toLowerCase())
+          .filter(name => !SUPPORTED_PM_REQUIRE_MODULES.includes(name as (typeof SUPPORTED_PM_REQUIRE_MODULES)[number]))
+      )
+    );
+    if (unsupportedModules.length > 0 || pmRequireMatches.length !== pmRequireCalls) {
+      signals.push({
+        code: 'script-unsupported-require',
+        level: 'warning',
+        message:
+          unsupportedModules.length > 0
+            ? `pm.require currently supports built-in modules only (${SUPPORTED_PM_REQUIRE_MODULES.join(', ')}). Unsupported module(s): ${unsupportedModules.join(', ')}.`
+            : `pm.require currently supports literal built-in module names only (${SUPPORTED_PM_REQUIRE_MODULES.join(', ')}).`
+      });
+    }
+  }
 
   try {
     // Validate syntax early so the UI can warn before the user sends the request.
     // eslint-disable-next-line no-new-func
-    new Function('pm', 'console', trimmed);
+    new Function('pm', 'postman', 'console', `return (async () => {\n${trimmed}\n})();`);
   } catch (error) {
     signals.push({
       code: 'script-parse-error',

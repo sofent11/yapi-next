@@ -20,12 +20,15 @@ import {
 } from '@yapi-debugger/schema';
 
 const TEMPLATE_PATTERN = /\{\{\s*([^}]+?)\s*\}\}/g;
+const SUPPORTED_PM_REQUIRE_MODULES = ['uuid'] as const;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-([1-5])[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type Primitive = string | number | boolean | null | undefined;
 
 export type ScriptExecutionState = {
   variables: Record<string, string>;
   globals?: Record<string, string>;
+  vault?: Record<string, string>;
   environment: EnvironmentDocument | undefined;
 };
 
@@ -201,6 +204,48 @@ function stringifyValue(input: unknown) {
   }
 }
 
+function generateUuidV4() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, char => {
+    const random = Math.floor(Math.random() * 16);
+    const value = char === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
+function supportedPmRequireModulesLabel() {
+  return SUPPORTED_PM_REQUIRE_MODULES.join(', ');
+}
+
+function normalizePmRequireModuleName(name: string) {
+  return name.trim().toLowerCase();
+}
+
+function resolvePmRequireModule(name: string) {
+  const normalized = normalizePmRequireModuleName(name);
+  if (normalized === 'uuid') {
+    return {
+      v4: () => generateUuidV4(),
+      validate: (value: unknown) => UUID_PATTERN.test(String(value || '')),
+      version: (value: unknown) => {
+        const match = String(value || '').match(UUID_PATTERN);
+        return match ? Number(match[1]) : 0;
+      }
+    };
+  }
+  throw createUnsupportedApiError(
+    'pm.require',
+    `Supported built-in modules: ${supportedPmRequireModulesLabel()}. Requested module: ${name || 'unknown'}.`
+  );
+}
+
+function renderVisualizerTemplate(template: string, data?: unknown) {
+  if (!template.includes('{{')) return template;
+  return template.replace(TEMPLATE_PATTERN, (_match, key: string) => stringifyTemplateValue(readPathValue(data, key.trim())));
+}
+
 function buildResponseHeaderMap(response: SendRequestResult) {
   return new Map(response.headers.map(item => [item.name.toLowerCase(), item.value]));
 }
@@ -326,6 +371,19 @@ function createReadonlyVariableApi(source: Record<string, string>, fallbackSourc
     has: (key: string) => Object.prototype.hasOwnProperty.call(source, key),
     toObject: () => ({ ...source }),
     replaceIn: (value: string) => interpolateString(String(value || ''), [source, ...fallbackSources])
+  };
+}
+
+function createVaultApi(target: Record<string, string>) {
+  return {
+    get: async (key: string) => target[key],
+    set: async (key: string, value: Primitive) => {
+      target[key] = value == null ? '' : String(value);
+    },
+    unset: async (key: string) => {
+      delete target[key];
+    },
+    has: async (key: string) => Object.prototype.hasOwnProperty.call(target, key)
   };
 }
 
@@ -797,7 +855,7 @@ function createPmApi(input: {
   logs: ScriptLog[];
   testResults: CheckResult[];
   sendRequest?: (request: ScriptSendRequestInput) => Promise<SendRequestResult>;
-  pendingRequests: Array<Promise<SendRequestResult>>;
+  pendingRequests: Set<Promise<SendRequestResult>>;
   context?: ScriptRuntimeContext;
   execution: ScriptExecutionFlow;
 }) {
@@ -837,6 +895,7 @@ function createPmApi(input: {
   ]);
   const responseApi = input.response ? createScriptResponse(input.response) : undefined;
   const globalsApi = createVariableApi(globalsStore, [input.state.variables, input.state.environment?.vars || {}]);
+  const vaultStore = (input.state.vault ||= {});
   const scopedVariablesApi = createScopedVariableApi(input.state.variables, [
     iterationData,
     input.state.environment?.vars || {},
@@ -882,42 +941,28 @@ function createPmApi(input: {
       stepKey: input.context?.sourceCollection?.stepKey || ''
     },
     execution: executionApi,
-    vault: {
-      get: (_key: string) => {
-        throw createUnsupportedApiError('pm.vault');
-      },
-      set: (_key: string, _value: Primitive) => {
-        throw createUnsupportedApiError('pm.vault');
-      }
-    },
+    vault: createVaultApi(vaultStore),
     visualizer: {
       set: (_template: string, _data?: unknown) => {
-        throw createUnsupportedApiError(
-          'pm.visualizer',
-          'Template rendering output is not surfaced in the local debugger runtime yet.'
+        const rendered = renderVisualizerTemplate(_template, _data);
+        input.logs.push(
+          createScriptLog(
+            input.phase,
+            'log',
+            `Visualizer output:\n${rendered || '<empty>'}`
+          )
         );
       }
     },
-    require: (_name: string) => {
-      throw createUnsupportedApiError(
-        'pm.require',
-        'External package loading is disabled in the local debugger runtime.'
-      );
-    },
+    require: (_name: string) => resolvePmRequireModule(String(_name || '')),
     cookies: responseApi?.cookies || {
       get: (_key: string) => '',
       has: (_key: string) => false,
       toObject: () => ({})
     },
     sendRequest: (requestInput: unknown, callback?: (error: Error | null, response?: ReturnType<typeof createScriptResponse>) => void) => {
-      if (input.phase !== 'pre-request') {
-        throw new Error('pm.sendRequest lite is only available during pre-request scripts.');
-      }
       if (!input.sendRequest) {
-        throw new Error('pm.sendRequest lite is unavailable in this runtime.');
-      }
-      if (input.pendingRequests.length > 0) {
-        throw new Error('pm.sendRequest lite supports a single top-level request per script.');
+        throw new Error('pm.sendRequest is unavailable in this runtime.');
       }
       const request = normalizeScriptRequestInput(requestInput, input.request);
       const task = input.sendRequest(request)
@@ -928,8 +973,11 @@ function createPmApi(input: {
         .catch(error => {
           callback?.(error as Error);
           throw error;
+        })
+        .finally(() => {
+          input.pendingRequests.delete(task);
         });
-      input.pendingRequests.push(task);
+      input.pendingRequests.add(task);
       return task.then(response => createScriptResponse(response));
     },
     request: createRequestApi(input.request),
@@ -964,7 +1012,7 @@ export async function executeRequestScript(input: {
     return { request: input.request, state: input.state, logs, testResults, execution };
   }
 
-  const pendingRequests: Array<Promise<SendRequestResult>> = [];
+  const pendingRequests = new Set<Promise<SendRequestResult>>();
 
   const pm = createPmApi({
     phase: input.phase,
@@ -1002,8 +1050,8 @@ export async function executeRequestScript(input: {
   try {
     const runner = new Function('pm', 'postman', 'console', `return (async () => {\n${normalizedScript}\n})();`);
     await runner(pm, postman, scriptConsole);
-    if (pendingRequests.length > 0) {
-      await Promise.all(pendingRequests);
+    while (pendingRequests.size > 0) {
+      await Promise.all([...pendingRequests]);
     }
       return {
         request: resolvedRequestPreviewSchema.parse(input.request),

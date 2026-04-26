@@ -2014,6 +2014,40 @@ mark {
   min-width: 0;
 }
 
+.graphql-editor-summary {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--surface-muted) 72%, var(--surface));
+}
+
+.graphql-editor-summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.graphql-editor-summary-chips span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.graphql-editor-summary-chips strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
 .graphql-editor-head {
   display: flex;
   justify-content: space-between;
@@ -2472,6 +2506,81 @@ mark {
 .graphql-schema-stats strong {
   color: var(--text);
   font-size: 12px;
+}
+
+.grpc-session-panel,
+.grpc-unary-editor,
+.grpc-message-card {
+  display: grid;
+  gap: 10px;
+}
+
+.grpc-session-panel {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--surface-muted) 68%, var(--surface));
+  margin-bottom: 12px;
+}
+
+.grpc-session-head,
+.grpc-session-stats,
+.grpc-message-actions,
+.grpc-message-meta,
+.grpc-message-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.grpc-session-head {
+  justify-content: space-between;
+}
+
+.grpc-session-stats,
+.grpc-message-actions,
+.grpc-message-meta {
+  flex-wrap: wrap;
+}
+
+.grpc-session-stats span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.grpc-session-stats strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.grpc-message-card {
+  border: 1px solid color-mix(in oklch, var(--line) 88%, var(--accent-soft));
+}
+
+.grpc-message-meta {
+  padding: 0 12px;
+}
+
+.grpc-message-meta code {
+  max-width: min(100%, 360px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .websocket-body-grid,
@@ -3565,7 +3674,8 @@ mark {
 
   .graphql-saved-ops-head,
   .graphql-saved-ops-controls,
-  .graphql-schema-search {
+  .graphql-schema-search,
+  .grpc-session-head {
     align-items: stretch;
     flex-direction: column;
   }

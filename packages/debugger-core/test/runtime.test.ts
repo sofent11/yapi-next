@@ -173,7 +173,7 @@ test('executeRequestScript resolves pm.variables across runtime scopes', async (
   assert.equal(result.testResults.every(item => item.ok), true);
 });
 
-test('executeRequestScript supports pm.sendRequest lite during pre-request', async () => {
+test('executeRequestScript supports pm.sendRequest during pre-request', async () => {
   const project = createDefaultProject('Demo');
   const environment = createDefaultEnvironment('shared');
   const request = createEmptyRequest('Tokenized');
@@ -211,6 +211,120 @@ test('executeRequestScript supports pm.sendRequest lite during pre-request', asy
 
   assert.equal(result.state.environment?.vars.token, 'tok_123');
   assert.equal(result.testResults.length, 0);
+});
+
+test('executeRequestScript supports pm.sendRequest during post-response and multiple local calls', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Follow-ups');
+  request.url = 'https://api.example.com/orders';
+  const preview = resolveRequest(project, request, undefined, environment);
+  const seenUrls: string[] = [];
+
+  const result = await executeRequestScript({
+    phase: 'post-response',
+    script: `
+      const first = await pm.sendRequest("https://example.com/first");
+      pm.test("first call works", () => pm.expect(first.json().ok).to.equal(true));
+      pm.sendRequest("https://example.com/second", (err, res) => {
+        if (err) throw err;
+        pm.variables.set("secondCall", res.json().id);
+      });
+    `,
+    state: {
+      variables: {},
+      environment
+    },
+    request: preview,
+    response: {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      url: 'https://api.example.com/orders',
+      durationMs: 8,
+      sizeBytes: 2,
+      headers: [{ name: 'content-type', value: 'application/json' }],
+      bodyText: '{}',
+      timestamp: new Date().toISOString()
+    },
+    sendRequest: async input => {
+      seenUrls.push(input.url);
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: input.url,
+        durationMs: 10,
+        sizeBytes: 20,
+        headers: [{ name: 'content-type', value: 'application/json' }],
+        bodyText: input.url.endsWith('/first') ? '{"ok":true}' : '{"id":"call-2"}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.deepEqual(seenUrls, ['https://example.com/first', 'https://example.com/second']);
+  assert.equal(result.state.variables.secondCall, 'call-2');
+  assert.equal(result.testResults.every(item => item.ok), true);
+});
+
+test('executeRequestScript supports built-in pm.require modules', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Require');
+  request.url = 'https://example.com/require';
+  const preview = resolveRequest(project, request, undefined, environment);
+
+  const result = await executeRequestScript({
+    phase: 'pre-request',
+    script: `
+      const uuid = pm.require("uuid");
+      const value = uuid.v4();
+      pm.expect(uuid.validate(value)).to.equal(true);
+      pm.expect(uuid.version(value)).to.equal(4);
+      pm.variables.set("generatedId", value);
+    `,
+    state: {
+      variables: {},
+      environment
+    },
+    request: preview
+  });
+
+  assert.match(result.state.variables.generatedId || '', /^[0-9a-f-]{36}$/i);
+  assert.equal(result.testResults.length, 0);
+});
+
+test('executeRequestScript surfaces pm.visualizer output through script logs', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Visualizer');
+  request.url = 'https://example.com/visualizer';
+  const preview = resolveRequest(project, request, undefined, environment);
+
+  const result = await executeRequestScript({
+    phase: 'post-response',
+    script: 'pm.visualizer.set("<div>{{user.name}}</div>", { user: { name: "Ada" } });',
+    state: {
+      variables: {},
+      environment
+    },
+    request: preview,
+    response: {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      url: 'https://example.com/visualizer',
+      durationMs: 5,
+      sizeBytes: 2,
+      headers: [{ name: 'content-type', value: 'application/json' }],
+      bodyText: '{}',
+      timestamp: new Date().toISOString()
+    }
+  });
+
+  assert.equal(result.logs.some(log => log.message.includes('Visualizer output:')), true);
+  assert.equal(result.logs.some(log => log.message.includes('<div>Ada</div>')), true);
 });
 
 test('executeRequestScript exposes richer request and response helpers', async () => {
@@ -460,6 +574,62 @@ test('executeRequestScript supports pm.globals across script phases', async () =
   assert.equal(post.testResults[0]?.ok, true);
 });
 
+test('executeRequestScript supports local pm.vault storage across script phases', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Vault Helpers');
+  request.url = 'https://example.com/vault';
+  const preview = resolveRequest(project, request, undefined, environment);
+
+  const pre = await executeRequestScript({
+    phase: 'pre-request',
+    script: `
+      await pm.vault.set('token', 'vault-123');
+      await pm.vault.set('tenant', 'team-a');
+      pm.variables.set('vaultToken', await pm.vault.get('token'));
+      pm.variables.set('vaultInVariables', String(pm.variables.get('token')));
+    `,
+    state: {
+      variables: {},
+      environment
+    },
+    request: preview
+  });
+
+  assert.equal(pre.state.vault?.token, 'vault-123');
+  assert.equal(pre.state.variables.vaultToken, 'vault-123');
+  assert.equal(pre.state.variables.vaultInVariables, '');
+
+  const post = await executeRequestScript({
+    phase: 'post-response',
+    script: `
+      pm.variables.set('hasTenantBeforeUnset', String(await pm.vault.has('tenant')));
+      await pm.vault.unset('tenant');
+      pm.variables.set('hasTenantAfterUnset', String(await pm.vault.has('tenant')));
+      pm.variables.set('vaultTokenAfterPost', await pm.vault.get('token'));
+    `,
+    state: pre.state,
+    request: preview,
+    response: {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      url: preview.url,
+      durationMs: 8,
+      sizeBytes: 12,
+      headers: [],
+      bodyText: '{"ok":true}',
+      timestamp: new Date().toISOString()
+    }
+  });
+
+  assert.equal(post.state.variables.hasTenantBeforeUnset, 'true');
+  assert.equal(post.state.variables.hasTenantAfterUnset, 'false');
+  assert.equal(post.state.variables.vaultTokenAfterPost, 'vault-123');
+  assert.equal(post.state.vault?.tenant, undefined);
+  assert.equal(post.state.vault?.token, 'vault-123');
+});
+
 test('executeRequestScript reports explicit unsupported api errors', async () => {
   const project = createDefaultProject('Demo');
   const environment = createDefaultEnvironment('shared');
@@ -585,6 +755,85 @@ test('runPreparedRequest preserves pm.globals between request runs', async () =>
   assert.equal(seenUrl, 'https://team-a.example.com/profile');
   assert.equal(consumed.preview.url, 'https://team-a.example.com/profile');
   assert.equal(consumed.state.globals.tenant, 'team-a');
+});
+
+test('runPreparedRequest preserves pm.vault between request runs', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const seedRequest = createEmptyRequest('Seed Vault');
+  seedRequest.url = 'https://example.com/seed';
+  seedRequest.scripts.preRequest = 'await pm.vault.set("sessionToken", "vault-abc");';
+
+  const consumerRequest = createEmptyRequest('Use Vault');
+  consumerRequest.url = 'https://example.com/{{sessionToken}}/profile';
+  consumerRequest.scripts.preRequest = 'pm.variables.set("sessionToken", await pm.vault.get("sessionToken"));';
+
+  const workspace = {
+    root: '/workspace/vault-runtime',
+    project,
+    environments: [{ document: environment, filePath: '/workspace/vault-runtime/environments/shared.yaml' }],
+    requests: [
+      {
+        request: seedRequest,
+        cases: [],
+        folderSegments: [],
+        requestFilePath: '/workspace/vault-runtime/requests/seed.request.yaml',
+        resourceDirPath: '/workspace/vault-runtime/requests/seed'
+      },
+      {
+        request: consumerRequest,
+        cases: [],
+        folderSegments: [],
+        requestFilePath: '/workspace/vault-runtime/requests/consumer.request.yaml',
+        resourceDirPath: '/workspace/vault-runtime/requests/consumer'
+      }
+    ],
+    folders: [],
+    collections: [],
+    tree: []
+  };
+
+  const seeded = await runPreparedRequest({
+    workspace,
+    request: seedRequest,
+    sendRequest: async preview => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      url: preview.url,
+      durationMs: 10,
+      sizeBytes: 12,
+      headers: [],
+      bodyText: '{"ok":true}',
+      timestamp: new Date().toISOString()
+    })
+  });
+
+  let seenUrl = '';
+  const consumed = await runPreparedRequest({
+    workspace,
+    request: consumerRequest,
+    context: { state: seeded.state },
+    sendRequest: async preview => {
+      seenUrl = preview.url;
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: preview.url,
+        durationMs: 10,
+        sizeBytes: 12,
+        headers: [],
+        bodyText: '{"ok":true}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.equal(seeded.state.vault.sessionToken, 'vault-abc');
+  assert.equal(seenUrl, 'https://example.com/vault-abc/profile');
+  assert.equal(consumed.preview.url, 'https://example.com/vault-abc/profile');
+  assert.equal(consumed.state.vault.sessionToken, 'vault-abc');
 });
 
 test('resolveRequest interpolates grpc payload fields and derives rpc path', () => {
@@ -3109,7 +3358,7 @@ test('inspectCollectionDataText supports CSV tables', () => {
   assert.equal(inspection.rows[1]?.userId, 'u-2');
 });
 
-test('inspectResolvedRequest surfaces unsupported script APIs before send', () => {
+test('inspectResolvedRequest surfaces local-only vault behavior before send', () => {
   const project = createDefaultProject('Demo');
   project.runtime.baseUrl = 'https://api.example.com';
   const environment = createDefaultEnvironment('shared');
@@ -3118,17 +3367,34 @@ test('inspectResolvedRequest surfaces unsupported script APIs before send', () =
   const caseDocument = createEmptyCase(request.id, 'scripted');
   caseDocument.scripts = {
     preRequest: 'pm.globals.set("tenant", "team-a"); pm.sendRequest("https://example.com/extra"); pm.execution.setNextRequest("next");',
-    postResponse: 'pm.vault.get("token"); pm.visualizer.set("<div></div>"); pm.require("uuid"); postman.setNextRequest(null);'
+    postResponse: 'await pm.vault.get("token"); pm.visualizer.set("<div></div>"); pm.require("uuid"); postman.setNextRequest(null);'
   };
 
   const insight = inspectResolvedRequest(project, request, caseDocument, environment);
-  assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-send-request'), true);
+  assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-send-request'), false);
   assert.equal(insight.warnings.some(item => item.code === 'script-limited-set-next-request'), true);
   assert.equal(insight.warnings.some(item => item.code === 'script-limited-legacy-set-next-request'), true);
   assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-globals'), false);
-  assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-visualizer'), true);
+  assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-visualizer'), false);
+  assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-require'), false);
+  assert.equal(insight.warnings.some(item => item.code === 'script-local-vault' && item.level === 'info'), true);
+  assert.equal(insight.diagnostics.some(item => item.code === 'script-local-vault' && item.level === 'info' && item.blocking === false), true);
+});
+
+test('inspectResolvedRequest keeps warning for unsupported pm.require modules', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Require Unsupported');
+  request.url = '{{baseUrl}}/profile';
+  request.scripts.postResponse = 'pm.require("lodash");';
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
   assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-require'), true);
-  assert.equal(insight.diagnostics.some(item => item.code === 'script-unsupported-vault' && item.blocking === false), true);
+  assert.match(
+    insight.warnings.find(item => item.code === 'script-unsupported-require')?.message || '',
+    /uuid/
+  );
 });
 
 test('renderCollectionRunReportHtml emits a readable report shell', () => {

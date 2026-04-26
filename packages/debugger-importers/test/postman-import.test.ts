@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { importSourceText } from '../src/index';
 
-test('Postman import preserves scripts as case scripts and emits warnings for unsupported APIs', () => {
+test('Postman import preserves scripts as case scripts and emits explicit local-vault warnings', () => {
   const postmanCollection = JSON.stringify({
     info: {
       name: 'Scripted Collection',
@@ -29,7 +29,9 @@ test('Postman import preserves scripts as case scripts and emits warnings for un
             script: {
               exec: [
                 'pm.test("status ok", () => pm.expect(pm.response.code).to.equal(200));',
-                'pm.sendRequest("https://example.com/extra");'
+                'pm.sendRequest("https://example.com/extra");',
+                'pm.vault.get("token");',
+                'pm.require("lodash");'
               ]
             }
           }
@@ -45,9 +47,13 @@ test('Postman import preserves scripts as case scripts and emits warnings for un
   assert.match(result.requests[0]?.cases[0]?.scripts?.preRequest || '', /pm\.variables\.set/);
   assert.match(result.requests[0]?.cases[0]?.scripts?.postResponse || '', /pm\.test/);
   assert.equal(result.warnings.some(warning => warning.code === 'postman-script-kept'), true);
-  assert.equal(result.warnings.some(warning => warning.code === 'postman-send-request'), true);
-  assert.match(result.warnings.find(warning => warning.code === 'postman-send-request')?.message || '', /pm\.sendRequest/);
-  assert.equal(result.warnings.find(warning => warning.code === 'postman-send-request')?.status, 'degraded');
+  assert.equal(result.warnings.some(warning => warning.code === 'postman-send-request'), false);
+  assert.equal(result.warnings.some(warning => warning.code === 'postman-vault'), true);
+  assert.equal(result.warnings.find(warning => warning.code === 'postman-vault')?.status, 'degraded');
+  assert.match(result.warnings.find(warning => warning.code === 'postman-vault')?.message || '', /local debugger vault/i);
+  assert.equal(result.warnings.some(warning => warning.code === 'postman-require'), true);
+  assert.match(result.warnings.find(warning => warning.code === 'postman-require')?.message || '', /lodash/);
+  assert.equal(result.warnings.find(warning => warning.code === 'postman-require')?.status, 'degraded');
 });
 
 test('OpenAPI import warns when security schemes need manual auth review', () => {

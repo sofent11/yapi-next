@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, Group, NumberInput, Select, Tabs, Text, TextInput, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { 
+import {
   IconAdjustments, 
+  IconArrowDown,
+  IconArrowUp,
+  IconCopy,
   IconDeviceFloppy,
   IconKey, 
   IconListCheck, 
@@ -405,6 +408,138 @@ function graphqlArgumentMatchesSearch(argument: GraphqlFieldArgumentSummary, sea
   return argument.name.toLowerCase().includes(normalizedSearch) || argument.type.toLowerCase().includes(normalizedSearch);
 }
 
+function parseGraphqlOperationSignature(query: string) {
+  const match = query.match(/\b(query|mutation|subscription)\b(?:\s+([_A-Za-z][_0-9A-Za-z]*))?/);
+  return {
+    kind: (match?.[1] as GraphqlOperationKind | undefined) || null,
+    name: match?.[2] || ''
+  };
+}
+
+function parseGraphqlVariablesSource(source: string) {
+  const trimmed = source.trim();
+  if (!trimmed) {
+    return {
+      error: undefined,
+      value: {} as Record<string, unknown>,
+      count: 0
+    };
+  }
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {
+        error: 'Variables JSON must resolve to an object.',
+        value: null,
+        count: 0
+      };
+    }
+    return {
+      error: undefined,
+      value: parsed as Record<string, unknown>,
+      count: Object.keys(parsed).length
+    };
+  } catch (error) {
+    return {
+      error: (error as Error).message || 'Variables JSON is invalid.',
+      value: null,
+      count: 0
+    };
+  }
+}
+
+function graphqlNamedType(typeSignature: string) {
+  return typeSignature.replace(/[[\]!]/g, '');
+}
+
+function graphqlPlaceholderForType(
+  typeSignature: string,
+  types: GraphqlSchemaTypeSummary[],
+  depth = 0
+): unknown {
+  if (depth > 4) return {};
+  const namedType = graphqlNamedType(typeSignature);
+  if (!namedType) return '';
+  if (typeSignature.includes('[')) {
+    return [graphqlPlaceholderForType(typeSignature.replace(/[[\]!]/g, ''), types, depth + 1)];
+  }
+  switch (namedType.toLowerCase()) {
+    case 'int':
+    case 'float':
+    case 'number':
+      return 0;
+    case 'boolean':
+      return false;
+    case 'id':
+    case 'string':
+    case 'uuid':
+    case 'datetime':
+      return '';
+    default:
+      break;
+  }
+  const typeSummary = types.find(type => type.name === namedType);
+  if (!typeSummary) return '';
+  if (typeSummary.enumValues.length > 0) {
+    return typeSummary.enumValues[0] || '';
+  }
+  if (typeSummary.inputFields.length > 0) {
+    return typeSummary.inputFields.reduce<Record<string, unknown>>((output, field) => {
+      if (field.type.includes('!') || field.defaultValue) {
+        output[field.name] = graphqlPlaceholderForType(field.type, types, depth + 1);
+      }
+      return output;
+    }, {});
+  }
+  return '';
+}
+
+function graphqlVariableSeedForArgs(
+  args: GraphqlFieldArgumentSummary[],
+  types: GraphqlSchemaTypeSummary[]
+) {
+  return args.reduce<Record<string, unknown>>((output, arg) => {
+    output[arg.name] = graphqlPlaceholderForType(arg.type, types);
+    return output;
+  }, {});
+}
+
+function createGrpcMessageDraft(index: number, content = '{}'): GrpcMessageDraft {
+  return {
+    name: `Message ${index + 1}`,
+    content,
+    enabled: true
+  };
+}
+
+function summarizeGrpcDraft(content: string) {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    return {
+      kind: 'empty' as const,
+      detail: 'empty payload',
+      preview: '{}'
+    };
+  }
+  try {
+    const parsed = JSON.parse(trimmed);
+    const topLevelKeys = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? Object.keys(parsed as Record<string, unknown>).length
+      : undefined;
+    return {
+      kind: 'json' as const,
+      detail: topLevelKeys !== undefined ? `${topLevelKeys} top-level key${topLevelKeys === 1 ? '' : 's'}` : 'JSON payload',
+      preview: JSON.stringify(parsed).slice(0, 120)
+    };
+  } catch (_error) {
+    return {
+      kind: 'text' as const,
+      detail: `${trimmed.length} chars`,
+      preview: trimmed.split('\n').find(Boolean)?.slice(0, 120) || trimmed.slice(0, 120)
+    };
+  }
+}
+
 export function RequestPanel(props: {
   workspace: WorkspaceIndex;
   activeEnvironmentName?: string;
@@ -616,6 +751,28 @@ export function RequestPanel(props: {
     [graphqlSavedOperations, selectedGraphqlSavedOperation]
   );
   const graphqlSchemaTypes = graphqlIntrospection.summary?.types || [];
+  const graphqlOperationSignature = useMemo(
+    () => parseGraphqlOperationSignature(graphqlBody.query || ''),
+    [graphqlBody.query]
+  );
+  const graphqlVariableState = useMemo(
+    () => parseGraphqlVariablesSource(graphqlBody.variables || '{}'),
+    [graphqlBody.variables]
+  );
+  const graphqlExplorerVariableSeed = useMemo(
+    () => graphqlVariableSeedForArgs(graphqlExplorerField?.args || [], graphqlSchemaTypes),
+    [graphqlExplorerField?.args, graphqlSchemaTypes]
+  );
+  const graphqlExplorerVariableSeedKeys = useMemo(
+    () => Object.keys(graphqlExplorerVariableSeed),
+    [graphqlExplorerVariableSeed]
+  );
+  const graphqlMissingExplorerVariableKeys = useMemo(() => {
+    if (!graphqlVariableState.value) return graphqlExplorerVariableSeedKeys;
+    return graphqlExplorerVariableSeedKeys.filter(
+      key => !Object.prototype.hasOwnProperty.call(graphqlVariableState.value, key)
+    );
+  }, [graphqlExplorerVariableSeedKeys, graphqlVariableState.value]);
   const graphqlTypeTrailVisible = useMemo(
     () => graphqlTypeTrail.filter(name => graphqlSchemaTypes.some(type => type.name === name)),
     [graphqlTypeTrail, graphqlSchemaTypes]
@@ -972,6 +1129,36 @@ export function RequestPanel(props: {
     }
   }
 
+  function syncGraphqlOperationName() {
+    if (!graphqlOperationSignature.name) return;
+    updateGraphqlBody({ operationName: graphqlOperationSignature.name });
+    notifications.show({ color: 'teal', message: `Operation name set to "${graphqlOperationSignature.name}"` });
+  }
+
+  function seedGraphqlVariablesFromExplorer() {
+    if (!graphqlExplorerField || graphqlExplorerVariableSeedKeys.length === 0) {
+      notifications.show({ color: 'orange', message: 'Select a field with arguments before seeding variables.' });
+      return;
+    }
+    if (!graphqlVariableState.value) {
+      notifications.show({ color: 'red', message: graphqlVariableState.error || 'Variables JSON is invalid' });
+      return;
+    }
+    const nextVariables = {
+      ...graphqlExplorerVariableSeed,
+      ...graphqlVariableState.value
+    };
+    const addedCount = graphqlMissingExplorerVariableKeys.length;
+    updateGraphqlBody({
+      variables: JSON.stringify(nextVariables, null, 2),
+      operationName: graphqlBody.operationName || graphqlOperationSignature.name || graphqlExplorerField.name
+    });
+    notifications.show({
+      color: addedCount > 0 ? 'teal' : 'blue',
+      message: addedCount > 0 ? `Seeded ${addedCount} GraphQL variable placeholder${addedCount === 1 ? '' : 's'}` : 'All explorer variables were already present'
+    });
+  }
+
   function updateWebSocketMessages(messages: NonNullable<RequestBody['websocket']>['messages']) {
     updateBody({
       ...body,
@@ -997,6 +1184,43 @@ export function RequestPanel(props: {
 
   function updateGrpcMessages(messages: GrpcMessageDraft[]) {
     updateGrpcBody({ messages });
+  }
+
+  function addGrpcMessage(content = grpcBody.message || grpcMessages[grpcMessages.length - 1]?.content || '{}') {
+    updateGrpcMessages([...grpcMessages, createGrpcMessageDraft(grpcMessages.length, content)]);
+  }
+
+  function duplicateGrpcMessage(index: number) {
+    const source = grpcMessages[index];
+    if (!source) return;
+    updateGrpcMessages([
+      ...grpcMessages.slice(0, index + 1),
+      createGrpcMessageDraft(index + 1, source.content || '{}'),
+      ...grpcMessages.slice(index + 1)
+    ]);
+  }
+
+  function moveGrpcMessage(index: number, direction: -1 | 1) {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= grpcMessages.length) return;
+    const next = [...grpcMessages];
+    const [current] = next.splice(index, 1);
+    next.splice(targetIndex, 0, current);
+    updateGrpcMessages(next);
+  }
+
+  function normalizeGrpcMessageNames() {
+    updateGrpcMessages(
+      grpcMessages.map((message, index) => ({
+        ...message,
+        name: !message.name.trim() || /^Message \d+$/.test(message.name.trim()) ? `Message ${index + 1}` : message.name
+      }))
+    );
+  }
+
+  function seedGrpcMessagesFromUnary() {
+    const source = grpcBody.message || grpcMessages.find(message => message.enabled !== false)?.content || '{}';
+    updateGrpcMessages([createGrpcMessageDraft(0, source)]);
   }
 
   function updateWebSocketExamples(examples: NonNullable<RequestBody['websocket']>['examples']) {
@@ -1220,6 +1444,9 @@ export function RequestPanel(props: {
   const isWebSocketLiveConnected = Boolean(websocketLive.sessionId);
   const selectedWebsocketEvent = websocketTimeline?.events[selectedWebsocketEventIndex] || websocketTimeline?.events[0];
   const selectedWebsocketEventPreview = selectedWebsocketEvent ? describeWebSocketPayload(selectedWebsocketEvent.body) : null;
+  const grpcEnabledMessageCount = grpcMessages.filter(message => message.enabled !== false).length;
+  const grpcMessageSummaries = grpcMessages.map(message => summarizeGrpcDraft(message.content || ''));
+  const grpcBindingReady = Boolean((grpcBody.protoFile || '').trim() && (grpcBody.service || '').trim() && (grpcBody.method || '').trim());
 
   useEffect(() => {
     if (!websocketTimeline?.events.length) {
@@ -1798,51 +2025,95 @@ export function RequestPanel(props: {
                         }}
                     >
                       Choose Proto File
-                    </Button>
-                  </div>
-                </div>
-                <div>
-                  <Text size="xs" fw={700} c="dimmed">
-                    {grpcBody.rpcKind === 'server-streaming'
-                      ? 'Request Message (server-streaming aggregates all response messages into one JSON result)'
-                      : grpcBody.rpcKind === 'client-streaming'
-                      ? 'Client Stream Messages (enabled messages are sent in order and return a single response message)'
-                      : grpcBody.rpcKind === 'bidi-streaming'
-                      ? 'Bidirectional Stream Messages (enabled request messages are sent in order and inbound responses are aggregated into one JSON result)'
-                      : 'Unary Message (JSON or protobuf text format)'}
-                  </Text>
-                  {grpcBody.rpcKind === 'client-streaming' || grpcBody.rpcKind === 'bidi-streaming' ? (
-                    <div className="websocket-message-list">
-                      <Group gap="xs" justify="space-between" mb="xs">
-                        <Text size="xs" c="dimmed">
-                          {grpcBody.rpcKind === 'bidi-streaming'
-                            ? 'Add one protobuf JSON/text payload per outbound message. The local runtime sends them in order and collects all inbound stream messages.'
-                            : 'Add one protobuf JSON/text payload per outbound message.'}
-                        </Text>
-                        <Button
-                          size="xs"
-                          variant="default"
-                          leftSection={<IconPlus size={14} />}
-                          onClick={() =>
-                            updateGrpcMessages([
-                              ...grpcMessages,
-                              { name: `Message ${grpcMessages.length + 1}`, content: '{}', enabled: true }
-                            ])
-                          }
-                        >
-                          Add Message
-                        </Button>
-                      </Group>
-                      <div className="websocket-message-list">
-                        {grpcMessages.map((message, index) => (
-                          <div key={`${message.name}-${index}`} className="websocket-message-card">
-                            <div className="websocket-message-toolbar">
-                              <Group gap="xs" align="flex-end" style={{ flex: 1 }}>
-                                <Checkbox
-                                  checked={message.enabled !== false}
-                                  label="Enabled"
-                                  onChange={event => {
-                                    const next = [...grpcMessages];
+                     </Button>
+                   </div>
+                 </div>
+                 <div>
+                   <div className="grpc-session-panel">
+                     <div className="grpc-session-head">
+                       <div>
+                         <Text size="xs" fw={700} c="dimmed">Session Authoring</Text>
+                         <Text size="sm" fw={700}>
+                           {grpcBody.rpcKind === 'server-streaming'
+                             ? 'Server stream request'
+                             : grpcBody.rpcKind === 'client-streaming'
+                               ? 'Client stream sequence'
+                               : grpcBody.rpcKind === 'bidi-streaming'
+                                 ? 'Bidirectional stream sequence'
+                                 : 'Unary request'}
+                         </Text>
+                       </div>
+                       <Group gap="xs" wrap="wrap">
+                         <Badge size="xs" variant="light" color={grpcBindingReady ? 'teal' : 'orange'}>
+                           {grpcBindingReady ? 'binding ready' : 'needs proto binding'}
+                         </Badge>
+                         <Badge size="xs" variant="light" color="indigo">
+                           {grpcBody.rpcKind}
+                         </Badge>
+                       </Group>
+                     </div>
+                     <div className="grpc-session-stats">
+                       <span><strong>{grpcEnabledMessageCount}</strong> enabled message{grpcEnabledMessageCount === 1 ? '' : 's'}</span>
+                       <span><strong>{grpcMessages.length}</strong> drafted</span>
+                       <span><strong>{(grpcBody.importPaths || []).length}</strong> import path{(grpcBody.importPaths || []).length === 1 ? '' : 's'}</span>
+                     </div>
+                     <Text size="xs" c="dimmed">
+                       {grpcBody.rpcKind === 'server-streaming'
+                         ? 'Author one request payload. The debugger aggregates streamed responses into a single JSON result for review.'
+                         : grpcBody.rpcKind === 'client-streaming'
+                           ? 'Compose the outbound message order here. Only enabled entries are sent, in order, before the single response is captured.'
+                           : grpcBody.rpcKind === 'bidi-streaming'
+                             ? 'Use the session list to stage outbound messages. The local runtime sends them in order and collects inbound responses into one result.'
+                             : 'Use JSON or protobuf text format for the single outbound payload.'}
+                     </Text>
+                     {grpcBody.rpcKind === 'client-streaming' || grpcBody.rpcKind === 'bidi-streaming' ? (
+                       <div className="grpc-message-actions">
+                         <Button
+                           size="xs"
+                           variant="default"
+                           leftSection={<IconPlus size={14} />}
+                           onClick={() => addGrpcMessage()}
+                         >
+                           Add Message
+                         </Button>
+                         <Button
+                           size="xs"
+                           variant="subtle"
+                           leftSection={<IconCopy size={14} />}
+                           disabled={grpcMessages.length === 0}
+                           onClick={() => duplicateGrpcMessage(Math.max(grpcMessages.length - 1, 0))}
+                         >
+                           Duplicate Last
+                         </Button>
+                         <Button
+                           size="xs"
+                           variant="subtle"
+                           disabled={!grpcBody.message && grpcEnabledMessageCount === 0}
+                           onClick={seedGrpcMessagesFromUnary}
+                         >
+                           Reset From Unary Draft
+                         </Button>
+                         <Button size="xs" variant="subtle" onClick={normalizeGrpcMessageNames}>
+                           Normalize Names
+                         </Button>
+                       </div>
+                     ) : null}
+                   </div>
+                   {grpcBody.rpcKind === 'client-streaming' || grpcBody.rpcKind === 'bidi-streaming' ? (
+                     <div className="websocket-message-list">
+                       <div className="websocket-message-list">
+                         {grpcMessages.map((message, index) => (
+                           <div key={`${message.name}-${index}`} className="websocket-message-card grpc-message-card">
+                             <div className="websocket-message-toolbar grpc-message-toolbar">
+                               <Group gap="xs" align="flex-end" style={{ flex: 1 }}>
+                                 <Badge size="xs" variant="light" color="gray">
+                                   #{index + 1}
+                                 </Badge>
+                                 <Checkbox
+                                   checked={message.enabled !== false}
+                                   label="Enabled"
+                                   onChange={event => {
+                                     const next = [...grpcMessages];
                                     next[index] = { ...next[index], enabled: event.currentTarget.checked };
                                     updateGrpcMessages(next);
                                   }}
@@ -1855,44 +2126,99 @@ export function RequestPanel(props: {
                                     next[index] = { ...next[index], name: event.currentTarget.value };
                                     updateGrpcMessages(next);
                                   }}
-                                  style={{ flex: 1 }}
-                                />
-                              </Group>
-                              <Button
-                                size="xs"
-                                variant="subtle"
-                                color="red"
-                                disabled={grpcMessages.length === 1}
-                                onClick={() => updateGrpcMessages(grpcMessages.filter((_, messageIndex) => messageIndex !== index))}
-                              >
-                                Remove
-                              </Button>
-                            </div>
-                            <CodeEditor
-                              value={message.content || '{}'}
-                              language="json"
-                              onChange={value => {
-                                const next = [...grpcMessages];
+                                   style={{ flex: 1 }}
+                                 />
+                               </Group>
+                               <Group gap="xs">
+                                 <Button
+                                   size="xs"
+                                   variant="subtle"
+                                   disabled={index === 0}
+                                   onClick={() => moveGrpcMessage(index, -1)}
+                                 >
+                                   <IconArrowUp size={14} />
+                                 </Button>
+                                 <Button
+                                   size="xs"
+                                   variant="subtle"
+                                   disabled={index === grpcMessages.length - 1}
+                                   onClick={() => moveGrpcMessage(index, 1)}
+                                 >
+                                   <IconArrowDown size={14} />
+                                 </Button>
+                                 <Button size="xs" variant="subtle" onClick={() => duplicateGrpcMessage(index)}>
+                                   Duplicate
+                                 </Button>
+                                 <Button
+                                   size="xs"
+                                   variant="subtle"
+                                   color="red"
+                                   disabled={grpcMessages.length === 1}
+                                   onClick={() => updateGrpcMessages(grpcMessages.filter((_, messageIndex) => messageIndex !== index))}
+                                 >
+                                   Remove
+                                 </Button>
+                               </Group>
+                             </div>
+                             <div className="grpc-message-meta">
+                               <Badge
+                                 size="xs"
+                                 variant="light"
+                                 color={
+                                   grpcMessageSummaries[index]?.kind === 'json'
+                                     ? 'teal'
+                                     : grpcMessageSummaries[index]?.kind === 'text'
+                                       ? 'blue'
+                                       : 'gray'
+                                 }
+                               >
+                                 {grpcMessageSummaries[index]?.kind || 'empty'}
+                               </Badge>
+                               <Text size="xs" c="dimmed">
+                                 {grpcMessageSummaries[index]?.detail || 'empty payload'}
+                               </Text>
+                               <code>{grpcMessageSummaries[index]?.preview || '{}'}</code>
+                             </div>
+                             <CodeEditor
+                               value={message.content || '{}'}
+                               language="json"
+                               onChange={value => {
+                                 const next = [...grpcMessages];
                                 next[index] = { ...next[index], content: value };
                                 updateGrpcMessages(next);
                               }}
                               minHeight="180px"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <CodeEditor
-                      value={grpcBody.message || '{}'}
-                      language="json"
-                      onChange={value => updateGrpcBody({ message: value })}
-                      minHeight="260px"
-                    />
-                  )}
-                </div>
-              </div>
-            ) : effectiveKind === 'websocket' ? (
+                             />
+                           </div>
+                         ))}
+                       </div>
+                     </div>
+                   ) : (
+                     <div className="grpc-unary-editor">
+                       <div className="grpc-message-meta">
+                         <Badge
+                           size="xs"
+                           variant="light"
+                           color={summarizeGrpcDraft(grpcBody.message || '{}').kind === 'json' ? 'teal' : 'blue'}
+                         >
+                           {summarizeGrpcDraft(grpcBody.message || '{}').kind}
+                         </Badge>
+                         <Text size="xs" c="dimmed">
+                           {summarizeGrpcDraft(grpcBody.message || '{}').detail}
+                         </Text>
+                         <code>{summarizeGrpcDraft(grpcBody.message || '{}').preview}</code>
+                       </div>
+                       <CodeEditor
+                         value={grpcBody.message || '{}'}
+                         language="json"
+                         onChange={value => updateGrpcBody({ message: value })}
+                         minHeight="260px"
+                       />
+                     </div>
+                   )}
+                 </div>
+               </div>
+             ) : effectiveKind === 'websocket' ? (
               <div className="websocket-body-grid">
                 <div className="websocket-toolbar">
                   <div>
@@ -2130,7 +2456,8 @@ export function RequestPanel(props: {
                 <div className="preview-note">
                   <Text size="xs" c="dimmed">
                     Script items run directly in the debugger sandbox. Use <code>pm.variables</code>, <code>pm.environment</code>,
-                    <code> pm.test</code>, and lite <code>pm.sendRequest</code> to orchestrate follow-up HTTP calls.
+                    <code> pm.test</code>, <code>pm.sendRequest</code>, safe built-in <code>pm.require</code>, and
+                    <code> pm.visualizer</code> to orchestrate and inspect local script flows.
                   </Text>
                 </div>
                 <CodeEditor
@@ -2234,12 +2561,59 @@ export function RequestPanel(props: {
                   </div>
                 </div>
                 <div className="graphql-editor-stack">
+                  <div className="graphql-editor-summary">
+                    <div>
+                      <Text size="xs" fw={700} c="dimmed">Editor Status</Text>
+                      <div className="graphql-editor-summary-chips">
+                        {graphqlOperationSignature.kind ? (
+                          <span><strong>{graphqlOperationSignature.kind}</strong> in query</span>
+                        ) : (
+                          <span><strong>draft</strong> unnamed operation</span>
+                        )}
+                        <span><strong>{graphqlVariableState.count}</strong> variable{graphqlVariableState.count === 1 ? '' : 's'}</span>
+                        {graphqlBody.operationName ? <span><strong>{graphqlBody.operationName}</strong> request operation</span> : null}
+                        {graphqlBody.schemaCache?.summary && isGraphqlSchemaSummary(graphqlBody.schemaCache.summary) ? (
+                          <span><strong>{graphqlBody.schemaCache.summary.typeCount}</strong> cached types</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <Group gap="xs">
+                      {graphqlOperationSignature.name && graphqlOperationSignature.name !== (graphqlBody.operationName || '') ? (
+                        <Button size="xs" variant="subtle" onClick={syncGraphqlOperationName}>
+                          Use Query Name
+                        </Button>
+                      ) : null}
+                      <Button
+                        size="xs"
+                        variant="default"
+                        disabled={!graphqlExplorerField || graphqlExplorerVariableSeedKeys.length === 0}
+                        onClick={seedGraphqlVariablesFromExplorer}
+                      >
+                        {graphqlMissingExplorerVariableKeys.length > 0
+                          ? `Seed ${graphqlMissingExplorerVariableKeys.length} Missing Var${graphqlMissingExplorerVariableKeys.length === 1 ? '' : 's'}`
+                          : 'Sync Explorer Vars'}
+                      </Button>
+                    </Group>
+                    {graphqlVariableState.error ? (
+                      <div className="request-preview-warning">
+                        <strong>variables</strong>
+                        <span>{graphqlVariableState.error}</span>
+                      </div>
+                    ) : null}
+                    {!graphqlVariableState.error && graphqlExplorerField && graphqlExplorerVariableSeedKeys.length > 0 ? (
+                      <Text size="xs" c="dimmed">
+                        {graphqlMissingExplorerVariableKeys.length > 0
+                          ? `Selected field ${graphqlExplorerField.name} exposes ${graphqlExplorerVariableSeedKeys.length} args. Seed placeholders for ${graphqlMissingExplorerVariableKeys.length} missing variable${graphqlMissingExplorerVariableKeys.length === 1 ? '' : 's'}.`
+                          : `Selected field ${graphqlExplorerField.name} already has every explorer arg represented in variables JSON.`}
+                      </Text>
+                    ) : null}
+                  </div>
                   <div>
                     <Text size="xs" fw={700} c="dimmed">Query</Text>
                     <CodeEditor
                       value={graphqlBody.query || ''}
                       language="text"
-                      onChange={value => updateBody({ ...body, graphql: { ...graphqlBody, query: value } })}
+                      onChange={value => updateGraphqlBody({ query: value })}
                       minHeight="220px"
                     />
                   </div>
@@ -2253,7 +2627,7 @@ export function RequestPanel(props: {
                     <CodeEditor
                       value={graphqlBody.variables || '{}'}
                       language="json"
-                      onChange={value => updateBody({ ...body, graphql: { ...graphqlBody, variables: value } })}
+                      onChange={value => updateGraphqlBody({ variables: value })}
                       minHeight="140px"
                     />
                   </div>
