@@ -1389,10 +1389,58 @@ export function App() {
         { preventDefault: true }
       ],
       [
+        preferences.keybindings.openWorkbench,
+        () => {
+          if (!store.workspace) return;
+          openWorkbenchOverview();
+        },
+        { preventDefault: true }
+      ],
+      [
+        preferences.keybindings.openScratch,
+        () => {
+          if (!store.workspace) return;
+          handleChangeRailView('scratch');
+        },
+        { preventDefault: true }
+      ],
+      [
+        preferences.keybindings.openCapture,
+        () => {
+          if (!store.workspace) return;
+          handleChangeRailView('capture');
+        },
+        { preventDefault: true }
+      ],
+      [
+        preferences.keybindings.openCollections,
+        () => {
+          if (!store.workspace) return;
+          handleChangeRailView('collections');
+        },
+        { preventDefault: true }
+      ],
+      [
+        preferences.keybindings.openHistory,
+        () => {
+          if (!store.workspace) return;
+          handleChangeRailView('history');
+        },
+        { preventDefault: true }
+      ],
+      [
         preferences.keybindings.openEnvironments,
         () => {
           if (!store.workspace) return;
           handleChangeRailView('environments');
+        },
+        { preventDefault: true }
+      ],
+      [
+        preferences.keybindings.openSync,
+        () => {
+          if (!store.workspace) return;
+          handleChangeRailView('sync');
         },
         { preventDefault: true }
       ],
@@ -1415,7 +1463,8 @@ export function App() {
       saveMutation,
       runMutation,
       scratchRunMutation,
-      handleChangeRailView
+      handleChangeRailView,
+      openWorkbenchOverview
     ]
   );
   useHotkeys(debuggerHotkeys);
@@ -3541,6 +3590,16 @@ export function App() {
               isDirty={store.isDirty}
               activeView={activeView}
               importTaskCount={importTaskCount}
+              shortcutHints={{
+                workspace: preferences.keybindings.openWorkbench,
+                scratch: preferences.keybindings.openScratch,
+                capture: preferences.keybindings.openCapture,
+                collections: preferences.keybindings.openCollections,
+                history: preferences.keybindings.openHistory,
+                environments: preferences.keybindings.openEnvironments,
+                sync: preferences.keybindings.openSync,
+                preferences: preferences.keybindings.openPreferences
+              }}
               onChangeView={handleChangeRailView}
             />
 

@@ -2131,6 +2131,8 @@ mark {
   align-items: stretch;
 }
 
+.graphql-type-match-panel,
+.graphql-type-panel,
 .graphql-explorer-panel,
 .graphql-explorer-tree,
 .graphql-explorer-fragments,
@@ -2146,6 +2148,16 @@ mark {
   background: var(--surface);
 }
 
+.graphql-type-match-panel,
+.graphql-type-panel {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.graphql-type-match-head,
+.graphql-type-panel-head,
 .graphql-explorer-head,
 .graphql-explorer-meta,
 .graphql-explorer-row {
@@ -2159,13 +2171,168 @@ mark {
   justify-content: space-between;
 }
 
+.graphql-type-match-head,
+.graphql-type-panel-head {
+  justify-content: space-between;
+}
+
 .graphql-explorer-meta {
   flex-wrap: wrap;
 }
 
+.graphql-type-breadcrumbs,
+.graphql-type-chip-list,
+.graphql-type-summary,
+.graphql-type-list,
+.graphql-type-section,
 .graphql-explorer-controls {
   display: grid;
   gap: 8px;
+}
+
+.graphql-type-breadcrumbs,
+.graphql-type-chip-list,
+.graphql-type-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.graphql-type-summary {
+  gap: 8px;
+}
+
+.graphql-type-summary span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in oklch, var(--surface-muted) 36%, var(--surface));
+  font-size: 11px;
+}
+
+.graphql-type-summary strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.graphql-type-chip,
+.graphql-type-breadcrumb,
+.graphql-value-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--surface-muted) 36%, var(--surface));
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.graphql-type-chip,
+.graphql-type-breadcrumb {
+  appearance: none;
+  cursor: pointer;
+}
+
+.graphql-type-chip:hover,
+.graphql-type-breadcrumb:hover {
+  border-color: color-mix(in oklch, var(--accent) 42%, var(--line));
+  color: var(--accent);
+}
+
+.graphql-type-chip.is-active,
+.graphql-type-breadcrumb.is-active {
+  border-color: color-mix(in oklch, var(--accent) 42%, var(--line));
+  background: color-mix(in oklch, var(--accent) 8%, var(--surface));
+  color: var(--accent);
+}
+
+.graphql-type-chip.is-muted {
+  color: var(--muted);
+}
+
+.graphql-type-row,
+.graphql-type-row-main,
+.graphql-explorer-args,
+.graphql-type-arg-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.graphql-type-row,
+.graphql-explorer-args,
+.graphql-type-arg-list {
+  flex-wrap: wrap;
+}
+
+.graphql-type-row {
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--surface-muted) 42%, var(--surface));
+}
+
+.graphql-type-row-main {
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.graphql-type-row-main strong,
+.graphql-type-row-main small {
+  min-width: 0;
+}
+
+.graphql-type-row code,
+.graphql-type-panel code {
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.graphql-arg-chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted-strong);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.graphql-arg-chip:hover:not(:disabled) {
+  border-color: color-mix(in oklch, var(--accent) 42%, var(--line));
+  color: var(--accent);
+}
+
+.graphql-arg-chip:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.graphql-arg-chip small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .graphql-explorer-fragment-mode {
@@ -3068,6 +3235,13 @@ mark {
   margin-top: 12px;
 }
 
+.variable-workflow-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .variable-authoring-card,
 .variable-definition-row {
   display: grid;
@@ -3121,6 +3295,11 @@ mark {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.variable-workflow-toolbar .mantine-Input-input,
+.variable-workflow-toolbar .mantine-Select-input {
+  min-height: 34px;
 }
 
 .request-preview-section {
@@ -3325,7 +3504,8 @@ mark {
   .response-cookie-grid,
   .response-compare-grid,
   .response-search-summary-grid,
-  .request-preview-grid-secondary {
+  .request-preview-grid-secondary,
+  .variable-workflow-toolbar {
     grid-template-columns: 1fr;
   }
 

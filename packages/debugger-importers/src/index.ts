@@ -1447,6 +1447,21 @@ function openCollectionGrpcMessage(message: any) {
   return '';
 }
 
+function openCollectionGrpcMessages(message: any) {
+  if (!Array.isArray(message)) return [];
+  return message.map((item: any, index: number) => ({
+    name: String(item.title || item.name || `Message ${index + 1}`),
+    content: typeof item?.message === 'string'
+      ? item.message
+      : typeof item?.content === 'string'
+      ? item.content
+      : typeof item?.body === 'string'
+      ? item.body
+      : '',
+    enabled: item?.enabled !== false && item?.selected !== false
+  }));
+}
+
 function splitGrpcMethod(method: string) {
   const normalized = method.replace(/^\/+/, '');
   const slashIndex = normalized.lastIndexOf('/');
@@ -1469,12 +1484,13 @@ function splitGrpcMethod(method: string) {
   };
 }
 
-function grpcRpcKind(value: unknown): 'unary' | 'server-streaming' {
-  return value === 'server-streaming' ? 'server-streaming' : 'unary';
+function grpcRpcKind(value: unknown): 'unary' | 'server-streaming' | 'client-streaming' {
+  return value === 'server-streaming' || value === 'client-streaming' ? value : 'unary';
 }
 
 function openCollectionGrpcBody(grpc: any): RequestDocument['body'] {
   const methodParts = splitGrpcMethod(String(grpc.method || ''));
+  const messages = openCollectionGrpcMessages(grpc.message);
   return {
     mode: 'none',
     mimeType: 'application/grpc',
@@ -1486,7 +1502,8 @@ function openCollectionGrpcBody(grpc: any): RequestDocument['body'] {
       service: methodParts.service,
       method: methodParts.method,
       rpcKind: grpcRpcKind(grpc.rpcKind),
-      message: openCollectionGrpcMessage(grpc.message)
+      message: openCollectionGrpcMessage(grpc.message),
+      ...(messages.length > 0 ? { messages } : {})
     }
   };
 }
@@ -2369,7 +2386,14 @@ function brunoJsonBody(body: any): RequestDocument['body'] {
     };
   }
   if (mode === 'grpc') {
-    const message = Array.isArray(body.grpc) ? body.grpc.find((item: any) => item?.enabled !== false) || body.grpc[0] : null;
+    const messages = Array.isArray(body.grpc)
+      ? body.grpc.map((item: any, index: number) => ({
+          name: String(item.name || `Message ${index + 1}`),
+          content: String(item.content || item.body || ''),
+          enabled: item.enabled !== false
+        }))
+      : [];
+    const message = messages.find((item: { enabled: boolean }) => item.enabled !== false) || messages[0] || null;
     return {
       mode: 'none',
       mimeType: 'application/grpc',
@@ -2377,8 +2401,9 @@ function brunoJsonBody(body: any): RequestDocument['body'] {
       fields: [],
       grpc: {
         importPaths: [],
-        rpcKind: grpcRpcKind(message?.rpcKind ?? body.rpcKind),
-        message: String(message?.content || message?.body || '')
+        rpcKind: grpcRpcKind((Array.isArray(body.grpc) ? body.grpc.find((item: any) => item?.enabled !== false) : null)?.rpcKind ?? body.rpcKind),
+        message: String(message?.content || ''),
+        ...(messages.length > 0 ? { messages } : {})
       }
     };
   }
@@ -2480,7 +2505,7 @@ function walkBrunoJsonItems(
         ? {
             ...body,
             grpc: {
-              ...(body.grpc || { importPaths: [], rpcKind: 'unary' as const, message: '' }),
+              ...(body.grpc || { importPaths: [], rpcKind: 'unary' as const, message: '', messages: [] }),
               importPaths: grpcImportPaths,
               protoFile: source.protoPath ? String(source.protoPath) : body.grpc?.protoFile,
               service: grpcParts.service || body.grpc?.service,

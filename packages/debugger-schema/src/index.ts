@@ -21,7 +21,7 @@ export type HttpMethod = z.infer<typeof httpMethodSchema>;
 
 export const requestKindSchema = z.enum(['http', 'graphql', 'grpc', 'websocket', 'script']);
 export type RequestKind = z.infer<typeof requestKindSchema>;
-export const grpcRpcKindSchema = z.enum(['unary', 'server-streaming']);
+export const grpcRpcKindSchema = z.enum(['unary', 'server-streaming', 'client-streaming']);
 export type GrpcRpcKind = z.infer<typeof grpcRpcKindSchema>;
 
 export const parameterRowSchema = z.object({
@@ -156,6 +156,12 @@ const graphqlSavedOperationSchema = z.object({
   updatedAt: z.string().optional()
 });
 
+const grpcMessageDraftSchema = z.object({
+  name: z.string().default('Message'),
+  content: z.string().default(''),
+  enabled: z.boolean().default(true)
+});
+
 export const requestBodySchema = z.object({
   mode: z.enum(['none', 'json', 'text', 'xml', 'graphql', 'sparql', 'file', 'form-urlencoded', 'multipart']).default('none'),
   mimeType: z.string().optional(),
@@ -180,7 +186,8 @@ export const requestBodySchema = z.object({
     service: z.string().optional(),
     method: z.string().optional(),
     rpcKind: grpcRpcKindSchema.default('unary'),
-    message: z.string().default('')
+    message: z.string().default(''),
+    messages: z.array(grpcMessageDraftSchema).optional()
   }).optional(),
   websocket: z.object({
     messages: z.array(websocketMessageSchema).default([]),

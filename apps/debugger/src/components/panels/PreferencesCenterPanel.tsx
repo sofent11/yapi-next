@@ -5,7 +5,13 @@ export type KeybindingActionId =
   | 'commandPalette'
   | 'saveChanges'
   | 'runRequest'
+  | 'openWorkbench'
+  | 'openScratch'
+  | 'openCapture'
+  | 'openCollections'
+  | 'openHistory'
   | 'openEnvironments'
+  | 'openSync'
   | 'openPreferences';
 export type KeybindingMap = Record<KeybindingActionId, string>;
 
@@ -50,12 +56,66 @@ const KEYBINDING_DEFINITIONS: KeybindingDefinition[] = [
     ]
   },
   {
+    id: 'openWorkbench',
+    label: 'Open Workbench',
+    description: 'Return to the main workspace overview and request tabs.',
+    options: [
+      { value: 'mod + alt + 1', label: 'Mod + Alt + 1' },
+      { value: 'mod + alt + W', label: 'Mod + Alt + W' }
+    ]
+  },
+  {
+    id: 'openScratch',
+    label: 'Open Scratch Pad',
+    description: 'Jump into scratch requests without leaving the keyboard.',
+    options: [
+      { value: 'mod + alt + 2', label: 'Mod + Alt + 2' },
+      { value: 'mod + alt + N', label: 'Mod + Alt + N' }
+    ]
+  },
+  {
+    id: 'openCapture',
+    label: 'Open Capture',
+    description: 'Switch to the browser capture workflow and live network intake.',
+    options: [
+      { value: 'mod + alt + 3', label: 'Mod + Alt + 3' },
+      { value: 'mod + alt + B', label: 'Mod + Alt + B' }
+    ]
+  },
+  {
+    id: 'openCollections',
+    label: 'Open Collections',
+    description: 'Jump to collection design, data, and run reports.',
+    options: [
+      { value: 'mod + alt + 4', label: 'Mod + Alt + 4' },
+      { value: 'mod + alt + C', label: 'Mod + Alt + C' }
+    ]
+  },
+  {
+    id: 'openHistory',
+    label: 'Open History',
+    description: 'Inspect recent request runs and saved response examples.',
+    options: [
+      { value: 'mod + alt + 5', label: 'Mod + Alt + 5' },
+      { value: 'mod + alt + H', label: 'Mod + Alt + H' }
+    ]
+  },
+  {
     id: 'openEnvironments',
     label: 'Open Environment Center',
     description: 'Jump to environment variables, session defaults, and prompt values.',
     options: [
       { value: 'mod + E', label: 'Mod + E' },
       { value: 'mod + shift + E', label: 'Mod + Shift + E' }
+    ]
+  },
+  {
+    id: 'openSync',
+    label: 'Open Sync Center',
+    description: 'Review Git status, diff details, and push or pull workspace changes.',
+    options: [
+      { value: 'mod + alt + 6', label: 'Mod + Alt + 6' },
+      { value: 'mod + alt + G', label: 'Mod + Alt + G' }
     ]
   },
   {
@@ -75,7 +135,13 @@ export function keybindingsForPreset(preset: Exclude<KeybindingPreset, 'custom'>
       commandPalette: 'mod + shift + P',
       saveChanges: 'mod + S',
       runRequest: 'mod + Enter',
+      openWorkbench: 'mod + alt + 1',
+      openScratch: 'mod + alt + 2',
+      openCapture: 'mod + alt + 3',
+      openCollections: 'mod + alt + 4',
+      openHistory: 'mod + alt + 5',
       openEnvironments: 'mod + E',
+      openSync: 'mod + alt + 6',
       openPreferences: 'mod + ,'
     };
   }
@@ -84,7 +150,13 @@ export function keybindingsForPreset(preset: Exclude<KeybindingPreset, 'custom'>
     commandPalette: 'mod + K',
     saveChanges: 'mod + S',
     runRequest: 'mod + Enter',
+    openWorkbench: 'mod + alt + 1',
+    openScratch: 'mod + alt + 2',
+    openCapture: 'mod + alt + 3',
+    openCollections: 'mod + alt + 4',
+    openHistory: 'mod + alt + 5',
     openEnvironments: 'mod + E',
+    openSync: 'mod + alt + 6',
     openPreferences: 'mod + ,'
   };
 }
@@ -252,7 +324,7 @@ export function PreferencesCenterPanel(props: {
         <div className="inspector-section">
           <h3 className="section-title">Keybindings</h3>
           <Text size="xs" c="dimmed" mb="md">
-            This focused shortcut set covers the highest-frequency debugger actions. Assigned shortcuts are filtered to avoid collisions.
+            This focused shortcut set covers the highest-frequency request actions plus rail jumps for core debugger centers. Assigned shortcuts are filtered to avoid collisions.
           </Text>
           <div className="keybinding-grid">
             {KEYBINDING_DEFINITIONS.map(definition => {

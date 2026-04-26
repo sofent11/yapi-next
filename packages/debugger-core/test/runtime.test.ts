@@ -20,6 +20,8 @@ import {
   runCollection,
   runPreparedRequest,
   resolveRequest,
+  serializeBrunoJsonCollection,
+  serializeOpenCollection,
   summarizeGraphqlSchema
 } from '../src/index';
 import {
@@ -33,6 +35,7 @@ import {
   collectionDocumentSchema,
   requestDocumentSchema
 } from '../../debugger-schema/src/index';
+import { importSourceText } from '../../debugger-importers/src/index';
 
 function insightResolvedAuthHeader(value: string) {
   const encoded = value.replace(/^NTLM\s+/i, '');
@@ -128,6 +131,46 @@ test('executeRequestScript records logs and generated script assertions', async 
   });
 
   assert.equal(post.testResults[0]?.ok, true);
+});
+
+test('executeRequestScript resolves pm.variables across runtime scopes', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  environment.vars.envToken = 'env-123';
+  environment.vars.shadowed = 'env-shadow';
+  const request = createEmptyRequest('Scoped Variables');
+  request.url = 'https://example.com/scoped';
+  const preview = resolveRequest(project, request, undefined, environment);
+
+  const result = await executeRequestScript({
+    phase: 'pre-request',
+    script: `
+      pm.globals.set('globalToken', 'global-123');
+      pm.collectionVariables.set('collectionToken', 'collection-123');
+      pm.variables.set('shadowed', 'local-shadow');
+      pm.test('dynamic variables resolve scope precedence', () => {
+        pm.expect(pm.variables.get('shadowed')).to.equal('local-shadow');
+        pm.expect(pm.variables.get('tenant')).to.equal('team-a');
+        pm.expect(pm.variables.get('envToken')).to.equal('env-123');
+        pm.expect(pm.variables.get('globalToken')).to.equal('global-123');
+        pm.expect(pm.variables.has('envToken')).to.equal(true);
+        pm.expect(pm.variables.replaceIn('{{tenant}}/{{envToken}}/{{globalToken}}/{{shadowed}}')).to.equal('team-a/env-123/global-123/local-shadow');
+        pm.expect(pm.variables.toObject()).to.have.property('envToken', 'env-123');
+      });
+    `,
+    state: {
+      variables: {},
+      globals: {},
+      environment
+    },
+    request: preview,
+    context: {
+      iterationData: { tenant: 'team-a' }
+    }
+  });
+
+  assert.equal(result.state.variables.shadowed, 'local-shadow');
+  assert.equal(result.testResults.every(item => item.ok), true);
 });
 
 test('executeRequestScript supports pm.sendRequest lite during pre-request', async () => {
@@ -332,6 +375,60 @@ test('executeRequestScript exposes info, iteration data, and response convenienc
   assert.equal(result.testResults[0]?.ok, true);
 });
 
+test('executeRequestScript supports pm.globals across script phases', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Global Helpers');
+  request.url = 'https://example.com/globals';
+  const preview = resolveRequest(project, request, undefined, environment);
+
+  const pre = await executeRequestScript({
+    phase: 'pre-request',
+    script: `
+      pm.globals.set('tenant', 'team-a');
+      pm.test('globals api', () => {
+        pm.expect(pm.globals.get('tenant')).to.equal('team-a');
+        pm.expect(pm.globals.has('tenant')).to.equal(true);
+        pm.expect(pm.globals.toObject()).to.have.property('tenant', 'team-a');
+        pm.expect(pm.globals.replaceIn('https://{{tenant}}.example.com')).to.equal('https://team-a.example.com');
+      });
+    `,
+    state: {
+      variables: {},
+      environment
+    },
+    request: preview
+  });
+
+  assert.equal(pre.state.globals?.tenant, 'team-a');
+  assert.equal(pre.testResults[0]?.ok, true);
+
+  const post = await executeRequestScript({
+    phase: 'post-response',
+    script: `
+      pm.test('globals persist', () => {
+        pm.expect(pm.globals.get('tenant')).to.equal('team-a');
+      });
+    `,
+    state: pre.state,
+    request: preview,
+    response: {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      url: preview.url,
+      durationMs: 8,
+      sizeBytes: 12,
+      headers: [],
+      bodyText: '{"ok":true}',
+      timestamp: new Date().toISOString()
+    }
+  });
+
+  assert.equal(post.state.globals?.tenant, 'team-a');
+  assert.equal(post.testResults[0]?.ok, true);
+});
+
 test('executeRequestScript reports explicit unsupported api errors', async () => {
   const project = createDefaultProject('Demo');
   const environment = createDefaultEnvironment('shared');
@@ -380,6 +477,83 @@ test('executeRequestScript supports script-flow directives when collection conte
   assert.equal(result.execution.skipRequest, true);
   assert.equal(result.execution.nextRequestSet, true);
   assert.equal(result.execution.nextRequest, 'final-step');
+});
+
+test('runPreparedRequest preserves pm.globals between request runs', async () => {
+  const project = createDefaultProject('Demo');
+  const environment = createDefaultEnvironment('shared');
+  const seedRequest = createEmptyRequest('Seed Globals');
+  seedRequest.url = 'https://example.com/seed';
+  seedRequest.scripts.preRequest = 'pm.globals.set("tenant", "team-a");';
+
+  const consumerRequest = createEmptyRequest('Use Globals');
+  consumerRequest.url = 'https://{{tenant}}.example.com/profile';
+
+  const workspace = {
+    root: '/workspace/globals-runtime',
+    project,
+    environments: [{ document: environment, filePath: '/workspace/globals-runtime/environments/shared.yaml' }],
+    requests: [
+      {
+        request: seedRequest,
+        cases: [],
+        folderSegments: [],
+        requestFilePath: '/workspace/globals-runtime/requests/seed.request.yaml',
+        resourceDirPath: '/workspace/globals-runtime/requests/seed'
+      },
+      {
+        request: consumerRequest,
+        cases: [],
+        folderSegments: [],
+        requestFilePath: '/workspace/globals-runtime/requests/consumer.request.yaml',
+        resourceDirPath: '/workspace/globals-runtime/requests/consumer'
+      }
+    ],
+    folders: [],
+    collections: [],
+    tree: []
+  };
+
+  const seeded = await runPreparedRequest({
+    workspace,
+    request: seedRequest,
+    sendRequest: async preview => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      url: preview.url,
+      durationMs: 10,
+      sizeBytes: 12,
+      headers: [],
+      bodyText: '{"ok":true}',
+      timestamp: new Date().toISOString()
+    })
+  });
+
+  let seenUrl = '';
+  const consumed = await runPreparedRequest({
+    workspace,
+    request: consumerRequest,
+    context: { state: seeded.state },
+    sendRequest: async preview => {
+      seenUrl = preview.url;
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: preview.url,
+        durationMs: 10,
+        sizeBytes: 12,
+        headers: [],
+        bodyText: '{"ok":true}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.equal(seenUrl, 'https://team-a.example.com/profile');
+  assert.equal(consumed.preview.url, 'https://team-a.example.com/profile');
+  assert.equal(consumed.state.globals.tenant, 'team-a');
 });
 
 test('resolveRequest interpolates grpc payload fields and derives rpc path', () => {
@@ -476,6 +650,44 @@ test('resolveRequest preserves grpc server-streaming authoring state', () => {
   const resolved = resolveRequest(project, request);
   assert.equal(resolved.body.grpc?.rpcKind, 'server-streaming');
   assert.equal(resolved.requestPath, '/demo.users.UserService/WatchUsers');
+});
+
+test('resolveRequest preserves grpc client-streaming authoring state', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'grpc://localhost:50051';
+  const environment = createDefaultEnvironment('shared');
+  environment.vars.team = 'core';
+
+  const request = createEmptyRequest('Upload Users');
+  request.kind = 'grpc';
+  request.method = 'POST';
+  request.url = '{{baseUrl}}';
+  request.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: 'proto/user.proto',
+      importPaths: ['proto'],
+      service: 'demo.users.UserService',
+      method: 'UploadUsers',
+      rpcKind: 'client-streaming',
+      message: '',
+      messages: [
+        { name: 'First', content: '{"team":"{{team}}","user":{"id":"user-1"}}', enabled: true },
+        { name: 'Second', content: '{"team":"{{team}}","user":{"id":"user-2"}}', enabled: true }
+      ]
+    }
+  };
+
+  const resolved = resolveRequest(project, request, undefined, environment);
+  assert.equal(resolved.body.grpc?.rpcKind, 'client-streaming');
+  assert.equal(resolved.requestPath, '/demo.users.UserService/UploadUsers');
+  assert.deepEqual(
+    resolved.body.grpc?.messages?.map(message => message.content),
+    ['{"team":"core","user":{"id":"user-1"}}', '{"team":"core","user":{"id":"user-2"}}']
+  );
 });
 
 test('runPreparedRequest resolves grpc previews and exposes native runtime responses to scripts', async () => {
@@ -654,6 +866,209 @@ test('runPreparedRequest keeps grpc server-streaming previews and aggregated res
   assert.equal(result.response.headers.find(item => item.name === 'x-debugger-runtime')?.value, 'grpc-server-streaming');
   assert.equal(result.response.headers.find(item => item.name === 'x-grpc-message-count')?.value, '2');
   assert.equal(result.checkResults.every(item => item.ok), true);
+});
+
+test('runPreparedRequest keeps grpc client-streaming previews and native responses script-visible', async () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'grpc://localhost:50051';
+  const environment = createDefaultEnvironment('shared');
+  environment.vars.protoDir = '/workspace/protos';
+  environment.vars.package = 'demo.users';
+  environment.vars.team = 'core';
+
+  const request = createEmptyRequest('Upload Users');
+  request.kind = 'grpc';
+  request.method = 'POST';
+  request.url = '{{baseUrl}}';
+  request.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: '{{protoDir}}/user.proto',
+      importPaths: ['{{protoDir}}', '{{protoDir}}/common'],
+      service: '{{package}}.UserService',
+      method: 'UploadUsers',
+      rpcKind: 'client-streaming',
+      message: '',
+      messages: [
+        { name: 'User 1', content: '{"team":"{{team}}","user":{"id":"user-1"}}', enabled: true },
+        { name: 'User 2', content: '{"team":"{{team}}","user":{"id":"user-2"}}', enabled: true }
+      ]
+    }
+  };
+  request.scripts.tests = [
+    'pm.test("grpc stream runtime", () => pm.expect(pm.response.headers.get("x-debugger-runtime")).to.equal("grpc-client-streaming"));',
+    'pm.test("grpc request count", () => pm.expect(pm.response.headers.get("x-grpc-request-message-count")).to.equal("2"));',
+    'pm.test("grpc response body", () => pm.expect(pm.response.json("acceptedCount")).to.equal(2));'
+  ].join('\n');
+
+  const workspace = {
+    root: '/workspace/grpc-client-streaming-runtime',
+    project,
+    environments: [{ document: environment, filePath: '/workspace/grpc-client-streaming-runtime/environments/shared.yaml' }],
+    requests: [
+      {
+        request,
+        cases: [],
+        folderSegments: ['RPC'],
+        requestFilePath: '/workspace/grpc-client-streaming-runtime/requests/upload-users.request.yaml',
+        resourceDirPath: '/workspace/grpc-client-streaming-runtime/requests/upload-users'
+      }
+    ],
+    folders: [],
+    collections: [],
+    tree: []
+  };
+
+  const result = await runPreparedRequest({
+    workspace,
+    request,
+    sendRequest: async preview => {
+      assert.equal(preview.requestPath, '/demo.users.UserService/UploadUsers');
+      assert.equal(preview.body.grpc?.rpcKind, 'client-streaming');
+      assert.deepEqual(
+        preview.body.grpc?.messages?.map(message => message.content),
+        ['{"team":"core","user":{"id":"user-1"}}', '{"team":"core","user":{"id":"user-2"}}']
+      );
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: 'http://localhost:50051/demo.users.UserService/UploadUsers',
+        durationMs: 24,
+        sizeBytes: 22,
+        headers: [
+          { name: 'content-type', value: 'application/json; charset=utf-8' },
+          { name: 'grpc-status', value: '0' },
+          { name: 'x-debugger-runtime', value: 'grpc-client-streaming' },
+          { name: 'x-grpc-request-message-count', value: '2' }
+        ],
+        bodyText: '{"acceptedCount":2}',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.equal(result.preview.body.grpc?.rpcKind, 'client-streaming');
+  assert.equal(result.response.headers.find(item => item.name === 'x-debugger-runtime')?.value, 'grpc-client-streaming');
+  assert.equal(result.response.headers.find(item => item.name === 'x-grpc-request-message-count')?.value, '2');
+  assert.equal(result.checkResults.every(item => item.ok), true);
+});
+
+test('runPreparedRequest keeps grpc client-streaming requests runnable after Bruno and OpenCollection round-trips', async () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'grpc://localhost:50051';
+  const environment = createDefaultEnvironment('shared');
+  environment.vars.protoDir = '/workspace/protos';
+  environment.vars.package = 'demo.users';
+  environment.vars.team = 'core';
+
+  const request = createEmptyRequest('Upload Users');
+  request.id = 'req_roundtrip_grpc_client_streaming';
+  request.kind = 'grpc';
+  request.method = 'POST';
+  request.url = '{{baseUrl}}';
+  request.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: '{{protoDir}}/user.proto',
+      importPaths: ['{{protoDir}}', '{{protoDir}}/common'],
+      service: '{{package}}.UserService',
+      method: 'UploadUsers',
+      rpcKind: 'client-streaming',
+      message: '',
+      messages: [
+        { name: 'User 1', content: '{"team":"{{team}}","user":{"id":"user-1"}}', enabled: true },
+        { name: 'User 2', content: '{"team":"{{team}}","user":{"id":"user-2"}}', enabled: true }
+      ]
+    }
+  };
+  request.scripts.tests = 'pm.test("grpc response body", () => pm.expect(pm.response.json("acceptedCount")).to.equal(2));';
+
+  const collection = createEmptyCollection('Streaming Smoke');
+  collection.steps = [createCollectionStep({ requestId: request.id })];
+  const requests = [
+    {
+      request,
+      cases: [],
+      folderSegments: ['RPC'],
+      requestFilePath: '/workspace/requests/upload-users.request.yaml',
+      resourceDirPath: '/workspace/requests/upload-users'
+    }
+  ];
+
+  for (const scenario of [
+    {
+      label: 'Bruno JSON',
+      text: serializeBrunoJsonCollection({ project, collection, requests })
+    },
+    {
+      label: 'OpenCollection',
+      text: serializeOpenCollection({ project, collection, environments: [environment], requests })
+    }
+  ]) {
+    const imported = importSourceText(scenario.text);
+    const importedRequest = imported.requests[0]?.request;
+    assert.equal(importedRequest?.body.grpc?.rpcKind, 'client-streaming', `${scenario.label} should preserve rpcKind`);
+    assert.deepEqual(
+      importedRequest?.body.grpc?.messages?.map(message => message.content),
+      ['{"team":"{{team}}","user":{"id":"user-1"}}', '{"team":"{{team}}","user":{"id":"user-2"}}'],
+      `${scenario.label} should preserve request messages`
+    );
+
+    const result = await runPreparedRequest({
+      workspace: {
+        root: `/workspace/${scenario.label.toLowerCase().replace(/\s+/g, '-')}-grpc-roundtrip`,
+        project,
+        environments: [{ document: environment, filePath: '/workspace/environments/shared.yaml' }],
+        requests: [
+          {
+            request: importedRequest!,
+            cases: [],
+            folderSegments: ['RPC'],
+            requestFilePath: '/workspace/requests/upload-users.request.yaml',
+            resourceDirPath: '/workspace/requests/upload-users'
+          }
+        ],
+        folders: [],
+        collections: [],
+        tree: []
+      },
+      request: importedRequest!,
+      sendRequest: async preview => {
+        assert.equal(preview.body.grpc?.rpcKind, 'client-streaming');
+        assert.deepEqual(
+          preview.body.grpc?.messages?.map(message => message.content),
+          ['{"team":"core","user":{"id":"user-1"}}', '{"team":"core","user":{"id":"user-2"}}'],
+          `${scenario.label} preview should stay runnable`
+        );
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          url: 'http://localhost:50051/demo.users.UserService/UploadUsers',
+          durationMs: 24,
+          sizeBytes: 22,
+          headers: [
+            { name: 'content-type', value: 'application/json; charset=utf-8' },
+            { name: 'grpc-status', value: '0' },
+            { name: 'x-debugger-runtime', value: 'grpc-client-streaming' },
+            { name: 'x-grpc-request-message-count', value: '2' }
+          ],
+          bodyText: '{"acceptedCount":2}',
+          timestamp: new Date().toISOString()
+        };
+      }
+    });
+
+    assert.equal(result.response.headers.find(item => item.name === 'x-grpc-request-message-count')?.value, '2');
+    assert.equal(result.checkResults.every(item => item.ok), true);
+  }
 });
 
 test('runPreparedRequest executes request-level scripts before case-level scripts', async () => {
@@ -1525,6 +1940,8 @@ test('summarizeGraphqlSchema extracts root operation fields', () => {
   assert.equal(summary.typeCount, 7);
   assert.deepEqual(summary.queries, ['viewer', 'search']);
   assert.deepEqual(summary.mutations, ['login']);
+  assert.equal(summary.queryFields[0]?.namedType, 'User');
+  assert.equal(summary.queryFields[1]?.args[0]?.namedType, 'String');
   assert.deepEqual(summary.queryFields[0]?.selection, [
     'id',
     'name',
@@ -1532,6 +1949,19 @@ test('summarizeGraphqlSchema extracts root operation fields', () => {
     'friends {\n  id\n  name\n}'
   ]);
   assert.equal(summary.queryFields[1]?.args[0]?.type, 'String!');
+  assert.deepEqual(summary.types.find(type => type.name === 'User'), {
+    name: 'User',
+    kind: 'OBJECT',
+    fields: [
+      { name: 'id', type: 'ID', namedType: 'ID', kind: 'scalar', args: [] },
+      { name: 'name', type: 'String', namedType: 'String', kind: 'scalar', args: [] },
+      { name: 'profile', type: 'Profile', namedType: 'Profile', kind: 'object', args: [] },
+      { name: 'friends', type: '[User]', namedType: 'User', kind: 'object', args: [] }
+    ],
+    inputFields: [],
+    enumValues: [],
+    possibleTypes: []
+  });
 });
 
 test('buildGraphqlOperationDraft creates a query skeleton with variables', () => {
@@ -2386,14 +2816,17 @@ test('inspectResolvedRequest surfaces unsupported script APIs before send', () =
   request.url = '{{baseUrl}}/profile';
   const caseDocument = createEmptyCase(request.id, 'scripted');
   caseDocument.scripts = {
-    preRequest: 'pm.sendRequest("https://example.com/extra"); pm.execution.setNextRequest("next");',
-    postResponse: 'pm.vault.get("token"); postman.setNextRequest(null);'
+    preRequest: 'pm.globals.set("tenant", "team-a"); pm.sendRequest("https://example.com/extra"); pm.execution.setNextRequest("next");',
+    postResponse: 'pm.vault.get("token"); pm.visualizer.set("<div></div>"); pm.require("uuid"); postman.setNextRequest(null);'
   };
 
   const insight = inspectResolvedRequest(project, request, caseDocument, environment);
   assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-send-request'), true);
   assert.equal(insight.warnings.some(item => item.code === 'script-limited-set-next-request'), true);
   assert.equal(insight.warnings.some(item => item.code === 'script-limited-legacy-set-next-request'), true);
+  assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-globals'), false);
+  assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-visualizer'), true);
+  assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-require'), true);
   assert.equal(insight.diagnostics.some(item => item.code === 'script-unsupported-vault' && item.blocking === false), true);
 });
 

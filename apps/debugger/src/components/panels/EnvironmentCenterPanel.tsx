@@ -1,7 +1,8 @@
+import { useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, Code, Group, Select, Text, TextInput } from '@mantine/core';
 import type { AuthConfig, EnvironmentDocument, ProjectDocument, SessionSnapshot, WorkspaceIndex } from '@yapi-debugger/schema';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
-import type { VariableAuthoringAudit } from '../../lib/variable-audit';
+import { buildVariableWorkflowCatalog, type VariableAuthoringAudit } from '../../lib/variable-audit';
 
 function authTypeOptions() {
   return [
@@ -95,6 +96,33 @@ export function EnvironmentCenterPanel(props: {
   const hasOverlay = localVarCount > 0 || localHeaderCount > 0 || Boolean(selectedEnvironment?.localFilePath);
   const variableAudit = props.variableAudit || null;
   const activeEnvironmentLabel = selectedEnvironment?.name || props.activeEnvironmentName || 'No environment selected';
+  const [workflowFilter, setWorkflowFilter] = useState<'all' | 'shadowed' | 'active-request' | 'prompt-defaults'>('shadowed');
+  const [workflowQuery, setWorkflowQuery] = useState('');
+  const workflowCatalog = useMemo(
+    () =>
+      buildVariableWorkflowCatalog({
+        project,
+        environment: selectedEnvironment,
+        runtimeVariables: props.runtimeVariables,
+        promptVariables: props.promptVariables,
+        variableAudit
+      }),
+    [project, selectedEnvironment, props.runtimeVariables, props.promptVariables, variableAudit]
+  );
+  const filteredWorkflowEntries = useMemo(() => {
+    const needle = workflowQuery.trim().toLowerCase();
+    return workflowCatalog.entries.filter(entry => {
+      if (workflowFilter === 'shadowed' && !entry.conflict) return false;
+      if (workflowFilter === 'active-request' && !entry.requestLinked) return false;
+      if (workflowFilter === 'prompt-defaults' && !entry.hasPromptDefault) return false;
+      if (!needle) return true;
+      return (
+        entry.token.toLowerCase().includes(needle) ||
+        entry.winnerLabel.toLowerCase().includes(needle) ||
+        entry.definitions.some(definition => definition.label.toLowerCase().includes(needle))
+      );
+    });
+  }, [workflowCatalog.entries, workflowFilter, workflowQuery]);
 
   return (
     <section className="workspace-main environment-center">
@@ -328,6 +356,122 @@ export function EnvironmentCenterPanel(props: {
                     {props.activeRequestName
                       ? 'Resolve the active request preview first to inspect variable precedence and shadowing.'
                       : 'Select a request to inspect variable precedence, conflicts, and edit ownership.'}
+                  </div>
+                )}
+              </section>
+
+              <section className="inspector-section">
+                <div className="checks-head">
+                  <div>
+                    <Text className="section-kicker">Cross-scope Catalog</Text>
+                    <h3 className="section-title">Variable ownership and duplicate names</h3>
+                  </div>
+                  <Badge color={workflowCatalog.conflictCount > 0 ? 'orange' : 'teal'} variant="light">
+                    {workflowCatalog.conflictCount} shadowed · {workflowCatalog.requestLinkedCount} active request
+                  </Badge>
+                </div>
+                <Text size="sm" c="dimmed">
+                  Scan project, environment, runtime, and remembered prompt layers together so duplicate names can be cleaned up before they create request-level surprises.
+                </Text>
+                <div className="summary-grid" style={{ marginTop: 12 }}>
+                  <div className="summary-chip">
+                    <span>Known Tokens</span>
+                    <strong>{workflowCatalog.tokenCount}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Shadowed</span>
+                    <strong>{workflowCatalog.conflictCount}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Prompt Defaults</span>
+                    <strong>{workflowCatalog.promptDefaultCount}</strong>
+                  </div>
+                  <div className="summary-chip">
+                    <span>Active Request</span>
+                    <strong>{workflowCatalog.requestLinkedCount}</strong>
+                  </div>
+                </div>
+                <div className="variable-workflow-toolbar">
+                  <TextInput
+                    size="xs"
+                    placeholder="Search token or scope"
+                    value={workflowQuery}
+                    onChange={event => setWorkflowQuery(event.currentTarget.value)}
+                  />
+                  <Select
+                    size="xs"
+                    value={workflowFilter}
+                    data={[
+                      { value: 'all', label: 'All tokens' },
+                      { value: 'shadowed', label: 'Shadowed only' },
+                      { value: 'active-request', label: 'Active request only' },
+                      { value: 'prompt-defaults', label: 'Prompt defaults only' }
+                    ]}
+                    onChange={value =>
+                      setWorkflowFilter((value as 'all' | 'shadowed' | 'active-request' | 'prompt-defaults') || 'all')
+                    }
+                  />
+                </div>
+                {filteredWorkflowEntries.length === 0 ? (
+                  <div className="empty-tab-state" style={{ marginTop: 12 }}>
+                    No variables match this filter yet.
+                  </div>
+                ) : (
+                  <div className="variable-authoring-list">
+                    {filteredWorkflowEntries.map(entry => (
+                      <div key={entry.token} className="variable-authoring-card">
+                        <div className="variable-authoring-head">
+                          <div className="variable-authoring-copy">
+                            <strong>{entry.token}</strong>
+                            <span>
+                              {entry.requestLinked
+                                ? entry.requestMissing
+                                  ? `Referenced by ${variableAudit?.requestName || 'the active request'} but unresolved.`
+                                  : `Referenced by ${variableAudit?.requestName || 'the active request'}.`
+                                : 'Not currently referenced by the active request.'}
+                            </span>
+                          </div>
+                          <Group gap="xs">
+                            {entry.requestLinked ? (
+                              <Badge color={entry.requestMissing ? 'red' : 'blue'} variant="light">
+                                {entry.requestMissing ? 'request missing' : 'active request'}
+                              </Badge>
+                            ) : null}
+                            <Badge color={entry.conflict ? 'orange' : entry.hasResolutionSource ? 'teal' : 'gray'} variant="light">
+                              {entry.conflict ? 'shadowed' : entry.hasResolutionSource ? 'single source' : 'prompt only'}
+                            </Badge>
+                            <Code>{entry.winnerValue || 'empty'}</Code>
+                          </Group>
+                        </div>
+                        <Text size="xs" c="dimmed">
+                          Current winner: {entry.winnerLabel}. {entry.winnerHint}
+                        </Text>
+                        {entry.definitions.length > 0 ? (
+                          <div className="variable-definition-list">
+                            {entry.definitions.map(definition => (
+                              <div
+                                key={`${entry.token}:${definition.layerId}`}
+                                className={definition.winner ? 'variable-definition-row is-winning' : 'variable-definition-row'}
+                              >
+                                <div className="variable-authoring-copy">
+                                  <strong>{definition.label}</strong>
+                                  <span>{definition.editHint}</span>
+                                </div>
+                                <div className="variable-definition-meta">
+                                  <Code>{definition.value || 'empty'}</Code>
+                                  <Badge
+                                    variant="light"
+                                    color={definition.winner ? 'teal' : definition.participatesInResolution ? 'gray' : 'blue'}
+                                  >
+                                    {definition.winner ? 'winning' : definition.participatesInResolution ? 'available' : 'prompt default'}
+                                  </Badge>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
                   </div>
                 )}
               </section>

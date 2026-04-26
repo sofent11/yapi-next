@@ -345,6 +345,65 @@ test('Bruno JSON collection export imports back with folders and collection step
   assert.equal(imported.collections[0]?.collection.steps.length, 4);
 });
 
+test('Bruno JSON collection export preserves grpc client-streaming batches', () => {
+  const project = createDefaultProject('Bruno gRPC Client Streaming');
+  const grpc = createEmptyRequest('Upload Users');
+  grpc.id = 'req_json_grpc_client_stream';
+  grpc.kind = 'grpc';
+  grpc.method = 'POST';
+  grpc.url = 'grpcs://grpc.example.com';
+  grpc.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: 'protos/user.proto',
+      importPaths: ['protos', 'protos/common'],
+      service: 'demo.users.UserService',
+      method: 'UploadUsers',
+      rpcKind: 'client-streaming',
+      message: '',
+      messages: [
+        { name: 'User 1', content: '{"id":"user-1"}', enabled: true },
+        { name: 'User 2', content: '{"id":"user-2"}', enabled: false }
+      ]
+    }
+  };
+
+  const collection = createEmptyCollection('JSON Client Streaming');
+  collection.steps = [createCollectionStep({ requestId: grpc.id })];
+
+  const json = serializeBrunoJsonCollection({
+    project,
+    collection,
+    requests: [
+      {
+        request: grpc,
+        cases: [],
+        folderSegments: ['RPC'],
+        requestFilePath: '/workspace/requests/rpc/upload-users.request.yaml',
+        resourceDirPath: '/workspace/requests/rpc/upload-users'
+      }
+    ]
+  });
+
+  const parsed = JSON.parse(json);
+  assert.equal(parsed.items[0].items[0].type, 'grpc-request');
+  assert.equal(parsed.items[0].items[0].request.body.grpc[0].rpcKind, 'client-streaming');
+  assert.equal(parsed.items[0].items[0].request.body.grpc[0].content, '{"id":"user-1"}');
+  assert.equal(parsed.items[0].items[0].request.body.grpc[1].enabled, false);
+
+  const imported = importSourceText(json);
+  const importedGrpc = imported.requests[0]?.request;
+
+  assert.equal(importedGrpc?.body.grpc?.rpcKind, 'client-streaming');
+  assert.deepEqual(importedGrpc?.body.grpc?.messages, [
+    { name: 'User 1', content: '{"id":"user-1"}', enabled: true },
+    { name: 'User 2', content: '{"id":"user-2"}', enabled: false }
+  ]);
+});
+
 test('OpenCollection export imports back with mixed request kinds and environments', () => {
   const project = createDefaultProject('OpenCollection Export Demo');
   const environment = createDefaultEnvironment('Local');
@@ -529,4 +588,66 @@ test('OpenCollection export imports back with mixed request kinds and environmen
   assert.equal(importedGrpc?.body.grpc?.service, 'demo.users.UserService');
   assert.equal(importedGrpc?.body.grpc?.method, 'WatchUsers');
   assert.equal(importedGrpc?.body.grpc?.rpcKind, 'server-streaming');
+});
+
+test('OpenCollection export preserves grpc client-streaming batches', () => {
+  const project = createDefaultProject('OpenCollection gRPC Client Streaming');
+  const grpc = createEmptyRequest('Upload Users');
+  grpc.id = 'req_oc_grpc_client_stream';
+  grpc.kind = 'grpc';
+  grpc.method = 'POST';
+  grpc.url = 'grpcs://grpc.example.com';
+  grpc.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: 'protos/user.proto',
+      importPaths: ['protos', 'protos/common'],
+      service: 'demo.users.UserService',
+      method: 'UploadUsers',
+      rpcKind: 'client-streaming',
+      message: '',
+      messages: [
+        { name: 'User 1', content: '{"id":"user-1"}', enabled: true },
+        { name: 'User 2', content: '{"id":"user-2"}', enabled: false }
+      ]
+    }
+  };
+
+  const collection = createEmptyCollection('OpenCollection Client Streaming');
+  collection.steps = [createCollectionStep({ requestId: grpc.id })];
+
+  const json = serializeOpenCollection({
+    project,
+    collection,
+    environments: [],
+    requests: [
+      {
+        request: grpc,
+        cases: [],
+        folderSegments: ['RPC'],
+        requestFilePath: '/workspace/requests/rpc/upload-users.request.yaml',
+        resourceDirPath: '/workspace/requests/rpc/upload-users'
+      }
+    ]
+  });
+
+  const exported = JSON.parse(json);
+  assert.equal(exported.items[0].items[0].grpc.rpcKind, 'client-streaming');
+  assert.deepEqual(exported.items[0].items[0].grpc.message, [
+    { title: 'User 1', selected: true, message: '{"id":"user-1"}' },
+    { title: 'User 2', selected: false, message: '{"id":"user-2"}' }
+  ]);
+
+  const imported = importSourceText(json);
+  const importedGrpc = imported.requests[0]?.request;
+
+  assert.equal(imported.detectedFormat, 'opencollection');
+  assert.equal(importedGrpc?.body.grpc?.rpcKind, 'client-streaming');
+  assert.deepEqual(importedGrpc?.body.grpc?.messages, [
+    { name: 'User 1', content: '{"id":"user-1"}', enabled: true },
+    { name: 'User 2', content: '{"id":"user-2"}', enabled: false }
+  ]);
 });

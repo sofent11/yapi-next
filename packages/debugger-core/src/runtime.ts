@@ -25,6 +25,7 @@ type Primitive = string | number | boolean | null | undefined;
 
 export type ScriptExecutionState = {
   variables: Record<string, string>;
+  globals?: Record<string, string>;
   environment: EnvironmentDocument | undefined;
 };
 
@@ -145,7 +146,12 @@ export function interpolateResolvedRequest(
             method: preview.body.grpc.method
               ? interpolateString(preview.body.grpc.method, sources)
               : preview.body.grpc.method,
-            message: interpolateString(preview.body.grpc.message || '', sources)
+            message: interpolateString(preview.body.grpc.message || '', sources),
+            messages: (preview.body.grpc.messages || []).map(message => ({
+              ...message,
+              name: interpolateString(message.name || '', sources),
+              content: interpolateString(message.content || '', sources)
+            }))
           }
         : preview.body.grpc,
       fields: interpolateRows(preview.body.fields, sources)
@@ -282,7 +288,35 @@ function createVariableApi(target: Record<string, string>, fallbackSources: Arra
       delete target[key];
     },
     has: (key: string) => Object.prototype.hasOwnProperty.call(target, key),
+    toObject: () => ({ ...target }),
     replaceIn: (value: string) => interpolateString(String(value || ''), [target, ...fallbackSources])
+  };
+}
+
+function createScopedVariableApi(target: Record<string, string>, fallbackSources: Array<Record<string, unknown>>) {
+  const sources = [target, ...fallbackSources];
+  return {
+    get: (key: string) => stringifyTemplateValue(lookupVariable(key, sources)),
+    set: (key: string, value: Primitive) => {
+      target[key] = value == null ? '' : String(value);
+    },
+    unset: (key: string) => {
+      delete target[key];
+    },
+    has: (key: string) => sources.some(source => source && readPathValue(source, key) !== undefined),
+    toObject: () => {
+      const merged: Record<string, string> = {};
+      [...fallbackSources].reverse().forEach(source => {
+        Object.entries(source || {}).forEach(([key, value]) => {
+          if (value !== undefined) merged[key] = stringifyTemplateValue(value);
+        });
+      });
+      Object.entries(target).forEach(([key, value]) => {
+        merged[key] = value;
+      });
+      return merged;
+    },
+    replaceIn: (value: string) => interpolateString(String(value || ''), sources)
   };
 }
 
@@ -615,10 +649,11 @@ function createPmApi(input: {
     );
   }
 
-  const fallbackTemplateSources = [input.state.environment?.vars || {}];
+  const globalsStore = (input.state.globals ||= {});
+  const fallbackTemplateSources = [globalsStore, input.state.environment?.vars || {}];
   const variablesApi = createVariableApi(input.state.variables, fallbackTemplateSources);
   const environmentApi = input.state.environment
-    ? createVariableApi(input.state.environment.vars, [input.state.variables])
+    ? createVariableApi(input.state.environment.vars, [input.state.variables, globalsStore])
     : {
         get: (_key: string) => undefined,
         set: () => undefined,
@@ -629,9 +664,18 @@ function createPmApi(input: {
   const iterationData = Object.fromEntries(
     Object.entries(input.context?.iterationData || {}).map(([key, value]) => [key, stringifyTemplateValue(value)])
   );
-  const iterationDataApi = createReadonlyVariableApi(iterationData, [input.state.variables, input.state.environment?.vars || {}]);
+  const iterationDataApi = createReadonlyVariableApi(iterationData, [
+    input.state.variables,
+    globalsStore,
+    input.state.environment?.vars || {}
+  ]);
   const responseApi = input.response ? createScriptResponse(input.response) : undefined;
-  const globalsApi = createUnsupportedVariableApi('pm.globals', [input.state.variables, input.state.environment?.vars || {}]);
+  const globalsApi = createVariableApi(globalsStore, [input.state.variables, input.state.environment?.vars || {}]);
+  const scopedVariablesApi = createScopedVariableApi(input.state.variables, [
+    iterationData,
+    input.state.environment?.vars || {},
+    globalsStore
+  ]);
   const setNextRequest = (apiName: 'pm.execution.setNextRequest' | 'postman.setNextRequest', name?: string | null) => {
     if (!input.context?.sourceCollection) {
       throw createUnsupportedApiError(apiName, 'Only collection runs can redirect flow.');
@@ -655,7 +699,7 @@ function createPmApi(input: {
   };
 
   return {
-    variables: variablesApi,
+    variables: scopedVariablesApi,
     collectionVariables: variablesApi,
     iterationData: iterationDataApi,
     environment: environmentApi,
@@ -682,11 +726,17 @@ function createPmApi(input: {
     },
     visualizer: {
       set: (_template: string, _data?: unknown) => {
-        throw createUnsupportedApiError('pm.visualizer');
+        throw createUnsupportedApiError(
+          'pm.visualizer',
+          'Template rendering output is not surfaced in the local debugger runtime yet.'
+        );
       }
     },
     require: (_name: string) => {
-      throw createUnsupportedApiError('pm.require');
+      throw createUnsupportedApiError(
+        'pm.require',
+        'External package loading is disabled in the local debugger runtime.'
+      );
     },
     cookies: responseApi?.cookies || {
       get: (_key: string) => '',

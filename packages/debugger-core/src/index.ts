@@ -115,12 +115,6 @@ const UNSUPPORTED_SCRIPT_PATTERNS = [
     message: 'pm.execution.setNextRequest is supported only during collection runs, and only for forward step key/name/request targets or null stop.'
   },
   {
-    token: 'pm.globals',
-    code: 'script-unsupported-globals',
-    level: 'warning' as const,
-    message: 'pm.globals is not supported by the local debugger runtime yet.'
-  },
-  {
     token: 'pm.vault',
     code: 'script-unsupported-vault',
     level: 'warning' as const,
@@ -130,13 +124,13 @@ const UNSUPPORTED_SCRIPT_PATTERNS = [
     token: 'pm.visualizer',
     code: 'script-unsupported-visualizer',
     level: 'warning' as const,
-    message: 'pm.visualizer is not supported by the local debugger runtime yet.'
+    message: 'pm.visualizer output is not surfaced by the local debugger runtime yet.'
   },
   {
     token: 'pm.require',
     code: 'script-unsupported-require',
     level: 'warning' as const,
-    message: 'pm.require is not supported by the local debugger runtime yet.'
+    message: 'pm.require is not supported by the local debugger runtime yet because external package loading is disabled.'
   },
   {
     token: 'postman.setNextRequest',
@@ -343,6 +337,7 @@ fragment TypeRef on __Type {
 export type GraphqlFieldArgumentSummary = {
   name: string;
   type: string;
+  namedType?: string;
   required: boolean;
   defaultValue?: string;
   placeholder?: unknown;
@@ -358,6 +353,7 @@ export type GraphqlSelectionFragmentSummary = {
 export type GraphqlSelectionFieldSummary = {
   name: string;
   returnType: string;
+  namedType?: string;
   kind: GraphqlSelectionKind;
   children: GraphqlSelectionFieldSummary[];
   fragments: GraphqlSelectionFragmentSummary[];
@@ -367,9 +363,27 @@ export type GraphqlOperationFieldSummary = {
   name: string;
   args: GraphqlFieldArgumentSummary[];
   returnType: string;
+  namedType?: string;
   selection: string[];
   selectionTree: GraphqlSelectionFieldSummary[];
   selectionFragments: GraphqlSelectionFragmentSummary[];
+};
+
+export type GraphqlSchemaTypeFieldSummary = {
+  name: string;
+  type: string;
+  namedType?: string;
+  kind: GraphqlSelectionKind;
+  args: GraphqlFieldArgumentSummary[];
+};
+
+export type GraphqlSchemaTypeSummary = {
+  name: string;
+  kind: string;
+  fields: GraphqlSchemaTypeFieldSummary[];
+  inputFields: GraphqlFieldArgumentSummary[];
+  enumValues: string[];
+  possibleTypes: string[];
 };
 
 export type GraphqlSchemaSummary = {
@@ -384,6 +398,7 @@ export type GraphqlSchemaSummary = {
   queryFields: GraphqlOperationFieldSummary[];
   mutationFields: GraphqlOperationFieldSummary[];
   subscriptionFields: GraphqlOperationFieldSummary[];
+  types: GraphqlSchemaTypeSummary[];
   warnings: string[];
 };
 
@@ -520,6 +535,30 @@ function possibleGraphqlTypes(schemaType: unknown, byName: Map<string, unknown>)
     .slice(0, 8);
 }
 
+function graphqlArgumentSummary(
+  source: { name?: unknown; defaultValue?: unknown; type?: GraphqlIntrospectionTypeRef | null },
+  byName: Map<string, unknown>
+): GraphqlFieldArgumentSummary {
+  const namedType = namedGraphqlType(source.type);
+  return {
+    name: String(source.name || ''),
+    type: formatGraphqlType(source.type),
+    namedType: namedType || undefined,
+    required: isGraphqlRequired(source.type),
+    defaultValue: typeof source.defaultValue === 'string' ? source.defaultValue : undefined,
+    placeholder: placeholderForGraphqlTypeRef(
+      source.type,
+      byName,
+      typeof source.defaultValue === 'string' ? source.defaultValue : undefined,
+      {
+        depth: 3,
+        path: new Set(),
+        maxFields: 16
+      }
+    )
+  };
+}
+
 function graphqlSelectionKindForTypeRef(
   typeRef: GraphqlIntrospectionTypeRef | null | undefined,
   byName: Map<string, unknown>
@@ -557,6 +596,7 @@ function buildGraphqlSelectionTree(
             .map(field => ({
               name: String(field.name),
               returnType: formatGraphqlType(field.type),
+              namedType: namedGraphqlType(field.type) || undefined,
               kind: graphqlSelectionKindForTypeRef(field.type, byName),
               children: [],
               fragments: []
@@ -579,6 +619,7 @@ function buildGraphqlSelectionTree(
             return {
               name: String(field.name),
               returnType: formatGraphqlType(field.type),
+              namedType: namedGraphqlType(field.type) || undefined,
               kind: graphqlSelectionKindForTypeRef(field.type, byName),
               children: nested.children,
               fragments: nested.fragments
@@ -818,33 +859,63 @@ function operationFields(schemaType: unknown, byName: Map<string, unknown>): Gra
       return {
         name: String(field.name),
         args: args
-          .map(arg => {
-            const source = arg as { name?: unknown; defaultValue?: unknown; type?: GraphqlIntrospectionTypeRef | null };
-            return {
-              name: String(source.name || ''),
-              type: formatGraphqlType(source.type),
-              required: isGraphqlRequired(source.type),
-              defaultValue: typeof source.defaultValue === 'string' ? source.defaultValue : undefined,
-              placeholder: placeholderForGraphqlTypeRef(
-                source.type,
-                byName,
-                typeof source.defaultValue === 'string' ? source.defaultValue : undefined,
-                {
-                  depth: 3,
-                  path: new Set(),
-                  maxFields: 16
-                }
-              )
-            };
-          })
+          .map(arg => graphqlArgumentSummary(arg as GraphqlIntrospectionInputValue, byName))
           .filter(arg => arg.name.trim().length > 0),
-          returnType: formatGraphqlType(field.type),
-          selection: defaultSelectionFieldsForType(field.type, byName),
-          selectionTree: selectionTree.children,
-          selectionFragments: selectionTree.fragments
-        };
+        returnType: formatGraphqlType(field.type),
+        namedType: namedGraphqlType(field.type) || undefined,
+        selection: defaultSelectionFieldsForType(field.type, byName),
+        selectionTree: selectionTree.children,
+        selectionFragments: selectionTree.fragments
+      };
       })
       .slice(0, 48);
+}
+
+function graphqlSchemaTypeSummaries(types: unknown[], byName: Map<string, unknown>): GraphqlSchemaTypeSummary[] {
+  const summaries: GraphqlSchemaTypeSummary[] = [];
+  types.forEach(rawType => {
+    const type = rawType as GraphqlIntrospectionType;
+      const name = String(type.name || '');
+      if (!name || name.startsWith('__')) return;
+      const fields = Array.isArray(type.fields)
+        ? type.fields
+            .map(field => field as GraphqlIntrospectionField)
+            .filter(field => typeof field.name === 'string' && field.name.trim().length > 0)
+            .map(field => ({
+              name: String(field.name),
+              type: formatGraphqlType(field.type),
+              namedType: namedGraphqlType(field.type) || undefined,
+              kind: graphqlSelectionKindForTypeRef(field.type, byName),
+              args: Array.isArray(field.args)
+                ? field.args
+                    .map(arg => graphqlArgumentSummary(arg as GraphqlIntrospectionInputValue, byName))
+                    .filter(arg => arg.name.trim().length > 0)
+                : []
+            }))
+            .slice(0, 64)
+        : [];
+      const inputFields = Array.isArray(type.inputFields)
+        ? type.inputFields
+            .map(field => graphqlArgumentSummary(field as GraphqlIntrospectionInputValue, byName))
+            .filter(field => field.name.trim().length > 0)
+            .slice(0, 64)
+        : [];
+      const enumValues = Array.isArray(type.enumValues)
+        ? type.enumValues
+            .map(value => String((value as GraphqlIntrospectionEnumValue).name || ''))
+            .filter(value => value.length > 0)
+            .slice(0, 64)
+        : [];
+      summaries.push({
+        name,
+        kind: String(type.kind || ''),
+        fields,
+        inputFields,
+        enumValues,
+        possibleTypes: possibleGraphqlTypes(type, byName)
+      } satisfies GraphqlSchemaTypeSummary);
+  });
+  return summaries.sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export function summarizeGraphqlSchema(bodyText: string): GraphqlSchemaSummary {
@@ -857,6 +928,7 @@ export function summarizeGraphqlSchema(bodyText: string): GraphqlSchemaSummary {
     queryFields: [],
     mutationFields: [],
     subscriptionFields: [],
+    types: [],
     warnings: []
   };
 
@@ -902,6 +974,7 @@ export function summarizeGraphqlSchema(bodyText: string): GraphqlSchemaSummary {
   const queryFields = queryType ? operationFields(byName.get(queryType), byName) : [];
   const mutationFields = mutationType ? operationFields(byName.get(mutationType), byName) : [];
   const subscriptionFields = subscriptionType ? operationFields(byName.get(subscriptionType), byName) : [];
+  const schemaTypes = graphqlSchemaTypeSummaries(types, byName);
 
   return {
     ok: true,
@@ -916,6 +989,7 @@ export function summarizeGraphqlSchema(bodyText: string): GraphqlSchemaSummary {
     queryFields,
     mutationFields,
     subscriptionFields,
+    types: schemaTypes,
     warnings
   };
 }
@@ -1028,6 +1102,7 @@ export function buildGraphqlOperationDraft(
       name: fieldName,
       args: [],
       returnType: 'JSON',
+      namedType: undefined,
       selection: [],
       selectionTree: [],
       selectionFragments: []
@@ -1979,13 +2054,21 @@ function brunoJsonBody(body: RequestBody, kind: RequestKind) {
     };
   }
   if (kind === 'grpc') {
+    const grpcMessages = normalized.grpc?.messages || [];
     return {
       mode: 'grpc',
-      grpc: [{
-        name: 'message 1',
-        content: normalized.grpc?.message || '',
-        ...(normalized.grpc?.rpcKind && normalized.grpc.rpcKind !== 'unary' ? { rpcKind: normalized.grpc.rpcKind } : {})
-      }]
+      grpc: grpcMessages.length > 0
+        ? grpcMessages.map((message, index) => ({
+            name: message.name || `message ${index + 1}`,
+            content: message.content || '',
+            enabled: message.enabled !== false,
+            ...(normalized.grpc?.rpcKind && normalized.grpc.rpcKind !== 'unary' ? { rpcKind: normalized.grpc.rpcKind } : {})
+          }))
+        : [{
+            name: 'message 1',
+            content: normalized.grpc?.message || '',
+            ...(normalized.grpc?.rpcKind && normalized.grpc.rpcKind !== 'unary' ? { rpcKind: normalized.grpc.rpcKind } : {})
+          }]
     };
   }
   switch (normalized.mode) {
@@ -2389,6 +2472,11 @@ function openCollectionItem(record: WorkspaceRequestRecord, seq: number) {
   if (request.kind === 'grpc') {
     const service = request.body.grpc?.service || '';
     const method = request.body.grpc?.method || '';
+    const grpcMessages = (request.body.grpc?.messages || []).map((message, index) => ({
+      title: message.name || `message ${index + 1}`,
+      selected: message.enabled !== false,
+      message: message.content || ''
+    }));
     return {
       ...base,
       grpc: {
@@ -2398,7 +2486,7 @@ function openCollectionItem(record: WorkspaceRequestRecord, seq: number) {
         ...(request.body.grpc?.importPaths?.length ? { importPaths: request.body.grpc.importPaths.filter(Boolean) } : {}),
         ...(request.body.grpc?.rpcKind && request.body.grpc.rpcKind !== 'unary' ? { rpcKind: request.body.grpc.rpcKind } : {}),
         ...(request.headers.length > 0 ? { metadata: request.headers.map(row => openCollectionRow(row)) } : {}),
-        message: request.body.grpc?.message || '',
+        message: grpcMessages.length > 0 ? grpcMessages : request.body.grpc?.message || '',
         auth: openCollectionAuth(request.auth)
       }
     };
@@ -4390,6 +4478,15 @@ function buildPreflightDiagnostics(
         field: 'body'
       });
     }
+    if (preview.body.grpc?.rpcKind === 'client-streaming' && !(preview.body.grpc.messages || []).some(message => message.enabled !== false)) {
+      diagnostics.push({
+        code: 'missing-grpc-client-stream-message',
+        level: 'error',
+        blocking: true,
+        message: 'Client-streaming gRPC requests require at least one enabled request message.',
+        field: 'body'
+      });
+    }
   }
 
   return diagnostics;
@@ -4728,6 +4825,22 @@ export function inspectResolvedRequest(
         )
       );
     }
+    (body.grpc.messages || []).forEach((message, index) => {
+      fields.push(
+        collectResolvedField(
+          {
+            location: 'body',
+            label: `gRPC Message ${index + 1}`,
+            rawValue: message.content || '',
+            resolvedValue: preview.body.grpc?.messages?.[index]?.content || ''
+          },
+          project,
+          environment,
+          extraSources,
+          variables
+        )
+      );
+    });
   }
 
   body.fields.forEach((row, index) => {
@@ -4966,7 +5079,12 @@ export function resolveRequest(
           method: resolvedBody.grpc.method
             ? applyProjectVariables(resolvedBody.grpc.method, project, environment, extraSources)
             : resolvedBody.grpc.method,
-          message: applyProjectVariables(resolvedBody.grpc.message || '', project, environment, extraSources)
+          message: applyProjectVariables(resolvedBody.grpc.message || '', project, environment, extraSources),
+          messages: (resolvedBody.grpc.messages || []).map(message => ({
+            ...message,
+            name: applyProjectVariables(message.name || '', project, environment, extraSources),
+            content: applyProjectVariables(message.content || '', project, environment, extraSources)
+          }))
         }
       : resolvedBody.grpc,
     fields: resolvedBody.fields.map((row: ParameterRow) => ({
@@ -5212,6 +5330,7 @@ export type RequestRunContext = {
   extraSources?: Array<Record<string, unknown>>;
   state?: {
     variables: Record<string, string>;
+    globals?: Record<string, string>;
     environment: EnvironmentDocument;
   };
   iterationData?: Record<string, unknown>;
@@ -5248,6 +5367,7 @@ export type PreparedRequestRunResult = {
   execution: ScriptExecutionFlow;
   state: {
     variables: Record<string, string>;
+    globals: Record<string, string>;
     environment: EnvironmentDocument;
   };
 };
@@ -5527,8 +5647,10 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
       : structuredClone(sourceEnvironment);
   const state = context.state || {
     variables: {},
+    globals: {},
     environment: initialEnvironment
   };
+  state.globals ||= {};
   state.environment = initialEnvironment;
   const preRequestScript = joinScriptBlocks(
     input.context?.collectionScripts?.preRequest,
@@ -5553,6 +5675,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
 
   const beforeSources = [
     createNamedTemplateSource('runtime variables', state.variables, 'runtime'),
+    createNamedTemplateSource('global variables', state.globals, 'runtime'),
     ...(context.extraSources || [])
   ];
   const previewBeforeScripts = resolveRequest(
@@ -5575,6 +5698,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
   });
   const runtimeSources = [
     createNamedTemplateSource('runtime variables', preScript.state.variables, 'script'),
+    createNamedTemplateSource('global variables', preScript.state.globals || {}, 'runtime'),
     ...(context.extraSources || [])
   ];
   const insight = inspectResolvedRequest(
@@ -5608,6 +5732,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
       execution: preScript.execution,
       state: {
         variables: { ...preScript.state.variables },
+        globals: { ...(preScript.state.globals || {}) },
         environment: structuredClone(preScript.state.environment || initialEnvironment)
       }
     };
@@ -5638,6 +5763,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
         execution: scriptExecution,
         state: {
           variables: { ...mainScript.state.variables },
+          globals: { ...(mainScript.state.globals || {}) },
           environment: structuredClone(mainScript.state.environment || initialEnvironment)
         }
       };
@@ -5664,6 +5790,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
       execution: mergeScriptExecutionFlows(scriptExecution, postScript.execution),
       state: {
         variables: { ...postScript.state.variables },
+        globals: { ...(postScript.state.globals || {}) },
         environment: structuredClone(postScript.state.environment || initialEnvironment)
       }
     };
@@ -5766,6 +5893,7 @@ export async function runPreparedRequest(input: PreparedRequestRunInput): Promis
     execution: mergeScriptExecutionFlows(preScript.execution, postScript.execution),
     state: {
       variables: { ...postScript.state.variables },
+      globals: { ...(postScript.state.globals || {}) },
       environment: structuredClone(postScript.state.environment || initialEnvironment)
     }
   };
@@ -5776,7 +5904,7 @@ async function runCollectionStepWithRetry(input: {
   collection: CollectionDocument;
   step: CollectionStep;
   requestRecord: WorkspaceRequestRecord;
-  runtimeState: { variables: Record<string, string>; environment: EnvironmentDocument };
+  runtimeState: { variables: Record<string, string>; globals: Record<string, string>; environment: EnvironmentDocument };
   dataVars: Record<string, unknown>;
   iteration: number;
   iterationCount: number;
@@ -5849,6 +5977,7 @@ async function runCollectionStepWithRetry(input: {
           iterationCount: input.iterationCount,
           state: {
             variables: stepVariables,
+            globals: input.runtimeState.globals,
             environment: input.runtimeState.environment
           },
           collectionRules: input.collection.rules,
@@ -5889,6 +6018,7 @@ async function runCollectionStepWithRetry(input: {
           } satisfies CollectionStepRun,
           nextState: {
             variables: nextVariables,
+            globals: { ...result.state.globals },
             environment: result.state.environment
           },
           execution: result.execution
@@ -5921,6 +6051,7 @@ async function runCollectionStepWithRetry(input: {
           } satisfies CollectionStepRun,
           nextState: {
             variables: nextVariables,
+            globals: { ...result.state.globals },
             environment: result.state.environment
           },
           output: buildStepOutput(result.preview, result.response),
@@ -6075,6 +6206,7 @@ export async function runCollection(input: {
       const dataVars = baseRows[index] || {};
       let runtimeState = {
         variables: { ...collection.vars },
+        globals: {},
         environment: structuredClone(sourceEnvironment)
       };
       const seeded = seededStepOutputsFromReport(input.options?.seedReport || null);

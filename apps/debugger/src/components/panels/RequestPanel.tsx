@@ -23,9 +23,12 @@ import {
   graphqlSelectionPath,
   inspectResolvedRequest,
   summarizeGraphqlSchema,
+  type GraphqlFieldArgumentSummary,
   type GraphqlFragmentStyle,
   type GraphqlOperationFieldSummary,
   type GraphqlOperationKind,
+  type GraphqlSchemaTypeFieldSummary,
+  type GraphqlSchemaTypeSummary,
   type GraphqlSelectionFieldSummary,
   type GraphqlSelectionFragmentSummary,
   type GraphqlSchemaSummary
@@ -62,7 +65,8 @@ const REQUEST_METHODS: RequestDocument['method'][] = ['GET', 'POST', 'PUT', 'PAT
 const REQUEST_KINDS: RequestDocument['kind'][] = ['http', 'graphql', 'grpc', 'websocket', 'script'];
 const GRPC_RPC_KINDS = [
   { value: 'unary', label: 'Unary' },
-  { value: 'server-streaming', label: 'Server Streaming' }
+  { value: 'server-streaming', label: 'Server Streaming' },
+  { value: 'client-streaming', label: 'Client Streaming' }
 ] as const;
 
 function bodyModeOptions() {
@@ -173,6 +177,7 @@ type WebSocketLiveState = {
   error?: string;
 };
 
+type GrpcMessageDraft = NonNullable<NonNullable<RequestBody['grpc']>['messages']>[number];
 type WebSocketMessageDraft = NonNullable<NonNullable<RequestBody['websocket']>['messages']>[number];
 type RequestVariableRow = RequestDocument['vars']['req'][number];
 type GraphqlSavedOperation = NonNullable<NonNullable<RequestBody['graphql']>['savedOperations']>[number];
@@ -366,6 +371,39 @@ function graphqlFieldMatchesSearch(field: GraphqlOperationFieldSummary, search: 
   return field.args.some(arg => arg.name.toLowerCase().includes(normalizedSearch) || arg.type.toLowerCase().includes(normalizedSearch));
 }
 
+function graphqlTypeMatchesSearch(type: GraphqlSchemaTypeSummary, search: string) {
+  const normalizedSearch = search.trim().toLowerCase();
+  if (!normalizedSearch) return true;
+  if (type.name.toLowerCase().includes(normalizedSearch)) return true;
+  if (type.kind.toLowerCase().includes(normalizedSearch)) return true;
+  if (type.possibleTypes.some(name => name.toLowerCase().includes(normalizedSearch))) return true;
+  if (type.enumValues.some(value => value.toLowerCase().includes(normalizedSearch))) return true;
+  if (
+    type.fields.some(field =>
+      field.name.toLowerCase().includes(normalizedSearch) ||
+      field.type.toLowerCase().includes(normalizedSearch) ||
+      field.args.some(arg => arg.name.toLowerCase().includes(normalizedSearch) || arg.type.toLowerCase().includes(normalizedSearch))
+    )
+  ) {
+    return true;
+  }
+  return type.inputFields.some(field => field.name.toLowerCase().includes(normalizedSearch) || field.type.toLowerCase().includes(normalizedSearch));
+}
+
+function graphqlTypeFieldMatchesSearch(field: GraphqlSchemaTypeFieldSummary, search: string) {
+  const normalizedSearch = search.trim().toLowerCase();
+  if (!normalizedSearch) return true;
+  if (field.name.toLowerCase().includes(normalizedSearch)) return true;
+  if (field.type.toLowerCase().includes(normalizedSearch)) return true;
+  return field.args.some(arg => arg.name.toLowerCase().includes(normalizedSearch) || arg.type.toLowerCase().includes(normalizedSearch));
+}
+
+function graphqlArgumentMatchesSearch(argument: GraphqlFieldArgumentSummary, search: string) {
+  const normalizedSearch = search.trim().toLowerCase();
+  if (!normalizedSearch) return true;
+  return argument.name.toLowerCase().includes(normalizedSearch) || argument.type.toLowerCase().includes(normalizedSearch);
+}
+
 export function RequestPanel(props: {
   workspace: WorkspaceIndex;
   activeEnvironmentName?: string;
@@ -410,8 +448,12 @@ export function RequestPanel(props: {
     service: '',
     method: '',
     rpcKind: 'unary' as const,
-    message: '{}'
+    message: '{}',
+    messages: []
   };
+  const grpcMessages = grpcBody.messages?.length
+    ? grpcBody.messages
+    : [{ name: 'Message 1', content: grpcBody.message || '{}', enabled: true }];
   const websocketMessages = body.websocket?.messages?.length
     ? body.websocket.messages
     : [{ name: 'Message 1', body: '', kind: 'json' as const, enabled: true }];
@@ -445,6 +487,7 @@ export function RequestPanel(props: {
     graphqlIntrospection.summary ? firstGraphqlExplorerState(graphqlIntrospection.summary) : null
   );
   const [graphqlSchemaSearch, setGraphqlSchemaSearch] = useState('');
+  const [graphqlTypeTrail, setGraphqlTypeTrail] = useState<string[]>([]);
   const [graphqlFragmentStyle, setGraphqlFragmentStyle] = useState<GraphqlFragmentStyle>('inline');
   const [selectedGraphqlSavedOperation, setSelectedGraphqlSavedOperation] = useState<string | null>(
     () => graphqlBody.savedOperations?.[0]?.name || null
@@ -548,6 +591,16 @@ export function RequestPanel(props: {
     );
   }, [graphqlExplorer, graphqlIntrospection.summary]);
 
+  useEffect(() => {
+    setGraphqlTypeTrail(current => {
+      const availableTypes = new Set(graphqlIntrospection.summary?.types.map(type => type.name) || []);
+      const filtered = current.filter(name => availableTypes.has(name));
+      if (filtered.length > 0) return filtered;
+      const explorerType = graphqlExplorerField?.namedType;
+      return explorerType && availableTypes.has(explorerType) ? [explorerType] : [];
+    });
+  }, [graphqlExplorerField?.namedType, graphqlIntrospection.summary, requestDocument.id, selectedCase?.id]);
+
   const graphqlSelectedFieldSet = useMemo(
     () => new Set(graphqlExplorer?.selectedFields || []),
     [graphqlExplorer?.selectedFields]
@@ -560,6 +613,42 @@ export function RequestPanel(props: {
   const activeGraphqlSavedOperation = useMemo(
     () => graphqlSavedOperations.find(operation => operation.name === selectedGraphqlSavedOperation) || null,
     [graphqlSavedOperations, selectedGraphqlSavedOperation]
+  );
+  const graphqlSchemaTypes = graphqlIntrospection.summary?.types || [];
+  const graphqlTypeTrailVisible = useMemo(
+    () => graphqlTypeTrail.filter(name => graphqlSchemaTypes.some(type => type.name === name)),
+    [graphqlTypeTrail, graphqlSchemaTypes]
+  );
+  const graphqlSelectedTypeName = graphqlTypeTrailVisible[graphqlTypeTrailVisible.length - 1] || null;
+  const graphqlSelectedType = useMemo(
+    () => graphqlSchemaTypes.find(type => type.name === graphqlSelectedTypeName) || null,
+    [graphqlSchemaTypes, graphqlSelectedTypeName]
+  );
+  const graphqlMatchingTypes = useMemo(
+    () => graphqlSchemaTypes.filter(type => graphqlTypeMatchesSearch(type, graphqlSchemaSearch)).slice(0, 12),
+    [graphqlSchemaSearch, graphqlSchemaTypes]
+  );
+  const graphqlVisibleTypeFields = useMemo(
+    () => graphqlSelectedType?.fields.filter(field => graphqlTypeFieldMatchesSearch(field, graphqlSchemaSearch)) || [],
+    [graphqlSchemaSearch, graphqlSelectedType]
+  );
+  const graphqlVisibleInputFields = useMemo(
+    () => graphqlSelectedType?.inputFields.filter(field => graphqlArgumentMatchesSearch(field, graphqlSchemaSearch)) || [],
+    [graphqlSchemaSearch, graphqlSelectedType]
+  );
+  const graphqlVisibleEnumValues = useMemo(
+    () =>
+      graphqlSelectedType?.enumValues.filter(value =>
+        graphqlSchemaSearch.trim() ? value.toLowerCase().includes(graphqlSchemaSearch.trim().toLowerCase()) : true
+      ) || [],
+    [graphqlSchemaSearch, graphqlSelectedType]
+  );
+  const graphqlVisiblePossibleTypes = useMemo(
+    () =>
+      graphqlSelectedType?.possibleTypes.filter(typeName =>
+        graphqlSchemaSearch.trim() ? typeName.toLowerCase().includes(graphqlSchemaSearch.trim().toLowerCase()) : true
+      ) || [],
+    [graphqlSchemaSearch, graphqlSelectedType]
   );
 
   function updateSelectedCase(updater: (current: CaseDocument) => CaseDocument) {
@@ -691,6 +780,37 @@ export function RequestPanel(props: {
 
   function selectGraphqlExplorerField(operation: GraphqlOperationKind, field: GraphqlOperationFieldSummary) {
     setGraphqlExplorer(explorerStateForField(operation, field));
+    if (field.namedType) {
+      setGraphqlTypeTrail([field.namedType]);
+    }
+  }
+
+  function openGraphqlType(typeName?: string | null) {
+    if (!typeName || !graphqlSchemaTypes.some(type => type.name === typeName)) return;
+    setGraphqlTypeTrail(current => {
+      const existingIndex = current.indexOf(typeName);
+      if (existingIndex >= 0) {
+        return current.slice(0, existingIndex + 1);
+      }
+      return [...current, typeName];
+    });
+  }
+
+  function renderGraphqlTypePill(typeName: string | undefined, label: string, tone: 'default' | 'muted' = 'default') {
+    const inspectable = Boolean(typeName && graphqlSchemaTypes.some(type => type.name === typeName));
+    if (!inspectable) {
+      return <code>{label}</code>;
+    }
+    return (
+      <button
+        type="button"
+        className={`graphql-type-chip${graphqlSelectedTypeName === typeName ? ' is-active' : ''}${tone === 'muted' ? ' is-muted' : ''}`}
+        onClick={() => openGraphqlType(typeName)}
+        title={`Inspect ${typeName}`}
+      >
+        {label}
+      </button>
+    );
   }
 
   function toggleGraphqlExplorerField(path: string, checked: boolean, node: GraphqlSelectionFieldSummary) {
@@ -860,6 +980,22 @@ export function RequestPanel(props: {
         examples: body.websocket?.examples || []
       }
     });
+  }
+
+  function updateGrpcBody(patch: Partial<NonNullable<RequestBody['grpc']>>) {
+    updateBody({
+      ...body,
+      mode: 'none',
+      mimeType: 'application/grpc',
+      grpc: {
+        ...grpcBody,
+        ...patch
+      }
+    });
+  }
+
+  function updateGrpcMessages(messages: GrpcMessageDraft[]) {
+    updateGrpcBody({ messages });
   }
 
   function updateWebSocketExamples(examples: NonNullable<RequestBody['websocket']>['examples']) {
@@ -1099,15 +1235,15 @@ export function RequestPanel(props: {
       const hasChildren = node.children.length > 0 || node.fragments.length > 0;
       return (
         <div className="graphql-explorer-node" key={path} data-depth={depth}>
-          <label className="graphql-explorer-row">
+          <div className="graphql-explorer-row">
             <Checkbox
               checked={checked}
               onChange={event => toggleGraphqlExplorerField(path, event.currentTarget.checked, node)}
             />
             <span className="graphql-explorer-name">{node.name}</span>
-            <code>{node.returnType}</code>
+            {renderGraphqlTypePill(node.namedType, node.returnType, 'muted')}
             {node.fragments.length > 0 ? <Badge size="xs" variant="light" color="violet">fragments</Badge> : null}
-          </label>
+          </div>
           {checked && hasChildren ? (
             <div className="graphql-explorer-children">
               {node.children.length > 0 ? renderGraphqlExplorerNodes(node.children, path, depth + 1) : null}
@@ -1129,14 +1265,14 @@ export function RequestPanel(props: {
       const checked = graphqlSelectedFragmentSet.has(path);
       return (
         <div className="graphql-explorer-fragment" key={path} data-depth={depth}>
-          <label className="graphql-explorer-row graphql-explorer-row-fragment">
+          <div className="graphql-explorer-row graphql-explorer-row-fragment">
             <Checkbox
               checked={checked}
               onChange={event => toggleGraphqlExplorerFragment(path, event.currentTarget.checked, fragment)}
             />
             <span className="graphql-explorer-name">... on {fragment.typeName}</span>
             <Badge size="xs" variant="light" color="grape">fragment</Badge>
-          </label>
+          </div>
           {checked && fragment.selection.length > 0 ? (
             <div className="graphql-explorer-children">
               {renderGraphqlExplorerNodes(fragment.selection, path, depth + 1)}
@@ -1230,7 +1366,8 @@ export function RequestPanel(props: {
                           service: '',
                           method: '',
                           rpcKind: 'unary',
-                          message: '{}'
+                          message: '{}',
+                          messages: []
                         }
                       }
                   : nextKind === 'websocket'
@@ -1396,7 +1533,8 @@ export function RequestPanel(props: {
                             rpcKind: resolvedPreview.body.grpc?.rpcKind || 'unary',
                             protoFile: resolvedPreview.body.grpc?.protoFile || '',
                             importPaths: resolvedPreview.body.grpc?.importPaths || [],
-                            message: resolvedPreview.body.grpc?.message || ''
+                            message: resolvedPreview.body.grpc?.message || '',
+                            messages: resolvedPreview.body.grpc?.messages || []
                           },
                           null,
                           2
@@ -1606,7 +1744,7 @@ export function RequestPanel(props: {
                     label="Proto File"
                     value={grpcBody.protoFile || ''}
                     placeholder="Relative to workspace or absolute path"
-                    onChange={event => updateBody({ ...body, mode: 'none', mimeType: 'application/grpc', grpc: { ...grpcBody, protoFile: event.currentTarget.value } })}
+                    onChange={event => updateGrpcBody({ protoFile: event.currentTarget.value })}
                   />
                   <Textarea
                     label="Import Paths"
@@ -1616,14 +1754,8 @@ export function RequestPanel(props: {
                     value={(grpcBody.importPaths || []).join('\n')}
                     placeholder="One path per line"
                     onChange={event =>
-                      updateBody({
-                        ...body,
-                        mode: 'none',
-                        mimeType: 'application/grpc',
-                        grpc: {
-                          ...grpcBody,
-                          importPaths: event.currentTarget.value.split('\n').map(item => item.trim()).filter(Boolean)
-                        }
+                      updateGrpcBody({
+                        importPaths: event.currentTarget.value.split('\n').map(item => item.trim()).filter(Boolean)
                       })
                     }
                   />
@@ -1631,44 +1763,38 @@ export function RequestPanel(props: {
                     label="Service"
                     value={grpcBody.service || ''}
                     placeholder="package.Service"
-                    onChange={event => updateBody({ ...body, mode: 'none', mimeType: 'application/grpc', grpc: { ...grpcBody, service: event.currentTarget.value } })}
+                    onChange={event => updateGrpcBody({ service: event.currentTarget.value })}
                   />
                   <TextInput
                     label="Method"
                     value={grpcBody.method || ''}
                     placeholder="UnaryMethod"
-                    onChange={event => updateBody({ ...body, mode: 'none', mimeType: 'application/grpc', grpc: { ...grpcBody, method: event.currentTarget.value } })}
+                    onChange={event => updateGrpcBody({ method: event.currentTarget.value })}
                   />
                   <Select
                     label="RPC Kind"
                     value={grpcBody.rpcKind || 'unary'}
                     data={GRPC_RPC_KINDS.map(item => ({ value: item.value, label: item.label }))}
                     onChange={value =>
-                      updateBody({
-                        ...body,
-                        mode: 'none',
-                        mimeType: 'application/grpc',
-                        grpc: {
-                          ...grpcBody,
-                          rpcKind: (value as 'unary' | 'server-streaming') || 'unary'
-                        }
+                      updateGrpcBody({
+                        rpcKind: (value as 'unary' | 'server-streaming' | 'client-streaming') || 'unary',
+                        ...(value === 'client-streaming' && !(grpcBody.messages || []).length
+                          ? {
+                              messages: [{ name: 'Message 1', content: grpcBody.message || '{}', enabled: true }]
+                            }
+                          : {})
                       })
                     }
                   />
                   <div className="preview-note">
                     <Button
-                      size="xs"
-                      variant="default"
-                      onClick={async () => {
-                        const filePath = await handlePickGrpcProtoFile();
-                        if (!filePath) return;
-                        updateBody({
-                          ...body,
-                          mode: 'none',
-                          mimeType: 'application/grpc',
-                          grpc: { ...grpcBody, protoFile: filePath }
-                        });
-                      }}
+                        size="xs"
+                        variant="default"
+                        onClick={async () => {
+                          const filePath = await handlePickGrpcProtoFile();
+                          if (!filePath) return;
+                          updateGrpcBody({ protoFile: filePath });
+                        }}
                     >
                       Choose Proto File
                     </Button>
@@ -1678,14 +1804,87 @@ export function RequestPanel(props: {
                   <Text size="xs" fw={700} c="dimmed">
                     {grpcBody.rpcKind === 'server-streaming'
                       ? 'Request Message (server-streaming aggregates all response messages into one JSON result)'
+                      : grpcBody.rpcKind === 'client-streaming'
+                      ? 'Client Stream Messages (enabled messages are sent in order and return a single response message)'
                       : 'Unary Message (JSON or protobuf text format)'}
                   </Text>
-                  <CodeEditor
-                    value={grpcBody.message || '{}'}
-                    language="json"
-                    onChange={value => updateBody({ ...body, mode: 'none', mimeType: 'application/grpc', grpc: { ...grpcBody, message: value } })}
-                    minHeight="260px"
-                  />
+                  {grpcBody.rpcKind === 'client-streaming' ? (
+                    <div className="websocket-message-list">
+                      <Group gap="xs" justify="space-between" mb="xs">
+                        <Text size="xs" c="dimmed">
+                          Add one protobuf JSON/text payload per outbound message.
+                        </Text>
+                        <Button
+                          size="xs"
+                          variant="default"
+                          leftSection={<IconPlus size={14} />}
+                          onClick={() =>
+                            updateGrpcMessages([
+                              ...grpcMessages,
+                              { name: `Message ${grpcMessages.length + 1}`, content: '{}', enabled: true }
+                            ])
+                          }
+                        >
+                          Add Message
+                        </Button>
+                      </Group>
+                      <div className="websocket-message-list">
+                        {grpcMessages.map((message, index) => (
+                          <div key={`${message.name}-${index}`} className="websocket-message-card">
+                            <div className="websocket-message-toolbar">
+                              <Group gap="xs" align="flex-end" style={{ flex: 1 }}>
+                                <Checkbox
+                                  checked={message.enabled !== false}
+                                  label="Enabled"
+                                  onChange={event => {
+                                    const next = [...grpcMessages];
+                                    next[index] = { ...next[index], enabled: event.currentTarget.checked };
+                                    updateGrpcMessages(next);
+                                  }}
+                                />
+                                <TextInput
+                                  label="Name"
+                                  value={message.name || `Message ${index + 1}`}
+                                  onChange={event => {
+                                    const next = [...grpcMessages];
+                                    next[index] = { ...next[index], name: event.currentTarget.value };
+                                    updateGrpcMessages(next);
+                                  }}
+                                  style={{ flex: 1 }}
+                                />
+                              </Group>
+                              <Button
+                                size="xs"
+                                variant="subtle"
+                                color="red"
+                                disabled={grpcMessages.length === 1}
+                                onClick={() => updateGrpcMessages(grpcMessages.filter((_, messageIndex) => messageIndex !== index))}
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                            <CodeEditor
+                              value={message.content || '{}'}
+                              language="json"
+                              onChange={value => {
+                                const next = [...grpcMessages];
+                                next[index] = { ...next[index], content: value };
+                                updateGrpcMessages(next);
+                              }}
+                              minHeight="180px"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <CodeEditor
+                      value={grpcBody.message || '{}'}
+                      language="json"
+                      onChange={value => updateGrpcBody({ message: value })}
+                      minHeight="260px"
+                    />
+                  )}
                 </div>
               </div>
             ) : effectiveKind === 'websocket' ? (
@@ -2212,6 +2411,31 @@ export function RequestPanel(props: {
                             No root fields matched this schema filter.
                           </Text>
                         ) : null}
+                        {(graphqlSchemaSearch.trim() || graphqlSelectedType) && graphqlMatchingTypes.length > 0 ? (
+                          <div className="graphql-type-match-panel">
+                            <div className="graphql-type-match-head">
+                              <Text size="xs" fw={700} c="dimmed">Type Matches</Text>
+                              {graphqlSchemaSearch.trim() ? (
+                                <Text size="xs" c="dimmed">
+                                  {graphqlMatchingTypes.length} matching types
+                                </Text>
+                              ) : null}
+                            </div>
+                            <div className="graphql-type-chip-list">
+                              {graphqlMatchingTypes.map(type => (
+                                <button
+                                  type="button"
+                                  key={type.name}
+                                  className={`graphql-type-chip${graphqlSelectedTypeName === type.name ? ' is-active' : ''}`}
+                                  onClick={() => openGraphqlType(type.name)}
+                                  title={`Inspect ${type.name}`}
+                                >
+                                  {type.name}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                         {graphqlExplorer && graphqlExplorerField ? (
                           <div className="graphql-explorer-panel">
                             <div className="graphql-explorer-head">
@@ -2240,15 +2464,30 @@ export function RequestPanel(props: {
                                   {graphqlExplorerField.args.length} args
                                 </Badge>
                               ) : null}
-                              <Badge size="xs" variant="light" color="gray">
-                                {graphqlExplorerField.returnType}
-                              </Badge>
+                              {renderGraphqlTypePill(graphqlExplorerField.namedType, graphqlExplorerField.returnType)}
                               {graphqlExplorerField.selectionFragments.length > 0 ? (
                                 <Badge size="xs" variant="light" color="grape">
                                   {graphqlExplorerField.selectionFragments.length} fragments
                                 </Badge>
                               ) : null}
                             </div>
+                            {graphqlExplorerField.args.length > 0 ? (
+                              <div className="graphql-explorer-args">
+                                {graphqlExplorerField.args.map(arg => (
+                                  <button
+                                    type="button"
+                                    key={arg.name}
+                                    className="graphql-arg-chip"
+                                    onClick={() => openGraphqlType(arg.namedType)}
+                                    disabled={!arg.namedType}
+                                    title={arg.namedType ? `Inspect ${arg.namedType}` : undefined}
+                                  >
+                                    <span>{arg.name}</span>
+                                    <small>{arg.type}</small>
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
                             <div className="graphql-explorer-controls">
                               <Select
                                 size="xs"
@@ -2282,6 +2521,131 @@ export function RequestPanel(props: {
                             graphqlExplorerField.selectionFragments.length === 0 ? (
                               <Text size="xs" c="dimmed">
                                 This root field resolves to a scalar payload, so there are no child selections to toggle.
+                              </Text>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {graphqlSelectedType ? (
+                          <div className="graphql-type-panel">
+                            <div className="graphql-type-panel-head">
+                              <div>
+                                <Text size="xs" fw={700} c="dimmed">Type Navigator</Text>
+                                <Text size="sm" fw={700}>{graphqlSelectedType.name}</Text>
+                              </div>
+                              <Group gap="xs">
+                                <Badge size="xs" variant="light" color="gray">
+                                  {graphqlSelectedType.kind.toLowerCase()}
+                                </Badge>
+                                {graphqlTypeTrailVisible.length > 1 ? (
+                                  <Button
+                                    size="xs"
+                                    variant="subtle"
+                                    onClick={() => setGraphqlTypeTrail(current => current.slice(0, -1))}
+                                  >
+                                    Back
+                                  </Button>
+                                ) : null}
+                              </Group>
+                            </div>
+                            <div className="graphql-type-breadcrumbs">
+                              {graphqlTypeTrailVisible.map((typeName, index) => (
+                                <button
+                                  key={`${typeName}:${index}`}
+                                  type="button"
+                                  className={`graphql-type-breadcrumb${index === graphqlTypeTrailVisible.length - 1 ? ' is-active' : ''}`}
+                                  onClick={() => setGraphqlTypeTrail(graphqlTypeTrailVisible.slice(0, index + 1))}
+                                >
+                                  {typeName}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="graphql-type-summary">
+                              {graphqlSelectedType.fields.length > 0 ? <span><strong>{graphqlSelectedType.fields.length}</strong> fields</span> : null}
+                              {graphqlSelectedType.inputFields.length > 0 ? <span><strong>{graphqlSelectedType.inputFields.length}</strong> inputs</span> : null}
+                              {graphqlSelectedType.enumValues.length > 0 ? <span><strong>{graphqlSelectedType.enumValues.length}</strong> enum values</span> : null}
+                              {graphqlSelectedType.possibleTypes.length > 0 ? <span><strong>{graphqlSelectedType.possibleTypes.length}</strong> variants</span> : null}
+                            </div>
+                            {graphqlVisiblePossibleTypes.length > 0 ? (
+                              <div className="graphql-type-section">
+                                <Text size="xs" fw={700} c="dimmed">Possible Types</Text>
+                                <div className="graphql-type-chip-list">
+                                  {graphqlVisiblePossibleTypes.map(typeName => (
+                                    <button
+                                      type="button"
+                                      key={typeName}
+                                      className={`graphql-type-chip${graphqlSelectedTypeName === typeName ? ' is-active' : ''}`}
+                                      onClick={() => openGraphqlType(typeName)}
+                                    >
+                                      {typeName}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                            {graphqlVisibleTypeFields.length > 0 ? (
+                              <div className="graphql-type-section">
+                                <Text size="xs" fw={700} c="dimmed">Fields</Text>
+                                <div className="graphql-type-list">
+                                  {graphqlVisibleTypeFields.map(field => (
+                                    <div className="graphql-type-row" key={field.name}>
+                                      <div className="graphql-type-row-main">
+                                        <strong>{field.name}</strong>
+                                        {field.args.length > 0 ? (
+                                          <div className="graphql-type-arg-list">
+                                            {field.args.map(arg => (
+                                              <button
+                                                type="button"
+                                                key={arg.name}
+                                                className="graphql-arg-chip"
+                                                onClick={() => openGraphqlType(arg.namedType)}
+                                                disabled={!arg.namedType}
+                                              >
+                                                <span>{arg.name}</span>
+                                                <small>{arg.type}</small>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                      {renderGraphqlTypePill(field.namedType, field.type, 'muted')}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                            {graphqlVisibleInputFields.length > 0 ? (
+                              <div className="graphql-type-section">
+                                <Text size="xs" fw={700} c="dimmed">Input Fields</Text>
+                                <div className="graphql-type-list">
+                                  {graphqlVisibleInputFields.map(field => (
+                                    <div className="graphql-type-row" key={field.name}>
+                                      <div className="graphql-type-row-main">
+                                        <strong>{field.name}</strong>
+                                        {field.defaultValue ? <small>default {field.defaultValue}</small> : null}
+                                      </div>
+                                      {renderGraphqlTypePill(field.namedType, field.type, 'muted')}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                            {graphqlVisibleEnumValues.length > 0 ? (
+                              <div className="graphql-type-section">
+                                <Text size="xs" fw={700} c="dimmed">Enum Values</Text>
+                                <div className="graphql-type-chip-list">
+                                  {graphqlVisibleEnumValues.map(value => (
+                                    <span className="graphql-value-chip" key={value}>{value}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                            {graphqlSchemaSearch.trim() &&
+                            graphqlVisibleTypeFields.length === 0 &&
+                            graphqlVisibleInputFields.length === 0 &&
+                            graphqlVisibleEnumValues.length === 0 &&
+                            graphqlVisiblePossibleTypes.length === 0 ? (
+                              <Text size="xs" c="dimmed">
+                                No members on this type matched the current schema filter.
                               </Text>
                             ) : null}
                           </div>

@@ -133,6 +133,18 @@ struct GrpcBody {
     rpc_kind: String,
     #[serde(default)]
     message: String,
+    #[serde(default)]
+    messages: Vec<GrpcMessageInput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GrpcMessageInput {
+    name: String,
+    #[serde(default)]
+    content: String,
+    #[serde(default = "default_parameter_enabled")]
+    enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,6 +163,7 @@ struct RequestBody {
 enum GrpcRuntimeKind {
     Unary,
     ServerStreaming,
+    ClientStreaming,
 }
 
 impl GrpcRuntimeKind {
@@ -158,6 +171,7 @@ impl GrpcRuntimeKind {
         match self {
             Self::Unary => "unary",
             Self::ServerStreaming => "server-streaming",
+            Self::ClientStreaming => "client-streaming",
         }
     }
 
@@ -165,6 +179,7 @@ impl GrpcRuntimeKind {
         match self {
             Self::Unary => "grpc",
             Self::ServerStreaming => "grpc-server-streaming",
+            Self::ClientStreaming => "grpc-client-streaming",
         }
     }
 }
@@ -384,6 +399,10 @@ struct RunHistoryEntry {
 
 fn default_parameter_kind() -> String {
     "text".into()
+}
+
+fn default_parameter_enabled() -> bool {
+    true
 }
 
 fn default_grpc_rpc_kind() -> String {
@@ -1636,19 +1655,30 @@ fn grpc_runtime_kind(
     grpc: &GrpcBody,
     method: &prost_reflect::MethodDescriptor,
 ) -> Result<GrpcRuntimeKind, String> {
-    if method.is_client_streaming() {
-        return Err("Client and bidi gRPC streaming are not supported right now.".to_string());
-    }
     let requested = if grpc.rpc_kind.trim().is_empty() {
         "unary"
     } else {
         grpc.rpc_kind.trim()
     };
+    if method.is_client_streaming() && method.is_server_streaming() {
+        return Err(format!(
+            "gRPC method {}.{} is bidirectional streaming. Bidi streaming is not supported right now.",
+            method.parent_service().full_name(),
+            method.name()
+        ));
+    }
     match requested {
         "unary" => {
             if method.is_server_streaming() {
                 return Err(format!(
                     "gRPC method {}.{} is server-streaming. Set RPC Kind to Server Streaming to run it.",
+                    method.parent_service().full_name(),
+                    method.name()
+                ));
+            }
+            if method.is_client_streaming() {
+                return Err(format!(
+                    "gRPC method {}.{} is client-streaming. Set RPC Kind to Client Streaming to run it.",
                     method.parent_service().full_name(),
                     method.name()
                 ));
@@ -1663,7 +1693,31 @@ fn grpc_runtime_kind(
                     method.name()
                 ));
             }
+            if method.is_client_streaming() {
+                return Err(format!(
+                    "gRPC method {}.{} is bidirectional streaming. Bidi streaming is not supported right now.",
+                    method.parent_service().full_name(),
+                    method.name()
+                ));
+            }
             Ok(GrpcRuntimeKind::ServerStreaming)
+        }
+        "client-streaming" => {
+            if !method.is_client_streaming() {
+                return Err(format!(
+                    "gRPC method {}.{} is not client-streaming. Switch RPC Kind back to Unary to run it.",
+                    method.parent_service().full_name(),
+                    method.name()
+                ));
+            }
+            if method.is_server_streaming() {
+                return Err(format!(
+                    "gRPC method {}.{} is bidirectional streaming. Bidi streaming is not supported right now.",
+                    method.parent_service().full_name(),
+                    method.name()
+                ));
+            }
+            Ok(GrpcRuntimeKind::ClientStreaming)
         }
         other => Err(format!("Unsupported gRPC RPC kind: {other}")),
     }
@@ -1693,10 +1747,54 @@ fn grpc_request_message(
     }
 }
 
-fn grpc_request_metadata(
-    request: &mut GrpcRequest<DynamicMessage>,
-    headers: &[ParameterRow],
-) -> Result<(), String> {
+fn grpc_request_messages(
+    descriptor: MessageDescriptor,
+    grpc: &GrpcBody,
+    runtime_kind: GrpcRuntimeKind,
+) -> Result<Vec<DynamicMessage>, String> {
+    match runtime_kind {
+        GrpcRuntimeKind::Unary | GrpcRuntimeKind::ServerStreaming => {
+            Ok(vec![grpc_request_message(descriptor, grpc.message.as_str())?])
+        }
+        GrpcRuntimeKind::ClientStreaming => {
+            let enabled_messages: Vec<(usize, &GrpcMessageInput)> = grpc
+                .messages
+                .iter()
+                .enumerate()
+                .filter(|(_, message)| message.enabled)
+                .collect();
+            if enabled_messages.is_empty() {
+                if grpc.message.trim().is_empty() {
+                    return Err(
+                        "Client-streaming gRPC requests require at least one enabled request message."
+                            .to_string(),
+                    );
+                }
+                return Ok(vec![grpc_request_message(descriptor, grpc.message.as_str())?]);
+            }
+            enabled_messages
+                .into_iter()
+                .map(|(index, message)| {
+                    grpc_request_message(descriptor.clone(), message.content.as_str()).map_err(
+                        |error| {
+                            format!(
+                                "Failed to parse client-streaming gRPC message {} ({}): {error}",
+                                index + 1,
+                                if message.name.trim().is_empty() {
+                                    format!("Message {}", index + 1)
+                                } else {
+                                    message.name.trim().to_string()
+                                }
+                            )
+                        },
+                    )
+                })
+                .collect()
+        }
+    }
+}
+
+fn grpc_request_metadata<T>(request: &mut GrpcRequest<T>, headers: &[ParameterRow]) -> Result<(), String> {
     for row in headers
         .iter()
         .filter(|row| row.enabled && !row.name.trim().is_empty())
@@ -1728,7 +1826,8 @@ async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult,
     let (pool, _proto_path) = grpc_proto_context(&input, &grpc)?;
     let method = grpc_method_descriptor(&pool, &grpc)?;
     let runtime_kind = grpc_runtime_kind(&grpc, &method)?;
-    let input_message = grpc_request_message(method.input(), grpc.message.as_str())?;
+    let input_messages = grpc_request_messages(method.input(), &grpc, runtime_kind)?;
+    let request_message_count = input_messages.len();
     let service_name = method.parent_service().full_name().to_string();
     let method_name = method.name().to_string();
     let rpc_path = format!("/{}/{}", service_name, method_name);
@@ -1746,8 +1845,6 @@ async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult,
         .connect()
         .await
         .map_err(|error| error.to_string())?;
-    let mut request = GrpcRequest::new(input_message);
-    grpc_request_metadata(&mut request, &input.headers)?;
     let mut client = Grpc::new(channel);
 
     let failure_result =
@@ -1766,6 +1863,19 @@ async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult,
                     },
                     "messages": partial_messages
                 })
+            } else if runtime_kind == GrpcRuntimeKind::ClientStreaming {
+                json!({
+                    "grpc": {
+                        "rpcKind": runtime_kind.rpc_kind(),
+                        "service": service_name.clone(),
+                        "method": method_name.clone(),
+                        "code": format!("{:?}", status.code()),
+                        "message": status.message(),
+                        "detailsBase64": (!status.details().is_empty())
+                            .then(|| general_purpose::STANDARD.encode(status.details())),
+                        "requestMessageCount": request_message_count
+                    }
+                })
             } else {
                 json!({
                     "grpc": {
@@ -1781,6 +1891,30 @@ async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult,
             };
             let body_text =
                 serde_json::to_string_pretty(&body_value).map_err(|error| error.to_string())?;
+            let mut headers = vec![
+                ResponseHeader {
+                    name: "content-type".into(),
+                    value: "application/json; charset=utf-8".into(),
+                },
+                ResponseHeader {
+                    name: "grpc-status".into(),
+                    value: grpc_status_code_value(status.code()).to_string(),
+                },
+                ResponseHeader {
+                    name: "grpc-message".into(),
+                    value: status.message().to_string(),
+                },
+                ResponseHeader {
+                    name: "x-debugger-runtime".into(),
+                    value: runtime_kind.runtime_header().into(),
+                },
+            ];
+            if runtime_kind == GrpcRuntimeKind::ClientStreaming {
+                headers.push(ResponseHeader {
+                    name: "x-grpc-request-message-count".into(),
+                    value: request_message_count.to_string(),
+                });
+            }
             Ok(SendRequestResult {
                 ok: false,
                 status: grpc_status_to_http_status(status.code()),
@@ -1788,24 +1922,7 @@ async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult,
                 url: rpc_url_text.clone(),
                 duration_ms: start.elapsed().as_millis() as u64,
                 size_bytes: body_text.as_bytes().len(),
-                headers: vec![
-                    ResponseHeader {
-                        name: "content-type".into(),
-                        value: "application/json; charset=utf-8".into(),
-                    },
-                    ResponseHeader {
-                        name: "grpc-status".into(),
-                        value: grpc_status_code_value(status.code()).to_string(),
-                    },
-                    ResponseHeader {
-                        name: "grpc-message".into(),
-                        value: status.message().to_string(),
-                    },
-                    ResponseHeader {
-                        name: "x-debugger-runtime".into(),
-                        value: runtime_kind.runtime_header().into(),
-                    },
-                ],
+                headers,
                 body_text,
                 body_base64: None,
                 timestamp: chrono_timestamp(),
@@ -1813,10 +1930,17 @@ async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult,
         };
 
     match runtime_kind {
-        GrpcRuntimeKind::Unary => match client
-            .unary(request, path, DynamicMessageCodec::new(method.output()))
-            .await
-        {
+        GrpcRuntimeKind::Unary => {
+            let input_message = input_messages
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| DynamicMessage::new(method.input()));
+            let mut request = GrpcRequest::new(input_message);
+            grpc_request_metadata(&mut request, &input.headers)?;
+            match client
+                .unary(request, path, DynamicMessageCodec::new(method.output()))
+                .await
+            {
             Ok(response) => {
                 let body_text = serde_json::to_string_pretty(&response.into_inner())
                     .map_err(|error| error.to_string())?;
@@ -1847,11 +1971,19 @@ async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult,
                 })
             }
             Err(status) => failure_result(status, vec![]),
-        },
-        GrpcRuntimeKind::ServerStreaming => match client
-            .server_streaming(request, path, DynamicMessageCodec::new(method.output()))
-            .await
-        {
+            }
+        }
+        GrpcRuntimeKind::ServerStreaming => {
+            let input_message = input_messages
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| DynamicMessage::new(method.input()));
+            let mut request = GrpcRequest::new(input_message);
+            grpc_request_metadata(&mut request, &input.headers)?;
+            match client
+                .server_streaming(request, path, DynamicMessageCodec::new(method.output()))
+                .await
+            {
             Ok(response) => {
                 let mut stream = response.into_inner();
                 let mut messages = Vec::new();
@@ -1911,7 +2043,52 @@ async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult,
                 })
             }
             Err(status) => failure_result(status, vec![]),
-        },
+            }
+        }
+        GrpcRuntimeKind::ClientStreaming => {
+            let stream = futures_util::stream::iter(input_messages);
+            let mut request = GrpcRequest::new(stream);
+            grpc_request_metadata(&mut request, &input.headers)?;
+            match client
+                .client_streaming(request, path, DynamicMessageCodec::new(method.output()))
+                .await
+            {
+                Ok(response) => {
+                    let body_text = serde_json::to_string_pretty(&response.into_inner())
+                        .map_err(|error| error.to_string())?;
+                    Ok(SendRequestResult {
+                        ok: true,
+                        status: 200,
+                        status_text: "OK".into(),
+                        url: rpc_url_text,
+                        duration_ms: start.elapsed().as_millis() as u64,
+                        size_bytes: body_text.as_bytes().len(),
+                        headers: vec![
+                            ResponseHeader {
+                                name: "content-type".into(),
+                                value: "application/json; charset=utf-8".into(),
+                            },
+                            ResponseHeader {
+                                name: "grpc-status".into(),
+                                value: "0".into(),
+                            },
+                            ResponseHeader {
+                                name: "x-debugger-runtime".into(),
+                                value: runtime_kind.runtime_header().into(),
+                            },
+                            ResponseHeader {
+                                name: "x-grpc-request-message-count".into(),
+                                value: request_message_count.to_string(),
+                            },
+                        ],
+                        body_text,
+                        body_base64: None,
+                        timestamp: chrono_timestamp(),
+                    })
+                }
+                Err(status) => failure_result(status, vec![]),
+            }
+        }
     }
 }
 
