@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, Code, Group, Menu, Select, Text, TextInput } from '@mantine/core';
+import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import type { AuthConfig, EnvironmentDocument, ProjectDocument, SessionSnapshot, WorkspaceIndex } from '@yapi-debugger/schema';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
@@ -80,7 +81,7 @@ type VariableQuickFixAction = {
 type VariableBatchQuickFixAction = {
   key: string;
   label: string;
-  successMessage: string;
+  successMessage: (appliedCount: number) => string;
   tone?: 'default' | 'danger';
   disabled: boolean;
   mutations: WorkflowVariableMutation[];
@@ -89,8 +90,165 @@ type VariableBatchQuickFixAction = {
     message: string;
     detail: string;
     confirmLabel: string;
+    selectable?: boolean;
   };
 };
+
+type VariableCleanupMutationPreviewItem = {
+  key: string;
+  token: string;
+  layerLabel: string;
+  mutation: WorkflowVariableMutation;
+};
+
+function VariableCleanupSelectionModal(props: {
+  message: string;
+  detail: string;
+  confirmLabel: string;
+  items: VariableCleanupMutationPreviewItem[];
+  onCancel: () => void;
+  onSubmit: (selectedKeys: string[]) => void;
+}) {
+  const [selectedKeys, setSelectedKeys] = useState(() => props.items.map(item => item.key));
+  const [query, setQuery] = useState('');
+  const [layerFilter, setLayerFilter] = useState('all');
+  const selectedSet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
+  const layerOptions = useMemo(() => {
+    const labels = [...new Set(props.items.map(item => item.layerLabel))].sort((left, right) =>
+      left.localeCompare(right)
+    );
+    return [{ value: 'all', label: 'All layers' }, ...labels.map(label => ({ value: label, label }))];
+  }, [props.items]);
+  const filteredItems = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return props.items.filter(item => {
+      if (layerFilter !== 'all' && item.layerLabel !== layerFilter) return false;
+      if (!needle) return true;
+      return item.token.toLowerCase().includes(needle) || item.layerLabel.toLowerCase().includes(needle);
+    });
+  }, [layerFilter, props.items, query]);
+  const selectedLayerStats = useMemo(() => {
+    const stats = new Map<string, number>();
+    props.items.forEach(item => {
+      if (!selectedSet.has(item.key)) return;
+      stats.set(item.layerLabel, (stats.get(item.layerLabel) || 0) + 1);
+    });
+    return [...stats.entries()].sort((left, right) => {
+      if (right[1] !== left[1]) return right[1] - left[1];
+      return left[0].localeCompare(right[0]);
+    });
+  }, [props.items, selectedSet]);
+  const visibleSelectedCount = useMemo(
+    () => filteredItems.reduce((count, item) => (selectedSet.has(item.key) ? count + 1 : count), 0),
+    [filteredItems, selectedSet]
+  );
+
+  function selectVisible(nextChecked: boolean) {
+    const visibleKeys = filteredItems.map(item => item.key);
+    if (visibleKeys.length === 0) return;
+    setSelectedKeys(current => {
+      if (nextChecked) {
+        const set = new Set(current);
+        visibleKeys.forEach(key => set.add(key));
+        return [...set];
+      }
+      const visibleSet = new Set(visibleKeys);
+      return current.filter(key => !visibleSet.has(key));
+    });
+  }
+
+  return (
+    <div className="variable-cleanup-selection-shell">
+      <Text size="sm">{props.message}</Text>
+      <Text size="xs" c="dimmed">
+        {props.detail}
+      </Text>
+      <div className="variable-cleanup-selection-filters">
+        <TextInput
+          size="xs"
+          placeholder="Search token or layer"
+          value={query}
+          onChange={event => setQuery(event.currentTarget.value)}
+        />
+        <Select
+          size="xs"
+          value={layerFilter}
+          data={layerOptions}
+          onChange={value => setLayerFilter(value || 'all')}
+        />
+      </div>
+      <div className="variable-cleanup-selection-summary">
+        {selectedLayerStats.length > 0 ? (
+          selectedLayerStats.map(([layerLabel, count]) => (
+            <span key={layerLabel} className="variable-cleanup-selection-chip">
+              <strong>{count}</strong>
+              <span>{layerLabel}</span>
+            </span>
+          ))
+        ) : (
+          <Text size="xs" c="dimmed">
+            No layers selected.
+          </Text>
+        )}
+      </div>
+      <div className="variable-cleanup-selection-toolbar">
+        <Text size="xs" c="dimmed">
+          {selectedKeys.length} selected / {props.items.length} · {visibleSelectedCount} in view
+        </Text>
+        <Group gap={6}>
+          <Button size="xs" variant="default" onClick={() => selectVisible(true)} disabled={filteredItems.length === 0}>
+            Select visible
+          </Button>
+          <Button size="xs" variant="default" onClick={() => selectVisible(false)} disabled={filteredItems.length === 0}>
+            Clear visible
+          </Button>
+          <Button size="xs" variant="default" onClick={() => setSelectedKeys(props.items.map(item => item.key))}>
+            Select all
+          </Button>
+          <Button size="xs" variant="default" onClick={() => setSelectedKeys([])}>
+            Clear all
+          </Button>
+        </Group>
+      </div>
+      <div className="variable-cleanup-selection-list">
+        {filteredItems.length === 0 ? (
+          <div className="empty-tab-state">No matching cleanup targets for this filter.</div>
+        ) : (
+          filteredItems.map(item => (
+            <div key={item.key} className="variable-cleanup-selection-row">
+              <Checkbox
+                checked={selectedSet.has(item.key)}
+                onChange={event =>
+                  setSelectedKeys(current =>
+                    event.currentTarget.checked
+                      ? current.includes(item.key)
+                        ? current
+                        : [...current, item.key]
+                      : current.filter(value => value !== item.key)
+                  )
+                }
+                label={
+                  <span className="variable-cleanup-selection-label">
+                    <strong>{item.token}</strong>
+                    <span>{item.layerLabel}</span>
+                  </span>
+                }
+              />
+            </div>
+          ))
+        )}
+      </div>
+      <Group justify="flex-end">
+        <Button variant="default" onClick={props.onCancel}>
+          Cancel
+        </Button>
+        <Button color="red" disabled={selectedKeys.length === 0} onClick={() => props.onSubmit(selectedKeys)}>
+          {props.confirmLabel}
+        </Button>
+      </Group>
+    </div>
+  );
+}
 
 function variableWorkflowResolutionOrder(layerId: string | null | undefined) {
   if (!layerId) return Number.MAX_SAFE_INTEGER;
@@ -212,6 +370,24 @@ function summarizeBatchMutationTargets(
   return `${preview.join(' | ')} | +${remaining} more`;
 }
 
+function buildCleanupMutationPreviewItems(
+  mutations: WorkflowVariableMutation[],
+  workflowMutations: VariableWorkflowMutationApi
+) {
+  return mutations
+    .map(mutation => ({
+      key: `${mutation.token}:${mutation.layerId}`,
+      token: mutation.token,
+      layerLabel: workflowMutations[mutation.layerId].label,
+      mutation
+    }))
+    .sort((left, right) =>
+      left.token === right.token
+        ? left.layerLabel.localeCompare(right.layerLabel)
+        : left.token.localeCompare(right.token)
+    );
+}
+
 function buildBatchQuickFixActions(
   entries: VariableWorkflowEntry[],
   workflowMutations: VariableWorkflowMutationApi
@@ -266,21 +442,21 @@ function buildBatchQuickFixActions(
     {
       key: 'seed-missing',
       label: seedLayerId ? `Seed missing (${seedMutations.length})` : 'Seed missing',
-      successMessage: `Seeded ${seedMutations.length} missing token(s).`,
+      successMessage: appliedCount => `Seeded ${appliedCount} missing token(s).`,
       disabled: seedMutations.length === 0,
       mutations: seedMutations
     },
     {
       key: 'remember-prompt',
       label: `Remember winners (${rememberPromptMutations.length})`,
-      successMessage: `Updated ${rememberPromptMutations.length} prompt default(s).`,
+      successMessage: appliedCount => `Updated ${appliedCount} prompt default(s).`,
       disabled: rememberPromptMutations.length === 0,
       mutations: rememberPromptMutations
     },
     {
       key: 'cleanup-shadowed',
       label: `Clean shadowed (${cleanupMutations.length})`,
-      successMessage: `Removed ${cleanupMutations.length} shadowed value(s).`,
+      successMessage: appliedCount => `Removed ${appliedCount} shadowed value(s).`,
       tone: 'danger',
       disabled: cleanupMutations.length === 0,
       mutations: cleanupMutations,
@@ -289,8 +465,9 @@ function buildBatchQuickFixActions(
           ? {
               title: 'Clean Shadowed Values',
               message: `Remove ${cleanupMutations.length} shadowed value(s) from editable layers?`,
-              detail: summarizeBatchMutationTargets(cleanupMutations, workflowMutations),
-              confirmLabel: 'Clean Shadowed'
+              detail: `${summarizeBatchMutationTargets(cleanupMutations, workflowMutations)}. Uncheck any item you want to keep.`,
+              confirmLabel: 'Clean Selected',
+              selectable: true
             }
           : undefined
     }
@@ -400,21 +577,79 @@ export function EnvironmentCenterPanel(props: {
     [filteredWorkflowEntries, props.workflowMutations]
   );
 
+  async function selectCleanupMutations(action: VariableBatchQuickFixAction) {
+    const confirm = action.confirm;
+    if (!confirm) return action.mutations;
+    const previewItems = buildCleanupMutationPreviewItems(action.mutations, props.workflowMutations);
+    if (previewItems.length === 0) return [];
+
+    return new Promise<WorkflowVariableMutation[] | null>(resolve => {
+      const modalId = `variable-cleanup-selection-${Date.now()}`;
+      let resolved = false;
+
+      const closeWith = (value: WorkflowVariableMutation[] | null) => {
+        if (resolved) return;
+        resolved = true;
+        resolve(value);
+        modals.close(modalId);
+      };
+
+      modals.open({
+        modalId,
+        title: confirm.title,
+        centered: true,
+        size: 'lg',
+        onClose: () => {
+          if (!resolved) {
+            resolved = true;
+            resolve(null);
+          }
+        },
+        children: (
+          <VariableCleanupSelectionModal
+            message={confirm.message}
+            detail={confirm.detail}
+            confirmLabel={confirm.confirmLabel}
+            items={previewItems}
+            onCancel={() => closeWith(null)}
+            onSubmit={selectedKeys => {
+              const selected = previewItems
+                .filter(item => selectedKeys.includes(item.key))
+                .map(item => item.mutation);
+              closeWith(selected);
+            }}
+          />
+        )
+      });
+    });
+  }
+
   async function handleBatchQuickFix(action: VariableBatchQuickFixAction) {
     if (action.disabled || action.mutations.length === 0) return;
+    let mutationsToApply = action.mutations;
     if (action.confirm) {
-      const confirmed = await confirmAction({
-        title: action.confirm.title,
-        message: action.confirm.message,
-        detail: action.confirm.detail,
-        confirmLabel: action.confirm.confirmLabel
-      });
-      if (!confirmed) return;
+      if (action.confirm.selectable) {
+        const selected = await selectCleanupMutations(action);
+        if (!selected) return;
+        if (selected.length === 0) {
+          notifications.show({ color: 'orange', message: 'No shadowed values selected.' });
+          return;
+        }
+        mutationsToApply = selected;
+      } else {
+        const confirmed = await confirmAction({
+          title: action.confirm.title,
+          message: action.confirm.message,
+          detail: action.confirm.detail,
+          confirmLabel: action.confirm.confirmLabel
+        });
+        if (!confirmed) return;
+      }
     }
-    props.workflowMutations.applyMany(action.mutations);
+    props.workflowMutations.applyMany(mutationsToApply);
     notifications.show({
       color: action.tone === 'danger' ? 'orange' : 'teal',
-      message: action.successMessage
+      message: action.successMessage(mutationsToApply.length)
     });
   }
 
