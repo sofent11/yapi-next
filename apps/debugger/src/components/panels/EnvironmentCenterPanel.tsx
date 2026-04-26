@@ -5,7 +5,7 @@ import { notifications } from '@mantine/notifications';
 import { save as saveFile } from '@tauri-apps/plugin-dialog';
 import type { AuthConfig, EnvironmentDocument, ProjectDocument, SessionSnapshot, WorkspaceIndex } from '@yapi-debugger/schema';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
-import { confirmAction } from '../../lib/dialogs';
+import { confirmAction, promptForText } from '../../lib/dialogs';
 import { writeDocument } from '../../lib/desktop';
 import {
   buildVariableWorkflowCatalog,
@@ -103,7 +103,95 @@ type VariableCleanupMutationPreviewItem = {
   mutation: WorkflowVariableMutation;
 };
 
+type VariableCleanupPlanExportScope = 'selected' | 'visible-selected';
+
+type VariableCleanupPlanTemplate = {
+  scope: VariableCleanupPlanExportScope;
+  includeDetails: boolean;
+  summaryOnly: boolean;
+  groupByToken: boolean;
+};
+
+type VariableCleanupPlanTemplatePreset = {
+  id: string;
+  name: string;
+  template: VariableCleanupPlanTemplate;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const CLEANUP_PLAN_TEMPLATE_PRESET_STORAGE_KEY_PREFIX = 'yapi-debugger.cleanup-plan-template-presets';
+const CUSTOM_CLEANUP_TEMPLATE_PRESET_ID = '__custom';
+
+function cleanupPlanTemplatePresetStorageKey(workspaceRoot: string) {
+  return `${CLEANUP_PLAN_TEMPLATE_PRESET_STORAGE_KEY_PREFIX}:${workspaceRoot || 'workspace'}`;
+}
+
+function normalizePlanTemplate(template: VariableCleanupPlanTemplate): VariableCleanupPlanTemplate {
+  const summaryOnly = Boolean(template.summaryOnly);
+  const includeDetails = summaryOnly ? false : Boolean(template.includeDetails);
+  const groupByToken = includeDetails ? Boolean(template.groupByToken) : false;
+  const scope: VariableCleanupPlanExportScope =
+    template.scope === 'visible-selected' ? 'visible-selected' : 'selected';
+  return {
+    scope,
+    includeDetails,
+    summaryOnly,
+    groupByToken
+  };
+}
+
+function loadCleanupPlanTemplatePresets(workspaceRoot: string) {
+  try {
+    const raw = window.localStorage.getItem(cleanupPlanTemplatePresetStorageKey(workspaceRoot));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map(item => {
+        if (!item || typeof item !== 'object') return null;
+        const id = typeof item.id === 'string' ? item.id.trim() : '';
+        const name = typeof item.name === 'string' ? item.name.trim() : '';
+        if (!id || !name) return null;
+        const template = normalizePlanTemplate(
+          (item as { template?: VariableCleanupPlanTemplate }).template || {
+            scope: 'selected',
+            includeDetails: true,
+            summaryOnly: false,
+            groupByToken: false
+          }
+        );
+        const createdAt = typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString();
+        const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : createdAt;
+        return {
+          id,
+          name,
+          template,
+          createdAt,
+          updatedAt
+        } as VariableCleanupPlanTemplatePreset;
+      })
+      .filter((item): item is VariableCleanupPlanTemplatePreset => Boolean(item))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  } catch (_error) {
+    return [];
+  }
+}
+
+function saveCleanupPlanTemplatePresets(workspaceRoot: string, presets: VariableCleanupPlanTemplatePreset[]) {
+  try {
+    window.localStorage.setItem(cleanupPlanTemplatePresetStorageKey(workspaceRoot), JSON.stringify(presets));
+  } catch (_error) {
+    // ignore write failure and keep current in-memory state.
+  }
+}
+
+function createPlanTemplatePresetId() {
+  return `cleanup-template-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function VariableCleanupSelectionModal(props: {
+  workspaceRoot: string;
   message: string;
   detail: string;
   confirmLabel: string;
@@ -119,6 +207,8 @@ function VariableCleanupSelectionModal(props: {
   const [planSummaryOnly, setPlanSummaryOnly] = useState(false);
   const [planGroupByToken, setPlanGroupByToken] = useState(false);
   const [planPreviewOpen, setPlanPreviewOpen] = useState(false);
+  const [planTemplatePresets, setPlanTemplatePresets] = useState<VariableCleanupPlanTemplatePreset[]>([]);
+  const [selectedPlanTemplatePresetId, setSelectedPlanTemplatePresetId] = useState(CUSTOM_CLEANUP_TEMPLATE_PRESET_ID);
   const [collapsedTokens, setCollapsedTokens] = useState<string[]>([]);
   const selectedSet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
   const collapsedSet = useMemo(() => new Set(collapsedTokens), [collapsedTokens]);
@@ -210,6 +300,17 @@ function VariableCleanupSelectionModal(props: {
     { value: 'selected', label: 'Selected items' },
     { value: 'visible-selected', label: 'Visible selected' }
   ];
+  const planTemplatePresetOptions = useMemo(
+    () => [
+      { value: CUSTOM_CLEANUP_TEMPLATE_PRESET_ID, label: 'Custom template' },
+      ...planTemplatePresets.map(item => ({ value: item.id, label: item.name }))
+    ],
+    [planTemplatePresets]
+  );
+  const selectedPlanTemplatePreset = useMemo(
+    () => planTemplatePresets.find(item => item.id === selectedPlanTemplatePresetId) || null,
+    [planTemplatePresets, selectedPlanTemplatePresetId]
+  );
   const planExportDetailAllowed = !planSummaryOnly && planIncludeDetails;
   const planPreviewText = useMemo(
     () => buildCleanupPlanText(planExportItems, planExportScopeLabel),
@@ -226,6 +327,15 @@ function VariableCleanupSelectionModal(props: {
       visibleSelectedCount
     ]
   );
+
+  useEffect(() => {
+    setPlanTemplatePresets(loadCleanupPlanTemplatePresets(props.workspaceRoot));
+    setSelectedPlanTemplatePresetId(CUSTOM_CLEANUP_TEMPLATE_PRESET_ID);
+  }, [props.workspaceRoot]);
+
+  useEffect(() => {
+    saveCleanupPlanTemplatePresets(props.workspaceRoot, planTemplatePresets);
+  }, [planTemplatePresets, props.workspaceRoot]);
 
   useEffect(() => {
     const visibleTokens = new Set(filteredGroups.map(group => group.token));
@@ -284,6 +394,130 @@ function VariableCleanupSelectionModal(props: {
 
   function toggleTokenCollapse(token: string) {
     setCollapsedTokens(current => (current.includes(token) ? current.filter(value => value !== token) : [...current, token]));
+  }
+
+  function currentPlanTemplate(): VariableCleanupPlanTemplate {
+    return normalizePlanTemplate({
+      scope: planExportScope,
+      includeDetails: planIncludeDetails,
+      summaryOnly: planSummaryOnly,
+      groupByToken: planGroupByToken
+    });
+  }
+
+  function applyPlanTemplate(template: VariableCleanupPlanTemplate) {
+    const normalized = normalizePlanTemplate(template);
+    setPlanExportScope(normalized.scope);
+    setPlanSummaryOnly(normalized.summaryOnly);
+    setPlanIncludeDetails(normalized.includeDetails);
+    setPlanGroupByToken(normalized.groupByToken);
+  }
+
+  function markTemplateAsCustom() {
+    setSelectedPlanTemplatePresetId(CUSTOM_CLEANUP_TEMPLATE_PRESET_ID);
+  }
+
+  function handleTemplateScopeChange(value: string | null) {
+    markTemplateAsCustom();
+    setPlanExportScope((value as VariableCleanupPlanExportScope) || 'selected');
+  }
+
+  function handleTemplateSummaryOnlyChange(checked: boolean) {
+    markTemplateAsCustom();
+    setPlanSummaryOnly(checked);
+    if (checked) {
+      setPlanIncludeDetails(false);
+      setPlanGroupByToken(false);
+    }
+  }
+
+  function handleTemplateIncludeDetailsChange(checked: boolean) {
+    markTemplateAsCustom();
+    setPlanIncludeDetails(checked);
+    if (!checked) {
+      setPlanGroupByToken(false);
+    }
+  }
+
+  function handleTemplateGroupByTokenChange(checked: boolean) {
+    markTemplateAsCustom();
+    setPlanGroupByToken(checked);
+  }
+
+  function handleTemplatePresetChange(value: string | null) {
+    const nextId = value || CUSTOM_CLEANUP_TEMPLATE_PRESET_ID;
+    if (nextId === CUSTOM_CLEANUP_TEMPLATE_PRESET_ID) {
+      setSelectedPlanTemplatePresetId(CUSTOM_CLEANUP_TEMPLATE_PRESET_ID);
+      return;
+    }
+    const preset = planTemplatePresets.find(item => item.id === nextId);
+    if (!preset) {
+      setSelectedPlanTemplatePresetId(CUSTOM_CLEANUP_TEMPLATE_PRESET_ID);
+      return;
+    }
+    applyPlanTemplate(preset.template);
+    setSelectedPlanTemplatePresetId(preset.id);
+  }
+
+  async function saveCurrentTemplateAsPreset() {
+    const existingNames = new Set(planTemplatePresets.map(item => item.name.toLowerCase()));
+    const defaultName = selectedPlanTemplatePreset ? `${selectedPlanTemplatePreset.name} copy` : 'Cleanup plan preset';
+    const presetName = await promptForText({
+      title: 'Save Cleanup Plan Template',
+      label: 'Preset name',
+      defaultValue: defaultName,
+      placeholder: 'e.g. PR review summary',
+      confirmLabel: 'Save',
+      validate: value => {
+        if (!value.trim()) return 'Preset name is required.';
+        if (existingNames.has(value.trim().toLowerCase())) return 'Preset name already exists.';
+        return null;
+      }
+    });
+    if (!presetName) return;
+    const now = new Date().toISOString();
+    const preset: VariableCleanupPlanTemplatePreset = {
+      id: createPlanTemplatePresetId(),
+      name: presetName,
+      template: currentPlanTemplate(),
+      createdAt: now,
+      updatedAt: now
+    };
+    setPlanTemplatePresets(current => [...current, preset].sort((left, right) => left.name.localeCompare(right.name)));
+    setSelectedPlanTemplatePresetId(preset.id);
+    notifications.show({ color: 'teal', message: `Saved cleanup template preset "${preset.name}".` });
+  }
+
+  function updateSelectedTemplatePreset() {
+    if (!selectedPlanTemplatePreset) return;
+    const now = new Date().toISOString();
+    setPlanTemplatePresets(current =>
+      current.map(item =>
+        item.id === selectedPlanTemplatePreset.id
+          ? {
+              ...item,
+              template: currentPlanTemplate(),
+              updatedAt: now
+            }
+          : item
+      )
+    );
+    notifications.show({ color: 'teal', message: `Updated cleanup template preset "${selectedPlanTemplatePreset.name}".` });
+  }
+
+  async function deleteSelectedTemplatePreset() {
+    if (!selectedPlanTemplatePreset) return;
+    const shouldDelete = await confirmAction({
+      title: 'Delete Cleanup Template',
+      message: `Delete preset "${selectedPlanTemplatePreset.name}"?`,
+      detail: 'This only removes the local template preset and does not affect any request or environment data.',
+      confirmLabel: 'Delete preset',
+      confirmColor: 'red'
+    });
+    if (!shouldDelete) return;
+    setPlanTemplatePresets(current => current.filter(item => item.id !== selectedPlanTemplatePreset.id));
+    setSelectedPlanTemplatePresetId(CUSTOM_CLEANUP_TEMPLATE_PRESET_ID);
+    notifications.show({ color: 'teal', message: `Deleted preset "${selectedPlanTemplatePreset.name}".` });
   }
 
   function buildCleanupPlanText(items: VariableCleanupMutationPreviewItem[], scopeLabel: string) {
@@ -429,30 +663,57 @@ function VariableCleanupSelectionModal(props: {
         <Group gap={6}>
           <Select
             size="xs"
+            w={210}
+            value={selectedPlanTemplatePresetId}
+            data={planTemplatePresetOptions}
+            onChange={handleTemplatePresetChange}
+          />
+          <Button size="xs" variant="default" onClick={() => void saveCurrentTemplateAsPreset()}>
+            Save as preset
+          </Button>
+          <Button
+            size="xs"
+            variant="default"
+            onClick={() => updateSelectedTemplatePreset()}
+            disabled={!selectedPlanTemplatePreset}
+          >
+            Update preset
+          </Button>
+          <Button
+            size="xs"
+            variant="default"
+            color="red"
+            onClick={() => void deleteSelectedTemplatePreset()}
+            disabled={!selectedPlanTemplatePreset}
+          >
+            Delete preset
+          </Button>
+          <Select
+            size="xs"
             w={180}
             value={planExportScope}
             data={planExportScopeOptions}
-            onChange={value => setPlanExportScope((value as 'selected' | 'visible-selected') || 'selected')}
+            onChange={handleTemplateScopeChange}
           />
           <Checkbox
             size="xs"
             label="Summary only"
             checked={planSummaryOnly}
-            onChange={event => setPlanSummaryOnly(event.currentTarget.checked)}
+            onChange={event => handleTemplateSummaryOnlyChange(event.currentTarget.checked)}
           />
           <Checkbox
             size="xs"
             label="Include details"
             checked={planIncludeDetails}
             disabled={planSummaryOnly}
-            onChange={event => setPlanIncludeDetails(event.currentTarget.checked)}
+            onChange={event => handleTemplateIncludeDetailsChange(event.currentTarget.checked)}
           />
           <Checkbox
             size="xs"
             label="Group by token"
             checked={planGroupByToken}
             disabled={!planExportDetailAllowed}
-            onChange={event => setPlanGroupByToken(event.currentTarget.checked)}
+            onChange={event => handleTemplateGroupByTokenChange(event.currentTarget.checked)}
           />
           <Button size="xs" variant="default" onClick={() => void saveCleanupPlan()} disabled={planExportItems.length === 0}>
             Save plan
@@ -935,6 +1196,7 @@ export function EnvironmentCenterPanel(props: {
         },
         children: (
           <VariableCleanupSelectionModal
+            workspaceRoot={props.workspace.root}
             message={confirm.message}
             detail={confirm.detail}
             confirmLabel={confirm.confirmLabel}
