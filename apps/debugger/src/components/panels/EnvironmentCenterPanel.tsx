@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Checkbox, Code, Group, Menu, Select, Text, TextInput } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
@@ -112,7 +112,9 @@ function VariableCleanupSelectionModal(props: {
   const [selectedKeys, setSelectedKeys] = useState(() => props.items.map(item => item.key));
   const [query, setQuery] = useState('');
   const [layerFilter, setLayerFilter] = useState('all');
+  const [collapsedTokens, setCollapsedTokens] = useState<string[]>([]);
   const selectedSet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
+  const collapsedSet = useMemo(() => new Set(collapsedTokens), [collapsedTokens]);
   const layerOptions = useMemo(() => {
     const labels = [...new Set(props.items.map(item => item.layerLabel))].sort((left, right) =>
       left.localeCompare(right)
@@ -127,6 +129,33 @@ function VariableCleanupSelectionModal(props: {
       return item.token.toLowerCase().includes(needle) || item.layerLabel.toLowerCase().includes(needle);
     });
   }, [layerFilter, props.items, query]);
+  const filteredGroups = useMemo(() => {
+    const map = new Map<string, VariableCleanupMutationPreviewItem[]>();
+    filteredItems.forEach(item => {
+      const group = map.get(item.token);
+      if (group) {
+        group.push(item);
+      } else {
+        map.set(item.token, [item]);
+      }
+    });
+    return [...map.entries()]
+      .map(([token, items]) => ({
+        token,
+        items: [...items].sort((left, right) => left.layerLabel.localeCompare(right.layerLabel))
+      }))
+      .sort((left, right) => left.token.localeCompare(right.token));
+  }, [filteredItems]);
+  const groupSelectionCount = useMemo(() => {
+    const map = new Map<string, number>();
+    filteredGroups.forEach(group => {
+      map.set(
+        group.token,
+        group.items.reduce((count, item) => (selectedSet.has(item.key) ? count + 1 : count), 0)
+      );
+    });
+    return map;
+  }, [filteredGroups, selectedSet]);
   const selectedLayerStats = useMemo(() => {
     const stats = new Map<string, number>();
     props.items.forEach(item => {
@@ -142,6 +171,12 @@ function VariableCleanupSelectionModal(props: {
     () => filteredItems.reduce((count, item) => (selectedSet.has(item.key) ? count + 1 : count), 0),
     [filteredItems, selectedSet]
   );
+  const visibleTokenCount = filteredGroups.length;
+
+  useEffect(() => {
+    const visibleTokens = new Set(filteredGroups.map(group => group.token));
+    setCollapsedTokens(current => current.filter(token => visibleTokens.has(token)));
+  }, [filteredGroups]);
 
   function selectVisible(nextChecked: boolean) {
     const visibleKeys = filteredItems.map(item => item.key);
@@ -155,6 +190,40 @@ function VariableCleanupSelectionModal(props: {
       const visibleSet = new Set(visibleKeys);
       return current.filter(key => !visibleSet.has(key));
     });
+  }
+
+  function selectGroup(token: string, nextChecked: boolean) {
+    const group = filteredGroups.find(item => item.token === token);
+    if (!group) return;
+    const groupKeys = group.items.map(item => item.key);
+    if (groupKeys.length === 0) return;
+    setSelectedKeys(current => {
+      if (nextChecked) {
+        const set = new Set(current);
+        groupKeys.forEach(key => set.add(key));
+        return [...set];
+      }
+      const groupSet = new Set(groupKeys);
+      return current.filter(key => !groupSet.has(key));
+    });
+  }
+
+  function setVisibleTokenCollapse(collapsed: boolean) {
+    const visibleTokens = filteredGroups.map(group => group.token);
+    if (visibleTokens.length === 0) return;
+    setCollapsedTokens(current => {
+      if (collapsed) {
+        const set = new Set(current);
+        visibleTokens.forEach(token => set.add(token));
+        return [...set];
+      }
+      const visibleSet = new Set(visibleTokens);
+      return current.filter(token => !visibleSet.has(token));
+    });
+  }
+
+  function toggleTokenCollapse(token: string) {
+    setCollapsedTokens(current => (current.includes(token) ? current.filter(value => value !== token) : [...current, token]));
   }
 
   return (
@@ -193,9 +262,15 @@ function VariableCleanupSelectionModal(props: {
       </div>
       <div className="variable-cleanup-selection-toolbar">
         <Text size="xs" c="dimmed">
-          {selectedKeys.length} selected / {props.items.length} · {visibleSelectedCount} in view
+          {selectedKeys.length} selected / {props.items.length} · {visibleSelectedCount} items in view · {visibleTokenCount} tokens in view
         </Text>
         <Group gap={6}>
+          <Button size="xs" variant="default" onClick={() => setVisibleTokenCollapse(false)} disabled={filteredGroups.length === 0}>
+            Expand visible
+          </Button>
+          <Button size="xs" variant="default" onClick={() => setVisibleTokenCollapse(true)} disabled={filteredGroups.length === 0}>
+            Collapse visible
+          </Button>
           <Button size="xs" variant="default" onClick={() => selectVisible(true)} disabled={filteredItems.length === 0}>
             Select visible
           </Button>
@@ -211,31 +286,71 @@ function VariableCleanupSelectionModal(props: {
         </Group>
       </div>
       <div className="variable-cleanup-selection-list">
-        {filteredItems.length === 0 ? (
+        {filteredGroups.length === 0 ? (
           <div className="empty-tab-state">No matching cleanup targets for this filter.</div>
         ) : (
-          filteredItems.map(item => (
-            <div key={item.key} className="variable-cleanup-selection-row">
-              <Checkbox
-                checked={selectedSet.has(item.key)}
-                onChange={event =>
-                  setSelectedKeys(current =>
-                    event.currentTarget.checked
-                      ? current.includes(item.key)
-                        ? current
-                        : [...current, item.key]
-                      : current.filter(value => value !== item.key)
-                  )
-                }
-                label={
-                  <span className="variable-cleanup-selection-label">
-                    <strong>{item.token}</strong>
-                    <span>{item.layerLabel}</span>
-                  </span>
-                }
-              />
-            </div>
-          ))
+          filteredGroups.map(group => {
+            const selectedCount = groupSelectionCount.get(group.token) || 0;
+            const isCollapsed = collapsedSet.has(group.token);
+            return (
+              <div key={group.token} className="variable-cleanup-group">
+                <div className="variable-cleanup-group-head">
+                  <button
+                    type="button"
+                    className="variable-cleanup-group-toggle"
+                    onClick={() => toggleTokenCollapse(group.token)}
+                  >
+                    <strong>{group.token}</strong>
+                    <span>{selectedCount}/{group.items.length} selected · {isCollapsed ? 'collapsed' : 'expanded'}</span>
+                  </button>
+                  <Group gap={6}>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      onClick={() => selectGroup(group.token, true)}
+                      disabled={selectedCount >= group.items.length}
+                    >
+                      Select token
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      onClick={() => selectGroup(group.token, false)}
+                      disabled={selectedCount === 0}
+                    >
+                      Clear token
+                    </Button>
+                  </Group>
+                </div>
+                {isCollapsed ? null : (
+                  <div className="variable-cleanup-group-body">
+                    {group.items.map(item => (
+                      <div key={item.key} className="variable-cleanup-selection-row">
+                        <Checkbox
+                          checked={selectedSet.has(item.key)}
+                          onChange={event =>
+                            setSelectedKeys(current =>
+                              event.currentTarget.checked
+                                ? current.includes(item.key)
+                                  ? current
+                                  : [...current, item.key]
+                                : current.filter(value => value !== item.key)
+                            )
+                          }
+                          label={
+                            <span className="variable-cleanup-selection-label">
+                              <strong>{item.token}</strong>
+                              <span>{item.layerLabel}</span>
+                            </span>
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
       <Group justify="flex-end">

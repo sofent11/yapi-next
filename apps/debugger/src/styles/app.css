@@ -3412,6 +3412,48 @@ mark {
   background: color-mix(in oklch, var(--surface) 92%, var(--surface-muted));
 }
 
+.variable-cleanup-group {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.variable-cleanup-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.variable-cleanup-group-toggle {
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.variable-cleanup-group-toggle strong {
+  font-size: 0.8rem;
+}
+
+.variable-cleanup-group-toggle span {
+  color: var(--muted);
+  font-size: 0.73rem;
+}
+
+.variable-cleanup-group-body {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+}
+
 .variable-cleanup-selection-row {
   padding: 6px 8px;
   border: 1px solid var(--line);
@@ -3711,6 +3753,11 @@ mark {
   }
 
   .variable-cleanup-selection-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .variable-cleanup-group-head {
     flex-direction: column;
     align-items: stretch;
   }
