@@ -602,14 +602,11 @@ export function InterfaceTreePanel(props: {
       }}
     >
       <div className="tree-panel-header">
-        <div>
-          <p className="tree-caption">Workspace Explorer</p>
-          <div className="tree-title-row">
-            <h2 className="tree-title">{props.workspace.project.name}</h2>
-            <span className={`tree-selection-state is-${currentSelectionLabel}`} aria-label={`Current selection is ${currentSelectionLabel}`}>
-              {currentSelectionLabel}
-            </span>
-          </div>
+        <div className="tree-title-row">
+          <h2 className="tree-title">{props.workspace.project.name}</h2>
+          <span className={`tree-selection-state is-${currentSelectionLabel}`} aria-label={`Current selection is ${currentSelectionLabel}`}>
+            {currentSelectionLabel}
+          </span>
         </div>
         <div className="tree-panel-actions">
           <ActionIcon

@@ -690,7 +690,7 @@ mark {
 
 .tree-panel-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 14px 16px;
@@ -807,14 +807,6 @@ mark {
 
 .tree-selection-state.is-category::before {
   background: color-mix(in oklch, var(--orange) 70%, white);
-}
-
-.tree-caption {
-  font-size: 0.65rem;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 2px;
 }
 
 .tree-panel .mantine-TextInput-root {
