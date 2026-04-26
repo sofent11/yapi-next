@@ -4609,28 +4609,24 @@ mark {
   background-size: auto, 24px 24px, 24px 24px;
 }
 
-.capture-console-head,
 .capture-phase-switch,
 .capture-card-head,
 .capture-review-bar,
 .capture-ledger-toolbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.capture-console-copy,
 .capture-card-copy,
 .capture-ledger-copy,
 .capture-ledger-identity {
-  display: grid;
-  gap: 6px;
-  max-width: 66ch;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.capture-console-kicker,
-.capture-ribbon-label,
 .capture-detail-label {
   font-size: 11px;
   letter-spacing: 0.16em;
@@ -4639,32 +4635,14 @@ mark {
   color: oklch(0.47 0.04 242);
 }
 
-.capture-console-copy h2,
 .capture-card-copy h3,
-.capture-ledger-copy h3 {
+.capture-ledger-copy h3,
+.capture-ledger-identity h3 {
   margin: 0;
   color: oklch(0.22 0.03 252);
-}
-
-.capture-console-copy h2 {
-  font-size: 1.72rem;
-  line-height: 1;
-  letter-spacing: -0.04em;
-}
-
-.capture-card-copy h3,
-.capture-ledger-copy h3 {
   font-size: 1.18rem;
   line-height: 1.08;
   letter-spacing: -0.03em;
-}
-
-.capture-console-copy p,
-.capture-card-copy p,
-.capture-ledger-copy p {
-  margin: 0;
-  color: oklch(0.49 0.025 245);
-  line-height: 1.48;
 }
 
 .capture-console-actions,
@@ -4695,7 +4673,8 @@ mark {
 }
 
 .capture-phase-switch {
-  padding: 6px 8px;
+  padding: 8px 12px;
+  background: white;
   flex-shrink: 0;
 }
 
@@ -5086,7 +5065,6 @@ mark {
 }
 
 @media (max-width: 1120px) {
-  .capture-console-head,
   .capture-phase-switch,
   .capture-card-head,
   .capture-review-bar,
@@ -5108,10 +5086,6 @@ mark {
 @media (max-width: 760px) {
   .capture-console {
     padding: 12px;
-  }
-
-  .capture-console-copy h2 {
-    font-size: 1.5rem;
   }
 
   .capture-phase-buttons,

@@ -140,14 +140,34 @@ export function CapturePanel(props: {
 
   return (
     <section className="workspace-main capture-console">
-      <header className="capture-console-head">
-        <div className="capture-console-copy">
-          <div className="capture-console-kicker">Browser Capture</div>
-          <h2>Capture Console</h2>
-          <p>Split setup from review so the request ledger stays large, readable, and ready for promotion only when you ask for it.</p>
+      <div className="capture-phase-switch">
+        <div className="capture-phase-buttons" role="tablist" aria-label="Capture workspace tabs">
+          <button
+            type="button"
+            className={surfaceTab === 'setup' ? 'is-active' : undefined}
+            onClick={() => setSurfaceTab('setup')}
+          >
+            Setup
+          </button>
+          <button
+            type="button"
+            className={surfaceTab === 'review' ? 'is-active' : undefined}
+            onClick={() => setSurfaceTab('review')}
+          >
+            Review
+          </button>
         </div>
 
-        <div className="capture-console-actions">
+        <div className="capture-phase-summary">
+          <Badge variant="light" color={props.browser ? 'teal' : 'gray'}>
+            {props.browser ? 'Connected' : 'No browser'}
+          </Badge>
+          <Badge variant="light" color={props.runtime?.running ? 'blue' : 'gray'}>
+            {props.runtime?.running ? 'Live' : 'Stopped'}
+          </Badge>
+        </div>
+
+        <div className="capture-console-actions" style={{ marginLeft: 'auto' }}>
           <Button
             size="xs"
             variant="default"
@@ -199,42 +219,6 @@ export function CapturePanel(props: {
             Clear
           </Button>
         </div>
-      </header>
-
-      <div className="capture-phase-switch">
-        <div className="capture-phase-buttons" role="tablist" aria-label="Capture workspace tabs">
-          <button
-            type="button"
-            className={surfaceTab === 'setup' ? 'is-active' : undefined}
-            onClick={() => setSurfaceTab('setup')}
-          >
-            Prepare Capture
-          </button>
-          <button
-            type="button"
-            className={surfaceTab === 'review' ? 'is-active' : undefined}
-            onClick={() => setSurfaceTab('review')}
-          >
-            Review Captures
-          </button>
-        </div>
-
-        <div className="capture-phase-summary">
-          <Badge variant="light" color={props.browser ? 'teal' : 'gray'}>
-            {props.browser ? 'Connected' : 'No browser'}
-          </Badge>
-          <Badge variant="light" color={props.runtime?.running ? 'blue' : 'gray'}>
-            {props.runtime?.running ? 'Live capture' : 'Stopped'}
-          </Badge>
-          <Badge variant="light" color="gray">
-            {props.visibleEntries.length} visible
-          </Badge>
-          {filterRuleCount > 0 ? (
-            <Badge variant="light" color="indigo">
-              {filterRuleCount} host rules
-            </Badge>
-          ) : null}
-        </div>
       </div>
 
       {surfaceTab === 'setup' ? (
@@ -242,9 +226,7 @@ export function CapturePanel(props: {
           <section className="capture-card capture-setup-status">
             <div className="capture-card-head">
               <div className="capture-card-copy">
-                <span className="capture-ribbon-label">Session</span>
-                <h3>Browser Link</h3>
-                <p>Keep setup compact here, then move to the review tab for the large ledger.</p>
+                <h3>Browser Connection</h3>
               </div>
               <Badge variant="light" color={props.browser ? 'teal' : 'gray'}>
                 {props.browser ? 'Ready' : 'Idle'}
@@ -274,19 +256,14 @@ export function CapturePanel(props: {
 
             {props.runtime?.error ? <div className="empty-tab-state">{props.runtime.error}</div> : null}
 
-            <div className="capture-setup-foot">
-              <Text size="sm" c="dimmed">
-                {props.entries.length > 0
-                  ? 'The review tab already has captured requests ready to inspect.'
-                  : 'Once requests arrive, the review tab becomes the main working surface.'}
-              </Text>
+            <div className="capture-setup-foot" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
               <Button
                 size="xs"
                 variant="default"
                 onClick={() => setSurfaceTab('review')}
                 disabled={props.entries.length === 0}
               >
-                Open Review
+                Go to Requests
               </Button>
             </div>
           </section>
@@ -294,13 +271,11 @@ export function CapturePanel(props: {
           <section className="capture-card capture-setup-controls">
             <div className="capture-card-head">
               <div className="capture-card-copy">
-                <span className="capture-ribbon-label">Scope</span>
-                <h3>Capture Setup</h3>
-                <p>Choose the listening scope and host rules here without taking height away from the results view.</p>
+                <h3>Capture Scope</h3>
               </div>
               <div className="capture-card-badges">
                 <Badge variant="light" color={props.mode === 'browser' ? 'blue' : 'gray'}>
-                  {props.mode === 'browser' ? 'Whole browser' : 'Single target'}
+                  {props.mode === 'browser' ? 'Browser' : 'Target'}
                 </Badge>
                 <Badge variant="light" color={filterRuleCount > 0 ? 'indigo' : 'gray'}>
                   {filterRuleCount > 0 ? `${filterRuleCount} filters` : 'No filter'}
@@ -355,8 +330,7 @@ export function CapturePanel(props: {
           <section className="capture-ledger">
             <div className="capture-ledger-toolbar">
               <div className="capture-ledger-identity">
-                <span className="capture-ribbon-label">Captured Ledger</span>
-                <h3>Request Stream</h3>
+                <h3>Requests</h3>
                 <span className="capture-ledger-meta">
                   {reviewSummaryText}
                   {selectedCount > 0 ? ` · ${selectedCount} selected` : ''}
@@ -464,7 +438,6 @@ export function CapturePanel(props: {
             <section className="capture-card capture-detail-panel">
               <div className="capture-card-head">
                 <div className="capture-card-copy">
-                  <span className="capture-ribbon-label">{showPromotePanel ? 'Promote' : 'Inspector'}</span>
                   <h3>
                     {showPromotePanel
                       ? promoteIntent === 'collection'
@@ -472,13 +445,6 @@ export function CapturePanel(props: {
                         : 'Save as Requests'
                       : 'Selected Request'}
                   </h3>
-                  <p>
-                    {showPromotePanel
-                      ? `Materialize ${selectedCount} checked requests only when you confirm the action.`
-                      : props.selectedEntry
-                        ? 'Details stay compact behind tabs so the request list keeps most of the screen.'
-                        : 'Select a request to inspect it, or select multiple rows and choose a promote action.'}
-                  </p>
                 </div>
 
                 {showPromotePanel ? (
