@@ -417,6 +417,29 @@ function createScriptResponse(response: SendRequestResult) {
   const responseHeaders = buildResponseHeaderMap(response);
   const responseCookies = buildResponseCookieMap(response);
   const responseBody = safeJsonParse(response.bodyText);
+  const headerRows = response.headers.map(header => ({
+    key: header.name,
+    name: header.name,
+    value: header.value
+  }));
+  const cookieRows = Array.from(responseCookies.entries()).map(([name, value]) => ({ name, value }));
+  const assertJsonResponse = () => {
+    const contentType = responseHeaders.get('content-type') || '';
+    if (!contentType.toLowerCase().includes('json')) {
+      throw new Error(`Expected response content-type to be JSON, got ${contentType || 'missing'}`);
+    }
+    if (responseBody === undefined) {
+      throw new Error('Expected response body to be valid JSON');
+    }
+  };
+  const assertResponseBody = (expected?: string) => {
+    if (!response.bodyText) {
+      throw new Error('Expected response to have a body');
+    }
+    if (expected !== undefined && response.bodyText !== expected) {
+      throw new Error(`Expected response body to equal ${expected}`);
+    }
+  };
   return {
     code: response.status,
     status: response.status,
@@ -429,14 +452,25 @@ function createScriptResponse(response: SendRequestResult) {
     headers: {
       get: (key: string) => responseHeaders.get(key.toLowerCase()) || '',
       has: (key: string) => responseHeaders.has(key.toLowerCase()),
+      all: () => headerRows,
       toObject: () => Object.fromEntries(response.headers.map(header => [header.name.toLowerCase(), header.value]))
     },
     cookies: {
       get: (key: string) => responseCookies.get(key) || '',
       has: (key: string) => responseCookies.has(key),
+      all: () => cookieRows,
       toObject: () => Object.fromEntries(responseCookies.entries())
     },
     to: {
+      be: {
+        ok() {
+          if (response.status < 200 || response.status >= 300) {
+            throw new Error(`Expected response status ${response.status} to be 2xx`);
+          }
+        },
+        json: assertJsonResponse,
+        withBody: assertResponseBody
+      },
       have: {
         status(expected: number) {
           if (response.status !== expected) {
@@ -450,6 +484,13 @@ function createScriptResponse(response: SendRequestResult) {
           }
           if (expected !== undefined && actual !== expected) {
             throw new Error(`Expected response header ${name} to equal ${expected}, got ${actual}`);
+          }
+        },
+        body: assertResponseBody,
+        jsonBody(path?: string) {
+          assertJsonResponse();
+          if (path && readPathValue(responseBody, path) === undefined) {
+            throw new Error(`Expected response JSON body to include path ${path}`);
           }
         }
       }

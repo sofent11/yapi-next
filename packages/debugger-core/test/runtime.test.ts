@@ -285,9 +285,16 @@ test('executeRequestScript supports deeper sandbox assertions and cookie helpers
       pm.test('sandbox helpers', () => {
         pm.response.to.have.status(200);
         pm.response.to.have.header('content-type', 'application/json');
+        pm.response.to.have.body('{"ok":true}');
+        pm.response.to.have.jsonBody('$.ok');
+        pm.response.to.be.ok();
+        pm.response.to.be.json();
+        pm.response.to.be.withBody();
         pm.expect(pm.response.json('$.ok')).to.equal(true);
         pm.expect(pm.cookies.has('sid')).to.equal(true);
         pm.expect(pm.cookies.get('sid')).to.equal('abc123');
+        pm.expect(pm.response.cookies.all()).to.deep.include({ name: 'sid', value: 'abc123' });
+        pm.expect(pm.response.headers.all()).to.deep.include({ key: 'content-type', name: 'content-type', value: 'application/json' });
         pm.expect(pm.response.headers.toObject()).to.have.property('content-type');
         pm.expect([1, 2, 3]).to.have.lengthOf(3);
         pm.expect([1, 2, 3]).to.include(2);
