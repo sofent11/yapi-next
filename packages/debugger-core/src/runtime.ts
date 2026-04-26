@@ -629,25 +629,69 @@ function buildExpect(actual: unknown) {
       if (negated ? ok : !ok) {
         throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to be empty`);
       }
+    },
+    typeOf(expected: string, negated = false) {
+      const normalizedExpected = expected.toLowerCase();
+      const actualType = normalizedType(actual);
+      const ok = actualType === normalizedExpected || (normalizedExpected === 'object' && actualType === 'object');
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to be a ${expected}`);
+      }
+    },
+    keys(expected: string[], negated = false) {
+      const actualKeys = actual && typeof actual === 'object' ? Object.keys(actual as Record<string, unknown>) : [];
+      const ok = expected.length === actualKeys.length && expected.every(key => actualKeys.includes(key));
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to have keys ${expected.join(', ')}`);
+      }
+    },
+    members(expected: unknown[], negated = false) {
+      const actualItems = Array.isArray(actual) ? actual : [];
+      const ok = expected.every(item => actualItems.some(actualItem => stringifyValue(actualItem) === stringifyValue(item)));
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to include members ${stringifyValue(expected)}`);
+      }
+    },
+    deepInclude(expected: unknown, negated = false) {
+      const ok = Array.isArray(actual)
+        ? actual.some(item => stringifyValue(item) === stringifyValue(expected))
+        : objectIncludes(actual, expected);
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to deeply include ${stringifyValue(expected)}`);
+      }
     }
   };
 
   function makeChain(negated = false) {
+    const include = Object.assign(
+      (expected: unknown) => chain.contain(expected, negated),
+      {
+        members: (expected: unknown[]) => chain.members(expected, negated)
+      }
+    );
     return {
       equal: (expected: unknown) => chain.equal(expected, negated),
       eql: (expected: unknown) => chain.eql(expected, negated),
       contain: (expected: unknown) => chain.contain(expected, negated),
-      include: (expected: unknown) => chain.contain(expected, negated),
+      include,
       match: (expected: RegExp) => chain.match(expected, negated),
       exist: () => chain.exist(negated),
       oneOf: (expected: unknown[]) => chain.oneOf(expected, negated),
+      deep: {
+        equal: (expected: unknown) => chain.eql(expected, negated),
+        eql: (expected: unknown) => chain.eql(expected, negated),
+        include: (expected: unknown) => chain.deepInclude(expected, negated)
+      },
       have: {
         lengthOf: (expected: number) => chain.lengthOf(expected, negated),
         property(expected: string, value?: unknown) {
           return chain.property(expected, value, negated, arguments.length > 1);
-        }
+        },
+        keys: (...expected: unknown[]) => chain.keys(normalizeExpectedKeys(expected), negated)
       },
       be: {
+        a: (expected: string) => chain.typeOf(expected, negated),
+        an: (expected: string) => chain.typeOf(expected, negated),
         lessThan: (expected: number) => chain.lessThan(expected, negated),
         below: (expected: number) => chain.lessThan(expected, negated),
         greaterThan: (expected: number) => chain.greaterThan(expected, negated),
@@ -938,6 +982,26 @@ function normalizeLength(input: unknown) {
     return Object.keys(input).length;
   }
   return Number.NaN;
+}
+
+function normalizedType(input: unknown) {
+  if (Array.isArray(input)) return 'array';
+  if (input === null) return 'null';
+  return typeof input;
+}
+
+function normalizeExpectedKeys(input: unknown[]) {
+  if (input.length === 1 && Array.isArray(input[0])) {
+    return input[0].map(item => String(item));
+  }
+  return input.map(item => String(item));
+}
+
+function objectIncludes(left: unknown, right: unknown) {
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object' || Array.isArray(left) || Array.isArray(right)) {
+    return false;
+  }
+  return Object.entries(right as Record<string, unknown>).every(([key, value]) => stringifyValue((left as Record<string, unknown>)[key]) === stringifyValue(value));
 }
 
 function normalizeNumberRange(expected: string) {

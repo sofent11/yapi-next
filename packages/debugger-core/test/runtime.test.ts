@@ -291,8 +291,15 @@ test('executeRequestScript supports deeper sandbox assertions and cookie helpers
         pm.expect(pm.response.headers.toObject()).to.have.property('content-type');
         pm.expect([1, 2, 3]).to.have.lengthOf(3);
         pm.expect([1, 2, 3]).to.include(2);
+        pm.expect([{ id: 1 }, { id: 2 }]).to.deep.include({ id: 2 });
+        pm.expect([1, 2, 3]).to.include.members([2, 3]);
+        pm.expect({ ok: true, count: 2 }).to.deep.equal({ ok: true, count: 2 });
+        pm.expect({ ok: true, count: 2 }).to.have.keys('ok', 'count');
         pm.expect('debugger-runtime').to.contain('runtime');
         pm.expect('debugger-runtime').to.not.contain('bruno-cloud');
+        pm.expect(pm.response.json('$.ok')).to.be.a('boolean');
+        pm.expect([1, 2, 3]).to.be.an('array');
+        pm.expect({ ok: true }).to.be.an('object');
         pm.expect(42).to.be.above(40);
         pm.expect(42).to.be.greaterThan(40);
         pm.expect(42).to.be.below(50);
