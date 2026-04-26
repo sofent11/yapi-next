@@ -65,6 +65,8 @@ import { normalizeRequestVariableRowDraft as normalizeRequestVariableRow } from 
 import { CodeEditor } from '../editors/CodeEditor';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
 import { RequestUrlBar } from './request/RequestUrlBar';
+import { AuthPanel } from './request/AuthPanel';
+import { ScriptsPanel } from './request/ScriptsPanel';
 
 const REQUEST_METHODS: RequestDocument['method'][] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const REQUEST_KINDS: RequestDocument['kind'][] = ['http', 'graphql', 'grpc', 'websocket', 'script'];
@@ -86,23 +88,6 @@ function bodyModeOptions() {
     { value: 'file', label: 'file' },
     { value: 'form-urlencoded', label: 'x-www-form-urlencoded' },
     { value: 'multipart', label: 'multipart/form-data' }
-  ];
-}
-
-function authTypeOptions() {
-  return [
-    { value: 'inherit', label: 'inherit' },
-    { value: 'none', label: 'none' },
-    { value: 'bearer', label: 'bearer' },
-    { value: 'basic', label: 'basic' },
-    { value: 'apikey', label: 'api key' },
-    { value: 'oauth2', label: 'oauth2' },
-    { value: 'oauth1', label: 'oauth1' },
-    { value: 'awsv4', label: 'aws signature v4' },
-    { value: 'digest', label: 'digest' },
-    { value: 'ntlm', label: 'ntlm' },
-    { value: 'wsse', label: 'wsse' },
-    { value: 'profile', label: 'environment profile' }
   ];
 }
 
@@ -2994,265 +2979,16 @@ export function RequestPanel(props: {
             )}
           </Tabs.Panel>
 
-          <Tabs.Panel value="auth">
-            <div className="settings-grid">
-              <Select
-                label="Auth Type"
-                value={auth.type}
-                data={authTypeOptions()}
-                onChange={value => updateAuth({ type: (value as AuthConfig['type']) || 'inherit' })}
-              />
-              {auth.type === 'bearer' ? (
-                <>
-                  <TextInput
-                    label="Bearer Token"
-                    value={auth.token || ''}
-                    onChange={event => updateAuth({ ...auth, token: event.currentTarget.value })}
-                  />
-                  <TextInput
-                    label="Token Variable"
-                    placeholder="authToken"
-                    value={auth.tokenFromVar || ''}
-                    onChange={event => updateAuth({ ...auth, tokenFromVar: event.currentTarget.value })}
-                  />
-                </>
-              ) : null}
-              {auth.type === 'basic' ? (
-                <>
-                  <TextInput
-                    label="Username"
-                    value={auth.username || ''}
-                    onChange={event => updateAuth({ ...auth, username: event.currentTarget.value })}
-                  />
-                  <TextInput
-                    label="Username Variable"
-                    placeholder="basicUsername"
-                    value={auth.usernameFromVar || ''}
-                    onChange={event => updateAuth({ ...auth, usernameFromVar: event.currentTarget.value })}
-                  />
-                  <TextInput
-                    label="Password"
-                    value={auth.password || ''}
-                    onChange={event => updateAuth({ ...auth, password: event.currentTarget.value })}
-                  />
-                  <TextInput
-                    label="Password Variable"
-                    placeholder="basicPassword"
-                    value={auth.passwordFromVar || ''}
-                    onChange={event => updateAuth({ ...auth, passwordFromVar: event.currentTarget.value })}
-                  />
-                </>
-              ) : null}
-              {auth.type === 'apikey' ? (
-                <>
-                  <TextInput
-                    label="Key"
-                    value={auth.key || ''}
-                    onChange={event => updateAuth({ ...auth, key: event.currentTarget.value })}
-                  />
-                  <TextInput
-                    label="Value"
-                    value={auth.value || ''}
-                    onChange={event => updateAuth({ ...auth, value: event.currentTarget.value })}
-                  />
-                  <TextInput
-                    label="Value Variable"
-                    placeholder="apiKeyValue"
-                    value={auth.valueFromVar || ''}
-                    onChange={event => updateAuth({ ...auth, valueFromVar: event.currentTarget.value })}
-                  />
-                  <Select
-                    label="Send To"
-                    value={auth.addTo || 'header'}
-                    data={[
-                      { value: 'header', label: 'Header' },
-                      { value: 'query', label: 'Query' }
-                    ]}
-                    onChange={value => updateAuth({ ...auth, addTo: (value as AuthConfig['addTo']) || 'header' })}
-                  />
-                </>
-              ) : null}
-              {auth.type === 'oauth2' ? (
-                <>
-                  <Select
-                    label="OAuth Flow"
-                    value={auth.oauthFlow || 'client_credentials'}
-                    data={[
-                      { value: 'client_credentials', label: 'client_credentials' },
-                      { value: 'authorization_code', label: 'authorization_code' },
-                      { value: 'password', label: 'password' },
-                      { value: 'implicit', label: 'implicit' }
-                    ]}
-                    onChange={value => updateAuth({ ...auth, oauthFlow: (value as AuthConfig['oauthFlow']) || 'client_credentials' })}
-                  />
-                  {auth.oauthFlow === 'authorization_code' || auth.oauthFlow === 'implicit' ? (
-                    <>
-                      <TextInput
-                        label="Authorization URL"
-                        value={auth.authorizationUrl || ''}
-                        onChange={event => updateAuth({ ...auth, authorizationUrl: event.currentTarget.value })}
-                      />
-                      <TextInput
-                        label="Callback URL"
-                        value={auth.callbackUrl || ''}
-                        onChange={event => updateAuth({ ...auth, callbackUrl: event.currentTarget.value })}
-                      />
-                    </>
-                  ) : null}
-                  <TextInput
-                    label="Token URL"
-                    placeholder="https://auth.example.com/oauth/token"
-                    value={auth.tokenUrl || ''}
-                    onChange={event => updateAuth({ ...auth, tokenUrl: event.currentTarget.value })}
-                  />
-                  <TextInput
-                    label="Client ID"
-                    value={auth.clientId || ''}
-                    onChange={event => updateAuth({ ...auth, clientId: event.currentTarget.value })}
-                  />
-                  <TextInput
-                    label="Client ID Variable"
-                    placeholder="oauthClientId"
-                    value={auth.clientIdFromVar || ''}
-                    onChange={event => updateAuth({ ...auth, clientIdFromVar: event.currentTarget.value })}
-                  />
-                  <TextInput
-                    label="Client Secret"
-                    value={auth.clientSecret || ''}
-                    onChange={event => updateAuth({ ...auth, clientSecret: event.currentTarget.value })}
-                  />
-                  <TextInput
-                    label="Client Secret Variable"
-                    placeholder="oauthClientSecret"
-                    value={auth.clientSecretFromVar || ''}
-                    onChange={event => updateAuth({ ...auth, clientSecretFromVar: event.currentTarget.value })}
-                  />
-                  <TextInput
-                    label="Scope"
-                    placeholder="read:users write:orders"
-                    value={auth.scope || ''}
-                    onChange={event => updateAuth({ ...auth, scope: event.currentTarget.value })}
-                  />
-                  <Select
-                    label="Token Placement"
-                    value={auth.tokenPlacement || 'header'}
-                    data={[
-                      { value: 'header', label: 'Header' },
-                      { value: 'query', label: 'Query' }
-                    ]}
-                    onChange={value => updateAuth({ ...auth, tokenPlacement: (value as AuthConfig['tokenPlacement']) || 'header' })}
-                  />
-                  <TextInput
-                    label="Token Name"
-                    placeholder={auth.tokenPlacement === 'query' ? 'access_token' : 'Authorization'}
-                    value={auth.tokenName || ''}
-                    onChange={event => updateAuth({ ...auth, tokenName: event.currentTarget.value })}
-                  />
-                  <TextInput
-                    label="Token Prefix"
-                    placeholder="Bearer"
-                    value={auth.tokenPrefix || ''}
-                    onChange={event => updateAuth({ ...auth, tokenPrefix: event.currentTarget.value })}
-                  />
-                  {resolvedPreview.authState?.type === 'oauth2' ? (
-                    <div className="preview-note">
-                      <Text size="xs" c="dimmed">
-                        Cache {resolvedPreview.authState.cacheStatus}
-                        {resolvedPreview.authState.expiresAt ? ` · expires ${resolvedPreview.authState.expiresAt}` : ''}
-                      </Text>
-                    </div>
-                  ) : null}
-                  {props.onRefreshRequestAuth ? (
-                    <div className="preview-note">
-                      <Button size="xs" variant="default" onClick={props.onRefreshRequestAuth}>
-                        Refresh OAuth Token
-                      </Button>
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
-              {auth.type === 'oauth1' ? (
-                <>
-                  <TextInput label="Consumer Key" value={auth.consumerKey || ''} onChange={event => updateAuth({ ...auth, consumerKey: event.currentTarget.value })} />
-                  <TextInput label="Consumer Secret" value={auth.consumerSecret || ''} onChange={event => updateAuth({ ...auth, consumerSecret: event.currentTarget.value })} />
-                  <TextInput label="Token" value={auth.token || ''} onChange={event => updateAuth({ ...auth, token: event.currentTarget.value })} />
-                  <TextInput label="Token Secret" value={auth.clientSecret || ''} onChange={event => updateAuth({ ...auth, clientSecret: event.currentTarget.value })} />
-                </>
-              ) : null}
-              {auth.type === 'awsv4' ? (
-                <>
-                  <TextInput label="Access Key" value={auth.accessKey || ''} onChange={event => updateAuth({ ...auth, accessKey: event.currentTarget.value })} />
-                  <TextInput label="Secret Key" value={auth.secretKey || ''} onChange={event => updateAuth({ ...auth, secretKey: event.currentTarget.value })} />
-                  <TextInput label="Region" value={auth.region || ''} onChange={event => updateAuth({ ...auth, region: event.currentTarget.value })} />
-                  <TextInput label="Service" value={auth.service || ''} onChange={event => updateAuth({ ...auth, service: event.currentTarget.value })} />
-                  <TextInput label="Session Token" value={auth.sessionToken || ''} onChange={event => updateAuth({ ...auth, sessionToken: event.currentTarget.value })} />
-                </>
-              ) : null}
-              {auth.type === 'digest' || auth.type === 'ntlm' || auth.type === 'wsse' ? (
-                <>
-                  <TextInput label="Username" value={auth.username || ''} onChange={event => updateAuth({ ...auth, username: event.currentTarget.value })} />
-                  <TextInput label="Password" value={auth.password || ''} onChange={event => updateAuth({ ...auth, password: event.currentTarget.value })} />
-                  {auth.type === 'ntlm' ? (
-                    <>
-                      <TextInput label="Domain" value={auth.domain || ''} onChange={event => updateAuth({ ...auth, domain: event.currentTarget.value })} />
-                      <TextInput label="Workstation" value={auth.workstation || ''} onChange={event => updateAuth({ ...auth, workstation: event.currentTarget.value })} />
-                      <div className="preview-note">
-                        <Text size="xs" c="dimmed">
-                          Desktop NTLM uses explicit username/password credentials only. Native OS/integrated enterprise flows are not available in this build.
-                        </Text>
-                      </div>
-                    </>
-                  ) : null}
-                  {auth.type === 'digest' ? (
-                    <>
-                      <TextInput label="Realm" value={auth.realm || ''} onChange={event => updateAuth({ ...auth, realm: event.currentTarget.value })} />
-                      <TextInput label="Nonce" value={auth.nonce || ''} onChange={event => updateAuth({ ...auth, nonce: event.currentTarget.value })} />
-                      <TextInput label="QOP" value={auth.qop || 'auth'} onChange={event => updateAuth({ ...auth, qop: event.currentTarget.value })} />
-                      <TextInput label="Algorithm" value={auth.algorithm || 'MD5'} onChange={event => updateAuth({ ...auth, algorithm: event.currentTarget.value })} />
-                      <TextInput label="Opaque" value={auth.opaque || ''} onChange={event => updateAuth({ ...auth, opaque: event.currentTarget.value })} />
-                      <TextInput label="Client Nonce" value={auth.cnonce || ''} placeholder="Auto generated" onChange={event => updateAuth({ ...auth, cnonce: event.currentTarget.value })} />
-                      <TextInput label="Nonce Count" value={auth.nonceCount || '00000001'} onChange={event => updateAuth({ ...auth, nonceCount: event.currentTarget.value })} />
-                    </>
-                  ) : null}
-                  {auth.type === 'wsse' ? (
-                    <>
-                      <TextInput label="Nonce" value={auth.nonce || ''} placeholder="Auto generated" onChange={event => updateAuth({ ...auth, nonce: event.currentTarget.value })} />
-                      <TextInput label="Created" value={auth.created || ''} placeholder="Auto generated ISO timestamp" onChange={event => updateAuth({ ...auth, created: event.currentTarget.value })} />
-                      <TextInput label="Password Digest" value={auth.passwordDigest || ''} placeholder="Optional override" onChange={event => updateAuth({ ...auth, passwordDigest: event.currentTarget.value })} />
-                    </>
-                  ) : null}
-                </>
-              ) : null}
-              {auth.type === 'profile' ? (
-                <Select
-                  label="Environment Profile"
-                  value={auth.profileName || null}
-                  data={(selectedEnvironment?.authProfiles || []).map(item => ({ value: item.name, label: item.name }))}
-                  onChange={value => updateAuth({ ...auth, profileName: value || '' })}
-                />
-              ) : null}
-              {selectedEnvironment?.authProfiles?.length ? (
-                <div className="preview-note">
-                  <Text size="xs" c="dimmed">
-                    Active environment profiles: {selectedEnvironment.authProfiles.map(item => item.name).join(', ')}
-                  </Text>
-                </div>
-              ) : null}
-              {props.onSaveAuthProfile && auth.type !== 'inherit' && auth.type !== 'none' ? (
-                <div className="preview-note">
-                  <Button
-                    size="xs"
-                    variant="default"
-                    onClick={() => {
-                      const seed = auth.profileName || requestDocument.name || 'auth-profile';
-                      props.onSaveAuthProfile?.(seed, auth);
-                    }}
-                  >
-                    保存为环境认证配置
-                  </Button>
-                </div>
-              ) : null}
-            </div>
+                              <Tabs.Panel value="auth">
+            <AuthPanel
+              auth={auth}
+              requestName={requestDocument.name}
+              selectedEnvironment={selectedEnvironment}
+              resolvedPreview={resolvedPreview}
+              onAuthChange={updateAuth}
+              onRefreshRequestAuth={props.onRefreshRequestAuth}
+              onSaveAuthProfile={props.onSaveAuthProfile}
+            />
           </Tabs.Panel>
 
           <Tabs.Panel value="checks">
@@ -3261,7 +2997,7 @@ export function RequestPanel(props: {
             ) : !selectedCase ? (
               <div className="empty-tab-state">Checks are case-scoped. Select or create a case to add smoke assertions.</div>
             ) : (
-              <div className="checks-panel">
+    <div className="checks-panel">
                 <div className="checks-head">
                   <Text fw={600}>Smoke Checks</Text>
                   <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={() => updateChecks([...(selectedCase.checks || []), createEmptyCheck()])}>
@@ -3365,96 +3101,16 @@ export function RequestPanel(props: {
           </Tabs.Panel>
 
           <Tabs.Panel value="scripts">
-            {!allowCases ? (
-              <div className="empty-tab-state">Scratch requests keep scripts lightweight. Save to workspace first to attach reusable scripts to a case.</div>
-            ) : (
-              <div className="checks-list">
-                <div className="check-card">
-                  <Text fw={700}>Request Pre-request Script</Text>
-                  <CodeEditor
-                    value={requestDocument.scripts.preRequest || ''}
-                    language="text"
-                    onChange={value => props.onRequestChange({ ...requestDocument, scripts: { ...requestDocument.scripts, preRequest: value } })}
-                    minHeight="180px"
-                  />
-                </div>
-                <div className="check-card">
-                  <Text fw={700}>Request Post-response Script</Text>
-                  <CodeEditor
-                    value={requestDocument.scripts.postResponse || ''}
-                    language="text"
-                    onChange={value => props.onRequestChange({ ...requestDocument, scripts: { ...requestDocument.scripts, postResponse: value } })}
-                    minHeight="220px"
-                  />
-                </div>
-                <div className="check-card">
-                  <Text fw={700}>Request Tests</Text>
-                  <Text size="xs" c="dimmed" mt={4}>
-                    Runs after the live response arrives and contributes assertion results to the response panel.
-                  </Text>
-                  <CodeEditor
-                    value={requestDocument.scripts.tests || ''}
-                    language="text"
-                    onChange={value => props.onRequestChange({ ...requestDocument, scripts: { ...requestDocument.scripts, tests: value } })}
-                    minHeight="180px"
-                  />
-                </div>
-                {selectedCase ? (
-                  <>
-                    <div className="check-card">
-                      <Text fw={700}>Case Pre-request Script</Text>
-                      <Text size="xs" c="dimmed" mt={4}>
-                        Runs after the request-level pre-request script for this case only.
-                      </Text>
-                      <CodeEditor
-                        value={selectedCase.scripts?.preRequest || ''}
-                        language="text"
-                        onChange={value =>
-                          updateSelectedCase(current => ({
-                            ...current,
-                            scripts: {
-                              preRequest: value,
-                              postResponse: current.scripts?.postResponse || ''
-                            }
-                          }))
-                        }
-                        minHeight="180px"
-                      />
-                    </div>
-                    <div className="check-card">
-                      <Text fw={700}>Case Post-response Script</Text>
-                      <Text size="xs" c="dimmed" mt={4}>
-                        Runs after the request-level post-response and tests blocks for this case only.
-                      </Text>
-                      <CodeEditor
-                        value={selectedCase.scripts?.postResponse || ''}
-                        language="text"
-                        onChange={value =>
-                          updateSelectedCase(current => ({
-                            ...current,
-                            scripts: {
-                              preRequest: current.scripts?.preRequest || '',
-                              postResponse: value
-                            }
-                          }))
-                        }
-                        minHeight="220px"
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <div className="check-card">
-                    <Text fw={700}>Case Overrides</Text>
-                    <Text size="sm" c="dimmed">
-                      Select or create a case if this request needs extra scenario-specific scripts on top of the reusable request-level blocks.
-                    </Text>
-                  </div>
-                )}
-              </div>
-            )}
+            <ScriptsPanel
+              allowCases={allowCases}
+              requestDocument={requestDocument}
+              selectedCase={selectedCase}
+              onRequestChange={props.onRequestChange}
+              onCaseChange={updateSelectedCase}
+            />
           </Tabs.Panel>
 
-          <Tabs.Panel value="settings">
+<Tabs.Panel value="settings">
             <div className="settings-grid">
               <TextInput
                 label="Name"
