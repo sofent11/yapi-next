@@ -1,5 +1,9 @@
 import {
+  checkResultSchema,
   createEmptyRequest,
+  requestDocumentSchema,
+  scriptLogSchema,
+  sendRequestResultSchema,
   type CheckResult,
   type RequestDocument,
   type ScriptLog,
@@ -20,16 +24,50 @@ export type ScratchSession = {
   updatedAt: string;
 };
 
+function normalizeScratchRequest(seed: Partial<ScratchSession> | undefined): RequestDocument {
+  const fallback = createEmptyRequest(
+    typeof seed?.title === 'string' && seed.title.trim() ? seed.title : 'Scratch Request'
+  );
+  if (!seed?.request || typeof seed.request !== 'object') return fallback;
+  const parsed = requestDocumentSchema.safeParse({
+    ...fallback,
+    ...seed.request
+  });
+  if (parsed.success) return parsed.data;
+  return fallback;
+}
+
+function normalizeScratchResponse(input: unknown): SendRequestResult | null {
+  const parsed = sendRequestResultSchema.safeParse(input);
+  return parsed.success ? parsed.data : null;
+}
+
+function normalizeScratchCheckResults(input: unknown): CheckResult[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map(item => checkResultSchema.safeParse(item))
+    .filter(item => item.success)
+    .map(item => item.data);
+}
+
+function normalizeScratchScriptLogs(input: unknown): ScriptLog[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map(item => scriptLogSchema.safeParse(item))
+    .filter(item => item.success)
+    .map(item => item.data);
+}
+
 export function createScratchSession(seed?: Partial<ScratchSession>): ScratchSession {
-  const request = seed?.request ? structuredClone(seed.request) : createEmptyRequest('Scratch Request');
+  const request = normalizeScratchRequest(seed);
   return {
     id: seed?.id || `scratch_${Math.random().toString(36).slice(2, 8)}`,
-    title: seed?.title || request.name || 'Scratch Request',
+    title: (typeof seed?.title === 'string' && seed.title.trim() ? seed.title : '') || request.name || 'Scratch Request',
     request,
-    response: seed?.response || null,
-    requestError: seed?.requestError || null,
-    checkResults: seed?.checkResults || [],
-    scriptLogs: seed?.scriptLogs || [],
+    response: normalizeScratchResponse(seed?.response),
+    requestError: typeof seed?.requestError === 'string' ? seed.requestError : null,
+    checkResults: normalizeScratchCheckResults(seed?.checkResults),
+    scriptLogs: normalizeScratchScriptLogs(seed?.scriptLogs),
     selectedExampleName: seed?.selectedExampleName || null,
     updatedAt: seed?.updatedAt || new Date().toISOString()
   };
