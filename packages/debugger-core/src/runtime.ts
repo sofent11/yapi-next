@@ -542,83 +542,132 @@ function normalizeScriptRequestInput(input: unknown, fallback: ResolvedRequestPr
 }
 
 function buildExpect(actual: unknown) {
+  const failPrefix = (negated: boolean) => negated ? 'Expected not ' : 'Expected ';
   const chain = {
-    equal(expected: unknown) {
-      if (actual !== expected) {
-        throw new Error(`Expected ${stringifyValue(actual)} to equal ${stringifyValue(expected)}`);
+    equal(expected: unknown, negated = false) {
+      const ok = actual === expected;
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to equal ${stringifyValue(expected)}`);
       }
     },
-    eql(expected: unknown) {
+    eql(expected: unknown, negated = false) {
       const actualValue = stringifyValue(actual);
       const expectedValue = stringifyValue(expected);
-      if (actualValue !== expectedValue) {
-        throw new Error(`Expected ${actualValue} to deeply equal ${expectedValue}`);
+      const ok = actualValue === expectedValue;
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${actualValue} to deeply equal ${expectedValue}`);
       }
     },
-    contain(expected: unknown) {
-      if (!String(actual ?? '').includes(String(expected ?? ''))) {
-        throw new Error(`Expected ${stringifyValue(actual)} to contain ${stringifyValue(expected)}`);
+    contain(expected: unknown, negated = false) {
+      const ok = Array.isArray(actual)
+        ? actual.includes(expected)
+        : String(actual ?? '').includes(String(expected ?? ''));
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to contain ${stringifyValue(expected)}`);
       }
     },
-    match(expected: RegExp) {
-      if (!expected.test(String(actual ?? ''))) {
-        throw new Error(`Expected ${stringifyValue(actual)} to match ${String(expected)}`);
+    match(expected: RegExp, negated = false) {
+      const ok = expected.test(String(actual ?? ''));
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to match ${String(expected)}`);
       }
     },
-    exist() {
-      if (actual == null || actual === '') {
-        throw new Error('Expected value to exist');
+    exist(negated = false) {
+      const ok = actual != null && actual !== '';
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}value to exist`);
       }
     },
-    lessThan(expected: number) {
-      if (!(Number(actual) < expected)) {
-        throw new Error(`Expected ${stringifyValue(actual)} to be less than ${expected}`);
+    lessThan(expected: number, negated = false) {
+      const ok = Number(actual) < expected;
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to be less than ${expected}`);
       }
     },
-    true() {
-      if (actual !== true) {
-        throw new Error(`Expected ${stringifyValue(actual)} to be true`);
+    greaterThan(expected: number, negated = false) {
+      const ok = Number(actual) > expected;
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to be greater than ${expected}`);
       }
     },
-    false() {
-      if (actual !== false) {
-        throw new Error(`Expected ${stringifyValue(actual)} to be false`);
+    true(negated = false) {
+      const ok = actual === true;
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to be true`);
       }
     },
-    lengthOf(expected: number) {
+    false(negated = false) {
+      const ok = actual === false;
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to be false`);
+      }
+    },
+    lengthOf(expected: number, negated = false) {
       const actualLength = normalizeLength(actual);
-      if (actualLength !== expected) {
-        throw new Error(`Expected length ${actualLength} to equal ${expected}`);
+      const ok = actualLength === expected;
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}length ${actualLength} to equal ${expected}`);
       }
     },
-    property(expected: string, value?: unknown) {
-      if (!actual || typeof actual !== 'object' || !(expected in (actual as Record<string, unknown>))) {
-        throw new Error(`Expected ${stringifyValue(actual)} to have property ${expected}`);
+    property(expected: string, value?: unknown, negated = false, hasExpectedValue = false) {
+      const hasProperty = Boolean(actual && typeof actual === 'object' && expected in (actual as Record<string, unknown>));
+      const valueMatches = !hasExpectedValue || (actual as Record<string, unknown>)[expected] === value;
+      const ok = hasProperty && valueMatches;
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to have property ${expected}`);
       }
-      if (arguments.length > 1 && (actual as Record<string, unknown>)[expected] !== value) {
-        throw new Error(
-          `Expected property ${expected} to equal ${stringifyValue(value)}, got ${stringifyValue((actual as Record<string, unknown>)[expected])}`
-        );
+    },
+    oneOf(expected: unknown[], negated = false) {
+      const ok = expected.some(item => item === actual);
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to be one of ${stringifyValue(expected)}`);
+      }
+    },
+    empty(negated = false) {
+      const length = normalizeLength(actual);
+      const ok = Number.isFinite(length) ? length === 0 : actual == null || actual === '';
+      if (negated ? ok : !ok) {
+        throw new Error(`${failPrefix(negated)}${stringifyValue(actual)} to be empty`);
       }
     }
   };
 
-  return {
-    to: {
-      equal: chain.equal,
-      eql: chain.eql,
-      contain: chain.contain,
-      match: chain.match,
-      exist: chain.exist,
+  function makeChain(negated = false) {
+    return {
+      equal: (expected: unknown) => chain.equal(expected, negated),
+      eql: (expected: unknown) => chain.eql(expected, negated),
+      contain: (expected: unknown) => chain.contain(expected, negated),
+      include: (expected: unknown) => chain.contain(expected, negated),
+      match: (expected: RegExp) => chain.match(expected, negated),
+      exist: () => chain.exist(negated),
+      oneOf: (expected: unknown[]) => chain.oneOf(expected, negated),
       have: {
-        lengthOf: chain.lengthOf,
-        property: chain.property
+        lengthOf: (expected: number) => chain.lengthOf(expected, negated),
+        property(expected: string, value?: unknown) {
+          return chain.property(expected, value, negated, arguments.length > 1);
+        }
       },
       be: {
-        lessThan: chain.lessThan,
-        true: chain.true,
-        false: chain.false
+        lessThan: (expected: number) => chain.lessThan(expected, negated),
+        below: (expected: number) => chain.lessThan(expected, negated),
+        greaterThan: (expected: number) => chain.greaterThan(expected, negated),
+        above: (expected: number) => chain.greaterThan(expected, negated),
+        true: () => chain.true(negated),
+        false: () => chain.false(negated),
+        empty: () => chain.empty(negated),
+        oneOf: (expected: unknown[]) => chain.oneOf(expected, negated)
       }
+    };
+  }
+
+  const positive = makeChain(false);
+  return {
+    to: {
+      ...positive,
+      not: makeChain(true)
+    },
+    not: {
+      to: makeChain(true)
     }
   };
 }

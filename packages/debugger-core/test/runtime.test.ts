@@ -290,8 +290,20 @@ test('executeRequestScript supports deeper sandbox assertions and cookie helpers
         pm.expect(pm.cookies.get('sid')).to.equal('abc123');
         pm.expect(pm.response.headers.toObject()).to.have.property('content-type');
         pm.expect([1, 2, 3]).to.have.lengthOf(3);
+        pm.expect([1, 2, 3]).to.include(2);
+        pm.expect('debugger-runtime').to.contain('runtime');
+        pm.expect('debugger-runtime').to.not.contain('bruno-cloud');
+        pm.expect(42).to.be.above(40);
+        pm.expect(42).to.be.greaterThan(40);
+        pm.expect(42).to.be.below(50);
+        pm.expect(42).to.be.lessThan(50);
+        pm.expect('json').to.be.oneOf(['json', 'xml']);
+        pm.expect({ ok: true }).to.not.have.property('error');
+        pm.expect([]).to.be.empty();
+        pm.expect([1]).to.not.be.empty();
         pm.expect(true).to.be.true();
         pm.expect(false).to.be.false();
+        pm.expect(false).to.not.be.true();
       });
     `,
     state: {
