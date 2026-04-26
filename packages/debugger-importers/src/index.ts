@@ -1484,8 +1484,8 @@ function splitGrpcMethod(method: string) {
   };
 }
 
-function grpcRpcKind(value: unknown): 'unary' | 'server-streaming' | 'client-streaming' {
-  return value === 'server-streaming' || value === 'client-streaming' ? value : 'unary';
+function grpcRpcKind(value: unknown): 'unary' | 'server-streaming' | 'client-streaming' | 'bidi-streaming' {
+  return value === 'server-streaming' || value === 'client-streaming' || value === 'bidi-streaming' ? value : 'unary';
 }
 
 function openCollectionGrpcBody(grpc: any): RequestDocument['body'] {

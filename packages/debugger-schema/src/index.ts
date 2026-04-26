@@ -21,7 +21,7 @@ export type HttpMethod = z.infer<typeof httpMethodSchema>;
 
 export const requestKindSchema = z.enum(['http', 'graphql', 'grpc', 'websocket', 'script']);
 export type RequestKind = z.infer<typeof requestKindSchema>;
-export const grpcRpcKindSchema = z.enum(['unary', 'server-streaming', 'client-streaming']);
+export const grpcRpcKindSchema = z.enum(['unary', 'server-streaming', 'client-streaming', 'bidi-streaming']);
 export type GrpcRpcKind = z.infer<typeof grpcRpcKindSchema>;
 
 export const parameterRowSchema = z.object({

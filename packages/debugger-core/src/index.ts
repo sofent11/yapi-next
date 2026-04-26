@@ -4478,12 +4478,18 @@ function buildPreflightDiagnostics(
         field: 'body'
       });
     }
-    if (preview.body.grpc?.rpcKind === 'client-streaming' && !(preview.body.grpc.messages || []).some(message => message.enabled !== false)) {
+    if (
+      (preview.body.grpc?.rpcKind === 'client-streaming' || preview.body.grpc?.rpcKind === 'bidi-streaming') &&
+      !(preview.body.grpc.messages || []).some(message => message.enabled !== false)
+    ) {
       diagnostics.push({
-        code: 'missing-grpc-client-stream-message',
+        code: preview.body.grpc?.rpcKind === 'bidi-streaming' ? 'missing-grpc-bidi-stream-message' : 'missing-grpc-client-stream-message',
         level: 'error',
         blocking: true,
-        message: 'Client-streaming gRPC requests require at least one enabled request message.',
+        message:
+          preview.body.grpc?.rpcKind === 'bidi-streaming'
+            ? 'Bidirectional-streaming gRPC requests require at least one enabled request message.'
+            : 'Client-streaming gRPC requests require at least one enabled request message.',
         field: 'body'
       });
     }

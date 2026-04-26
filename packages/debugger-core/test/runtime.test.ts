@@ -721,6 +721,44 @@ test('resolveRequest preserves grpc client-streaming authoring state', () => {
   );
 });
 
+test('resolveRequest preserves grpc bidi-streaming authoring state', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'grpc://localhost:50051';
+  const environment = createDefaultEnvironment('shared');
+  environment.vars.team = 'core';
+
+  const request = createEmptyRequest('Sync Users');
+  request.kind = 'grpc';
+  request.method = 'POST';
+  request.url = '{{baseUrl}}';
+  request.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: 'proto/user.proto',
+      importPaths: ['proto'],
+      service: 'demo.users.UserService',
+      method: 'SyncUsers',
+      rpcKind: 'bidi-streaming',
+      message: '',
+      messages: [
+        { name: 'First', content: '{"team":"{{team}}","user":{"id":"user-1"}}', enabled: true },
+        { name: 'Second', content: '{"team":"{{team}}","user":{"id":"user-2"}}', enabled: true }
+      ]
+    }
+  };
+
+  const resolved = resolveRequest(project, request, undefined, environment);
+  assert.equal(resolved.body.grpc?.rpcKind, 'bidi-streaming');
+  assert.equal(resolved.requestPath, '/demo.users.UserService/SyncUsers');
+  assert.deepEqual(
+    resolved.body.grpc?.messages?.map(message => message.content),
+    ['{"team":"core","user":{"id":"user-1"}}', '{"team":"core","user":{"id":"user-2"}}']
+  );
+});
+
 test('runPreparedRequest resolves grpc previews and exposes native runtime responses to scripts', async () => {
   const project = createDefaultProject('Demo');
   project.runtime.baseUrl = 'grpc://localhost:50051';
@@ -988,6 +1026,110 @@ test('runPreparedRequest keeps grpc client-streaming previews and native respons
   assert.equal(result.checkResults.every(item => item.ok), true);
 });
 
+test('runPreparedRequest keeps grpc bidi-streaming previews and aggregated responses script-visible', async () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'grpc://localhost:50051';
+  const environment = createDefaultEnvironment('shared');
+  environment.vars.protoDir = '/workspace/protos';
+  environment.vars.package = 'demo.users';
+  environment.vars.team = 'core';
+
+  const request = createEmptyRequest('Sync Users');
+  request.kind = 'grpc';
+  request.method = 'POST';
+  request.url = '{{baseUrl}}';
+  request.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: '{{protoDir}}/user.proto',
+      importPaths: ['{{protoDir}}', '{{protoDir}}/common'],
+      service: '{{package}}.UserService',
+      method: 'SyncUsers',
+      rpcKind: 'bidi-streaming',
+      message: '',
+      messages: [
+        { name: 'User 1', content: '{"team":"{{team}}","user":{"id":"user-1"}}', enabled: true },
+        { name: 'User 2', content: '{"team":"{{team}}","user":{"id":"user-2"}}', enabled: true }
+      ]
+    }
+  };
+  request.scripts.tests = [
+    'pm.test("grpc bidi runtime", () => pm.expect(pm.response.headers.get("x-debugger-runtime")).to.equal("grpc-bidi-streaming"));',
+    'pm.test("grpc bidi request count", () => pm.expect(pm.response.headers.get("x-grpc-request-message-count")).to.equal("2"));',
+    'pm.test("grpc bidi response count", () => pm.expect(pm.response.headers.get("x-grpc-message-count")).to.equal("2"));',
+    'pm.test("grpc bidi payload", () => pm.expect(pm.response.json("messages.1.user.id")).to.equal("user-2"));'
+  ].join('\n');
+
+  const workspace = {
+    root: '/workspace/grpc-bidi-streaming-runtime',
+    project,
+    environments: [{ document: environment, filePath: '/workspace/grpc-bidi-streaming-runtime/environments/shared.yaml' }],
+    requests: [
+      {
+        request,
+        cases: [],
+        folderSegments: ['RPC'],
+        requestFilePath: '/workspace/grpc-bidi-streaming-runtime/requests/sync-users.request.yaml',
+        resourceDirPath: '/workspace/grpc-bidi-streaming-runtime/requests/sync-users'
+      }
+    ],
+    folders: [],
+    collections: [],
+    tree: []
+  };
+
+  const result = await runPreparedRequest({
+    workspace,
+    request,
+    sendRequest: async preview => {
+      assert.equal(preview.requestPath, '/demo.users.UserService/SyncUsers');
+      assert.equal(preview.body.grpc?.rpcKind, 'bidi-streaming');
+      assert.deepEqual(
+        preview.body.grpc?.messages?.map(message => message.content),
+        ['{"team":"core","user":{"id":"user-1"}}', '{"team":"core","user":{"id":"user-2"}}']
+      );
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: 'http://localhost:50051/demo.users.UserService/SyncUsers',
+        durationMs: 31,
+        sizeBytes: 212,
+        headers: [
+          { name: 'content-type', value: 'application/json; charset=utf-8' },
+          { name: 'grpc-status', value: '0' },
+          { name: 'x-debugger-runtime', value: 'grpc-bidi-streaming' },
+          { name: 'x-grpc-request-message-count', value: '2' },
+          { name: 'x-grpc-message-count', value: '2' }
+        ],
+        bodyText: JSON.stringify({
+          grpc: {
+            rpcKind: 'bidi-streaming',
+            service: 'demo.users.UserService',
+            method: 'SyncUsers',
+            requestMessageCount: 2,
+            messageCount: 2
+          },
+          messages: [
+            { user: { id: 'user-1' } },
+            { user: { id: 'user-2' } }
+          ]
+        }),
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
+
+  assert.equal(result.preview.body.grpc?.rpcKind, 'bidi-streaming');
+  assert.equal(result.response.headers.find(item => item.name === 'x-debugger-runtime')?.value, 'grpc-bidi-streaming');
+  assert.equal(result.response.headers.find(item => item.name === 'x-grpc-request-message-count')?.value, '2');
+  assert.equal(result.response.headers.find(item => item.name === 'x-grpc-message-count')?.value, '2');
+  assert.equal(result.checkResults.every(item => item.ok), true);
+});
+
 test('runPreparedRequest keeps grpc client-streaming requests runnable after Bruno and OpenCollection round-trips', async () => {
   const project = createDefaultProject('Demo');
   project.runtime.baseUrl = 'grpc://localhost:50051';
@@ -1098,6 +1240,134 @@ test('runPreparedRequest keeps grpc client-streaming requests runnable after Bru
     });
 
     assert.equal(result.response.headers.find(item => item.name === 'x-grpc-request-message-count')?.value, '2');
+    assert.equal(result.checkResults.every(item => item.ok), true);
+  }
+});
+
+test('runPreparedRequest keeps grpc bidi-streaming requests runnable after Bruno and OpenCollection round-trips', async () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'grpc://localhost:50051';
+  const environment = createDefaultEnvironment('shared');
+  environment.vars.protoDir = '/workspace/protos';
+  environment.vars.package = 'demo.users';
+  environment.vars.team = 'core';
+
+  const request = createEmptyRequest('Sync Users');
+  request.id = 'req_roundtrip_grpc_bidi_streaming';
+  request.kind = 'grpc';
+  request.method = 'POST';
+  request.url = '{{baseUrl}}';
+  request.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: '{{protoDir}}/user.proto',
+      importPaths: ['{{protoDir}}', '{{protoDir}}/common'],
+      service: '{{package}}.UserService',
+      method: 'SyncUsers',
+      rpcKind: 'bidi-streaming',
+      message: '',
+      messages: [
+        { name: 'User 1', content: '{"team":"{{team}}","user":{"id":"user-1"}}', enabled: true },
+        { name: 'User 2', content: '{"team":"{{team}}","user":{"id":"user-2"}}', enabled: true }
+      ]
+    }
+  };
+  request.scripts.tests = 'pm.test("grpc bidi count", () => pm.expect(pm.response.headers.get("x-grpc-message-count")).to.equal("2"));';
+
+  const collection = createEmptyCollection('Streaming Smoke');
+  collection.steps = [createCollectionStep({ requestId: request.id })];
+  const requests = [
+    {
+      request,
+      cases: [],
+      folderSegments: ['RPC'],
+      requestFilePath: '/workspace/requests/sync-users.request.yaml',
+      resourceDirPath: '/workspace/requests/sync-users'
+    }
+  ];
+
+  for (const scenario of [
+    {
+      label: 'Bruno JSON',
+      text: serializeBrunoJsonCollection({ project, collection, requests })
+    },
+    {
+      label: 'OpenCollection',
+      text: serializeOpenCollection({ project, collection, environments: [environment], requests })
+    }
+  ]) {
+    const imported = importSourceText(scenario.text);
+    const importedRequest = imported.requests[0]?.request;
+    assert.equal(importedRequest?.body.grpc?.rpcKind, 'bidi-streaming', `${scenario.label} should preserve rpcKind`);
+    assert.deepEqual(
+      importedRequest?.body.grpc?.messages?.map(message => message.content),
+      ['{"team":"{{team}}","user":{"id":"user-1"}}', '{"team":"{{team}}","user":{"id":"user-2"}}'],
+      `${scenario.label} should preserve request messages`
+    );
+
+    const result = await runPreparedRequest({
+      workspace: {
+        root: `/workspace/${scenario.label.toLowerCase().replace(/\s+/g, '-')}-grpc-bidi-roundtrip`,
+        project,
+        environments: [{ document: environment, filePath: '/workspace/environments/shared.yaml' }],
+        requests: [
+          {
+            request: importedRequest!,
+            cases: [],
+            folderSegments: ['RPC'],
+            requestFilePath: '/workspace/requests/sync-users.request.yaml',
+            resourceDirPath: '/workspace/requests/sync-users'
+          }
+        ],
+        folders: [],
+        collections: [],
+        tree: []
+      },
+      request: importedRequest!,
+      sendRequest: async preview => {
+        assert.equal(preview.body.grpc?.rpcKind, 'bidi-streaming');
+        assert.deepEqual(
+          preview.body.grpc?.messages?.map(message => message.content),
+          ['{"team":"core","user":{"id":"user-1"}}', '{"team":"core","user":{"id":"user-2"}}'],
+          `${scenario.label} preview should stay runnable`
+        );
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          url: 'http://localhost:50051/demo.users.UserService/SyncUsers',
+          durationMs: 29,
+          sizeBytes: 212,
+          headers: [
+            { name: 'content-type', value: 'application/json; charset=utf-8' },
+            { name: 'grpc-status', value: '0' },
+            { name: 'x-debugger-runtime', value: 'grpc-bidi-streaming' },
+            { name: 'x-grpc-request-message-count', value: '2' },
+            { name: 'x-grpc-message-count', value: '2' }
+          ],
+          bodyText: JSON.stringify({
+            grpc: {
+              rpcKind: 'bidi-streaming',
+              service: 'demo.users.UserService',
+              method: 'SyncUsers',
+              requestMessageCount: 2,
+              messageCount: 2
+            },
+            messages: [
+              { user: { id: 'user-1' } },
+              { user: { id: 'user-2' } }
+            ]
+          }),
+          timestamp: new Date().toISOString()
+        };
+      }
+    });
+
+    assert.equal(result.response.headers.find(item => item.name === 'x-grpc-request-message-count')?.value, '2');
+    assert.equal(result.response.headers.find(item => item.name === 'x-grpc-message-count')?.value, '2');
     assert.equal(result.checkResults.every(item => item.ok), true);
   }
 });

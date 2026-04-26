@@ -66,7 +66,8 @@ const REQUEST_KINDS: RequestDocument['kind'][] = ['http', 'graphql', 'grpc', 'we
 const GRPC_RPC_KINDS = [
   { value: 'unary', label: 'Unary' },
   { value: 'server-streaming', label: 'Server Streaming' },
-  { value: 'client-streaming', label: 'Client Streaming' }
+  { value: 'client-streaming', label: 'Client Streaming' },
+  { value: 'bidi-streaming', label: 'Bidirectional Streaming' }
 ] as const;
 
 function bodyModeOptions() {
@@ -1777,8 +1778,8 @@ export function RequestPanel(props: {
                     data={GRPC_RPC_KINDS.map(item => ({ value: item.value, label: item.label }))}
                     onChange={value =>
                       updateGrpcBody({
-                        rpcKind: (value as 'unary' | 'server-streaming' | 'client-streaming') || 'unary',
-                        ...(value === 'client-streaming' && !(grpcBody.messages || []).length
+                        rpcKind: (value as 'unary' | 'server-streaming' | 'client-streaming' | 'bidi-streaming') || 'unary',
+                        ...((value === 'client-streaming' || value === 'bidi-streaming') && !(grpcBody.messages || []).length
                           ? {
                               messages: [{ name: 'Message 1', content: grpcBody.message || '{}', enabled: true }]
                             }
@@ -1806,13 +1807,17 @@ export function RequestPanel(props: {
                       ? 'Request Message (server-streaming aggregates all response messages into one JSON result)'
                       : grpcBody.rpcKind === 'client-streaming'
                       ? 'Client Stream Messages (enabled messages are sent in order and return a single response message)'
+                      : grpcBody.rpcKind === 'bidi-streaming'
+                      ? 'Bidirectional Stream Messages (enabled request messages are sent in order and inbound responses are aggregated into one JSON result)'
                       : 'Unary Message (JSON or protobuf text format)'}
                   </Text>
-                  {grpcBody.rpcKind === 'client-streaming' ? (
+                  {grpcBody.rpcKind === 'client-streaming' || grpcBody.rpcKind === 'bidi-streaming' ? (
                     <div className="websocket-message-list">
                       <Group gap="xs" justify="space-between" mb="xs">
                         <Text size="xs" c="dimmed">
-                          Add one protobuf JSON/text payload per outbound message.
+                          {grpcBody.rpcKind === 'bidi-streaming'
+                            ? 'Add one protobuf JSON/text payload per outbound message. The local runtime sends them in order and collects all inbound stream messages.'
+                            : 'Add one protobuf JSON/text payload per outbound message.'}
                         </Text>
                         <Button
                           size="xs"

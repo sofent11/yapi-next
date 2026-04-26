@@ -164,6 +164,7 @@ enum GrpcRuntimeKind {
     Unary,
     ServerStreaming,
     ClientStreaming,
+    BidiStreaming,
 }
 
 impl GrpcRuntimeKind {
@@ -172,6 +173,7 @@ impl GrpcRuntimeKind {
             Self::Unary => "unary",
             Self::ServerStreaming => "server-streaming",
             Self::ClientStreaming => "client-streaming",
+            Self::BidiStreaming => "bidi-streaming",
         }
     }
 
@@ -180,6 +182,7 @@ impl GrpcRuntimeKind {
             Self::Unary => "grpc",
             Self::ServerStreaming => "grpc-server-streaming",
             Self::ClientStreaming => "grpc-client-streaming",
+            Self::BidiStreaming => "grpc-bidi-streaming",
         }
     }
 }
@@ -1661,11 +1664,25 @@ fn grpc_runtime_kind(
         grpc.rpc_kind.trim()
     };
     if method.is_client_streaming() && method.is_server_streaming() {
-        return Err(format!(
-            "gRPC method {}.{} is bidirectional streaming. Bidi streaming is not supported right now.",
-            method.parent_service().full_name(),
-            method.name()
-        ));
+        return match requested {
+            "bidi-streaming" => Ok(GrpcRuntimeKind::BidiStreaming),
+            "unary" => Err(format!(
+                "gRPC method {}.{} is bidirectional streaming. Set RPC Kind to Bidirectional Streaming to run it.",
+                method.parent_service().full_name(),
+                method.name()
+            )),
+            "server-streaming" => Err(format!(
+                "gRPC method {}.{} is bidirectional streaming. Set RPC Kind to Bidirectional Streaming to run it.",
+                method.parent_service().full_name(),
+                method.name()
+            )),
+            "client-streaming" => Err(format!(
+                "gRPC method {}.{} is bidirectional streaming. Set RPC Kind to Bidirectional Streaming to run it.",
+                method.parent_service().full_name(),
+                method.name()
+            )),
+            other => Err(format!("Unsupported gRPC RPC kind: {other}")),
+        };
     }
     match requested {
         "unary" => {
@@ -1719,6 +1736,11 @@ fn grpc_runtime_kind(
             }
             Ok(GrpcRuntimeKind::ClientStreaming)
         }
+        "bidi-streaming" => Err(format!(
+            "gRPC method {}.{} is not bidirectional streaming. Switch RPC Kind to Unary, Server Streaming, or Client Streaming to run it.",
+            method.parent_service().full_name(),
+            method.name()
+        )),
         other => Err(format!("Unsupported gRPC RPC kind: {other}")),
     }
 }
@@ -1756,7 +1778,7 @@ fn grpc_request_messages(
         GrpcRuntimeKind::Unary | GrpcRuntimeKind::ServerStreaming => {
             Ok(vec![grpc_request_message(descriptor, grpc.message.as_str())?])
         }
-        GrpcRuntimeKind::ClientStreaming => {
+        GrpcRuntimeKind::ClientStreaming | GrpcRuntimeKind::BidiStreaming => {
             let enabled_messages: Vec<(usize, &GrpcMessageInput)> = grpc
                 .messages
                 .iter()
@@ -1859,7 +1881,8 @@ async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult,
                         "message": status.message(),
                         "detailsBase64": (!status.details().is_empty())
                             .then(|| general_purpose::STANDARD.encode(status.details())),
-                        "partialMessageCount": partial_messages.len()
+                        "partialMessageCount": partial_messages.len(),
+                        "requestMessageCount": request_message_count
                     },
                     "messages": partial_messages
                 })
@@ -1909,10 +1932,16 @@ async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult,
                     value: runtime_kind.runtime_header().into(),
                 },
             ];
-            if runtime_kind == GrpcRuntimeKind::ClientStreaming {
+            if runtime_kind == GrpcRuntimeKind::ClientStreaming || runtime_kind == GrpcRuntimeKind::BidiStreaming {
                 headers.push(ResponseHeader {
                     name: "x-grpc-request-message-count".into(),
                     value: request_message_count.to_string(),
+                });
+            }
+            if runtime_kind == GrpcRuntimeKind::BidiStreaming {
+                headers.push(ResponseHeader {
+                    name: "x-grpc-message-count".into(),
+                    value: partial_messages.len().to_string(),
                 });
             }
             Ok(SendRequestResult {
@@ -2079,6 +2108,80 @@ async fn grpc_request_send(input: SendRequestInput) -> Result<SendRequestResult,
                             ResponseHeader {
                                 name: "x-grpc-request-message-count".into(),
                                 value: request_message_count.to_string(),
+                            },
+                        ],
+                        body_text,
+                        body_base64: None,
+                        timestamp: chrono_timestamp(),
+                    })
+                }
+                Err(status) => failure_result(status, vec![]),
+            }
+        }
+        GrpcRuntimeKind::BidiStreaming => {
+            let stream = futures_util::stream::iter(input_messages);
+            let mut request = GrpcRequest::new(stream);
+            grpc_request_metadata(&mut request, &input.headers)?;
+            match client
+                .streaming(request, path, DynamicMessageCodec::new(method.output()))
+                .await
+            {
+                Ok(response) => {
+                    let mut stream = response.into_inner();
+                    let mut messages = Vec::new();
+                    loop {
+                        match stream.message().await {
+                            Ok(Some(message)) => {
+                                messages.push(
+                                    serde_json::to_value(&message)
+                                        .map_err(|error| error.to_string())?,
+                                );
+                            }
+                            Ok(None) => break,
+                            Err(status) => return failure_result(status, messages),
+                        }
+                    }
+                    if let Err(status) = stream.trailers().await {
+                        return failure_result(status, messages);
+                    }
+                    let body_text = serde_json::to_string_pretty(&json!({
+                        "grpc": {
+                            "rpcKind": runtime_kind.rpc_kind(),
+                            "service": service_name.clone(),
+                            "method": method_name.clone(),
+                            "requestMessageCount": request_message_count,
+                            "messageCount": messages.len()
+                        },
+                        "messages": messages
+                    }))
+                    .map_err(|error| error.to_string())?;
+                    Ok(SendRequestResult {
+                        ok: true,
+                        status: 200,
+                        status_text: "OK".into(),
+                        url: rpc_url_text,
+                        duration_ms: start.elapsed().as_millis() as u64,
+                        size_bytes: body_text.as_bytes().len(),
+                        headers: vec![
+                            ResponseHeader {
+                                name: "content-type".into(),
+                                value: "application/json; charset=utf-8".into(),
+                            },
+                            ResponseHeader {
+                                name: "grpc-status".into(),
+                                value: "0".into(),
+                            },
+                            ResponseHeader {
+                                name: "x-debugger-runtime".into(),
+                                value: runtime_kind.runtime_header().into(),
+                            },
+                            ResponseHeader {
+                                name: "x-grpc-request-message-count".into(),
+                                value: request_message_count.to_string(),
+                            },
+                            ResponseHeader {
+                                name: "x-grpc-message-count".into(),
+                                value: messages.len().to_string(),
                             },
                         ],
                         body_text,

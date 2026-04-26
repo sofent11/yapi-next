@@ -651,3 +651,65 @@ test('OpenCollection export preserves grpc client-streaming batches', () => {
     { name: 'User 2', content: '{"id":"user-2"}', enabled: false }
   ]);
 });
+
+test('OpenCollection export preserves grpc bidi-streaming batches', () => {
+  const project = createDefaultProject('OpenCollection gRPC Bidi Streaming');
+  const grpc = createEmptyRequest('Sync Users');
+  grpc.id = 'req_oc_grpc_bidi_stream';
+  grpc.kind = 'grpc';
+  grpc.method = 'POST';
+  grpc.url = 'grpcs://grpc.example.com';
+  grpc.body = {
+    mode: 'none',
+    mimeType: 'application/grpc',
+    text: '',
+    fields: [],
+    grpc: {
+      protoFile: 'protos/user.proto',
+      importPaths: ['protos', 'protos/common'],
+      service: 'demo.users.UserService',
+      method: 'SyncUsers',
+      rpcKind: 'bidi-streaming',
+      message: '',
+      messages: [
+        { name: 'User 1', content: '{"id":"user-1"}', enabled: true },
+        { name: 'User 2', content: '{"id":"user-2"}', enabled: false }
+      ]
+    }
+  };
+
+  const collection = createEmptyCollection('OpenCollection Bidi Streaming');
+  collection.steps = [createCollectionStep({ requestId: grpc.id })];
+
+  const json = serializeOpenCollection({
+    project,
+    collection,
+    environments: [],
+    requests: [
+      {
+        request: grpc,
+        cases: [],
+        folderSegments: ['RPC'],
+        requestFilePath: '/workspace/requests/rpc/sync-users.request.yaml',
+        resourceDirPath: '/workspace/requests/rpc/sync-users'
+      }
+    ]
+  });
+
+  const exported = JSON.parse(json);
+  assert.equal(exported.items[0].items[0].grpc.rpcKind, 'bidi-streaming');
+  assert.deepEqual(exported.items[0].items[0].grpc.message, [
+    { title: 'User 1', selected: true, message: '{"id":"user-1"}' },
+    { title: 'User 2', selected: false, message: '{"id":"user-2"}' }
+  ]);
+
+  const imported = importSourceText(json);
+  const importedGrpc = imported.requests[0]?.request;
+
+  assert.equal(imported.detectedFormat, 'opencollection');
+  assert.equal(importedGrpc?.body.grpc?.rpcKind, 'bidi-streaming');
+  assert.deepEqual(importedGrpc?.body.grpc?.messages, [
+    { name: 'User 1', content: '{"id":"user-1"}', enabled: true },
+    { name: 'User 2', content: '{"id":"user-2"}', enabled: false }
+  ]);
+});
