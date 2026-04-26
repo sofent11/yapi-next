@@ -82,19 +82,14 @@ export function SyncCenterPanel(props: {
         <section className="sync-hero">
           <div className="sync-hero-main">
             <div className="sync-hero-copy">
-              <Text className="section-kicker">Sync Control</Text>
-              <h2 className="sync-hero-title">Can this workspace sync safely right now?</h2>
-              <Text size="sm" c="dimmed" className="sync-hero-body">
-                {nextStepCopy}
-              </Text>
               <div className="sync-hero-status-row">
-                <Badge color={statusTone(props.syncGuard.level)} variant="light" size="lg">
+                <Badge color={statusTone(props.syncGuard.level)} variant="light" size="xl">
                   {statusLabel}
                 </Badge>
-                <Text size="sm" c="dimmed">
-                  {isRepo ? 'The summary below reflects the current repository state.' : 'Sync actions stay blocked until this folder is a Git repository.'}
-                </Text>
               </div>
+              <Text size="lg" className="sync-hero-body" mt="md">
+                {nextStepCopy}
+              </Text>
             </div>
           </div>
           <div className="summary-grid sync-summary-grid">
@@ -110,66 +105,34 @@ export function SyncCenterPanel(props: {
         <section className="sync-guard-grid">
           <div className={`check-card sync-guard-card ${props.syncGuard.canPull ? 'is-ready' : 'is-blocked'}`} style={{ margin: 0 }}>
             <div className="sync-guard-head">
-              <div>
-                <Text className="section-kicker">Can Pull?</Text>
-                <h3 className="section-title">Pull safety</h3>
-              </div>
+              <h3 className="section-title">Pull Status</h3>
               <Badge color={props.syncGuard.canPull ? 'teal' : 'orange'} variant="light" size="lg">
                 {props.syncGuard.canPull ? 'Ready' : 'Blocked'}
               </Badge>
             </div>
-            <Text size="sm" c="dimmed" className="sync-guard-body">
-              {props.syncGuard.pullReason || 'The workspace can pull safely. No local condition is currently blocking this step.'}
+            <Text size="sm" c="dimmed" className="sync-guard-body" mt="sm">
+              {props.syncGuard.pullReason || 'The workspace can pull safely.'}
             </Text>
-            <div className="sync-next-step">
-              <span>Next</span>
-              <strong>
-                {props.syncGuard.canPull
-                  ? 'Pull from remote when you need the latest shared state.'
-                  : !isRepo
-                    ? 'Open the repository root or initialize Git first.'
-                    : 'Resolve the blocker above, then re-check the guard.'}
-              </strong>
-            </div>
-            <Group gap="xs" mt="md" className="sync-actions-row">
+            <Group gap="xs" mt="lg" className="sync-actions-row">
               <Button size="xs" variant="default" onClick={props.onPull} disabled={!props.gitStatus?.isRepo || !props.syncGuard.canPull}>
-                Pull
-              </Button>
-              <Button size="xs" variant="subtle" onClick={props.onRefresh}>
-                Re-check
+                Pull from remote
               </Button>
             </Group>
           </div>
 
           <div className={`check-card sync-guard-card ${props.syncGuard.canPush ? 'is-ready' : 'is-blocked'}`} style={{ margin: 0 }}>
             <div className="sync-guard-head">
-              <div>
-                <Text className="section-kicker">Can Push?</Text>
-                <h3 className="section-title">Push safety</h3>
-              </div>
+              <h3 className="section-title">Push Status</h3>
               <Badge color={props.syncGuard.canPush ? 'teal' : 'orange'} variant="light" size="lg">
                 {props.syncGuard.canPush ? 'Ready' : 'Blocked'}
               </Badge>
             </div>
-            <Text size="sm" c="dimmed" className="sync-guard-body">
-              {props.syncGuard.pushReason || 'The workspace can push safely. No sync guard is currently blocking this step.'}
+            <Text size="sm" c="dimmed" className="sync-guard-body" mt="sm">
+              {props.syncGuard.pushReason || 'The workspace can push safely.'}
             </Text>
-            <div className="sync-next-step">
-              <span>Next</span>
-              <strong>
-                {props.syncGuard.canPush
-                  ? 'Push after you confirm the changed files and commit message are intentional.'
-                  : !isRepo
-                    ? 'Connect this workspace to Git before publishing changes.'
-                    : 'Clear the push blocker first, then re-check the guard.'}
-              </strong>
-            </div>
-            <Group gap="xs" mt="md" className="sync-actions-row">
+            <Group gap="xs" mt="lg" className="sync-actions-row">
               <Button size="xs" onClick={props.onPush} disabled={!props.gitStatus?.isRepo || !props.syncGuard.canPush}>
-                Push
-              </Button>
-              <Button size="xs" variant="subtle" onClick={props.onRefresh}>
-                Re-check
+                Push to remote
               </Button>
             </Group>
           </div>
@@ -178,18 +141,15 @@ export function SyncCenterPanel(props: {
         {props.gitRisks.length > 0 ? (
           <section className="inspector-section sync-risk-section">
             <div className="checks-head">
-              <div>
-                <Text className="section-kicker">Why not now?</Text>
-                <h3 className="section-title">Sync risks to resolve first</h3>
-              </div>
+              <h3 className="section-title">Sync risks to resolve first</h3>
             </div>
-            <div className="sync-risk-list">
+            <div className="sync-risk-list" style={{ marginTop: 12 }}>
               {props.gitRisks.map(risk => (
                 <div key={risk.id} className="sync-risk-card">
                   <Group justify="space-between" align="flex-start">
                     <div>
-                      <Text fw={700}>{risk.title}</Text>
-                      <Text size="sm" c="dimmed" mt={6}>{risk.description}</Text>
+                      <Text fw={500}>{risk.title}</Text>
+                      <Text size="sm" c="dimmed" mt={4}>{risk.description}</Text>
                     </div>
                     <Badge color={risk.severity === 'danger' ? 'red' : 'orange'}>
                       {risk.severity === 'danger' ? 'High risk' : 'Review'}
@@ -203,10 +163,9 @@ export function SyncCenterPanel(props: {
 
         <section className="sync-support-grid">
           <div className="check-card sync-support-card" style={{ margin: 0 }}>
-            <Text className="section-kicker">Support</Text>
-            <h3 className="section-title">Suggested commit message</h3>
-            <div className="sync-commit-preview">{props.suggestedCommitMessage}</div>
-            <Group gap="xs" mt="md" className="sync-actions-row">
+            <h3 className="section-title">Suggested commit</h3>
+            <div className="sync-commit-preview" style={{ marginTop: 12 }}>{props.suggestedCommitMessage}</div>
+            <Group gap="xs" mt="lg" className="sync-actions-row">
               <Button size="xs" variant="default" onClick={props.onCopySuggestedCommitMessage}>
                 Copy message
               </Button>
@@ -217,14 +176,13 @@ export function SyncCenterPanel(props: {
           </div>
 
           <div className="check-card sync-support-card" style={{ margin: 0 }}>
-            <Text className="section-kicker">Changed Files</Text>
-            <h3 className="section-title">What is currently dirty</h3>
+            <h3 className="section-title">Changed Files</h3>
             {changedFiles.length === 0 ? (
               <div className="empty-tab-state sync-empty-note" style={{ marginTop: 12 }}>
-                No uncommitted files. The workspace is clean.
+                No uncommitted files.
               </div>
             ) : (
-              <div className="sync-file-list">
+              <div className="sync-file-list" style={{ marginTop: 12 }}>
                 {changedFiles.map(file => (
                   <div key={file} className="sync-file-row">
                     <strong>{fileName(file)}</strong>
