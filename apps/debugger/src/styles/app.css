@@ -402,7 +402,7 @@ mark {
 }
 
 .workspace-topnav.is-macos {
-  padding-left: max(88px, env(titlebar-area-x, 0) + env(titlebar-area-width, 72px) + 16px);
+  padding-left: max(132px, calc(env(titlebar-area-x, 0px) + env(titlebar-area-width, 72px) + 24px));
 }
 
 .workspace-topnav-left {
@@ -1916,7 +1916,7 @@ mark {
   }
 
   .workspace-topnav.is-macos {
-    padding-left: max(88px, env(titlebar-area-x, 0) + env(titlebar-area-width, 72px) + 8px);
+    padding-left: max(118px, calc(env(titlebar-area-x, 0px) + env(titlebar-area-width, 72px) + 16px));
   }
 
   .workspace-topnav-center {
