@@ -3401,6 +3401,34 @@ mark {
   gap: 8px;
 }
 
+.variable-cleanup-selection-toolbar .mantine-Group-root {
+  align-items: center;
+  row-gap: 6px;
+}
+
+.variable-cleanup-plan-preview {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--surface) 94%, var(--surface-muted));
+}
+
+.variable-cleanup-plan-preview-head {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.variable-cleanup-plan-preview pre {
+  margin: 0;
+  padding: 10px;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .variable-cleanup-selection-list {
   max-height: 280px;
   overflow: auto;

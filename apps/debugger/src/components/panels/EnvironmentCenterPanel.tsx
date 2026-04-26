@@ -114,6 +114,11 @@ function VariableCleanupSelectionModal(props: {
   const [selectedKeys, setSelectedKeys] = useState(() => props.items.map(item => item.key));
   const [query, setQuery] = useState('');
   const [layerFilter, setLayerFilter] = useState('all');
+  const [planExportScope, setPlanExportScope] = useState<'selected' | 'visible-selected'>('selected');
+  const [planIncludeDetails, setPlanIncludeDetails] = useState(true);
+  const [planSummaryOnly, setPlanSummaryOnly] = useState(false);
+  const [planGroupByToken, setPlanGroupByToken] = useState(false);
+  const [planPreviewOpen, setPlanPreviewOpen] = useState(false);
   const [collapsedTokens, setCollapsedTokens] = useState<string[]>([]);
   const selectedSet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
   const collapsedSet = useMemo(() => new Set(collapsedTokens), [collapsedTokens]);
@@ -185,11 +190,53 @@ function VariableCleanupSelectionModal(props: {
         ),
     [props.items, selectedSet]
   );
+  const visibleSelectedItems = useMemo(
+    () =>
+      filteredItems
+        .filter(item => selectedSet.has(item.key))
+        .sort((left, right) =>
+          left.token === right.token
+            ? left.layerLabel.localeCompare(right.layerLabel)
+            : left.token.localeCompare(right.token)
+        ),
+    [filteredItems, selectedSet]
+  );
+  const planExportItems = useMemo(
+    () => (planExportScope === 'visible-selected' ? visibleSelectedItems : selectedItems),
+    [planExportScope, selectedItems, visibleSelectedItems]
+  );
+  const planExportScopeLabel = planExportScope === 'visible-selected' ? 'visible selected' : 'selected';
+  const planExportScopeOptions = [
+    { value: 'selected', label: 'Selected items' },
+    { value: 'visible-selected', label: 'Visible selected' }
+  ];
+  const planExportDetailAllowed = !planSummaryOnly && planIncludeDetails;
+  const planPreviewText = useMemo(
+    () => buildCleanupPlanText(planExportItems, planExportScopeLabel),
+    [
+      filteredItems.length,
+      layerFilter,
+      planExportDetailAllowed,
+      planExportItems,
+      planExportScopeLabel,
+      planGroupByToken,
+      props.items.length,
+      query,
+      selectedItems.length,
+      visibleSelectedCount
+    ]
+  );
 
   useEffect(() => {
     const visibleTokens = new Set(filteredGroups.map(group => group.token));
     setCollapsedTokens(current => current.filter(token => visibleTokens.has(token)));
   }, [filteredGroups]);
+
+  useEffect(() => {
+    if (planSummaryOnly && planIncludeDetails) {
+      setPlanIncludeDetails(false);
+    }
+  }, [planSummaryOnly, planIncludeDetails]);
 
   function selectVisible(nextChecked: boolean) {
     const visibleKeys = filteredItems.map(item => item.key);
@@ -239,46 +286,93 @@ function VariableCleanupSelectionModal(props: {
     setCollapsedTokens(current => (current.includes(token) ? current.filter(value => value !== token) : [...current, token]));
   }
 
-  function buildCleanupPlanText() {
+  function buildCleanupPlanText(items: VariableCleanupMutationPreviewItem[], scopeLabel: string) {
+    const layerSummary = new Map<string, number>();
+    items.forEach(item => {
+      layerSummary.set(item.layerLabel, (layerSummary.get(item.layerLabel) || 0) + 1);
+    });
+    const sortedLayerSummary = [...layerSummary.entries()].sort((left, right) => {
+      if (right[1] !== left[1]) return right[1] - left[1];
+      return left[0].localeCompare(right[0]);
+    });
+    const tokenCount = new Set(items.map(item => item.token)).size;
     const lines = [
       '# Variable Cleanup Plan',
       `Generated at: ${new Date().toISOString()}`,
-      `Selected: ${selectedItems.length}/${props.items.length}`,
+      `Plan scope: ${scopeLabel}`,
+      `Selected in scope: ${items.length}`,
+      `Tokens in scope: ${tokenCount}`,
+      `Selected total: ${selectedItems.length}/${props.items.length}`,
       `Visible in current filter: ${visibleSelectedCount}/${filteredItems.length} items`,
       `Layer filter: ${layerFilter}`,
       `Search query: ${query.trim() || '(none)'}`,
       '',
-      'Selected targets:'
+      'Layer summary:'
     ];
-    selectedItems.forEach(item => {
-      lines.push(`- ${item.token} -> ${item.layerLabel}`);
-    });
+    if (sortedLayerSummary.length === 0) {
+      lines.push('- (none)');
+    } else {
+      sortedLayerSummary.forEach(([layerLabel, count]) => {
+        lines.push(`- ${layerLabel}: ${count}`);
+      });
+    }
+
+    if (planExportDetailAllowed) {
+      lines.push('', 'Selected targets:');
+      if (planGroupByToken) {
+        const grouped = new Map<string, string[]>();
+        items.forEach(item => {
+          const list = grouped.get(item.token);
+          if (list) {
+            list.push(item.layerLabel);
+          } else {
+            grouped.set(item.token, [item.layerLabel]);
+          }
+        });
+        [...grouped.entries()]
+          .sort((left, right) => left[0].localeCompare(right[0]))
+          .forEach(([token, layers]) => {
+            lines.push(`- ${token}`);
+            [...layers].sort((left, right) => left.localeCompare(right)).forEach(layer => {
+              lines.push(`  - ${layer}`);
+            });
+          });
+      } else {
+        items.forEach(item => {
+          lines.push(`- ${item.token} -> ${item.layerLabel}`);
+        });
+      }
+    } else {
+      lines.push('', 'Selected targets detail: omitted');
+    }
+
     return lines.join('\n');
   }
 
   async function copyCleanupPlan() {
-    if (selectedItems.length === 0) {
+    if (planExportItems.length === 0) {
       notifications.show({ color: 'orange', message: 'No selected cleanup items to export.' });
       return;
     }
-    const content = buildCleanupPlanText();
+    const content = buildCleanupPlanText(planExportItems, planExportScopeLabel);
     try {
       await navigator.clipboard.writeText(content);
-      notifications.show({ color: 'teal', message: `Copied ${selectedItems.length} cleanup item(s) to clipboard.` });
+      notifications.show({ color: 'teal', message: `Copied ${planExportItems.length} cleanup item(s) to clipboard.` });
     } catch (_error) {
       notifications.show({ color: 'red', message: 'Failed to copy cleanup plan to clipboard.' });
     }
   }
 
   async function saveCleanupPlan() {
-    if (selectedItems.length === 0) {
+    if (planExportItems.length === 0) {
       notifications.show({ color: 'orange', message: 'No selected cleanup items to export.' });
       return;
     }
     const stamp = new Date().toISOString().replace(/\..+$/, '').replace(/:/g, '-');
+    const scopeSlug = planExportScope === 'visible-selected' ? 'visible-selected' : 'selected';
     const targetPath = await saveFile({
       title: 'Save Variable Cleanup Plan',
-      defaultPath: `variable-cleanup-plan-${stamp}.md`,
+      defaultPath: `variable-cleanup-plan-${scopeSlug}-${stamp}.md`,
       filters: [
         { name: 'Markdown', extensions: ['md'] },
         { name: 'Text', extensions: ['txt'] }
@@ -287,8 +381,8 @@ function VariableCleanupSelectionModal(props: {
     if (!targetPath || typeof targetPath !== 'string') return;
 
     try {
-      await writeDocument(targetPath, buildCleanupPlanText());
-      notifications.show({ color: 'teal', message: `Saved cleanup plan with ${selectedItems.length} item(s).` });
+      await writeDocument(targetPath, buildCleanupPlanText(planExportItems, planExportScopeLabel));
+      notifications.show({ color: 'teal', message: `Saved cleanup plan with ${planExportItems.length} item(s).` });
     } catch (_error) {
       notifications.show({ color: 'red', message: 'Failed to save cleanup plan.' });
     }
@@ -333,11 +427,46 @@ function VariableCleanupSelectionModal(props: {
           {selectedKeys.length} selected / {props.items.length} · {visibleSelectedCount} items in view · {visibleTokenCount} tokens in view
         </Text>
         <Group gap={6}>
-          <Button size="xs" variant="default" onClick={() => void saveCleanupPlan()} disabled={selectedItems.length === 0}>
+          <Select
+            size="xs"
+            w={180}
+            value={planExportScope}
+            data={planExportScopeOptions}
+            onChange={value => setPlanExportScope((value as 'selected' | 'visible-selected') || 'selected')}
+          />
+          <Checkbox
+            size="xs"
+            label="Summary only"
+            checked={planSummaryOnly}
+            onChange={event => setPlanSummaryOnly(event.currentTarget.checked)}
+          />
+          <Checkbox
+            size="xs"
+            label="Include details"
+            checked={planIncludeDetails}
+            disabled={planSummaryOnly}
+            onChange={event => setPlanIncludeDetails(event.currentTarget.checked)}
+          />
+          <Checkbox
+            size="xs"
+            label="Group by token"
+            checked={planGroupByToken}
+            disabled={!planExportDetailAllowed}
+            onChange={event => setPlanGroupByToken(event.currentTarget.checked)}
+          />
+          <Button size="xs" variant="default" onClick={() => void saveCleanupPlan()} disabled={planExportItems.length === 0}>
             Save plan
           </Button>
-          <Button size="xs" variant="default" onClick={() => void copyCleanupPlan()} disabled={selectedItems.length === 0}>
+          <Button size="xs" variant="default" onClick={() => void copyCleanupPlan()} disabled={planExportItems.length === 0}>
             Copy plan
+          </Button>
+          <Button
+            size="xs"
+            variant="default"
+            onClick={() => setPlanPreviewOpen(current => !current)}
+            disabled={planExportItems.length === 0}
+          >
+            {planPreviewOpen ? 'Hide preview' : 'Preview plan'}
           </Button>
           <Button size="xs" variant="default" onClick={() => setVisibleTokenCollapse(false)} disabled={filteredGroups.length === 0}>
             Expand visible
@@ -359,6 +488,16 @@ function VariableCleanupSelectionModal(props: {
           </Button>
         </Group>
       </div>
+      {planPreviewOpen ? (
+        <div className="variable-cleanup-plan-preview">
+          <div className="variable-cleanup-plan-preview-head">
+            <Text size="xs" c="dimmed">
+              Live export preview ({planExportItems.length} item{planExportItems.length === 1 ? '' : 's'})
+            </Text>
+          </div>
+          <pre>{planPreviewText}</pre>
+        </div>
+      ) : null}
       <div className="variable-cleanup-selection-list">
         {filteredGroups.length === 0 ? (
           <div className="empty-tab-state">No matching cleanup targets for this filter.</div>
