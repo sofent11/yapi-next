@@ -3,6 +3,9 @@
 - [x] `ui-density-finish` — tighten request/response chrome grouping, add compact summary strips for Environment Center and Preferences, and mark the Bruno parity gap as reduced.
 - [x] `graphql-schema-navigation` — add a real GraphQL type navigator so authors can jump from root fields, nested selections, and argument/input types into deeper schema members from the request editor.
 - [x] `variables-workflow-depth` — add a cross-scope variable catalog in Environment Center so shadowed names, prompt defaults, and active-request gaps are easier to manage without changing precedence semantics.
+- [x] `variables-workflow-quick-fixes` — add Environment Center quick fixes to seed missing active-request variables, promote/copy winning values into editable layers, remember prompt defaults, and remove shadowed values from mutable layers.
+- [x] `variables-workflow-bulk-fixes` — add catalog-level bulk actions that apply seed missing, remember prompt defaults, and shadow cleanup across the current filtered token set with batch-safe mutations.
+- [x] `variables-workflow-bulk-guardrails` — add confirmation with target previews before catalog-level shadow cleanup so large batch deletes remain reviewable.
 - [x] `script-api-depth-2` — add in-memory `pm.globals` support across local request/collection flows, keep request interpolation aware of seeded globals, and narrow pre-send gap diagnostics to the remaining unsupported Bruno helpers.
 - [x] `script-variable-scope-depth` — make `pm.variables` resolve across runtime/collection variables, iteration data, environment vars, and in-memory globals while keeping writes scoped to the runtime variable store.
 - [x] `script-assertion-chain-depth` — expand the local `pm.expect` subset with common Bruno/Postman chains such as `to.not`, `include`, `above/below`, `oneOf`, and `empty`.

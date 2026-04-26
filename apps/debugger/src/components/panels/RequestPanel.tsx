@@ -61,6 +61,7 @@ import {
   type WebSocketLiveSnapshot,
   type WebSocketRunResult
 } from '../../lib/desktop';
+import { normalizeRequestVariableRowDraft as normalizeRequestVariableRow } from '../../lib/variable-audit';
 import { CodeEditor } from '../editors/CodeEditor';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
 
@@ -223,22 +224,6 @@ function websocketStateFromBody(body: RequestBody): WebSocketRunState {
   return body.websocket?.lastRun
     ? { loading: false, result: body.websocket.lastRun }
     : { loading: false };
-}
-
-function normalizeRequestVariableRow(
-  row: Partial<RequestVariableRow>,
-  scope: 'request' | 'prompt' = 'request'
-): RequestVariableRow {
-  return {
-    name: row.name || '',
-    value: row.value || '',
-    enabled: row.enabled ?? true,
-    kind: 'text',
-    filePath: undefined,
-    scope: row.scope === 'prompt' ? 'prompt' : scope,
-    secret: row.secret ?? false,
-    description: row.description || ''
-  };
 }
 
 function splitRequestVariableRows(rows: RequestVariableRow[]) {
@@ -3574,7 +3559,7 @@ export function RequestPanel(props: {
                   <div className="check-card">
                     <Text fw={700}>Prompt Variables</Text>
                     <Text size="xs" c="dimmed">
-                      Prompt rows ask for a value right before run. The editor value acts as the default for that prompt.
+                      Prompt rows ask for a value right before run. The editor value is the request-owned seed, and remembered prompt defaults from Environment Center can prefill it between runs.
                     </Text>
                     <KeyValueEditor
                       rows={promptVariableRows}

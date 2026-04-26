@@ -7,12 +7,24 @@ import type {
 
 type RequestVariableRow = RequestDocument['vars']['req'][number];
 
+export const VARIABLE_WORKFLOW_EDITABLE_LAYERS = [
+  'request',
+  'prompt-defaults',
+  'environment-shared',
+  'environment-local',
+  'project-runtime'
+] as const;
+
+export type VariableWorkflowEditableLayerId = (typeof VARIABLE_WORKFLOW_EDITABLE_LAYERS)[number];
+
 export type VariableAuthoringDefinition = {
   layerId: string;
   label: string;
   value: string;
   editHint: string;
   winner: boolean;
+  editable: boolean;
+  mutationLayerId?: VariableWorkflowEditableLayerId;
 };
 
 export type VariableAuthoringEntry = {
@@ -41,10 +53,13 @@ type VariableLayer = {
   editHint: string;
   values: Record<string, string>;
   participatesInResolution: boolean;
+  mutationLayerId?: VariableWorkflowEditableLayerId;
 };
 
 export type VariableWorkflowDefinition = VariableAuthoringDefinition & {
   participatesInResolution: boolean;
+  editable: boolean;
+  mutationLayerId?: VariableWorkflowEditableLayerId;
 };
 
 export type VariableWorkflowEntry = {
@@ -68,6 +83,35 @@ export type VariableWorkflowCatalog = {
   promptDefaultCount: number;
 };
 
+/**
+ * Describes a create/update/delete operation on one of the mutable variable layers
+ * reachable from the Environment Center workflow catalog.
+ *
+ * - value !== null  → upsert (create or overwrite) the token in that layer
+ * - value === null  → delete the token from that layer
+ *
+ * Folder layers (folder-*) are intentionally omitted — they are inspect-only.
+ * The builtin-baseUrl layer is also excluded; edit it via the baseUrl field instead.
+ */
+export type WorkflowVariableMutation = {
+  layerId: VariableWorkflowEditableLayerId;
+  token: string;
+  value: string | null;
+};
+
+export type VariableWorkflowMutationController = {
+  layerId: VariableWorkflowEditableLayerId;
+  label: string;
+  available: boolean;
+  unavailableReason?: string;
+  upsert: (token: string, value: string) => void;
+  remove: (token: string) => void;
+};
+
+export type VariableWorkflowMutationApi = Record<VariableWorkflowEditableLayerId, VariableWorkflowMutationController> & {
+  applyMany: (mutations: WorkflowVariableMutation[]) => void;
+};
+
 function readDebugSourceLabel(source: Record<string, unknown>) {
   const meta = source.__debugSource;
   if (!meta || typeof meta !== 'object') return '';
@@ -79,8 +123,130 @@ function stripDebugSource(source: Record<string, unknown>) {
   return Object.fromEntries(entries.map(([key, value]) => [key, String(value ?? '')]));
 }
 
+function sanitizeVariableToken(token: string) {
+  return token.trim();
+}
+
 function requestVariableRows(request: RequestDocument): RequestVariableRow[] {
   return request.vars?.req || [];
+}
+
+export function normalizeRequestVariableRowDraft(
+  row: Partial<RequestVariableRow>,
+  scope: 'request' | 'prompt' = 'request'
+): RequestVariableRow {
+  return {
+    name: row.name || '',
+    value: row.value || '',
+    enabled: row.enabled ?? true,
+    kind: 'text',
+    filePath: undefined,
+    scope: row.scope === 'prompt' ? 'prompt' : scope,
+    secret: row.secret ?? false,
+    description: row.description || ''
+  };
+}
+
+export function upsertRequestVariableValue(
+  rows: RequestVariableRow[],
+  token: string,
+  value: string,
+  scope: 'request' | 'prompt'
+) {
+  const normalizedToken = sanitizeVariableToken(token);
+  if (!normalizedToken) return rows;
+
+  let matched = false;
+  const nextRows: RequestVariableRow[] = [];
+
+  rows.forEach(row => {
+    const rowScope = row.scope === 'prompt' ? 'prompt' : 'request';
+    if (rowScope !== scope || row.name.trim() !== normalizedToken) {
+      nextRows.push(row);
+      return;
+    }
+    if (matched) return;
+    matched = true;
+    nextRows.push({
+      ...row,
+      name: normalizedToken,
+      value,
+      enabled: true,
+      scope
+    });
+  });
+
+  if (!matched) {
+    nextRows.push(
+      normalizeRequestVariableRowDraft(
+        {
+          name: normalizedToken,
+          value,
+          enabled: true,
+          scope
+        },
+        scope
+      )
+    );
+  }
+
+  return nextRows;
+}
+
+export function removeRequestVariableValue(
+  rows: RequestVariableRow[],
+  token: string,
+  scope: 'request' | 'prompt'
+) {
+  const normalizedToken = sanitizeVariableToken(token);
+  if (!normalizedToken) return rows;
+  return rows.filter(row => {
+    const rowScope = row.scope === 'prompt' ? 'prompt' : 'request';
+    return rowScope !== scope || row.name.trim() !== normalizedToken;
+  });
+}
+
+export function upsertVariableRecordValue(values: Record<string, string>, token: string, value: string) {
+  const normalizedToken = sanitizeVariableToken(token);
+  if (!normalizedToken) return { ...values };
+  return {
+    ...values,
+    [normalizedToken]: value
+  };
+}
+
+export function removeVariableRecordValue(values: Record<string, string>, token: string) {
+  const normalizedToken = sanitizeVariableToken(token);
+  if (!normalizedToken || !Object.prototype.hasOwnProperty.call(values, normalizedToken)) {
+    return { ...values };
+  }
+  const next = { ...values };
+  delete next[normalizedToken];
+  return next;
+}
+
+export function updateEnvironmentVariableLayer(
+  environment: EnvironmentDocument,
+  layerId: 'environment-shared' | 'environment-local',
+  values: Record<string, string>
+) {
+  const sharedVars = layerId === 'environment-shared' ? values : environment.sharedVars ?? environment.vars ?? {};
+  const localVars = layerId === 'environment-local' ? values : environment.localVars ?? {};
+  const hasLocalOverlay =
+    Object.keys(localVars).length > 0 ||
+    (environment.localHeaders || []).length > 0 ||
+    Boolean(environment.localFilePath);
+
+  return {
+    ...environment,
+    sharedVars,
+    localVars,
+    vars: {
+      ...sharedVars,
+      ...localVars
+    },
+    overlayMode: hasLocalOverlay || environment.sharedFilePath ? 'overlay' : environment.overlayMode || 'standalone'
+  };
 }
 
 function requestVariableSource(rows: RequestVariableRow[], scope: 'request' | 'prompt') {
@@ -115,7 +281,8 @@ function buildLayers(input: {
       label: 'request variables',
       editHint: 'Edit in the request Variables tab.',
       values: requestValues,
-      participatesInResolution: true
+      participatesInResolution: true,
+      mutationLayerId: 'request'
     });
   }
   input.folderSources.forEach((source, index) => {
@@ -145,7 +312,8 @@ function buildLayers(input: {
       label: input.environment ? `environment local · ${input.environment.name}` : 'environment local',
       editHint: 'Edit in Local Variables.',
       values: environmentLocal,
-      participatesInResolution: true
+      participatesInResolution: true,
+      mutationLayerId: 'environment-local'
     });
   }
   if (Object.keys(environmentShared).length > 0) {
@@ -154,16 +322,18 @@ function buildLayers(input: {
       label: input.environment ? `environment shared · ${input.environment.name}` : 'environment shared',
       editHint: 'Edit in Shared Variables.',
       values: environmentShared,
-      participatesInResolution: true
+      participatesInResolution: true,
+      mutationLayerId: 'environment-shared'
     });
   }
   if (Object.keys(input.project.runtime.vars || {}).length > 0) {
     baseLayers.push({
-      id: 'project',
+      id: 'project-runtime',
       label: 'project runtime',
       editHint: 'Edit in Project Settings → Shared Variables.',
       values: input.project.runtime.vars || {},
-      participatesInResolution: true
+      participatesInResolution: true,
+      mutationLayerId: 'project-runtime'
     });
   }
   const hasExplicitBaseUrl =
@@ -186,7 +356,8 @@ function buildLayers(input: {
       label: 'remembered prompt defaults',
       editHint: 'Edit in Remembered Prompt Values.',
       values: input.promptVariables || {},
-      participatesInResolution: false
+      participatesInResolution: false,
+      mutationLayerId: 'prompt-defaults'
     });
   }
   return baseLayers;
@@ -203,7 +374,9 @@ function definitionsForToken(layers: VariableLayer[], token: string) {
       value,
       editHint: layer.editHint,
       winner: false,
-      participatesInResolution: layer.participatesInResolution
+      participatesInResolution: layer.participatesInResolution,
+      editable: Boolean(layer.mutationLayerId),
+      mutationLayerId: layer.mutationLayerId
     });
   });
   return definitions;
@@ -239,7 +412,9 @@ export function buildVariableAuthoringAudit(input: {
             label: layer.label,
             value,
             editHint: layer.editHint,
-            winner: false
+            winner: false,
+            editable: Boolean(layer.mutationLayerId),
+            mutationLayerId: layer.mutationLayerId
           } as VariableAuthoringDefinition;
         })
         .filter((item): item is VariableAuthoringDefinition => Boolean(item));

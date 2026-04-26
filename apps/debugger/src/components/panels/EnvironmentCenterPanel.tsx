@@ -1,8 +1,17 @@
 import { useMemo, useState } from 'react';
-import { Badge, Button, Checkbox, Code, Group, Select, Text, TextInput } from '@mantine/core';
+import { Badge, Button, Checkbox, Code, Group, Menu, Select, Text, TextInput } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import type { AuthConfig, EnvironmentDocument, ProjectDocument, SessionSnapshot, WorkspaceIndex } from '@yapi-debugger/schema';
 import { KeyValueEditor } from '../primitives/KeyValueEditor';
-import { buildVariableWorkflowCatalog, type VariableAuthoringAudit } from '../../lib/variable-audit';
+import { confirmAction } from '../../lib/dialogs';
+import {
+  buildVariableWorkflowCatalog,
+  type VariableAuthoringAudit,
+  type VariableWorkflowEditableLayerId,
+  type VariableWorkflowEntry,
+  type VariableWorkflowMutationApi,
+  type WorkflowVariableMutation
+} from '../../lib/variable-audit';
 
 function authTypeOptions() {
   return [
@@ -61,6 +70,264 @@ function rebuildEnvironment(environment: EnvironmentDocument, patch: Partial<Env
   };
 }
 
+type VariableQuickFixAction = {
+  key: string;
+  label: string;
+  tone?: 'default' | 'danger';
+  onClick: () => void;
+};
+
+type VariableBatchQuickFixAction = {
+  key: string;
+  label: string;
+  successMessage: string;
+  tone?: 'default' | 'danger';
+  disabled: boolean;
+  mutations: WorkflowVariableMutation[];
+  confirm?: {
+    title: string;
+    message: string;
+    detail: string;
+    confirmLabel: string;
+  };
+};
+
+function variableWorkflowResolutionOrder(layerId: string | null | undefined) {
+  if (!layerId) return Number.MAX_SAFE_INTEGER;
+  if (layerId === 'request') return 0;
+  if (layerId.startsWith('folder-')) return 1;
+  if (layerId === 'runtime') return 2;
+  if (layerId === 'environment-local') return 3;
+  if (layerId === 'environment-shared') return 4;
+  if (layerId === 'project-runtime') return 5;
+  if (layerId === 'builtin-baseUrl') return 6;
+  if (layerId === 'prompt-defaults') return 7;
+  return Number.MAX_SAFE_INTEGER - 1;
+}
+
+function findWorkflowDefinition(entry: VariableWorkflowEntry, layerId: VariableWorkflowEditableLayerId) {
+  return entry.definitions.find(definition => definition.mutationLayerId === layerId) || null;
+}
+
+function winningWorkflowDefinition(entry: VariableWorkflowEntry) {
+  return entry.definitions.find(definition => definition.winner) || entry.definitions[0] || null;
+}
+
+function buildVariableQuickFixActions(
+  entry: VariableWorkflowEntry,
+  workflowMutations: VariableWorkflowMutationApi
+): VariableQuickFixAction[] {
+  const actions: VariableQuickFixAction[] = [];
+  const winningDefinition = winningWorkflowDefinition(entry);
+  const winningValue = winningDefinition?.value ?? entry.winnerValue;
+  const winningLayerId = winningDefinition?.layerId || null;
+  const promptDefinition = findWorkflowDefinition(entry, 'prompt-defaults');
+
+  (
+    ['request', 'environment-shared', 'environment-local', 'project-runtime'] as const
+  ).forEach(targetLayerId => {
+    const controller = workflowMutations[targetLayerId];
+    if (!controller?.available) return;
+
+    const targetDefinition = findWorkflowDefinition(entry, targetLayerId);
+    const promote =
+      winningDefinition?.participatesInResolution &&
+      variableWorkflowResolutionOrder(targetLayerId) < variableWorkflowResolutionOrder(winningLayerId);
+    const isSeed = entry.requestMissing || !entry.hasResolutionSource;
+    const isCurrentWinningLayer = !isSeed && winningDefinition?.mutationLayerId === targetLayerId;
+    const wouldBeNoop = !promote && targetDefinition?.value === winningValue;
+
+    if (isCurrentWinningLayer || wouldBeNoop) return;
+
+    actions.push({
+      key: `${entry.token}:${targetLayerId}`,
+      label: isSeed
+        ? `Seed into ${controller.label}`
+        : promote
+          ? `Promote winner into ${controller.label}`
+          : `Copy winner into ${controller.label}`,
+      onClick: () => controller.upsert(entry.token, winningValue)
+    });
+  });
+
+  const promptController = workflowMutations['prompt-defaults'];
+  if (promptController.available && winningDefinition && promptDefinition?.value !== winningValue) {
+    actions.push({
+      key: `${entry.token}:remember-prompt`,
+      label: promptDefinition ? 'Update remembered prompt default' : 'Remember winning value as prompt default',
+      onClick: () => promptController.upsert(entry.token, winningValue)
+    });
+  }
+
+  if (promptController.available && promptDefinition) {
+    actions.push({
+      key: `${entry.token}:clear-prompt`,
+      label: 'Clear remembered prompt default',
+      tone: 'danger',
+      onClick: () => promptController.remove(entry.token)
+    });
+  }
+
+  entry.definitions.forEach(definition => {
+    if (!definition.mutationLayerId || definition.winner) return;
+    if (definition.mutationLayerId === 'prompt-defaults') return;
+    const controller = workflowMutations[definition.mutationLayerId];
+    if (!controller?.available) return;
+    actions.push({
+      key: `${entry.token}:remove:${definition.mutationLayerId}`,
+      label: `Remove shadowed value from ${controller.label}`,
+      tone: 'danger',
+      onClick: () => controller.remove(entry.token)
+    });
+  });
+
+  return actions;
+}
+
+function preferredSeedLayer(workflowMutations: VariableWorkflowMutationApi): VariableWorkflowEditableLayerId | null {
+  const candidates: VariableWorkflowEditableLayerId[] = [
+    'request',
+    'environment-local',
+    'environment-shared',
+    'project-runtime'
+  ];
+  for (const layerId of candidates) {
+    if (workflowMutations[layerId].available) return layerId;
+  }
+  return null;
+}
+
+function summarizeBatchMutationTargets(
+  mutations: WorkflowVariableMutation[],
+  workflowMutations: VariableWorkflowMutationApi,
+  limit = 8
+) {
+  const targets = mutations
+    .map(mutation => `${mutation.token} -> ${workflowMutations[mutation.layerId].label}`)
+    .sort((left, right) => left.localeCompare(right));
+  const preview = targets.slice(0, limit);
+  const remaining = targets.length - preview.length;
+  if (preview.length === 0) return 'No mutable targets detected.';
+  if (remaining <= 0) return preview.join(' | ');
+  return `${preview.join(' | ')} | +${remaining} more`;
+}
+
+function buildBatchQuickFixActions(
+  entries: VariableWorkflowEntry[],
+  workflowMutations: VariableWorkflowMutationApi
+): VariableBatchQuickFixAction[] {
+  const seedLayerId = preferredSeedLayer(workflowMutations);
+  const seedMutations: WorkflowVariableMutation[] = [];
+  const rememberPromptMutations: WorkflowVariableMutation[] = [];
+  const cleanupMutations: WorkflowVariableMutation[] = [];
+  const cleanupKeySet = new Set<string>();
+
+  entries.forEach(entry => {
+    const winningDefinition = winningWorkflowDefinition(entry);
+    const winningValue = winningDefinition?.value ?? entry.winnerValue;
+    const promptDefinition = findWorkflowDefinition(entry, 'prompt-defaults');
+
+    if (seedLayerId && (entry.requestMissing || !entry.hasResolutionSource)) {
+      seedMutations.push({
+        layerId: seedLayerId,
+        token: entry.token,
+        value: winningValue
+      });
+    }
+
+    if (
+      workflowMutations['prompt-defaults'].available &&
+      winningDefinition &&
+      promptDefinition?.value !== winningValue
+    ) {
+      rememberPromptMutations.push({
+        layerId: 'prompt-defaults',
+        token: entry.token,
+        value: winningValue
+      });
+    }
+
+    entry.definitions.forEach(definition => {
+      if (!definition.mutationLayerId || definition.winner) return;
+      if (definition.mutationLayerId === 'prompt-defaults') return;
+      if (!workflowMutations[definition.mutationLayerId].available) return;
+      const mutationKey = `${entry.token}:${definition.mutationLayerId}`;
+      if (cleanupKeySet.has(mutationKey)) return;
+      cleanupKeySet.add(mutationKey);
+      cleanupMutations.push({
+        layerId: definition.mutationLayerId,
+        token: entry.token,
+        value: null
+      });
+    });
+  });
+
+  return [
+    {
+      key: 'seed-missing',
+      label: seedLayerId ? `Seed missing (${seedMutations.length})` : 'Seed missing',
+      successMessage: `Seeded ${seedMutations.length} missing token(s).`,
+      disabled: seedMutations.length === 0,
+      mutations: seedMutations
+    },
+    {
+      key: 'remember-prompt',
+      label: `Remember winners (${rememberPromptMutations.length})`,
+      successMessage: `Updated ${rememberPromptMutations.length} prompt default(s).`,
+      disabled: rememberPromptMutations.length === 0,
+      mutations: rememberPromptMutations
+    },
+    {
+      key: 'cleanup-shadowed',
+      label: `Clean shadowed (${cleanupMutations.length})`,
+      successMessage: `Removed ${cleanupMutations.length} shadowed value(s).`,
+      tone: 'danger',
+      disabled: cleanupMutations.length === 0,
+      mutations: cleanupMutations,
+      confirm:
+        cleanupMutations.length > 0
+          ? {
+              title: 'Clean Shadowed Values',
+              message: `Remove ${cleanupMutations.length} shadowed value(s) from editable layers?`,
+              detail: summarizeBatchMutationTargets(cleanupMutations, workflowMutations),
+              confirmLabel: 'Clean Shadowed'
+            }
+          : undefined
+    }
+  ];
+}
+
+function VariableWorkflowQuickFixMenu(props: {
+  entry: VariableWorkflowEntry;
+  workflowMutations: VariableWorkflowMutationApi;
+}) {
+  const actions = buildVariableQuickFixActions(props.entry, props.workflowMutations);
+
+  if (actions.length === 0) return null;
+
+  return (
+    <Menu width={280} position="bottom-end" withinPortal>
+      <Menu.Target>
+        <Button size="xs" variant="default">
+          Quick fix
+        </Button>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Label>{props.entry.token}</Menu.Label>
+        {actions.map(action => (
+          <Menu.Item
+            key={action.key}
+            color={action.tone === 'danger' ? 'red' : undefined}
+            onClick={action.onClick}
+          >
+            {action.label}
+          </Menu.Item>
+        ))}
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
+
 export function EnvironmentCenterPanel(props: {
   workspace: WorkspaceIndex;
   draftProject: ProjectDocument | null;
@@ -82,6 +349,7 @@ export function EnvironmentCenterPanel(props: {
   onClearRuntimeVars: () => void;
   onPromptVariablesChange: (values: Record<string, string>) => void;
   onClearPromptVars: () => void;
+  workflowMutations: VariableWorkflowMutationApi;
   onSave: () => void;
 }) {
   const selectedEnvironment = props.selectedEnvironment;
@@ -109,6 +377,10 @@ export function EnvironmentCenterPanel(props: {
       }),
     [project, selectedEnvironment, props.runtimeVariables, props.promptVariables, variableAudit]
   );
+  const workflowEntryByToken = useMemo(
+    () => new Map(workflowCatalog.entries.map(entry => [entry.token, entry])),
+    [workflowCatalog.entries]
+  );
   const filteredWorkflowEntries = useMemo(() => {
     const needle = workflowQuery.trim().toLowerCase();
     return workflowCatalog.entries.filter(entry => {
@@ -123,6 +395,28 @@ export function EnvironmentCenterPanel(props: {
       );
     });
   }, [workflowCatalog.entries, workflowFilter, workflowQuery]);
+  const batchQuickFixActions = useMemo(
+    () => buildBatchQuickFixActions(filteredWorkflowEntries, props.workflowMutations),
+    [filteredWorkflowEntries, props.workflowMutations]
+  );
+
+  async function handleBatchQuickFix(action: VariableBatchQuickFixAction) {
+    if (action.disabled || action.mutations.length === 0) return;
+    if (action.confirm) {
+      const confirmed = await confirmAction({
+        title: action.confirm.title,
+        message: action.confirm.message,
+        detail: action.confirm.detail,
+        confirmLabel: action.confirm.confirmLabel
+      });
+      if (!confirmed) return;
+    }
+    props.workflowMutations.applyMany(action.mutations);
+    notifications.show({
+      color: action.tone === 'danger' ? 'orange' : 'teal',
+      message: action.successMessage
+    });
+  }
 
   return (
     <section className="workspace-main environment-center">
@@ -303,14 +597,22 @@ export function EnvironmentCenterPanel(props: {
                       </div>
                     ) : (
                       <div className="variable-authoring-list">
-                        {variableAudit.entries.map(variable => (
-                          <div key={variable.token} className="variable-authoring-card">
+                        {variableAudit.entries.map(variable => {
+                          const workflowEntry = workflowEntryByToken.get(variable.token);
+                          return (
+                            <div key={variable.token} className="variable-authoring-card">
                             <div className="variable-authoring-head">
                               <div className="variable-authoring-copy">
                                 <strong>{variable.token}</strong>
                                 <span>{variable.sourceLabel}</span>
                               </div>
                               <Group gap="xs">
+                                {workflowEntry ? (
+                                  <VariableWorkflowQuickFixMenu
+                                    entry={workflowEntry}
+                                    workflowMutations={props.workflowMutations}
+                                  />
+                                ) : null}
                                 <Badge color={variable.missing ? 'red' : variable.conflict ? 'orange' : 'teal'} variant="light">
                                   {variable.missing ? 'missing' : variable.conflict ? 'shadowed' : 'resolved'}
                                 </Badge>
@@ -339,7 +641,7 @@ export function EnvironmentCenterPanel(props: {
                                     <div className="variable-definition-meta">
                                       <Code>{definition.value || 'empty'}</Code>
                                       <Badge variant="light" color={definition.winner ? 'teal' : 'gray'}>
-                                        {definition.winner ? 'winning' : 'shadowed'}
+                                        {definition.winner ? 'winning' : definition.editable ? 'shadowed' : 'inspect only'}
                                       </Badge>
                                     </div>
                                   </div>
@@ -347,7 +649,8 @@ export function EnvironmentCenterPanel(props: {
                               </div>
                             ) : null}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </>
@@ -412,6 +715,22 @@ export function EnvironmentCenterPanel(props: {
                     }
                   />
                 </div>
+                <div className="variable-workflow-actions">
+                  {batchQuickFixActions.map(action => (
+                    <Button
+                      key={action.key}
+                      size="xs"
+                      variant="default"
+                      color={action.tone === 'danger' ? 'red' : undefined}
+                      disabled={action.disabled}
+                      onClick={() => {
+                        void handleBatchQuickFix(action);
+                      }}
+                    >
+                      {action.label}
+                    </Button>
+                  ))}
+                </div>
                 {filteredWorkflowEntries.length === 0 ? (
                   <div className="empty-tab-state" style={{ marginTop: 12 }}>
                     No variables match this filter yet.
@@ -432,6 +751,10 @@ export function EnvironmentCenterPanel(props: {
                             </span>
                           </div>
                           <Group gap="xs">
+                            <VariableWorkflowQuickFixMenu
+                              entry={entry}
+                              workflowMutations={props.workflowMutations}
+                            />
                             {entry.requestLinked ? (
                               <Badge color={entry.requestMissing ? 'red' : 'blue'} variant="light">
                                 {entry.requestMissing ? 'request missing' : 'active request'}
@@ -463,7 +786,13 @@ export function EnvironmentCenterPanel(props: {
                                     variant="light"
                                     color={definition.winner ? 'teal' : definition.participatesInResolution ? 'gray' : 'blue'}
                                   >
-                                    {definition.winner ? 'winning' : definition.participatesInResolution ? 'available' : 'prompt default'}
+                                    {definition.winner
+                                      ? 'winning'
+                                      : definition.participatesInResolution
+                                        ? definition.editable
+                                          ? 'available'
+                                          : 'inspect only'
+                                        : 'prompt default'}
                                   </Badge>
                                 </div>
                               </div>

@@ -3351,6 +3351,13 @@ mark {
   margin-top: 12px;
 }
 
+.variable-workflow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .variable-authoring-card,
 .variable-definition-row {
   display: grid;
@@ -3370,6 +3377,7 @@ mark {
 .variable-authoring-head {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .variable-authoring-copy {
@@ -3616,6 +3624,11 @@ mark {
   .request-preview-grid-secondary,
   .variable-workflow-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .variable-workflow-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .sync-hero {

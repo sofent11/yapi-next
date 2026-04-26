@@ -109,7 +109,16 @@ import { collectionReportHtml, collectionReportJson, collectionReportJunit } fro
 import { Resizer } from './components/primitives/Resizer';
 import { StatusBar } from './components/layout/StatusBar';
 import { createScratchSession, loadScratchSessions, normalizeScratchTitle, saveScratchSessions, type ScratchSession } from './lib/scratch';
-import { buildVariableAuthoringAudit } from './lib/variable-audit';
+import {
+  buildVariableAuthoringAudit,
+  removeRequestVariableValue,
+  removeVariableRecordValue,
+  type VariableWorkflowMutationApi,
+  type WorkflowVariableMutation,
+  upsertRequestVariableValue,
+  upsertVariableRecordValue,
+  updateEnvironmentVariableLayer
+} from './lib/variable-audit';
 import {
   captureEntriesToImportResult,
   formatCaptureStepName,
@@ -852,6 +861,138 @@ export function App() {
       return next;
     });
   }
+
+  const applyWorkflowMutations = useCallback((mutations: WorkflowVariableMutation[]) => {
+    if (mutations.length === 0) return;
+
+    const requestMutations = mutations.filter(mutation => mutation.layerId === 'request');
+    if (requestMutations.length > 0 && store.draftRequest) {
+      let nextRows = [...(store.draftRequest.vars?.req || [])];
+      requestMutations.forEach(mutation => {
+        nextRows =
+          mutation.value === null
+            ? removeRequestVariableValue(nextRows, mutation.token, 'request')
+            : upsertRequestVariableValue(nextRows, mutation.token, mutation.value, 'request');
+      });
+      store.updateRequest({
+        ...store.draftRequest,
+        vars: {
+          req: nextRows,
+          res: store.draftRequest.vars?.res || []
+        }
+      });
+    }
+
+    const promptMutations = mutations.filter(mutation => mutation.layerId === 'prompt-defaults');
+    if (promptMutations.length > 0) {
+      updatePromptVariables(current => {
+        let next = current;
+        promptMutations.forEach(mutation => {
+          next =
+            mutation.value === null
+              ? removeVariableRecordValue(next, mutation.token)
+              : upsertVariableRecordValue(next, mutation.token, mutation.value);
+        });
+        return next;
+      });
+    }
+
+    const environmentMutations = mutations.filter(
+      (
+        mutation
+      ): mutation is WorkflowVariableMutation & { layerId: 'environment-shared' | 'environment-local' } =>
+        mutation.layerId === 'environment-shared' || mutation.layerId === 'environment-local'
+    );
+    if (environmentMutations.length > 0 && selectedEnvironment) {
+      store.updateEnvironment(selectedEnvironment.name, environment => {
+        let nextEnvironment = environment;
+        environmentMutations.forEach(mutation => {
+          const environmentLayerId = mutation.layerId;
+          const currentValues =
+            environmentLayerId === 'environment-shared'
+              ? nextEnvironment.sharedVars ?? nextEnvironment.vars ?? {}
+              : nextEnvironment.localVars ?? {};
+          const nextValues =
+            mutation.value === null
+              ? removeVariableRecordValue(currentValues, mutation.token)
+              : upsertVariableRecordValue(currentValues, mutation.token, mutation.value);
+          nextEnvironment = updateEnvironmentVariableLayer(nextEnvironment, environmentLayerId, nextValues);
+        });
+        return nextEnvironment;
+      });
+    }
+
+    const projectMutations = mutations.filter(mutation => mutation.layerId === 'project-runtime');
+    if (projectMutations.length > 0) {
+      const project = store.draftProject || store.workspace?.project;
+      if (!project) return;
+      let nextValues = { ...(project.runtime.vars || {}) };
+      projectMutations.forEach(mutation => {
+        nextValues =
+          mutation.value === null
+            ? removeVariableRecordValue(nextValues, mutation.token)
+            : upsertVariableRecordValue(nextValues, mutation.token, mutation.value);
+      });
+      store.updateProject({
+        ...project,
+        runtime: {
+          ...project.runtime,
+          vars: nextValues
+        }
+      });
+    }
+  }, [selectedEnvironment, store, updatePromptVariables]);
+
+  const handleWorkflowMutation = useCallback(
+    (mutation: WorkflowVariableMutation) => {
+      applyWorkflowMutations([mutation]);
+    },
+    [applyWorkflowMutations]
+  );
+
+  const workflowMutations = useMemo<VariableWorkflowMutationApi>(() => ({
+    request: {
+      layerId: 'request',
+      label: 'Request variables',
+      available: Boolean(store.draftRequest),
+      unavailableReason: store.draftRequest ? undefined : 'Select a request to edit request variables.',
+      upsert: (token, value) => handleWorkflowMutation({ layerId: 'request', token, value }),
+      remove: token => handleWorkflowMutation({ layerId: 'request', token, value: null })
+    },
+    'prompt-defaults': {
+      layerId: 'prompt-defaults',
+      label: 'Remembered prompt defaults',
+      available: Boolean(store.workspace),
+      unavailableReason: store.workspace ? undefined : 'Open a workspace to edit remembered prompt defaults.',
+      upsert: (token, value) => handleWorkflowMutation({ layerId: 'prompt-defaults', token, value }),
+      remove: token => handleWorkflowMutation({ layerId: 'prompt-defaults', token, value: null })
+    },
+    'environment-shared': {
+      layerId: 'environment-shared',
+      label: 'Environment shared variables',
+      available: Boolean(selectedEnvironment),
+      unavailableReason: selectedEnvironment ? undefined : 'Select an environment to edit shared variables.',
+      upsert: (token, value) => handleWorkflowMutation({ layerId: 'environment-shared', token, value }),
+      remove: token => handleWorkflowMutation({ layerId: 'environment-shared', token, value: null })
+    },
+    'environment-local': {
+      layerId: 'environment-local',
+      label: 'Environment local variables',
+      available: Boolean(selectedEnvironment),
+      unavailableReason: selectedEnvironment ? undefined : 'Select an environment to edit local variables.',
+      upsert: (token, value) => handleWorkflowMutation({ layerId: 'environment-local', token, value }),
+      remove: token => handleWorkflowMutation({ layerId: 'environment-local', token, value: null })
+    },
+    'project-runtime': {
+      layerId: 'project-runtime',
+      label: 'Project runtime variables',
+      available: Boolean(store.draftProject || store.workspace?.project),
+      unavailableReason: store.draftProject || store.workspace?.project ? undefined : 'Open a workspace to edit project runtime variables.',
+      upsert: (token, value) => handleWorkflowMutation({ layerId: 'project-runtime', token, value }),
+      remove: token => handleWorkflowMutation({ layerId: 'project-runtime', token, value: null })
+    },
+    applyMany: (mutations: WorkflowVariableMutation[]) => applyWorkflowMutations(mutations)
+  }), [applyWorkflowMutations, handleWorkflowMutation, selectedEnvironment, store.draftProject, store.draftRequest, store.workspace]);
 
   const importedRecords = useMemo(() => {
     if (!store.workspace || !lastImportSession) return [];
@@ -3918,6 +4059,7 @@ export function App() {
                   onClearRuntimeVars={() => setRuntimeVariables({})}
                   onPromptVariablesChange={values => updatePromptVariables(() => values)}
                   onClearPromptVars={() => updatePromptVariables(() => ({}))}
+                  workflowMutations={workflowMutations}
                   onSave={() => saveMutation.mutate()}
                 />
               </section>
