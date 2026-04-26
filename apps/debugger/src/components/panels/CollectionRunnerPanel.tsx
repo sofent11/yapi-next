@@ -256,21 +256,10 @@ export function CollectionRunnerPanel(props: {
         </div>
       </div>
 
-      <div className="center-intro">
-        <Text size="sm" c="dimmed">
-          Collections turn individual requests into repeatable flows. Switch between design, data, and reports so each step of that workflow stays focused.
-        </Text>
-      </div>
-
       <div className="environment-layout">
         <div className="environment-sidebar">
           <div className="sidebar-section-head">
             <Text fw={700} size="sm">{showReportsView ? 'Reports First' : 'Collections First'}</Text>
-            <Text size="xs" c="dimmed">
-              {showReportsView
-                ? 'Pick a recent run and inspect where the flow failed or what values should be extracted.'
-                : 'Pick a collection to edit its steps, environment defaults, and reusable variables.'}
-            </Text>
           </div>
           <div className="environment-list">
             {props.workspace.collections.length === 0 ? (
@@ -293,43 +282,45 @@ export function CollectionRunnerPanel(props: {
           <div className={showReportsView ? 'inspector-section collection-sidebar-section is-primary' : 'inspector-section collection-sidebar-section'} style={{ marginTop: 12 }}>
             <div className="checks-head">
               <Text fw={700} size="sm">Reports</Text>
-              <Group gap={6}>
-                <Button
-                  size="xs"
-                  variant="subtle"
-                  onClick={() => props.onExportReport?.('json')}
-                  disabled={!selectedReport || !enabledReporters.includes('json')}
-                >
-                  JSON
-                </Button>
-                <Button
-                  size="xs"
-                  variant="subtle"
-                  onClick={() => props.onExportReport?.('html')}
-                  disabled={!selectedReport || !enabledReporters.includes('html')}
-                >
-                  HTML
-                </Button>
-                <Button
-                  size="xs"
-                  variant="subtle"
-                  onClick={() => props.onExportReport?.('junit')}
-                  disabled={!selectedReport || !enabledReporters.includes('junit')}
-                >
-                  JUnit
-                </Button>
-                <Button
-                  size="xs"
-                  variant="default"
-                  onClick={props.onExportConfiguredReports}
-                  disabled={!selectedReport || enabledReporters.length === 0 || !props.onExportConfiguredReports}
-                >
-                  Configured
-                </Button>
+              <Group gap={4}>
                 <Button size="xs" variant="subtle" color="red" onClick={props.onClearReports}>
                   Clear
                 </Button>
               </Group>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 12 }}>
+              <Button
+                size="xs"
+                variant="subtle"
+                onClick={() => props.onExportReport?.('json')}
+                disabled={!selectedReport || !enabledReporters.includes('json')}
+              >
+                JSON
+              </Button>
+              <Button
+                size="xs"
+                variant="subtle"
+                onClick={() => props.onExportReport?.('html')}
+                disabled={!selectedReport || !enabledReporters.includes('html')}
+              >
+                HTML
+              </Button>
+              <Button
+                size="xs"
+                variant="subtle"
+                onClick={() => props.onExportReport?.('junit')}
+                disabled={!selectedReport || !enabledReporters.includes('junit')}
+              >
+                JUnit
+              </Button>
+              <Button
+                size="xs"
+                variant="default"
+                onClick={props.onExportConfiguredReports}
+                disabled={!selectedReport || enabledReporters.length === 0 || !props.onExportConfiguredReports}
+              >
+                All
+              </Button>
             </div>
             <TextInput
               mt="sm"

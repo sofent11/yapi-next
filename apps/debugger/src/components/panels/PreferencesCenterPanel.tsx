@@ -257,18 +257,13 @@ export function PreferencesCenterPanel(props: {
         </div>
       </div>
 
-      <div className="center-intro">
-        <Text size="sm" c="dimmed">
-          Keep the debugger compact and predictable: visual scale, editor readability, shortcuts, and runtime defaults should all reinforce the same workbench rhythm.
-        </Text>
-        <div className="summary-grid center-summary-grid">
-          {preferenceSummary.map(item => (
-            <div key={item.label} className="summary-chip">
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </div>
-          ))}
-        </div>
+      <div className="summary-grid center-summary-grid" style={{ padding: '16px 18px 0' }}>
+        {preferenceSummary.map(item => (
+          <div key={item.label} className="summary-chip">
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+          </div>
+        ))}
       </div>
 
       <div className="project-inspector">
@@ -288,7 +283,6 @@ export function PreferencesCenterPanel(props: {
               label="Keybinding Preset"
               value={preferences.keybindingPreset}
               data={keybindingPresetData}
-              description="Presets provide safe defaults; manual edits automatically switch to Custom."
               onChange={value => value && applyPreset(value as PreferencesState['keybindingPreset'])}
             />
             <NumberInput
@@ -316,17 +310,11 @@ export function PreferencesCenterPanel(props: {
               }}
             />
           </div>
-          <Text size="xs" c="dimmed">
-            Current command palette shortcut: <strong>{preferences.keybindings.commandPalette}</strong>
-          </Text>
         </div>
 
         <div className="inspector-section">
           <h3 className="section-title">Keybindings</h3>
-          <Text size="xs" c="dimmed" mb="md">
-            This focused shortcut set covers the highest-frequency request actions plus rail jumps for core debugger centers. Assigned shortcuts are filtered to avoid collisions.
-          </Text>
-          <div className="keybinding-grid">
+          <div className="keybinding-grid" style={{ marginTop: 12 }}>
             {KEYBINDING_DEFINITIONS.map(definition => {
               const currentShortcut = preferences.keybindings[definition.id];
               const usedShortcuts = new Set(
@@ -355,7 +343,7 @@ export function PreferencesCenterPanel(props: {
 
         <div className="inspector-section">
           <h3 className="section-title">Runtime Defaults</h3>
-          <div className="form-grid form-grid-2">
+          <div className="form-grid form-grid-2" style={{ marginTop: 12 }}>
             <TextInput
               label="Proxy URL"
               placeholder="http://127.0.0.1:8080"
@@ -401,16 +389,13 @@ export function PreferencesCenterPanel(props: {
               }
             />
           </div>
-          <Text size="xs" c="dimmed">
-            These defaults are applied as runtime fallbacks when a request or case does not already define proxy/certificate settings.
-          </Text>
         </div>
 
-        <div className="inspector-section danger-section">
+        <div className="inspector-section danger-section" style={{ marginTop: 24 }}>
           <div className="danger-section-copy">
-            <Text fw={700}>Local Cache Controls</Text>
-            <Text size="xs" c="dimmed">
-              Clears recent workspaces, persisted debugger UI state, import sessions, and volatile runtime/session cache stored in the desktop app.
+            <Text fw={500}>Local Cache Controls</Text>
+            <Text size="sm" c="dimmed" mt={4}>
+              Clears workspace UI state and volatile runtime caches.
             </Text>
           </div>
           <Group gap="sm">
