@@ -4188,6 +4188,16 @@ mark {
   gap: 12px;
 }
 
+.history-run-item-head strong {
+  font-size: 0.88rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.history-run-item-head .mantine-Badge-root {
+  flex-shrink: 0;
+}
+
 .history-action-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

@@ -79,12 +79,6 @@ export function HistoryPanel(props: {
         </div>
       </div>
 
-      <div className="center-intro">
-        <Text size="sm" c="dimmed">
-          Replay previous runs, compare outputs, and turn useful executions into Cases, baselines, and reusable examples.
-        </Text>
-      </div>
-
       <div className="environment-layout">
         <aside className="environment-sidebar">
           <div className="sidebar-section-head">
@@ -123,10 +117,7 @@ export function HistoryPanel(props: {
             <>
               <section className="inspector-section">
                 <div className="checks-head">
-                  <div>
-                    <Text className="section-kicker">Run Summary</Text>
-                    <h3 className="section-title">Current run and what to do next</h3>
-                  </div>
+                  <h3 className="section-title">Run Summary</h3>
                 </div>
                 <div className="summary-grid">
                   <div className="summary-chip">
@@ -177,10 +168,7 @@ export function HistoryPanel(props: {
 
               <section className="inspector-section">
                 <div className="checks-head">
-                  <div>
-                    <Text className="section-kicker">Compare</Text>
-                    <h3 className="section-title">Choose another run as reference</h3>
-                  </div>
+                  <h3 className="section-title">Compare</h3>
                   <Select
                     size="xs"
                     placeholder="Select another run"
@@ -194,8 +182,8 @@ export function HistoryPanel(props: {
                     onChange={value => setCompareEntryId(value || null)}
                   />
                 </div>
-                <Text size="sm" c="dimmed">
-                  {compareEntry ? compareSummary(selectedEntry, compareEntry) : 'Pick another run to compare status, latency, and body output before generating checks.'}
+                <Text size="sm" c="dimmed" mt="sm">
+                  {compareEntry ? compareSummary(selectedEntry, compareEntry) : 'Pick another run to compare status, latency, and body output.'}
                 </Text>
                 <div className="response-compare-grid" style={{ marginTop: 12 }}>
                   <div className="check-card" style={{ margin: 0 }}>
@@ -211,12 +199,9 @@ export function HistoryPanel(props: {
 
               <section className="inspector-section">
                 <div className="checks-head">
-                  <div>
-                    <Text className="section-kicker">Details</Text>
-                    <h3 className="section-title">Checks and script output</h3>
-                  </div>
+                  <h3 className="section-title">Details</h3>
                 </div>
-                <div className="checks-list">
+                <div className="checks-list" style={{ marginTop: 12 }}>
                   <div className="check-card" style={{ margin: 0 }}>
                     <Text fw={700}>Check Results</Text>
                     {selectedCheckResults.length === 0 ? (
