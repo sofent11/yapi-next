@@ -69,6 +69,7 @@ import {
 } from '@yapi-debugger/schema';
 import {
   applyCollectionRules,
+  buildPmRequireWarningMessage,
   buildCurlCommand,
   evaluateChecks,
   executeRequestScript,
@@ -101,7 +102,6 @@ export type ResolvedRequest = ResolvedRequestPreview;
 const VARIABLE_PATTERN = /\{\{\s*([^}]+?)\s*\}\}/g;
 const NTLM_DESKTOP_CONSTRAINT_DETAIL =
   'Desktop NTLM currently supports explicit username/password credentials only. Native OS/integrated enterprise flows (SSPI, GSSAPI, Negotiate/Kerberos) are not available in this build.';
-const SUPPORTED_PM_REQUIRE_MODULES = ['uuid'] as const;
 const UNSUPPORTED_SCRIPT_PATTERNS = [
   {
     token: 'pm.execution.setNextRequest',
@@ -6570,26 +6570,13 @@ function inspectScriptSource(script: string) {
       level: pattern.level,
       message: pattern.message
     }));
-  const pmRequireMatches = [...trimmed.matchAll(/pm\.require\(\s*(['"`])([^'"`]+)\1\s*\)/g)];
-  const pmRequireCalls = trimmed.match(/pm\.require\(/g)?.length || 0;
-  if (pmRequireCalls > 0) {
-    const unsupportedModules = Array.from(
-      new Set(
-        pmRequireMatches
-          .map(match => match[2].trim().toLowerCase())
-          .filter(name => !SUPPORTED_PM_REQUIRE_MODULES.includes(name as (typeof SUPPORTED_PM_REQUIRE_MODULES)[number]))
-      )
-    );
-    if (unsupportedModules.length > 0 || pmRequireMatches.length !== pmRequireCalls) {
-      signals.push({
-        code: 'script-unsupported-require',
-        level: 'warning',
-        message:
-          unsupportedModules.length > 0
-            ? `pm.require currently supports built-in modules only (${SUPPORTED_PM_REQUIRE_MODULES.join(', ')}). Unsupported module(s): ${unsupportedModules.join(', ')}.`
-            : `pm.require currently supports literal built-in module names only (${SUPPORTED_PM_REQUIRE_MODULES.join(', ')}).`
-      });
-    }
+  const requireWarningMessage = buildPmRequireWarningMessage(trimmed);
+  if (requireWarningMessage) {
+    signals.push({
+      code: 'script-unsupported-require',
+      level: 'warning',
+      message: requireWarningMessage
+    });
   }
 
   try {

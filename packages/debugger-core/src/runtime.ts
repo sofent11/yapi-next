@@ -1,5 +1,9 @@
 import Ajv from 'ajv';
 import {
+  resolvePmRequireBuiltin,
+  supportedPmRequireModulesLabel
+} from './pm-require';
+import {
   caseCheckSchema,
   checkResultSchema,
   createId,
@@ -20,8 +24,7 @@ import {
 } from '@yapi-debugger/schema';
 
 const TEMPLATE_PATTERN = /\{\{\s*([^}]+?)\s*\}\}/g;
-const SUPPORTED_PM_REQUIRE_MODULES = ['uuid'] as const;
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-([1-5])[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export { buildPmRequireWarningMessage, SUPPORTED_PM_REQUIRE_MODULES } from './pm-require';
 
 type Primitive = string | number | boolean | null | undefined;
 
@@ -204,36 +207,10 @@ function stringifyValue(input: unknown) {
   }
 }
 
-function generateUuidV4() {
-  if (typeof globalThis.crypto?.randomUUID === 'function') {
-    return globalThis.crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, char => {
-    const random = Math.floor(Math.random() * 16);
-    const value = char === 'x' ? random : (random & 0x3) | 0x8;
-    return value.toString(16);
-  });
-}
-
-function supportedPmRequireModulesLabel() {
-  return SUPPORTED_PM_REQUIRE_MODULES.join(', ');
-}
-
-function normalizePmRequireModuleName(name: string) {
-  return name.trim().toLowerCase();
-}
-
 function resolvePmRequireModule(name: string) {
-  const normalized = normalizePmRequireModuleName(name);
-  if (normalized === 'uuid') {
-    return {
-      v4: () => generateUuidV4(),
-      validate: (value: unknown) => UUID_PATTERN.test(String(value || '')),
-      version: (value: unknown) => {
-        const match = String(value || '').match(UUID_PATTERN);
-        return match ? Number(match[1]) : 0;
-      }
-    };
+  const builtin = resolvePmRequireBuiltin(name);
+  if (builtin !== undefined) {
+    return builtin;
   }
   throw createUnsupportedApiError(
     'pm.require',

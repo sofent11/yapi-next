@@ -14,6 +14,7 @@ import {
   type RequestDocument,
   type ResponseExample
 } from '@yapi-debugger/schema';
+import { buildPmRequireWarningMessage } from '../../debugger-core/src/pm-require';
 
 type ImportedRequestRecord = {
   folderSegments: string[];
@@ -885,7 +886,6 @@ function extractPostmanScript(item: any, listen: 'prerequest' | 'test') {
 
 function collectScriptWarnings(requestName: string, script: string, warnings: ImportWarning[]) {
   if (!script.trim()) return;
-  const supportedPmRequireModules = ['uuid'];
   if (script.includes('pm.test(') || script.includes('pm.expect(')) {
     warnings.push({
       level: 'info',
@@ -924,26 +924,15 @@ function collectScriptWarnings(requestName: string, script: string, warnings: Im
     }
   });
 
-  const pmRequireMatches = [...script.matchAll(/pm\.require\(\s*(['"`])([^'"`]+)\1\s*\)/g)];
-  const pmRequireCalls = script.match(/pm\.require\(/g)?.length || 0;
-  const unsupportedPmRequireModules = Array.from(
-    new Set(
-      pmRequireMatches
-        .map(match => match[2].trim().toLowerCase())
-        .filter(name => !supportedPmRequireModules.includes(name))
-    )
-  );
-  if (pmRequireCalls > 0 && (unsupportedPmRequireModules.length > 0 || pmRequireMatches.length !== pmRequireCalls)) {
+  const requireWarningMessage = buildPmRequireWarningMessage(script);
+  if (requireWarningMessage) {
     warnings.push({
       level: 'warning',
       scope: 'case',
       requestName,
       code: 'postman-require',
       status: 'degraded',
-      message:
-        unsupportedPmRequireModules.length > 0
-          ? `${requestName}: pm.require currently supports built-in modules only (${supportedPmRequireModules.join(', ')}). Unsupported module(s): ${unsupportedPmRequireModules.join(', ')}.`
-          : `${requestName}: pm.require currently supports literal built-in module names only (${supportedPmRequireModules.join(', ')}).`
+      message: `${requestName}: ${requireWarningMessage}`
     });
   }
 }

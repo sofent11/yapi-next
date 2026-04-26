@@ -268,7 +268,7 @@ test('executeRequestScript supports pm.sendRequest during post-response and mult
   assert.equal(result.testResults.every(item => item.ok), true);
 });
 
-test('executeRequestScript supports built-in pm.require modules', async () => {
+test('executeRequestScript supports allowlisted built-in pm.require modules', async () => {
   const project = createDefaultProject('Demo');
   const environment = createDefaultEnvironment('shared');
   const request = createEmptyRequest('Require');
@@ -279,10 +279,30 @@ test('executeRequestScript supports built-in pm.require modules', async () => {
     phase: 'pre-request',
     script: `
       const uuid = pm.require("uuid");
+      const crypto = pm.require("crypto");
+      const querystring = pm.require("querystring");
+      const { URL, URLSearchParams } = pm.require("url");
       const value = uuid.v4();
+      const digest = crypto.createHash("sha256").update("hello").digest("hex");
+      const signature = crypto.createHmac("sha1", "secret").update("payload").digest("hex");
+      const parsed = querystring.parse("mode=debug&tag=alpha&tag=beta");
+      const encoded = querystring.stringify({ hello: "world", tag: ["one", "two"] });
+      const target = new URL("https://example.com/base");
+      target.pathname = "/orders";
+      target.search = new URLSearchParams({ q: "hello world", id: "42" }).toString();
+
       pm.expect(uuid.validate(value)).to.equal(true);
       pm.expect(uuid.version(value)).to.equal(4);
+      pm.expect(digest).to.equal("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+      pm.expect(signature).to.equal("f75efc0f29bf50c23f99b30b86f7c78fdaf5f11d");
+      pm.expect(parsed.tag).to.deep.eql(["alpha", "beta"]);
+      pm.expect(encoded).to.equal("hello=world&tag=one&tag=two");
+      pm.expect(target.toString()).to.equal("https://example.com/orders?q=hello+world&id=42");
+
       pm.variables.set("generatedId", value);
+      pm.variables.set("digest", digest);
+      pm.variables.set("encoded", encoded);
+      pm.variables.set("targetUrl", target.toString());
     `,
     state: {
       variables: {},
@@ -292,6 +312,12 @@ test('executeRequestScript supports built-in pm.require modules', async () => {
   });
 
   assert.match(result.state.variables.generatedId || '', /^[0-9a-f-]{36}$/i);
+  assert.equal(
+    result.state.variables.digest,
+    '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'
+  );
+  assert.equal(result.state.variables.encoded, 'hello=world&tag=one&tag=two');
+  assert.equal(result.state.variables.targetUrl, 'https://example.com/orders?q=hello+world&id=42');
   assert.equal(result.testResults.length, 0);
 });
 
@@ -3393,8 +3419,36 @@ test('inspectResolvedRequest keeps warning for unsupported pm.require modules', 
   assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-require'), true);
   assert.match(
     insight.warnings.find(item => item.code === 'script-unsupported-require')?.message || '',
-    /uuid/
+    /crypto.*querystring.*url.*uuid/
   );
+});
+
+test('inspectResolvedRequest keeps dynamic pm.require warnings precise', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Require Dynamic');
+  request.url = '{{baseUrl}}/profile';
+  request.scripts.postResponse = 'pm.require("crypto"); pm.require(moduleName); pm.require("lodash");';
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
+  const warning = insight.warnings.find(item => item.code === 'script-unsupported-require');
+  assert.equal(Boolean(warning), true);
+  assert.match(warning?.message || '', /crypto.*querystring.*url.*uuid/);
+  assert.match(warning?.message || '', /Unsupported module\(s\): lodash\./);
+  assert.match(warning?.message || '', /Dynamic module names will not resolve\./);
+});
+
+test('inspectResolvedRequest accepts allowlisted pm.require built-ins', () => {
+  const project = createDefaultProject('Demo');
+  project.runtime.baseUrl = 'https://api.example.com';
+  const environment = createDefaultEnvironment('shared');
+  const request = createEmptyRequest('Require Supported');
+  request.url = '{{baseUrl}}/profile';
+  request.scripts.postResponse = 'pm.require("crypto"); pm.require("querystring"); pm.require("url"); pm.require("uuid");';
+
+  const insight = inspectResolvedRequest(project, request, undefined, environment);
+  assert.equal(insight.warnings.some(item => item.code === 'script-unsupported-require'), false);
 });
 
 test('renderCollectionRunReportHtml emits a readable report shell', () => {

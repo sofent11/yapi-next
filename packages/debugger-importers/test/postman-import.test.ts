@@ -31,7 +31,9 @@ test('Postman import preserves scripts as case scripts and emits explicit local-
                 'pm.test("status ok", () => pm.expect(pm.response.code).to.equal(200));',
                 'pm.sendRequest("https://example.com/extra");',
                 'pm.vault.get("token");',
-                'pm.require("lodash");'
+                'pm.require("crypto");',
+                'pm.require("lodash");',
+                'pm.require(resolveModuleName());'
               ]
             }
           }
@@ -52,8 +54,53 @@ test('Postman import preserves scripts as case scripts and emits explicit local-
   assert.equal(result.warnings.find(warning => warning.code === 'postman-vault')?.status, 'degraded');
   assert.match(result.warnings.find(warning => warning.code === 'postman-vault')?.message || '', /local debugger vault/i);
   assert.equal(result.warnings.some(warning => warning.code === 'postman-require'), true);
+  assert.match(
+    result.warnings.find(warning => warning.code === 'postman-require')?.message || '',
+    /crypto.*querystring.*url.*uuid/
+  );
   assert.match(result.warnings.find(warning => warning.code === 'postman-require')?.message || '', /lodash/);
+  assert.match(
+    result.warnings.find(warning => warning.code === 'postman-require')?.message || '',
+    /Dynamic module names will not resolve/
+  );
   assert.equal(result.warnings.find(warning => warning.code === 'postman-require')?.status, 'degraded');
+});
+
+test('Postman import does not warn for allowlisted pm.require built-ins', () => {
+  const postmanCollection = JSON.stringify({
+    info: {
+      name: 'Built-in Require Collection',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [
+      {
+        name: 'Use Built-ins',
+        request: {
+          method: 'GET',
+          url: {
+            raw: 'https://api.example.com/profile'
+          }
+        },
+        event: [
+          {
+            listen: 'test',
+            script: {
+              exec: [
+                'pm.require("crypto");',
+                'pm.require("querystring");',
+                'pm.require("url");',
+                'pm.require("uuid");'
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  });
+
+  const result = importSourceText(postmanCollection);
+  assert.equal(result.detectedFormat, 'postman');
+  assert.equal(result.warnings.some(warning => warning.code === 'postman-require'), false);
 });
 
 test('OpenAPI import warns when security schemes need manual auth review', () => {
