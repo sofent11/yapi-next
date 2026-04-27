@@ -15,6 +15,12 @@
   --space-xl: 24px;
   --space-2xl: 32px;
   --space-3xl: 48px;
+  --text-2xs: 0.625rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8rem;
+  --text-md: 0.88rem;
+  --text-lg: 1rem;
+  --text-xl: 1.18rem;
   --canvas: oklch(0.965 0.008 248);
   --surface: oklch(0.992 0.004 248);
   --surface-raised: oklch(0.985 0.007 248);
@@ -107,7 +113,7 @@ mark {
 .section-kicker {
   margin: 0;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -140,7 +146,7 @@ mark {
 .mantine-InputWrapper-label {
   margin-bottom: 4px;
   color: var(--muted-strong);
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: none;
 }
@@ -227,7 +233,7 @@ mark {
 
 .workspace-home-statusbar-item span {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -322,7 +328,7 @@ mark {
   flex: 0 0 auto;
   padding: 3px 8px;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.03em;
 }
@@ -436,7 +442,7 @@ mark {
 .workspace-topnav-path {
   min-width: 0;
   color: var(--topnav-muted);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -562,7 +568,7 @@ mark {
 .resizer-handle {
   position: relative;
   background: var(--line);
-  transition: background 0.2s;
+  transition: background-color 160ms ease;
   z-index: 10;
   flex-shrink: 0;
 }
@@ -590,6 +596,24 @@ mark {
   background: transparent;
 }
 
+.resizer-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.resizer-handle.vertical::after {
+  left: -0.5px;
+  right: -0.5px;
+  transform: scaleX(0.5);
+}
+
 .resizer-handle.horizontal {
   height: 1px;
   width: 100%;
@@ -606,23 +630,35 @@ mark {
   background: transparent;
 }
 
+.resizer-handle.horizontal::after {
+  top: -0.5px;
+  bottom: -0.5px;
+  transform: scaleY(0.5);
+}
+
 .resizer-handle:hover,
 .resizer-handle.is-dragging {
-  background: var(--accent);
+  background: var(--line);
 }
 
 .resizer-handle.vertical:hover,
 .resizer-handle.vertical.is-dragging {
-  width: 2px;
-  margin-left: -0.5px;
-  margin-right: -0.5px;
+  width: 1px;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 .resizer-handle.horizontal:hover,
 .resizer-handle.horizontal.is-dragging {
-  height: 2px;
-  margin-top: -0.5px;
-  margin-bottom: -0.5px;
+  height: 1px;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.resizer-handle:hover::after,
+.resizer-handle.is-dragging::after {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .app-rail {
@@ -743,7 +779,7 @@ mark {
   border-radius: 9px;
   background: color-mix(in oklch, var(--accent-soft) 72%, white);
   color: var(--accent);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   font-weight: 800;
   letter-spacing: 0.04em;
 }
@@ -781,7 +817,7 @@ mark {
   gap: 6px;
   flex: 0 0 auto;
   padding: 0;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -854,7 +890,7 @@ mark {
 }
 
 .tree-context-copy strong {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -878,7 +914,7 @@ mark {
   cursor: pointer;
   text-align: left;
   gap: 8px;
-  transition: background 0.1s;
+  transition: background-color 120ms ease;
   user-select: none;
 }
 
@@ -903,7 +939,7 @@ mark {
   background: var(--surface);
   border: 1px solid var(--accent);
   border-radius: 3px;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   padding: 1px 4px;
   color: var(--text);
@@ -912,7 +948,7 @@ mark {
 }
 
 .tree-row-copy strong {
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -933,7 +969,7 @@ mark {
 }
 
 .tree-method-pill {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   padding: 1px 4px;
   border-radius: 3px;
@@ -986,7 +1022,7 @@ mark {
 }
 
 .tree-count-badge {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: var(--muted);
   padding: 0 4px;
 }
@@ -1014,6 +1050,35 @@ mark {
   color: var(--muted-strong);
 }
 
+.empty-tab-state,
+.empty-body-msg,
+.empty-workflow-state {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px dashed color-mix(in oklch, var(--line) 86%, transparent);
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--surface-muted) 74%, var(--surface));
+  color: var(--muted-strong);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.empty-workflow-state strong {
+  color: var(--text);
+  font-size: var(--text-md);
+}
+
+.empty-workflow-state span {
+  max-width: 68ch;
+  color: var(--muted);
+}
+
+.empty-workflow-state .mantine-Button-root {
+  justify-self: start;
+  border-radius: 4px !important;
+}
+
 .tree-panel-search {
   padding: 8px 12px;
   background: var(--surface-muted);
@@ -1033,7 +1098,7 @@ mark {
   background: var(--surface-muted);
   display: flex;
   justify-content: space-between;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: var(--muted);
 }
 
@@ -1067,7 +1132,7 @@ mark {
 }
 
 .breadcrumb-chip {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted-strong);
   white-space: nowrap;
@@ -1223,11 +1288,14 @@ mark {
   border: none;
   border-radius: 6px 6px 0 0;
   padding: 8px 16px;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--muted);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
   position: relative;
   z-index: 1;
 }
@@ -1247,6 +1315,36 @@ mark {
 .request-tab-tier-button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.request-auth-quick {
+  margin-left: auto;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 6px 10px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--muted-strong);
+  background: color-mix(in oklch, var(--surface) 82%, var(--surface-muted));
+}
+
+.request-auth-quick.is-active,
+.request-auth-quick.has-auth {
+  border-color: color-mix(in oklch, var(--accent) 28%, var(--line));
+  color: var(--accent);
+  background: color-mix(in oklch, var(--accent-soft) 72%, var(--surface));
+}
+
+.request-auth-quick:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.request-tab-priority-note {
+  padding: 8px 16px 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.4;
 }
 
 .request-tabs-ide .mantine-Tabs-list,
@@ -1275,7 +1373,7 @@ mark {
 }
 
 .compact-section-title {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
@@ -1324,7 +1422,7 @@ mark {
 }
 
 .response-metrics .mantine-Text {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted-strong);
 }
@@ -1459,7 +1557,7 @@ mark {
 .debugger-spotlight-group::before {
   padding-inline-start: 10px;
   color: color-mix(in srgb, var(--muted) 82%, white);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -1537,7 +1635,7 @@ mark {
   border-radius: 11px;
   background: rgba(15, 23, 42, 0.06);
   color: var(--muted-strong);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1563,7 +1661,7 @@ mark {
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.06);
   color: var(--muted-strong);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 760;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1665,7 +1763,7 @@ mark {
   justify-content: flex-end;
   gap: 10px;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   white-space: nowrap;
 }
 
@@ -1813,7 +1911,7 @@ mark {
 
 .keybinding-row-copy span {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -1899,7 +1997,7 @@ mark {
   
   .request-tabs-ide .mantine-Tabs-tab {
     padding: 6px 8px;
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
   }
 
   .workspace-topnav {
@@ -1982,7 +2080,7 @@ mark {
   top: 0;
   z-index: 1;
   background: var(--surface-muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
@@ -2840,7 +2938,7 @@ mark {
   border-radius: 4px;
   background: color-mix(in oklch, var(--surface) 72%, transparent);
   color: var(--accent);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2893,7 +2991,7 @@ mark {
 
 .launchpad-capability span {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -2951,7 +3049,7 @@ mark {
 
 .launchpad-sequence-row span {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 800;
   letter-spacing: 0.08em;
 }
@@ -2987,13 +3085,13 @@ mark {
   padding: 6px 12px;
   border: none;
   background: transparent;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   text-align: left;
   cursor: pointer;
   color: var(--text);
   border-radius: 4px;
-  transition: background 0.1s;
+  transition: background-color 120ms ease;
 }
 
 .debugger-context-menu-item:hover:not(:disabled) {
@@ -3119,7 +3217,7 @@ mark {
 
 .request-tabs-ide .mantine-Tabs-tab {
   padding: 8px 12px;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   flex: 0 0 auto;
   white-space: nowrap;
@@ -3308,7 +3406,7 @@ mark {
 
 .summary-chip span {
   display: block;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3355,7 +3453,7 @@ mark {
 
 .repair-step-copy span {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
 }
 
 .repair-empty-state {
@@ -3410,7 +3508,7 @@ mark {
 .variable-audit-card span,
 .json-inspector-copy span {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   word-break: break-word;
 }
 
@@ -3466,12 +3564,12 @@ mark {
 }
 
 .variable-cleanup-selection-chip strong {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
 }
 
 .variable-cleanup-selection-chip span {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
 }
 
 .variable-cleanup-selection-toolbar {
@@ -3502,7 +3600,7 @@ mark {
   padding: 10px;
   max-height: 220px;
   overflow: auto;
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   line-height: 1.45;
   font-family: var(--font-mono);
   white-space: pre-wrap;
@@ -3548,12 +3646,12 @@ mark {
 }
 
 .variable-cleanup-group-toggle strong {
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
 }
 
 .variable-cleanup-group-toggle span {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
 }
 
 .variable-cleanup-group-body {
@@ -3580,7 +3678,7 @@ mark {
 
 .variable-cleanup-selection-label span {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
 }
 
 .variable-authoring-card,
@@ -3616,7 +3714,7 @@ mark {
 
 .variable-authoring-copy span {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   word-break: break-word;
 }
 
@@ -3701,7 +3799,7 @@ mark {
 .response-diff-column span {
   display: block;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   word-break: break-word;
   white-space: pre-wrap;
   font-family: var(--font-mono);
@@ -3757,14 +3855,14 @@ mark {
 }
 
 .response-merge-row strong {
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   color: var(--muted-strong);
   font-family: var(--font-mono);
 }
 
 .response-merge-row span {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--font-mono);
@@ -3794,13 +3892,13 @@ mark {
 }
 
 .response-search-result-row strong {
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   color: var(--muted-strong);
 }
 
 .response-search-result-row span {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   word-break: break-word;
   font-family: var(--font-mono);
 }
@@ -3964,7 +4062,10 @@ mark {
   border-right: 1px solid var(--line);
   cursor: pointer;
   background: var(--surface);
-  transition: all 0.2s;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
   position: relative;
   gap: 8px;
 }
@@ -4069,7 +4170,9 @@ mark {
 .status-item.clickable {
   cursor: pointer;
   border-radius: 4px;
-  transition: all 0.2s ease;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
 .status-item.clickable:hover {
@@ -4434,7 +4537,7 @@ mark {
 .import-stat-card span,
 .import-warning-level,
 .import-next-step-copy span {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: var(--muted);
 }
 
@@ -4539,7 +4642,7 @@ mark {
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   font-weight: 700;
   flex-shrink: 0;
 }

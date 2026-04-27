@@ -73,6 +73,20 @@ function rebuildEnvironment(environment: EnvironmentDocument, patch: Partial<Env
   };
 }
 
+function WorkflowEmptyState(props: { title: string; detail: string; actionLabel?: string; onAction?: () => void }) {
+  return (
+    <div className="empty-workflow-state">
+      <strong>{props.title}</strong>
+      <span>{props.detail}</span>
+      {props.actionLabel && props.onAction ? (
+        <Button size="xs" variant="default" onClick={props.onAction}>
+          {props.actionLabel}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 type VariableQuickFixAction = {
   key: string;
   label: string;
@@ -1288,7 +1302,14 @@ export function EnvironmentCenterPanel(props: {
             <Text size="xs" c="dimmed">Choose which named environment the workspace should use right now.</Text>
           </div>
           <div className="environment-list">
-            {props.workspace.environments.map(item => {
+            {props.workspace.environments.length === 0 ? (
+              <WorkflowEmptyState
+                title="No environments yet"
+                detail="Create one to keep shared defaults, local overrides, auth profiles, and runtime state separated."
+                actionLabel="New Environment"
+                onAction={props.onAddEnvironment}
+              />
+            ) : props.workspace.environments.map(item => {
               const mergedVarCount = Object.keys(item.document.vars || {}).length;
               const overlayCount = Object.keys(item.document.localVars || {}).length + (item.document.localHeaders || []).length;
               return (
@@ -1417,8 +1438,11 @@ export function EnvironmentCenterPanel(props: {
                       </div>
                     </div>
                     {variableAudit.entries.length === 0 ? (
-                      <div className="empty-tab-state" style={{ marginTop: 12 }}>
-                        The current request does not reference any template variables yet.
+                      <div style={{ marginTop: 12 }}>
+                        <WorkflowEmptyState
+                          title="No template variables in this request"
+                          detail="Add {{tokens}} to the URL, query, headers, or body when this request should resolve environment values before Send."
+                        />
                       </div>
                     ) : (
                       <div className="variable-authoring-list">
@@ -1480,11 +1504,14 @@ export function EnvironmentCenterPanel(props: {
                     )}
                   </>
                 ) : (
-                  <div className="empty-tab-state">
-                    {props.activeRequestName
-                      ? 'Resolve the active request preview first to inspect variable precedence and shadowing.'
-                      : 'Select a request to inspect variable precedence, conflicts, and edit ownership.'}
-                  </div>
+                  <WorkflowEmptyState
+                    title={props.activeRequestName ? 'Preview not ready yet' : 'Select a request'}
+                    detail={
+                      props.activeRequestName
+                        ? 'Resolve the active request preview to inspect variable precedence, conflicts, and edit ownership.'
+                        : 'Choose a request to audit variable precedence, missing values, and shadowed definitions.'
+                    }
+                  />
                 )}
               </section>
 
@@ -1739,7 +1766,23 @@ export function EnvironmentCenterPanel(props: {
                   Separate auth profiles from general variables so requests can reference a durable auth strategy instead of duplicating secret fields.
                 </Text>
                 {selectedEnvironment.authProfiles.length === 0 ? (
-                  <div className="empty-tab-state">No auth profile yet. Add one if this environment should inject bearer, basic, API key, or OAuth credentials.</div>
+                  <WorkflowEmptyState
+                    title="No auth profiles"
+                    detail="Add a profile when requests should reference durable bearer, basic, API key, OAuth, or signature credentials without duplicating fields."
+                    actionLabel="Add Profile"
+                    onAction={() =>
+                      props.onEnvironmentUpdate(selectedEnvironment.name, environment => ({
+                        ...environment,
+                        authProfiles: [
+                          ...environment.authProfiles,
+                          {
+                            name: `profile-${environment.authProfiles.length + 1}`,
+                            auth: { type: 'bearer', token: '' }
+                          }
+                        ]
+                      }))
+                    }
+                  />
                 ) : (
                   <div className="checks-list">
                     {selectedEnvironment.authProfiles.map(profile => (
@@ -2348,7 +2391,10 @@ export function EnvironmentCenterPanel(props: {
                   <div className="check-card" style={{ margin: 0 }}>
                     <Text fw={700}>Runtime Variables</Text>
                     {runtimeEntries.length === 0 ? (
-                      <div className="empty-tab-state">No runtime variables yet. Extract values from responses when you want downstream requests to reuse them.</div>
+                      <WorkflowEmptyState
+                        title="No runtime variables"
+                        detail="Extract a value from a response when downstream requests should reuse session-only data."
+                      />
                     ) : (
                       <div className="json-inspector-list" style={{ marginTop: 12 }}>
                         {runtimeEntries.map(([name, value]) => (
@@ -2386,7 +2432,12 @@ export function EnvironmentCenterPanel(props: {
               </section>
             </>
           ) : (
-            <div className="empty-tab-state">Choose an environment first. Then edit shared defaults, local overrides, auth profiles, and runtime session state from one place.</div>
+            <WorkflowEmptyState
+              title="Choose an environment"
+              detail="Select or create an environment, then edit shared defaults, local overrides, auth profiles, and runtime session state from one place."
+              actionLabel="New Environment"
+              onAction={props.onAddEnvironment}
+            />
           )}
         </div>
       </div>

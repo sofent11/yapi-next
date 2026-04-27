@@ -62,6 +62,20 @@ function parseTagList(text: string) {
     .filter(Boolean);
 }
 
+function WorkflowEmptyState(props: { title: string; detail: string; actionLabel?: string; onAction?: () => void }) {
+  return (
+    <div className="empty-workflow-state">
+      <strong>{props.title}</strong>
+      <span>{props.detail}</span>
+      {props.actionLabel && props.onAction ? (
+        <Button size="xs" variant="default" onClick={props.onAction}>
+          {props.actionLabel}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 export function CollectionRunnerPanel(props: {
   workspace: WorkspaceIndex;
   selectedCollectionId: string | null;
@@ -263,7 +277,12 @@ export function CollectionRunnerPanel(props: {
           </div>
           <div className="environment-list">
             {props.workspace.collections.length === 0 ? (
-              <div className="empty-tab-state">No collections yet. Create one to orchestrate multi-step flows.</div>
+              <WorkflowEmptyState
+                title="No collections yet"
+                detail="Create one to turn the current request flow into a repeatable smoke, regression, or handoff run."
+                actionLabel="New Collection"
+                onAction={props.onCreateCollection}
+              />
             ) : (
               props.workspace.collections.map(item => (
                 <button
@@ -363,8 +382,13 @@ export function CollectionRunnerPanel(props: {
                 </div>
               </div>
             ) : (
-              <div className="empty-tab-state" style={{ marginTop: 12 }}>
-                No collection reports yet. Run a collection to inspect failures, drift, and extracted values here.
+              <div style={{ marginTop: 12 }}>
+                <WorkflowEmptyState
+                  title="No report selected"
+                  detail="Run a collection to inspect failures, drift, extracted values, and step output here."
+                  actionLabel={draftCollection ? 'Run Collection' : undefined}
+                  onAction={draftCollection ? () => props.onRunCollection({ tags: runTags }) : undefined}
+                />
               </div>
             )}
           </div>
@@ -640,7 +664,27 @@ export function CollectionRunnerPanel(props: {
                   Save the run filters you actually use so you can relaunch smoke, nightly, or focused subsets without retyping tags and step keys each time.
                 </Text>
                 {draftCollection.runPresets.length === 0 ? (
-                  <div className="empty-tab-state">No run preset yet. Add one to persist environment, tags, selected steps, and fail-fast behavior.</div>
+                  <WorkflowEmptyState
+                    title="No run presets yet"
+                    detail="Add one to persist environment, tags, selected steps, and fail-fast behavior for the runs you repeat."
+                    actionLabel="Add Preset"
+                    onAction={() =>
+                      props.onCollectionChange({
+                        ...draftCollection,
+                        runPresets: [
+                          ...(draftCollection.runPresets || []),
+                          {
+                            id: createId('preset'),
+                            name: `Preset ${draftCollection.runPresets.length + 1}`,
+                            environmentName: draftCollection.defaultEnvironment || undefined,
+                            tags: [...(draftCollection.runnerTags || [])],
+                            stepKeys: [],
+                            failFast: false
+                          }
+                        ]
+                      })
+                    }
+                  />
                 ) : (
                   <div className="checks-list">
                     {draftCollection.runPresets.map(preset => (
@@ -1047,7 +1091,12 @@ export function CollectionRunnerPanel(props: {
                     );
                   })}
                   {draftCollection.steps.length === 0 ? (
-                    <div className="empty-tab-state">Add at least one enabled step to run this collection.</div>
+                    <WorkflowEmptyState
+                      title="No runnable steps"
+                      detail="Add the current request or choose a request from the step editor before running this collection."
+                      actionLabel={props.currentSelection?.requestId && props.onAddCurrentSelection ? 'Add Current Request' : undefined}
+                      onAction={props.currentSelection?.requestId && props.onAddCurrentSelection ? props.onAddCurrentSelection : undefined}
+                    />
                   ) : null}
                 </div>
               </div>
@@ -1098,8 +1147,11 @@ export function CollectionRunnerPanel(props: {
                   />
                 </div>
               ) : (
-                <div className="empty-tab-state" style={{ marginBottom: 12 }}>
-                  No data rows yet. Add JSON, YAML, or CSV rows here when this collection should iterate over multiple cases.
+                <div style={{ marginBottom: 12 }}>
+                  <WorkflowEmptyState
+                    title="No iteration data"
+                    detail="Paste JSON, YAML, or CSV rows here only when this collection should iterate over multiple cases."
+                  />
                 </div>
               )}
               <CodeEditor
@@ -1112,7 +1164,12 @@ export function CollectionRunnerPanel(props: {
           ) : null}
 
           {!draftCollection ? (
-            <div className="empty-tab-state">Select a collection to edit its design, attach data, or inspect reports.</div>
+            <WorkflowEmptyState
+              title="Select or create a collection"
+              detail="Use collections to save a request sequence, attach iteration data, run it, and review reports from one workbench."
+              actionLabel="New Collection"
+              onAction={props.onCreateCollection}
+            />
           ) : null}
 
           {showReportsView ? (
@@ -1419,11 +1476,19 @@ export function CollectionRunnerPanel(props: {
                   </div>
                 </div>
               ) : (
-                <div className="empty-tab-state">Choose a step from the report to inspect the request and response.</div>
+                <WorkflowEmptyState
+                  title="Choose a report step"
+                  detail="Select a step from the run report to inspect the resolved request, response payload, headers, checks, and drift."
+                />
               )}
             </div>
             ) : (
-              <div className="empty-tab-state">No report selected yet. Run a collection, then use this tab to inspect failures, drift, and step output.</div>
+              <WorkflowEmptyState
+                title="No report selected"
+                detail="Run a collection, then use this tab to inspect failures, drift, extracted values, and step output."
+                actionLabel={draftCollection ? 'Run Collection' : undefined}
+                onAction={draftCollection ? () => props.onRunCollection({ tags: runTags }) : undefined}
+              />
             )
           ) : null}
         </div>

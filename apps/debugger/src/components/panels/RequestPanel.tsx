@@ -240,7 +240,90 @@ function tabOptionsForSection(section: RequestSection) {
   if (section === 'automation') {
     return ['scripts', 'settings'] satisfies RequestTab[];
   }
-  return ['query', 'headers', 'body', 'auth', 'preview'] satisfies RequestTab[];
+  return ['query', 'headers', 'body', 'preview'] satisfies RequestTab[];
+}
+
+function authStatusLabel(auth: AuthConfig) {
+  if (auth.type === 'none') return 'Auth off';
+  if (auth.type === 'inherit') return 'Auth inherits';
+  if (auth.type === 'profile' && auth.profileName) return `Auth · ${auth.profileName}`;
+  return `Auth · ${auth.type}`;
+}
+
+function RequestTabNavigation(props: {
+  activeSection: RequestSection;
+  activeTab: RequestTab;
+  visibleTabs: Set<RequestTab>;
+  allowCases: boolean;
+  auth: AuthConfig;
+  onTabChange: (tab: RequestTab) => void;
+}) {
+  const hasAuthOverride = props.auth.type !== 'inherit' && props.auth.type !== 'none';
+
+  return (
+    <>
+      <div className="request-tab-tier">
+        <button
+          type="button"
+          className={props.activeSection === 'request' ? 'request-tab-tier-button is-active' : 'request-tab-tier-button'}
+          onClick={() => props.onTabChange('query')}
+        >
+          Request
+        </button>
+        <button
+          type="button"
+          className={props.activeSection === 'validation' ? 'request-tab-tier-button is-active' : 'request-tab-tier-button'}
+          onClick={() => props.onTabChange('checks')}
+          disabled={!props.allowCases}
+        >
+          Validation
+        </button>
+        <button
+          type="button"
+          className={props.activeSection === 'automation' ? 'request-tab-tier-button is-active' : 'request-tab-tier-button'}
+          onClick={() => props.onTabChange('scripts')}
+          disabled={!props.allowCases}
+        >
+          Automation
+        </button>
+        <button
+          type="button"
+          className={[
+            'request-auth-quick',
+            props.activeTab === 'auth' ? 'is-active' : '',
+            hasAuthOverride ? 'has-auth' : ''
+          ].filter(Boolean).join(' ')}
+          onClick={() => props.onTabChange('auth')}
+          aria-pressed={props.activeTab === 'auth'}
+        >
+          {authStatusLabel(props.auth)}
+        </button>
+      </div>
+      <Tabs.List>
+        {props.visibleTabs.has('query') ? <Tabs.Tab value="query">参数</Tabs.Tab> : null}
+        {props.visibleTabs.has('headers') ? <Tabs.Tab value="headers">请求头</Tabs.Tab> : null}
+        {props.visibleTabs.has('body') ? <Tabs.Tab value="body">请求体</Tabs.Tab> : null}
+        {props.visibleTabs.has('checks') ? <Tabs.Tab value="checks" disabled={!props.allowCases}>断言</Tabs.Tab> : null}
+        {props.visibleTabs.has('scripts') ? <Tabs.Tab value="scripts" disabled={!props.allowCases}>脚本</Tabs.Tab> : null}
+        {props.visibleTabs.has('settings') ? <Tabs.Tab value="settings">设置</Tabs.Tab> : null}
+        {props.visibleTabs.has('preview') ? <Tabs.Tab value="preview">预览</Tabs.Tab> : null}
+      </Tabs.List>
+    </>
+  );
+}
+
+function WorkflowEmptyState(props: { title: string; detail: string; actionLabel?: string; onAction?: () => void }) {
+  return (
+    <div className="empty-workflow-state">
+      <strong>{props.title}</strong>
+      <span>{props.detail}</span>
+      {props.actionLabel && props.onAction ? (
+        <Button size="xs" variant="default" onClick={props.onAction}>
+          {props.actionLabel}
+        </Button>
+      ) : null}
+    </div>
+  );
 }
 
 function appendEnabledQueryRows(url: string, rows: Array<{ name: string; value: string; enabled: boolean }>) {
@@ -1607,41 +1690,19 @@ export function RequestPanel(props: {
       ) : null}
 
       <Tabs value={props.activeTab} onChange={value => props.onTabChange(value as RequestTab)} className="request-tabs-ide" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-        <div className="request-tab-tier" style={{ display: 'flex', gap: '2px', padding: '12px 16px 0', borderBottom: '1px solid var(--line)', background: 'var(--surface-muted)' }}>
-          <button
-            type="button"
-            className={activeSection === 'request' ? 'request-tab-tier-button is-active' : 'request-tab-tier-button'}
-            onClick={() => props.onTabChange('query')}
-          >
-            Request
-          </button>
-          <button
-            type="button"
-            className={activeSection === 'validation' ? 'request-tab-tier-button is-active' : 'request-tab-tier-button'}
-            onClick={() => props.onTabChange('checks')}
-            disabled={!allowCases}
-          >
-            Validation
-          </button>
-          <button
-            type="button"
-            className={activeSection === 'automation' ? 'request-tab-tier-button is-active' : 'request-tab-tier-button'}
-            onClick={() => props.onTabChange('scripts')}
-            disabled={!allowCases}
-          >
-            Automation
-          </button>
-        </div>
-        <Tabs.List>
-          {visibleTabs.has('query') ? <Tabs.Tab value="query">参数</Tabs.Tab> : null}
-          {visibleTabs.has('headers') ? <Tabs.Tab value="headers">请求头</Tabs.Tab> : null}
-          {visibleTabs.has('body') ? <Tabs.Tab value="body">请求体</Tabs.Tab> : null}
-          {visibleTabs.has('auth') ? <Tabs.Tab value="auth">认证</Tabs.Tab> : null}
-          {visibleTabs.has('checks') ? <Tabs.Tab value="checks" disabled={!allowCases}>断言</Tabs.Tab> : null}
-          {visibleTabs.has('scripts') ? <Tabs.Tab value="scripts" disabled={!allowCases}>脚本</Tabs.Tab> : null}
-          {visibleTabs.has('settings') ? <Tabs.Tab value="settings">设置</Tabs.Tab> : null}
-          {visibleTabs.has('preview') ? <Tabs.Tab value="preview">预览</Tabs.Tab> : null}
-        </Tabs.List>
+        <RequestTabNavigation
+          activeSection={activeSection}
+          activeTab={props.activeTab}
+          visibleTabs={visibleTabs}
+          allowCases={allowCases}
+          auth={auth}
+          onTabChange={props.onTabChange}
+        />
+        {props.activeTab === 'auth' ? (
+          <div className="request-tab-priority-note">
+            Auth is kept as a request status entry so the common Query, Headers, Body and Preview loop stays compact.
+          </div>
+        ) : null}
 
         <div className="request-tab-content">
           <Tabs.Panel value="preview">
@@ -1739,7 +1800,10 @@ export function RequestPanel(props: {
                 <div className="request-preview-section">
                   <Text fw={700} size="sm">Resolved Variables</Text>
                   {resolvedInsight.variables.length === 0 ? (
-                    <div className="empty-tab-state">No template variables were detected in this request.</div>
+                    <WorkflowEmptyState
+                      title="No request variables detected"
+                      detail="Add {{tokens}} to the URL, headers, query, or body when this request should resolve environment values before Send."
+                    />
                   ) : (
                     <div className="variable-audit-list">
                       {resolvedInsight.variables.map(variable => (
@@ -1787,7 +1851,12 @@ export function RequestPanel(props: {
                       </div>
                     ) : null}
                     {resolvedInsight.authPreview.length === 0 ? (
-                      <div className="empty-tab-state">No auth values will be injected for the current request.</div>
+                      <WorkflowEmptyState
+                        title="No auth injection"
+                        detail="Use the Auth status entry when this request needs bearer, API key, OAuth, or an environment profile."
+                        actionLabel="Open Auth"
+                        onAction={() => props.onTabChange('auth')}
+                      />
                     ) : (
                       <div className="checks-list">
                         {resolvedInsight.authPreview.map(item => (
@@ -2993,9 +3062,17 @@ export function RequestPanel(props: {
 
           <Tabs.Panel value="checks">
             {!allowCases ? (
-              <div className="empty-tab-state">Scratch requests do not persist case assertions. Save to workspace first if you want reusable checks.</div>
+              <WorkflowEmptyState
+                title="Scratch checks stay temporary"
+                detail="Save this request to the workspace before attaching reusable case assertions."
+              />
             ) : !selectedCase ? (
-              <div className="empty-tab-state">Checks are case-scoped. Select or create a case to add smoke assertions.</div>
+              <WorkflowEmptyState
+                title="Choose a case for assertions"
+                detail="Checks are case-scoped so smoke validation can stay tied to a concrete scenario."
+                actionLabel="New Case"
+                onAction={props.onAddCase}
+              />
             ) : (
     <div className="checks-panel">
                 <div className="checks-head">
@@ -3005,7 +3082,12 @@ export function RequestPanel(props: {
                   </Button>
                 </div>
                 {(selectedCase.checks || []).length === 0 ? (
-                  <div className="empty-tab-state">No checks yet. Add one to validate status, headers or JSON fields after Send.</div>
+                  <WorkflowEmptyState
+                    title="No checks yet"
+                    detail="Add a smoke check to validate status, headers, JSON paths, response time, or saved baselines after Send."
+                    actionLabel="Add Check"
+                    onAction={() => updateChecks([...(selectedCase.checks || []), createEmptyCheck()])}
+                  />
                 ) : (
                   <div className="checks-list">
                     {(selectedCase.checks || []).map((check, index) => (
