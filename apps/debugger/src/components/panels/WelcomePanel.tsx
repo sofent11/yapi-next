@@ -1,5 +1,5 @@
-import { Button, Text, TextInput, Group, Badge } from '@mantine/core';
-import { IconApi, IconBrandGithub, IconBug, IconFolderOpen, IconGitBranch, IconHistory, IconPlus, IconPlayerPlay, IconSettingsAutomation } from '@tabler/icons-react';
+import { Badge, Button, Text, TextInput } from '@mantine/core';
+import { IconApi, IconBrandGithub, IconFolderOpen, IconGitBranch, IconHistory, IconPlus, IconPlayerPlay } from '@tabler/icons-react';
 
 export function WelcomePanel(props: {
   projectName: string;
@@ -16,33 +16,29 @@ export function WelcomePanel(props: {
         <section className="launchpad-hero">
           <div className="launchpad-product-mark">
             <IconApi size={22} />
-            <span>Local API IDE</span>
+            <span>本地 API 工作台</span>
           </div>
           <h1 className="launchpad-title">YAPI Next Debugger</h1>
           <p className="launchpad-subtitle">
-            A calm local workbench for importing specs, sending requests, capturing browser traffic, saving cases, and replaying collections with Git-visible files.
+            打开工作区后，先导入规范，再把一次调通的请求沉淀成 Case、Collection 和可 review 的本地资产。
           </p>
-          <div className="launchpad-capability-grid">
-            <div className="launchpad-capability">
-              <IconFolderOpen size={16} />
-              <strong>File workspace</strong>
-              <span>YAML requests, environments, cases, and reports stay reviewable.</span>
-            </div>
-            <div className="launchpad-capability">
-              <IconSettingsAutomation size={16} />
-              <strong>Case runner</strong>
-              <span>Turn successful debugging into repeatable collection checks.</span>
-            </div>
-            <div className="launchpad-capability">
-              <IconBug size={16} />
-              <strong>Browser capture</strong>
-              <span>Promote real network calls into durable workspace assets.</span>
-            </div>
-            <div className="launchpad-capability">
-              <IconGitBranch size={16} />
-              <strong>Git aware</strong>
-              <span>Pull, push, inspect status, and keep local secrets out of commits.</span>
-            </div>
+          <div className="launchpad-sequence launchpad-sequence-hero">
+            {[
+              '进入现有工作区，或创建一个新的本地 API 项目',
+              '导入 OpenAPI / HAR / Postman，并补齐阻塞项',
+              '发送请求、保存 Case、编排 Collection，再决定是否同步到 Git'
+            ].map((item, index) => (
+              <div key={item} className="launchpad-sequence-row">
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <strong>{item}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="launchpad-hero-note">
+            <Badge variant="light" color="indigo">本地优先</Badge>
+            <Text size="sm" c="dimmed">
+              请求、环境、Case、Collection 和报告都会落在工作区目录里，便于审查、同步和回放。
+            </Text>
           </div>
         </section>
 
@@ -51,9 +47,9 @@ export function WelcomePanel(props: {
             <div className="launchpad-section-head">
               <div>
                 <p className="section-kicker">Workspace</p>
-                <h2 className="section-title">Start a debugging session</h2>
+                <h2 className="section-title">先进入一个工作区</h2>
               </div>
-              <Badge variant="light" color="indigo">Bruno parity track</Badge>
+              <IconPlayerPlay size={16} />
             </div>
             <div className="launchpad-form-grid">
               <TextInput
@@ -88,7 +84,7 @@ export function WelcomePanel(props: {
                 </Button>
               </div>
               <Text size="xs" c="dimmed">
-                API 导入发生在进入工作区之后，这样请求、环境、Case 和 Collection 才会落在同一个本地项目里。
+                先进入工作区，再导入 API。这样请求、环境、Case 和 Collection 才会落在同一个本地项目里。
               </Text>
               <Text size="xs" c="dimmed">
                 私有仓库建议使用 SSH 地址，或先在系统 Git 凭据助手中配置 HTTPS/PAT；桌面端 clone 会直接反馈进度与认证错误，但不会弹出交互式密码提示。
@@ -96,29 +92,11 @@ export function WelcomePanel(props: {
             </div>
           </div>
 
-          <div className="launchpad-section launchpad-sequence-panel">
-            <div className="launchpad-section-head">
-              <div>
-                <p className="section-kicker">Flow</p>
-                <h2 className="section-title">Operational path</h2>
-              </div>
-              <IconPlayerPlay size={16} />
-            </div>
-            <div className="launchpad-sequence">
-              {['Open or create a workspace', 'Import OpenAPI / HAR / Postman', 'Repair blockers and send requests', 'Save response as Case', 'Add to Collection and sync'].map((item, index) => (
-                <div key={item} className="launchpad-sequence-row">
-                  <span>{String(index + 1).padStart(2, '0')}</span>
-                  <strong>{item}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-
           <div className="launchpad-section launchpad-recent-panel">
             <div className="launchpad-section-head">
               <div>
                 <p className="section-kicker">Recent</p>
-                <h2 className="section-title">Recent workspaces</h2>
+                <h2 className="section-title">继续最近的工作区</h2>
               </div>
               <IconHistory size={16} />
             </div>
@@ -143,10 +121,28 @@ export function WelcomePanel(props: {
                 <div className="launchpad-empty-recent">
                   <IconBrandGithub size={18} />
                   <Text size="sm" c="dimmed">
-                    No recent workspace yet. Open an existing directory or create a local API project to begin.
+                    还没有最近工作区。打开现有目录，或先新建一个本地 API 项目。
                   </Text>
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="launchpad-section">
+            <div className="launchpad-section-head">
+              <div>
+                <p className="section-kicker">Notes</p>
+                <h2 className="section-title">进入工作区之后会发生什么</h2>
+              </div>
+              <IconGitBranch size={16} />
+            </div>
+            <div className="launchpad-form-grid">
+              <Text size="sm" c="dimmed">
+                导入、修复、发送、保存结果、加入 Collection，都在同一个本地目录里完成。
+              </Text>
+              <Text size="sm" c="dimmed">
+                需要同步时再看 Git；不需要同步时，它也可以只是一个安静的本地调试台。
+              </Text>
             </div>
           </div>
         </section>

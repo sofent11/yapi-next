@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { findNext, findPrevious } from '@codemirror/search';
 import type { EditorView } from '@codemirror/view';
-import { Badge, Button, Group, Select, Tabs, Text, TextInput } from '@mantine/core';
-import { IconAlertCircle, IconBraces, IconCookie, IconDownload, IconEye, IconGitCompare, IconPlayerPlay, IconSearch } from '@tabler/icons-react';
+import { Badge, Button, Group, Menu, Select, Tabs, Text, TextInput } from '@mantine/core';
+import { IconAlertCircle, IconBraces, IconCookie, IconDots, IconDownload, IconEye, IconGitCompare, IconPlayerPlay, IconSearch } from '@tabler/icons-react';
 import type {
   CheckResult,
   RequestDocument,
@@ -394,11 +394,13 @@ export function ResponsePanel(props: {
   );
   const activeDiffRow = diffRows[selectedDiffIndex] || null;
   const responseSourceLabel = selectedExample
-    ? `Viewing ${selectedExample.role === 'baseline' ? 'baseline' : 'saved example'} · ${selectedExample.name}`
+    ? `查看${selectedExample.role === 'baseline' ? 'Baseline' : '已保存 Example'} · ${selectedExample.name}`
     : props.response
-      ? 'Viewing latest live response'
-      : 'Waiting for a response';
+      ? '查看最新实时响应'
+      : '等待响应';
   const surfacedSearchMatches = bodyMatches.length + jsonRows.length + filteredHeaders.length + filteredResponseCookies.length + filteredSessionCookies.length;
+  const hasResponse = Boolean(props.response);
+  const hasStructuredData = parsedJson != null || filteredHeaders.length > 0 || filteredResponseCookies.length > 0 || filteredSessionCookies.length > 0;
 
   useEffect(() => {
     setSelectedDiffIndex(0);
@@ -434,7 +436,7 @@ export function ResponsePanel(props: {
             <Text size="xs" c="dimmed">
               {responseSourceLabel}
               {(mimeType || previewKind) ? ` · ${mimeType || previewKind}` : ''}
-              {searchNeedle ? ` · ${surfacedSearchMatches} surfaced matches` : ''}
+              {searchNeedle ? ` · ${surfacedSearchMatches} 处命中` : ''}
             </Text>
           </div>
           {props.response ? (
@@ -481,74 +483,91 @@ export function ResponsePanel(props: {
               {prettifyJson ? '已格式化' : '格式化 JSON'}
             </Button>
           ) : null}
-          {props.response ? (
+          {hasResponse ? (
             <Group gap={6} wrap="wrap" className="response-header-actions-secondary response-toolbar-secondary">
-              <Button size="xs" variant="default" onClick={props.onCopyBody} disabled={!displayBody}>复制响应</Button>
-              <Button size="xs" variant="default" onClick={props.onCopyCurl} disabled={!props.requestPreview}>复制 cURL</Button>
-              <Button size="xs" variant="default" onClick={props.onCopyBruno} disabled={!props.onCopyBruno || !props.requestDocument}>
-                复制 Bruno
-              </Button>
-              <Button
-                size="xs"
-                variant="default"
-                leftSection={<IconDownload size={14} />}
-                onClick={() =>
-                  downloadResponsePayload({
-                    bodyText: displayBody,
-                    bodyBase64: selectedExample ? undefined : props.response?.bodyBase64,
-                    mimeType: mimeType || 'text/plain',
-                    url: props.response?.url
-                  })
-                }
-                disabled={!displayBody && !props.response?.bodyBase64}
-              >
-                下载响应
-              </Button>
               <Button size="xs" variant="filled" color="indigo" onClick={props.onSaveAs} disabled={!props.onSaveAs}>
-                Save As
+                保存当前结果
               </Button>
-              <Button size="xs" variant="default" onClick={props.onReplaceExample} disabled={!selectedExample}>
-                覆盖当前 Example
-              </Button>
+              {selectedExample ? (
+                <Button size="xs" variant="default" onClick={props.onReplaceExample}>
+                  覆盖当前 Example
+                </Button>
+              ) : null}
+              <Menu shadow="md" width={240} position="bottom-end">
+                <Menu.Target>
+                  <Button size="xs" variant="default" leftSection={<IconDots size={14} />}>
+                    更多结果操作
+                  </Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Label>复制与导出</Menu.Label>
+                  <Menu.Item onClick={props.onCopyBody} disabled={!displayBody}>复制响应</Menu.Item>
+                  <Menu.Item onClick={props.onCopyCurl} disabled={!props.requestPreview}>复制 cURL</Menu.Item>
+                  <Menu.Item onClick={props.onCopyBruno} disabled={!props.onCopyBruno || !props.requestDocument}>复制 Bruno</Menu.Item>
+                  <Menu.Item
+                    leftSection={<IconDownload size={14} />}
+                    onClick={() =>
+                      downloadResponsePayload({
+                        bodyText: displayBody,
+                        bodyBase64: selectedExample ? undefined : props.response?.bodyBase64,
+                        mimeType: mimeType || 'text/plain',
+                        url: props.response?.url
+                      })
+                    }
+                    disabled={!displayBody && !props.response?.bodyBase64}
+                  >
+                    下载响应
+                  </Menu.Item>
+                  <Menu.Divider />
+                  <Menu.Label>沉淀与会话</Menu.Label>
+                  <Menu.Item
+                    onClick={() =>
+                      props.onCreateCheck({
+                        type: 'status-equals',
+                        label: 'Status equals current response',
+                        expected: String(props.response?.status || 200)
+                      })
+                    }
+                  >
+                    生成状态校验
+                  </Menu.Item>
+                  <Menu.Item onClick={props.onCreateCaseFromResponse}>从当前响应生成 Case</Menu.Item>
+                  <Menu.Item onClick={props.onRefreshSession}>刷新会话</Menu.Item>
+                  <Menu.Item color="red" onClick={props.onClearSession}>清空会话</Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
             </Group>
           ) : null}
         </Group>
       </div>
 
-      {props.response ? (
-        <div className="response-quick-actions response-results-toolbar">
+      {hasResponse ? (
+        <div className="response-context-strip">
           {props.requestPreview?.authState ? (
-            <Text size="xs" c="dimmed">
+            <Text size="xs" c="dimmed" className="response-context-hint">
               认证 {props.requestPreview.authState.type}
               {props.requestPreview.authState.profileName ? ` · ${props.requestPreview.authState.profileName}` : ''}
               {` · 注入${props.requestPreview.authState.tokenInjected ? '成功' : '未注入'} · 缓存 ${props.requestPreview.authState.cacheStatus}`}
             </Text>
+          ) : (
+            <Text size="xs" c="dimmed" className="response-context-hint">
+              先看结果本身；复制、导出、生成校验和会话操作都已收进“更多结果操作”。
+            </Text>
+          )}
+          {selectedExample ? (
+            <Badge variant="light" color="indigo">
+              已选 {selectedExample.role === 'baseline' ? 'Baseline' : 'Example'}，可直接查看“对比”
+            </Badge>
+          ) : (
+            <Badge variant="light" color="gray">
+              选择 Example / Baseline 后再进入对比
+            </Badge>
+          )}
+          {hasStructuredData ? (
+            <Badge variant="light" color="teal">
+              可从 JSON / 响应头 / Cookie 提取变量
+            </Badge>
           ) : null}
-          <Button size="xs" variant="default" onClick={props.onSaveAs} disabled={!props.onSaveAs}>
-            保存为资产
-          </Button>
-          <Button
-            size="xs"
-            variant="light"
-            onClick={() =>
-              props.onCreateCheck({
-                type: 'status-equals',
-                label: 'Status equals current response',
-                expected: String(props.response?.status || 200)
-              })
-            }
-          >
-            生成状态校验
-          </Button>
-          <Button size="xs" variant="default" onClick={props.onCreateCaseFromResponse}>
-            从当前响应生成 Case
-          </Button>
-          <Button size="xs" variant="subtle" onClick={props.onRefreshSession}>
-            刷新会话
-          </Button>
-          <Button size="xs" variant="subtle" color="red" onClick={props.onClearSession}>
-            清空会话
-          </Button>
         </div>
       ) : null}
 
@@ -639,9 +658,9 @@ export function ResponsePanel(props: {
           <Tabs.Tab value="preview">预览</Tabs.Tab>
           <Tabs.Tab value="body">正文</Tabs.Tab>
           <Tabs.Tab value="json">JSON</Tabs.Tab>
+          <Tabs.Tab value="compare">对比</Tabs.Tab>
           <Tabs.Tab value="headers">响应头</Tabs.Tab>
           <Tabs.Tab value="cookies">Cookies</Tabs.Tab>
-          <Tabs.Tab value="compare">对比</Tabs.Tab>
           <Tabs.Tab value="raw">Raw</Tabs.Tab>
         </Tabs.List>
 
@@ -690,7 +709,7 @@ export function ResponsePanel(props: {
               <Tabs.Panel value="preview">
                 <div className="response-adaptive-preview">
                   <div className="compare-summary-card">
-                    <Text fw={700}>Content Preview</Text>
+                    <Text fw={700}>内容预览</Text>
                     <Text size="sm" c="dimmed">
                       {mimeType || 'unknown'} · {previewKind} · {props.response?.sizeBytes || displayBody.length} bytes
                     </Text>
@@ -722,9 +741,9 @@ export function ResponsePanel(props: {
                     />
                   ) : previewKind === 'binary' ? (
                     <div className="check-card">
-                      <Text fw={700}>Binary Response</Text>
+                      <Text fw={700}>二进制响应</Text>
                       <Text size="sm" c="dimmed">
-                        This response is best handled as a file. Use download to inspect it in an external viewer.
+                        这类响应更适合以文件方式查看。可以从“更多结果操作”里直接下载。
                       </Text>
                       <CodeEditor
                         value={previewEditorValue}
@@ -847,7 +866,7 @@ export function ResponsePanel(props: {
                             })
                           }
                         >
-                          Equals
+                          相等
                         </Button>
                         <Button
                           size="xs"
@@ -861,7 +880,7 @@ export function ResponsePanel(props: {
                             })
                           }
                         >
-                          Includes
+                          包含
                         </Button>
                         {props.onExtractValue ? (
                           <>
@@ -870,14 +889,14 @@ export function ResponsePanel(props: {
                               variant="subtle"
                               onClick={() => props.onExtractValue?.('runtime', { suggestedName: header.name, value: header.value })}
                             >
-                              Runtime Var
+                              提取到运行时
                             </Button>
                             <Button
                               size="xs"
                               variant="subtle"
                               onClick={() => props.onExtractValue?.('local', { suggestedName: header.name, value: header.value })}
                             >
-                              Local Var
+                              提取到本地环境
                             </Button>
                           </>
                         ) : null}
@@ -988,13 +1007,13 @@ export function ResponsePanel(props: {
                 {selectedExample ? (
                   <div className="response-search-summary-grid">
                     <div className="compare-summary-card">
-                      <Text fw={700}>Diff Breakdown</Text>
+                      <Text fw={700}>差异概览</Text>
                       <Text size="sm" c="dimmed">
                         changed {diffCounts.changed} · added {diffCounts.added} · removed {diffCounts.removed}
                       </Text>
                     </div>
                     <div className="compare-summary-card">
-                      <Text fw={700}>Diff Filter</Text>
+                      <Text fw={700}>差异筛选</Text>
                       <Select
                         size="xs"
                         value={compareFilter}
@@ -1008,13 +1027,13 @@ export function ResponsePanel(props: {
                       />
                     </div>
                     <div className="compare-summary-card">
-                      <Text fw={700}>Compare View</Text>
+                      <Text fw={700}>对比视图</Text>
                       <Select
                         size="xs"
                         value={compareView}
                         data={[
-                          { value: 'overview', label: 'Overview cards' },
-                          { value: 'workbench', label: 'Merge workbench' }
+                          { value: 'overview', label: '概览卡片' },
+                          { value: 'workbench', label: '并排工作台' }
                         ]}
                         onChange={value => setCompareView((value as typeof compareView) || 'overview')}
                       />
@@ -1025,7 +1044,7 @@ export function ResponsePanel(props: {
                   <div className="response-merge-shell">
                     <div className="compare-summary-card response-merge-toolbar">
                       <div>
-                        <Text fw={700}>Diff Navigation</Text>
+                        <Text fw={700}>差异导航</Text>
                         <Text size="sm" c="dimmed">
                           {diffRows.length > 0
                             ? `Focused diff ${selectedDiffIndex + 1} / ${diffRows.length} · line ${activeDiffRow?.lineNumber}`

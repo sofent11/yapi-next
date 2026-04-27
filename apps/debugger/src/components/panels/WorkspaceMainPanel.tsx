@@ -163,13 +163,6 @@ export function WorkspaceMainPanel(props: {
         </div>
         <div className="panel-toolbar-actions">
           {props.isDirty && <Badge color="orange" variant="filled" size="xs">Unsaved</Badge>}
-          <Select
-            size="xs"
-            value={props.activeEnvironmentName}
-            data={props.workspace.environments.map(item => ({ value: item.document.name, label: item.document.name }))}
-            onChange={value => value && props.onEnvironmentChange(value)}
-            style={{ width: 120 }}
-          />
           {actions}
         </div>
       </div>
@@ -467,18 +460,13 @@ export function WorkspaceMainPanel(props: {
   }
 
   return (
-    <section className="workspace-main">
-      {renderTabHeader()}
-      {renderToolbar(
-        <div style={{ display: 'flex', gap: 8 }}>
+      <section className="workspace-main">
+        {renderTabHeader()}
+        {renderToolbar(
           <Button size="xs" variant="default" onClick={props.onCopyToScratch}>
             Copy To Scratch
           </Button>
-          <Button size="xs" variant="default" leftSection={<IconPlus size={14} />} onClick={() => props.onAddCase()}>
-            New Case
-          </Button>
-        </div>
-      )}
+        )}
 
       <div
         ref={splitRef}

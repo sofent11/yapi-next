@@ -80,6 +80,15 @@ function displayLabel(value: string | null | undefined, fallback = '时间未知
   return value;
 }
 
+function workspacePulseCopy(counts: ReturnType<typeof summaryCounts>) {
+  const parts = [
+    counts.requests > 0 ? `${counts.requests} 个请求` : null,
+    counts.cases > 0 ? `${counts.cases} 个 Case` : null,
+    counts.collections > 0 ? `${counts.collections} 个 Collection` : null
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : '当前还没有可继续的请求资产。';
+}
+
 export function WorkspaceHomePanel(props: {
   workspace: WorkspaceIndex;
   gitStatus: GitStatusPayload | null;
@@ -275,6 +284,12 @@ export function WorkspaceHomePanel(props: {
   const showSync = Boolean(
     props.gitStatus?.isRepo && (props.gitStatus.dirty || props.gitStatus.ahead > 0 || props.gitStatus.behind > 0 || props.gitRisks.length > 0)
   );
+  const workspacePulse = workspacePulseCopy(counts);
+  const importPulse = props.importSession
+    ? `最近导入 ${props.importSession.importedRequestCount} 个请求${blockingCount > 0 ? `，还有 ${blockingCount} 个阻塞项` : warningCount > 0 ? `，还有 ${warningCount} 个提醒` : ''}。`
+    : counts.requests > 0
+      ? '继续从工作区里已有的请求、Case 和 Collection 往前推进。'
+      : '先把第一个工作区资产导进来，再开始调试。';
 
   return (
     <section className="workspace-main workspace-home">
@@ -314,22 +329,22 @@ export function WorkspaceHomePanel(props: {
           </div>
         ) : (
           <div className="workspace-home-shell">
-            <div className="workspace-home-statusbar">
-              <div className="workspace-home-statusbar-item">
-                <span>Requests</span>
-                <strong>{counts.requests}</strong>
+            <div className="workspace-home-context-strip">
+              <div className="workspace-home-context-copy">
+                <Text className="section-kicker">当前节奏</Text>
+                <Text size="sm" c="dimmed">
+                  {importPulse}
+                </Text>
               </div>
-              <div className="workspace-home-statusbar-item">
-                <span>Cases</span>
-                <strong>{counts.cases}</strong>
-              </div>
-              <div className="workspace-home-statusbar-item">
-                <span>Collections</span>
-                <strong>{counts.collections}</strong>
-              </div>
-              <div className="workspace-home-statusbar-item">
-                <span>Environments</span>
-                <strong>{counts.environments}</strong>
+              <div className="workspace-home-context-tags">
+                <span className="workspace-home-context-tag">{workspacePulse}</span>
+                {props.gitStatus?.isRepo ? (
+                  <span className={`workspace-home-context-tag is-${gitStatusTone(props.gitStatus)}`}>
+                    {props.gitStatus.branch || 'detached'}
+                    {props.gitStatus.dirty ? ` · ${props.gitStatus.changedFiles.length} 改动` : ''}
+                    {props.gitStatus.behind > 0 ? ` · 落后 ${props.gitStatus.behind}` : ''}
+                  </span>
+                ) : null}
               </div>
             </div>
 
@@ -500,8 +515,8 @@ export function WorkspaceHomePanel(props: {
                 <div className="workspace-home-panel">
                   <div className="workspace-home-panel-head">
                     <div>
-                      <Text className="section-kicker">同步提醒</Text>
-                      <h3 className="section-title">需要同步前再看一眼</h3>
+                      <Text className="section-kicker">同步前检查</Text>
+                      <h3 className="section-title">只保留真正影响下一步的 Git 信息</h3>
                     </div>
                     <Badge color={gitStatusTone(props.gitStatus)} variant="light">
                       {props.gitStatus?.branch || 'detached'}

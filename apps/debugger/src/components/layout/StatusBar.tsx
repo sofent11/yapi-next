@@ -1,10 +1,9 @@
-import { Group, Text, Tooltip } from '@mantine/core';
+import { Group, Text } from '@mantine/core';
 import { IconGitBranch, IconArrowUpRight, IconArrowDownRight, IconClock, IconCheck, IconX } from '@tabler/icons-react';
 import type { GitStatusPayload } from '../../lib/desktop';
 
 export function StatusBar(props: {
   gitStatus: GitStatusPayload | null;
-  activeEnvironment: string;
   responseInfo?: {
     status: number;
     duration: number;
@@ -16,26 +15,7 @@ export function StatusBar(props: {
 
   return (
     <footer className="app-status-bar">
-      <Group gap="md" style={{ flex: 1 }}>
-        {props.gitStatus?.isRepo && (
-          <Tooltip label="当前 Git 分支" position="top" withArrow>
-            <div className="status-item clickable" onClick={props.onRefreshGit}>
-              <IconGitBranch size={14} />
-              <Text size="xs" fw={600}>{props.gitStatus.branch || 'detached'}</Text>
-              {props.gitStatus.dirty && <span className="status-dot orange" />}
-            </div>
-          </Tooltip>
-        )}
-
-        {props.gitStatus?.isRepo ? (
-          <div className="status-item">
-            <IconArrowUpRight size={14} />
-            <Text size="xs">{props.gitStatus.ahead}</Text>
-            <IconArrowDownRight size={14} />
-            <Text size="xs">{props.gitStatus.behind}</Text>
-          </div>
-        ) : null}
-
+      <Group gap="sm" style={{ flex: 1 }}>
         {props.responseInfo && (
           <div className={`status-response-pill animate-in ${responseTone}`}>
             <span className="status-response-main">
@@ -53,10 +33,29 @@ export function StatusBar(props: {
             </span>
           </div>
         )}
+        {!props.responseInfo ? (
+          <Text size="xs" c="dimmed">
+            等待请求结果
+          </Text>
+        ) : null}
       </Group>
 
-      <Group gap="md">
-        <Text size="xs" c="dimmed">YAPI Next Debugger v0.1.0</Text>
+      <Group gap="sm">
+        {props.gitStatus?.isRepo ? (
+          <>
+            <button type="button" className="status-item status-button" onClick={props.onRefreshGit}>
+              <IconGitBranch size={14} />
+              <Text size="xs" fw={600}>{props.gitStatus.branch || 'detached'}</Text>
+              {props.gitStatus.dirty && <span className="status-dot orange" />}
+            </button>
+            <div className="status-item">
+              <IconArrowUpRight size={14} />
+              <Text size="xs">{props.gitStatus.ahead}</Text>
+              <IconArrowDownRight size={14} />
+              <Text size="xs">{props.gitStatus.behind}</Text>
+            </div>
+          </>
+        ) : null}
       </Group>
     </footer>
   );

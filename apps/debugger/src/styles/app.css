@@ -179,6 +179,51 @@ mark {
   gap: 14px;
 }
 
+.workspace-home-context-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, white);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-muted) 74%, white);
+}
+
+.workspace-home-context-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.workspace-home-context-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.workspace-home-context-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, white);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 90%, white);
+  color: var(--muted-strong);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.workspace-home-context-tag.is-orange {
+  color: var(--orange);
+}
+
+.workspace-home-context-tag.is-teal {
+  color: var(--green);
+}
+
 .workspace-home-empty,
 .workspace-home-panel,
 .workspace-home-next-card {
@@ -212,38 +257,6 @@ mark {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-}
-
-.workspace-home-statusbar {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid color-mix(in srgb, var(--line) 82%, white);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-muted) 74%, white);
-}
-
-.workspace-home-statusbar-item {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-
-.workspace-home-statusbar-item span {
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.workspace-home-statusbar-item strong {
-  min-width: 0;
-  color: var(--text);
-  font-size: 0.92rem;
-  line-height: 1.2;
 }
 
 .workspace-home-next-card {
@@ -345,7 +358,7 @@ mark {
 
 .workspace-home-task-status.is-success {
   background: rgba(28, 126, 90, 0.1);
-  color: var(--teal);
+  color: var(--green);
 }
 
 .workspace-home-sync-strip,
@@ -420,9 +433,16 @@ mark {
 
 .workspace-topnav-center {
   min-width: 0;
+  display: grid;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.workspace-topnav-context {
+  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: baseline;
+  gap: 8px;
   overflow: hidden;
 }
 
@@ -433,16 +453,24 @@ mark {
   font-family: var(--font-display);
 }
 
+.workspace-topnav-divider {
+  color: var(--topnav-muted);
+  font-size: 0.82rem;
+}
+
 .workspace-topnav-active {
   color: var(--topnav-muted);
   font-size: 0.76rem;
   font-weight: 600;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.workspace-topnav-path {
-  min-width: 0;
+.workspace-topnav-meta {
   color: var(--topnav-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -473,14 +501,6 @@ mark {
   background: color-mix(in oklch, var(--surface-muted) 78%, var(--surface));
 }
 
-.workspace-topnav-overflow-trigger {
-  display: none;
-}
-
-.workspace-topnav-overflow-menu {
-  min-width: 240px;
-}
-
 .workspace-topnav [data-topnav-no-drag] {
   position: relative;
   z-index: 2;
@@ -497,13 +517,21 @@ mark {
     padding: 16px;
   }
 
+  .workspace-home-context-strip {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .workspace-home-context-tags {
+    justify-content: flex-start;
+  }
+
   .workspace-home-empty,
   .workspace-home-panel,
   .workspace-home-next-card {
     padding: 16px;
   }
 
-  .workspace-home-summary-strip,
   .workspace-home-sync-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -513,11 +541,6 @@ mark {
   .workspace-home-task-actions {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .workspace-home-statusbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 12px;
   }
 
   .workspace-home-next-head,
@@ -535,13 +558,8 @@ mark {
     font-size: 1.18rem;
   }
 
-  .workspace-home-statusbar,
   .workspace-home-sync-strip {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .workspace-home-statusbar-item {
-    justify-content: space-between;
   }
 }
 
@@ -1387,12 +1405,12 @@ mark {
 }
 
 .response-header-ide {
-  min-height: 44px;
-  padding: 0 16px;
+  min-height: 56px;
+  padding: 10px 16px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   flex-shrink: 0;
   border-bottom: 1px solid var(--line);
   background: var(--surface-muted);
@@ -1428,7 +1446,7 @@ mark {
 }
 
 .response-example-select {
-  width: 140px;
+  width: 168px;
 }
 
 .response-header-actions {
@@ -1443,16 +1461,12 @@ mark {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .response-header-actions-secondary {
   min-width: 0;
   justify-content: flex-end;
-}
-
-.response-results-toolbar {
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in oklch, var(--accent-soft) 35%, var(--surface));
 }
 
 .scratch-session-select {
@@ -1984,10 +1998,6 @@ mark {
     height: 24px;
     margin-bottom: 8px;
   }
-
-  .workspace-topnav-path {
-    max-width: 36vw;
-  }
 }
 
 @media (max-width: 800px) {
@@ -2015,21 +2025,14 @@ mark {
   }
 
   .workspace-topnav-right {
-    justify-content: space-between;
-  }
-
-  .workspace-topnav-path {
-    max-width: none;
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 
 @media (max-width: 1280px) {
   .workspace-topnav-optional {
     display: none;
-  }
-
-  .workspace-topnav-overflow-trigger {
-    display: inline-flex;
   }
 }
 
@@ -3059,6 +3062,19 @@ mark {
   font-size: 0.78rem;
 }
 
+.launchpad-sequence-hero {
+  margin-top: 6px;
+}
+
+.launchpad-hero-note {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in oklch, var(--line) 76%, white);
+}
+
 .launchpad-recent-list .category-row {
   padding: 9px 10px;
 }
@@ -3332,13 +3348,20 @@ mark {
   min-height: 60px;
 }
 
-.response-quick-actions {
+.response-context-strip {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding: 12px;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface) 86%, var(--accent-soft));
+}
+
+.response-context-hint {
+  flex: 1;
+  min-width: min(420px, 100%);
 }
 
 .request-diagnostics-banner {
@@ -4144,12 +4167,15 @@ mark {
 
 /* Status Bar Styles */
 .app-status-bar {
-  height: 26px;
+  min-height: 28px;
   background: var(--surface-muted);
   color: var(--muted);
   border-top: 1px solid var(--line);
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   padding: 0 12px;
   font-size: 12px;
   user-select: none;
@@ -4167,15 +4193,18 @@ mark {
   color: inherit;
 }
 
-.status-item.clickable {
-  cursor: pointer;
+.status-button {
+  border: none;
+  background: transparent;
+  color: inherit;
   border-radius: 4px;
   transition:
     background-color 160ms ease,
     color 160ms ease;
 }
 
-.status-item.clickable:hover {
+.status-button:hover {
+  cursor: pointer;
   background: color-mix(in oklch, var(--text) 8%, transparent);
   color: var(--text);
 }

@@ -3708,9 +3708,6 @@ export function App() {
               value: item.document.name,
               label: item.document.name
             }))}
-            importTaskCount={importTaskCount}
-            showImportTaskBadge={activeView === 'workspace'}
-            importTasksActive={activeWorkbenchPane === 'import-tasks'}
             isRunning={runMutation.isPending || scratchRunMutation.isPending}
             gitStatus={gitInfo}
             isMacOS={isMacOS}
@@ -3718,7 +3715,6 @@ export function App() {
             canGoForward={canNavigateTabsForward}
             onBack={() => navigateOpenTabs('back')}
             onForward={() => navigateOpenTabs('forward')}
-            onOpenImportTasks={openImportTasks}
             onChangeEnvironment={name => store.setActiveEnvironment(name)}
             onRefreshWorkspace={() => openMutation.mutate(store.workspace!.root)}
           />
@@ -4172,7 +4168,6 @@ export function App() {
           </main>
           <StatusBar
             gitStatus={gitInfo}
-            activeEnvironment={store.activeEnvironmentName}
             responseInfo={contextResponseInfo}
             onRefreshGit={handleRefreshGitStatus}
           />
