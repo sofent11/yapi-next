@@ -113,6 +113,20 @@ npm run next:smoke:api
 npm run next:self-assess:api
 ```
 
+### yapi-to-typescript-next
+
+本仓库维护 `packages/yapi-to-typescript-next` 作为新版 YApi TypeScript 代码生成工具，包名为
+`yapi-to-typescript-next`，CLI 为 `yttn`。
+
+```bash
+npm run yttn:build
+npm run yttn:test
+npm run yttn -- -c yttn.config.ts
+```
+
+外部项目使用时可通过 `npx yttn -c yttn.config.ts` 执行。配置文件默认使用
+`yttn.config.ts` / `yttn.config.js`，并从 `yapi-to-typescript-next` 导入 `defineConfig`。
+
 ### 索引与性能
 
 ```bash

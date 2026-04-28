@@ -1,0 +1,41 @@
+{
+  "name": "yapi-to-typescript-next",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Generate TypeScript request types and helpers from YApi, Swagger, or OpenAPI definitions.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "yttn": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx --test test/*.test.ts",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@apidevtools/swagger-parser": "^12.1.0",
+    "change-case": "^3.1.0",
+    "json-schema-to-typescript": "^15.0.4",
+    "json5": "^2.2.3",
+    "prettier": "^3.6.2",
+    "swagger2openapi": "^7.0.8",
+    "to-json-schema": "^0.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsx": "^4.21.0"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
+  "license": "MIT"
+}

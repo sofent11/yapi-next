@@ -29,6 +29,9 @@
     "debugger:bundle": "npm run build --prefix apps/debugger",
     "debugger:test": "tsx --test packages/debugger-core/test/*.test.ts packages/debugger-importers/test/*.test.ts",
     "debugger:run": "tsx scripts/debugger-runner.ts",
+    "yttn:build": "npm run build --prefix packages/yapi-to-typescript-next",
+    "yttn:test": "npm run test --prefix packages/yapi-to-typescript-next",
+    "yttn": "tsx packages/yapi-to-typescript-next/src/cli.ts",
     "next:build": "npm run next:types:build && npm run next:api:build && npm run next:web:build",
     "next:start": "./scripts/start-next.sh"
   },
@@ -44,6 +47,9 @@
     "debugger:bundle": "构建调试器桌面安装包",
     "debugger:test": "运行调试器 core/importer 轻量回归测试",
     "debugger:run": "在命令行运行本地 debugger collection 并可导出报告",
+    "yttn:build": "构建 yapi-to-typescript-next 工具包",
+    "yttn:test": "运行 yapi-to-typescript-next 工具包测试",
+    "yttn": "运行 yapi-to-typescript-next CLI",
     "next:smoke:api": "运行新版 API 兼容冒烟测试",
     "next:self-assess:api": "运行新版 API 全量自评",
     "test": "执行 Next 构建校验"
