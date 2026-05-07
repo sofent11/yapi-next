@@ -1264,6 +1264,19 @@
     @apply truncate;
   }
 
+  .doc-tree-rename-input {
+    @apply min-w-0 flex-1;
+  }
+
+  .doc-tree-rename-input .mantine-Input-input {
+    @apply h-8 border-slate-300 bg-white text-sm;
+    &:is([data-theme="dark"], [data-theme="dark"] *) {
+      border-color: var(--border-project-subtle);
+      background-color: var(--surface-project-input);
+      color: rgb(226 232 240);
+    }
+  }
+
   .doc-tree-row-actions {
     @apply opacity-0 transition-opacity;
   }

@@ -11,6 +11,7 @@ import {
   IconFilePlus,
   IconFolder,
   IconFolderPlus,
+  IconPencil,
   IconSearch,
   IconTrash,
   IconX
@@ -109,6 +110,8 @@ export function DocWorkspace(props: DocWorkspaceProps) {
   const [titleDraft, setTitleDraft] = useState('');
   const [markdownDraft, setMarkdownDraft] = useState('');
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
+  const [renamingId, setRenamingId] = useState(0);
+  const [renameDraft, setRenameDraft] = useState('');
 
   const activeNode = useMemo(() => findNode(nodes, activeId), [nodes, activeId]);
   const dirty = Boolean(activeNode && (titleDraft !== activeNode.title || markdownDraft !== activeNode.markdown));
@@ -210,6 +213,41 @@ export function DocWorkspace(props: DocWorkspaceProps) {
     message.success('文档已保存');
   }
 
+  function startRename(node: DocTreeNode) {
+    setRenamingId(node._id);
+    setRenameDraft(node.title);
+  }
+
+  function cancelRename() {
+    setRenamingId(0);
+    setRenameDraft('');
+  }
+
+  async function commitRename(node: DocTreeNode) {
+    if (!canWrite) return;
+    const nextTitle = renameDraft.trim();
+    if (!nextTitle || nextTitle === node.title) {
+      cancelRename();
+      return;
+    }
+    const response = await safeApiRequest(
+      updateDocNode({
+        id: node._id,
+        title: nextTitle
+      }).unwrap(),
+      {
+        fallback: '重命名失败',
+        onError: text => message.error(text)
+      }
+    );
+    if (!response) return;
+    if (activeId === node._id) {
+      setTitleDraft(nextTitle);
+    }
+    cancelRename();
+    message.success('已重命名');
+  }
+
   async function handleDelete(node: DocTreeNode) {
     if (!canWrite) return;
     const text = node.node_type === 'folder' ? '删除目录会同时删除子目录和页面，确定删除吗？' : '确定删除这个页面吗？';
@@ -309,16 +347,38 @@ export function DocWorkspace(props: DocWorkspaceProps) {
             visibleNodes.map(node => {
               const active = node._id === activeId;
               const isFolder = node.node_type === 'folder';
+              const renaming = renamingId === node._id;
               return (
                 <div key={node._id} className={`doc-tree-row ${active ? 'is-active' : ''}`} style={{ paddingLeft: 10 + node.depth * 18 }}>
-                  <button type="button" className="doc-tree-main" onClick={() => selectNode(node)}>
+                  {renaming ? (
+                    <TextInput
+                      value={renameDraft}
+                      onChange={event => setRenameDraft(event.currentTarget.value)}
+                      onBlur={() => void commitRename(node)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          void commitRename(node);
+                        }
+                        if (event.key === 'Escape') {
+                          event.preventDefault();
+                          cancelRename();
+                        }
+                      }}
+                      autoFocus
+                      className="doc-tree-rename-input"
+                      aria-label="重命名文档节点"
+                    />
+                  ) : (
+                    <button type="button" className="doc-tree-main" onClick={() => selectNode(node)}>
                     {isFolder ? (
                       expandedIds.has(node._id) ? <IconChevronDown size={15} /> : <IconChevronRight size={15} />
                     ) : (
                       <IconFileText size={15} />
                     )}
                     <span>{node.title}</span>
-                  </button>
+                    </button>
+                  )}
                   {canWrite ? (
                     <div className="doc-tree-row-actions">
                       {isFolder ? (
@@ -326,6 +386,9 @@ export function DocWorkspace(props: DocWorkspaceProps) {
                           <IconFilePlus size={14} />
                         </ActionIcon>
                       ) : null}
+                      <ActionIcon size="sm" variant="subtle" aria-label="重命名" onClick={() => startRename(node)}>
+                        <IconPencil size={14} />
+                      </ActionIcon>
                       <ActionIcon size="sm" variant="subtle" aria-label="上移" onClick={() => void handleMove(node, -1)}>
                         <IconChevronDown size={14} className="rotate-180" />
                       </ActionIcon>
