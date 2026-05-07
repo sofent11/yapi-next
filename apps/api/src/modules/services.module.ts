@@ -3,6 +3,7 @@ import { DatabaseModule } from './database.module';
 import { AccessContextService } from '../services/access-context.service';
 import { ColCompatService } from '../services/col-compat.service';
 import { CounterService } from '../services/counter.service';
+import { DocNodeService } from '../services/doc-node.service';
 import { FollowCompatService } from '../services/follow-compat.service';
 import { GroupCompatService } from '../services/group-compat.service';
 import { InterfaceBulkUpsertService } from '../services/interface-bulk-upsert.service';
@@ -27,6 +28,7 @@ import { SpecService } from '../services/spec.service';
 const serviceProviders = [
   AccessContextService,
   CounterService,
+  DocNodeService,
   InterfaceBulkUpsertService,
   InterfaceCatService,
   InterfaceCompatService,

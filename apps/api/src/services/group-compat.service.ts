@@ -145,6 +145,24 @@ export class GroupCompatService {
     return this.resolveRoleFromGroup(group, user);
   }
 
+  async assertGroupPermission(groupId: number, action: 'view' | 'edit', user: SessionUser): Promise<GroupEntity> {
+    const group = await this.requireGroup(groupId);
+    const role = this.resolveRoleFromGroup(group, user);
+    if (action === 'edit') {
+      if (role === 'admin' || role === 'owner' || role === 'dev') {
+        return group;
+      }
+      throw new Error('没有权限');
+    }
+    if (group.type === 'private' && role === 'member') {
+      throw new Error('没有权限');
+    }
+    if (role === 'admin' || role === 'owner' || role === 'dev' || role === 'guest' || role === 'member') {
+      return group;
+    }
+    throw new Error('没有权限');
+  }
+
   async addGroup(
     payload: { group_name: string; group_desc?: string; owner_uids?: number[] },
     user: SessionUser

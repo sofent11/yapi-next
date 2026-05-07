@@ -188,6 +188,8 @@ export type SpecExportFormat = 'openapi3' | 'swagger2';
 export type InterfacePublishStatus = 'all' | 'open';
 export type InterfaceStatus = 'undone' | 'done';
 export type TaskStatus = 'queued' | 'running' | 'success' | 'failed';
+export type DocScopeType = 'group' | 'project';
+export type DocNodeType = 'folder' | 'page';
 
 export interface OpenApiOperationNormalized {
   method: string;
@@ -279,6 +281,63 @@ export interface SpecImportTaskDTO {
   up_time: number;
   start_time?: number;
   end_time?: number;
+}
+
+export interface DocNode {
+  _id: number;
+  scope_type: DocScopeType;
+  group_id?: number;
+  project_id?: number;
+  parent_id: number;
+  node_type: DocNodeType;
+  title: string;
+  markdown: string;
+  index: number;
+  uid: number;
+  edit_uid?: number;
+  add_time?: number;
+  up_time?: number;
+}
+
+export interface DocTreeNode extends DocNode {
+  children: DocTreeNode[];
+}
+
+export interface DocScopeQuery {
+  scope_type: DocScopeType;
+  group_id?: number;
+  project_id?: number;
+  token?: string;
+}
+
+export interface DocTreeResult {
+  list: DocTreeNode[];
+  can_write: boolean;
+}
+
+export interface DocAddRequest extends DocScopeQuery {
+  parent_id?: number;
+  node_type: DocNodeType;
+  title: string;
+  markdown?: string;
+}
+
+export interface DocUpdateRequest {
+  id: number;
+  title?: string;
+  markdown?: string;
+  parent_id?: number;
+  index?: number;
+}
+
+export interface DocDeleteRequest {
+  id: number;
+}
+
+export interface DocMoveRequest {
+  id: number;
+  parent_id: number;
+  index?: number;
 }
 
 export interface InterfaceDTO {

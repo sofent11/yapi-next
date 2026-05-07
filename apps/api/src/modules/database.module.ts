@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AvatarEntity, AvatarSchema } from '../database/schemas/avatar.schema';
 import { CounterEntity, CounterSchema } from '../database/schemas/counter.schema';
+import { DocNodeEntity, DocNodeSchema } from '../database/schemas/doc-node.schema';
 import { FollowEntity, FollowSchema } from '../database/schemas/follow.schema';
 import { GroupEntity, GroupSchema } from '../database/schemas/group.schema';
 import { InterfaceCaseEntity, InterfaceCaseSchema } from '../database/schemas/interface-case.schema';
@@ -21,6 +22,7 @@ import { UserEntity, UserSchema } from '../database/schemas/user.schema';
     }),
     MongooseModule.forFeature([
       { name: CounterEntity.name, schema: CounterSchema },
+      { name: DocNodeEntity.name, schema: DocNodeSchema },
       { name: AvatarEntity.name, schema: AvatarSchema },
       { name: GroupEntity.name, schema: GroupSchema },
       { name: FollowEntity.name, schema: FollowSchema },

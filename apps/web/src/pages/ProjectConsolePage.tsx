@@ -6,6 +6,7 @@ import { ProjectConsoleSettingTab } from './components/ProjectConsoleSettingTab'
 import { ActivityList } from './project/components/ActivityList';
 import { MemberList } from './project/components/MemberList';
 import { ProjectList } from './project/components/ProjectList';
+import { DocWorkspace } from '../components/docs/DocWorkspace';
 import { AppShell, PageHeader } from '../components/layout';
 import { ConsoleShell } from '../app/shells/ConsoleShell';
 import { GroupNavigator } from '../domains/group-console/GroupNavigator';
@@ -48,6 +49,20 @@ export function ProjectConsolePage() {
       )
     }
   ];
+
+  tabItems.push({
+    key: 'docs',
+    label: '文档',
+    children: (
+      <DocWorkspace
+        title="分组文档"
+        scope={{
+          scope_type: 'group',
+          group_id: state.groupId
+        }}
+      />
+    )
+  });
 
   if (state.showMembers) {
     tabItems.push({

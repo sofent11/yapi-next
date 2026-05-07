@@ -1,4 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { buildDocEndpoints } from './yapi-api/doc.endpoints';
 import { buildInterfaceEndpoints } from './yapi-api/interface.endpoints';
 import { buildProjectSpecEndpoints } from './yapi-api/project-spec.endpoints';
 import { apiBaseUrl, tagTypes } from './yapi-api/shared';
@@ -14,6 +15,7 @@ export const yapiApi = createApi({
   endpoints: builder => ({
     ...buildUserGroupEndpoints(builder),
     ...buildProjectSpecEndpoints(builder),
+    ...buildDocEndpoints(builder),
     ...buildInterfaceEndpoints(builder)
   })
 });
@@ -78,6 +80,11 @@ export const {
   useGetImportTaskQuery,
   useListImportTasksQuery,
   useExportSpecMutation,
+  useGetDocTreeQuery,
+  useAddDocNodeMutation,
+  useUpdateDocNodeMutation,
+  useMoveDocNodeMutation,
+  useDeleteDocNodeMutation,
   useGetInterfaceTreeQuery,
   useLazyGetInterfaceTreeQuery,
   useGetInterfaceTreeNodeQuery,

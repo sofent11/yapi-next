@@ -2,6 +2,14 @@ import type { BaseQueryFn, FetchArgs, FetchBaseQueryError, FetchBaseQueryMeta } 
 import type { EndpointBuilder } from '@reduxjs/toolkit/query/react';
 import type {
   ApiResult,
+  DocAddRequest,
+  DocDeleteRequest,
+  DocMoveRequest,
+  DocNode,
+  DocScopeQuery,
+  DocTreeNode,
+  DocTreeResult,
+  DocUpdateRequest,
   FollowItem,
   GroupListItem,
   ProjectCopyRequest,
@@ -33,6 +41,14 @@ import type {
 import type { InterfaceDTO } from '../../types/interface-dto';
 
 export type SharedApiResult<T = unknown> = ApiResult<T>;
+export type SharedDocAddRequest = DocAddRequest;
+export type SharedDocDeleteRequest = DocDeleteRequest;
+export type SharedDocMoveRequest = DocMoveRequest;
+export type SharedDocNode = DocNode;
+export type SharedDocScopeQuery = DocScopeQuery;
+export type SharedDocTreeNode = DocTreeNode;
+export type SharedDocTreeResult = DocTreeResult;
+export type SharedDocUpdateRequest = DocUpdateRequest;
 export type SharedInterfaceDTO = InterfaceDTO;
 export type SharedFollowItem = FollowItem;
 export type SharedGroupListItem = GroupListItem;
@@ -190,6 +206,7 @@ export const USER_LIST_TAG = { type: 'User' as const, id: 'LIST' };
 export const GROUP_LIST_TAG = { type: 'Group' as const, id: 'LIST' };
 export const PROJECT_LIST_TAG = { type: 'Project' as const, id: 'LIST' };
 export const FOLLOW_LIST_TAG = { type: 'Project' as const, id: 'FOLLOW-LIST' };
+export const DOC_LIST_TAG = { type: 'Doc' as const, id: 'LIST' };
 
 export function toPositiveNumber(value: unknown): number {
   const numeric = Number(value || 0);
@@ -206,6 +223,14 @@ export function groupTag(groupId: number) {
 
 export function projectTag(projectId: number) {
   return { type: 'Project' as const, id: projectId };
+}
+
+export function docScopeTag(scope: DocScopeQuery) {
+  const id =
+    scope.scope_type === 'group'
+      ? `GROUP-${Number(scope.group_id || 0)}`
+      : `PROJECT-${Number(scope.project_id || 0)}`;
+  return { type: 'Doc' as const, id };
 }
 
 export function interfaceProjectTag(projectId: number) {
@@ -263,6 +288,7 @@ export const tagTypes = [
   'User',
   'Group',
   'Project',
+  'Doc',
   'Col',
   'ColCase'
 ] as const;

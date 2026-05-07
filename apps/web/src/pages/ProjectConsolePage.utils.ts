@@ -2,7 +2,7 @@ import type { GroupListItem } from '@yapi-next/shared-types';
 import type { ConsoleTabKey } from './ProjectConsolePage.types';
 
 export function isConsoleTabKey(key: string): key is ConsoleTabKey {
-  return key === 'projects' || key === 'members' || key === 'activity' || key === 'setting';
+  return key === 'projects' || key === 'docs' || key === 'members' || key === 'activity' || key === 'setting';
 }
 
 export function normalizeGroups(myGroup: GroupListItem | undefined, groups: GroupListItem[]): GroupListItem[] {

@@ -13,4 +13,4 @@ export type CopyForm = {
   project_name: string;
 };
 
-export type ConsoleTabKey = 'projects' | 'members' | 'activity' | 'setting';
+export type ConsoleTabKey = 'projects' | 'docs' | 'members' | 'activity' | 'setting';

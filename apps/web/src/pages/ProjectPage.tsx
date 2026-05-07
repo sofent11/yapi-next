@@ -7,7 +7,7 @@ import { AsyncRetryAction, AsyncState } from '../components/patterns/AsyncState'
 import { SecondaryNav } from '../components/patterns/SecondaryNav';
 import { ProjectHeader } from '../domains/project/ProjectHeader';
 
-const BUILT_IN_NAV_KEYS = new Set(['interface', 'activity', 'data', 'members', 'setting', 'api-markdown']);
+const BUILT_IN_NAV_KEYS = new Set(['interface', 'activity', 'data', 'members', 'setting', 'docs', 'api-markdown']);
 
 function createLazyProjectPage(
   loader: () => Promise<{ default: ComponentType<any> }>
@@ -32,6 +32,9 @@ const ProjectMembersPage = createLazyProjectPage(() =>
 );
 const ProjectSettingPage = createLazyProjectPage(() =>
   import('./project/ProjectSettingPage').then(mod => ({ default: mod.ProjectSettingPage }))
+);
+const ProjectDocsPage = createLazyProjectPage(() =>
+  import('./project/ProjectDocsPage').then(mod => ({ default: mod.ProjectDocsPage }))
 );
 const ProjectApiMarkdownPage = createLazyProjectPage(() =>
   import('./project/ProjectApiMarkdownPage').then(mod => ({ default: mod.ProjectApiMarkdownPage }))
@@ -75,6 +78,10 @@ export function ProjectPage() {
       setting: {
         name: '设置',
         path: `/project/${projectId}/setting`
+      },
+      docs: {
+        name: '文档',
+        path: `/project/${projectId}/docs`
       }
     };
     webPlugins.applySubNav(routes, { projectId });
@@ -169,6 +176,7 @@ export function ProjectPage() {
       data: '执行 OpenAPI/Swagger 导入导出并跟踪任务状态。',
       members: '维护项目成员、角色和通知配置。',
       setting: '配置项目基础信息、环境变量、Token 和全局 Mock。',
+      docs: '维护项目说明、联调记录和团队约定。',
       'api-markdown': '按接口 URL 批量生成当前项目的 Markdown 接口说明。'
     };
     return {
@@ -226,6 +234,7 @@ export function ProjectPage() {
             <Route path="members" element={<ProjectMembersPage projectId={projectId} />} />
           ) : null}
           <Route path="setting" element={<ProjectSettingPage projectId={projectId} />} />
+          <Route path="docs" element={<ProjectDocsPage projectId={projectId} />} />
           <Route path="api-markdown" element={<ProjectApiMarkdownPage projectId={projectId} />} />
           {pluginRouteItems.map(item => {
             const C = item.component;
