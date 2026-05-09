@@ -199,8 +199,8 @@ export class OpenapiParserService {
         };
 
         this.handleParameters(mergedDereferencedOperation, api, spec);
-        this.handleRequestBody(mergedOperation, api, spec);
-        this.handleResponse(mergedOperation, api, spec);
+        this.handleRequestBody(mergedDereferencedOperation, api, dereferencedSpec);
+        this.handleResponse(mergedDereferencedOperation, api, dereferencedSpec);
 
         if (api.catname && !cats.find(item => item.name === api.catname)) {
           cats.push({
