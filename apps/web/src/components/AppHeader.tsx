@@ -19,7 +19,8 @@ export function AppHeader(props: AppHeaderProps) {
     <header className="flex items-center gap-4 border-b border-[var(--border-shell-subtle)] bg-[var(--surface-shell-panel)] px-4 py-2.5 text-[var(--text-primary)]">
       <Link
         to="/group"
-        className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-shell-subtle)] bg-white text-slate-900 transition hover:border-blue-400 hover:bg-blue-400 hover:text-white dark:bg-[var(--surface-shell-subtle)] dark:text-slate-100"
+        aria-label="回到分组首页"
+        className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-shell-subtle)] bg-[var(--surface-shell-subtle)] text-[var(--text-primary)] transition hover:border-[var(--border-interactive)] hover:bg-[var(--surface-shell-panel)]"
       >
         <div className="flex h-8 w-8 items-center justify-center rounded-full">
           <LogoSVG length={28} />

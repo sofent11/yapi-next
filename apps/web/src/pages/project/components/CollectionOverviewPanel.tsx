@@ -7,6 +7,7 @@ import {
   IconPlus,
   IconTrash
 } from '@tabler/icons-react';
+import type { KeyboardEvent } from 'react';
 import { AdaptiveDataView } from '../../../components/patterns/AdaptiveDataView';
 import { CollectionDetailHeader } from '../../../domains/interface/CollectionDetailHeader';
 import { FilterBar } from '../../../components/layout';
@@ -76,6 +77,14 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
       notifications.show({ color: 'teal', message: successText });
     } catch (_err) {
       notifications.show({ color: 'red', message: '复制失败，请手动复制' });
+    }
+  }
+
+  function handleCaseCardKeyDown(event: KeyboardEvent<HTMLElement>, caseId: string) {
+    if (event.currentTarget !== event.target) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      props.onNavigateCase(caseId);
     }
   }
 
@@ -276,6 +285,7 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
                                 <Button
                                   size="xs"
                                   variant="default"
+                                  aria-label={`复制用例 ${String(row.casename || row._id || '')}`}
                                   onClick={event => {
                                     event.stopPropagation();
                                     props.onCopyCase(caseId);
@@ -287,6 +297,7 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
                                   size="xs"
                                   color="red"
                                   variant="light"
+                                  aria-label={`删除用例 ${String(row.casename || row._id || '')}`}
                                   onClick={event => {
                                     event.stopPropagation();
                                     props.onDeleteCase(caseId);
@@ -328,7 +339,11 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
                             : ' adaptive-data-card-error'
                         : ''
                     }`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`打开用例 ${String(row.casename || row._id || '-')}`}
                     onClick={() => props.onNavigateCase(caseId)}
+                    onKeyDown={event => handleCaseCardKeyDown(event, caseId)}
                   >
                     <div className="adaptive-data-card-head">
                       <button
@@ -375,10 +390,21 @@ export function CollectionOverviewPanel(props: CollectionOverviewPanelProps) {
                           <Button size="xs" variant="default" loading={props.autoTestRunning} onClick={() => props.onRunCaseTest(caseId)}>
                             测试
                           </Button>
-                          <Button size="xs" variant="default" onClick={() => props.onCopyCase(caseId)}>
+                          <Button
+                            size="xs"
+                            variant="default"
+                            aria-label={`复制用例 ${String(row.casename || row._id || '')}`}
+                            onClick={() => props.onCopyCase(caseId)}
+                          >
                             <IconCopy size={14} />
                           </Button>
-                          <Button size="xs" color="red" variant="light" onClick={() => props.onDeleteCase(caseId)}>
+                          <Button
+                            size="xs"
+                            color="red"
+                            variant="light"
+                            aria-label={`删除用例 ${String(row.casename || row._id || '')}`}
+                            onClick={() => props.onDeleteCase(caseId)}
+                          >
                             <IconTrash size={14} />
                           </Button>
                         </>

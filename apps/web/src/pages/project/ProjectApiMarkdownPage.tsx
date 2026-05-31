@@ -50,9 +50,9 @@ export function ProjectApiMarkdownPage(props: ProjectApiMarkdownPageProps) {
   const placeholder = useMemo(
     () =>
       [
-        `https://decom.valleysound.xyz/yapi/project/${props.projectId}/interface/api/20049`,
-        `https://decom.valleysound.xyz/yapi/project/${props.projectId}/interface/api/19898`,
-        `https://decom.valleysound.xyz/yapi/project/${props.projectId}/interface/api/19919`
+        `/project/${props.projectId}/interface/api/20049`,
+        `/project/${props.projectId}/interface/api/19898`,
+        '19919'
       ].join('\n'),
     [props.projectId]
   );
@@ -133,6 +133,8 @@ export function ProjectApiMarkdownPage(props: ProjectApiMarkdownPageProps) {
             </div>
 
             <Textarea
+              label="接口 URL 或接口 ID"
+              description="一行一个，支持当前站点内的接口详情路径或直接输入接口 ID。"
               minRows={12}
               autosize
               value={source}
@@ -162,35 +164,37 @@ export function ProjectApiMarkdownPage(props: ProjectApiMarkdownPageProps) {
               </div>
 
               {result.matched.length > 0 ? (
-                <Table withTableBorder striped highlightOnHover>
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th>接口</Table.Th>
-                      <Table.Th>分类</Table.Th>
-                      <Table.Th>路径</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {result.matched.map(item => (
-                      <Table.Tr key={item.id}>
-                        <Table.Td>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge size="sm" variant="light">{item.method}</Badge>
-                            <span>{item.title}</span>
-                            <span className="text-xs text-slate-400">#{item.id}</span>
-                          </div>
-                        </Table.Td>
-                        <Table.Td>{item.catName}</Table.Td>
-                        <Table.Td>
-                          <div className="space-y-1">
-                            <div>{item.path}</div>
-                            <div className="text-xs text-slate-400">{item.fullPath}</div>
-                          </div>
-                        </Table.Td>
+                <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--border-subtle)] dark:border-[var(--border-project-subtle)]">
+                  <Table striped highlightOnHover>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>接口</Table.Th>
+                        <Table.Th>分类</Table.Th>
+                        <Table.Th>路径</Table.Th>
                       </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {result.matched.map(item => (
+                        <Table.Tr key={item.id}>
+                          <Table.Td>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge size="sm" variant="light">{item.method}</Badge>
+                              <span>{item.title}</span>
+                              <span className="text-xs text-slate-400">#{item.id}</span>
+                            </div>
+                          </Table.Td>
+                          <Table.Td>{item.catName}</Table.Td>
+                          <Table.Td>
+                            <div className="space-y-1">
+                              <div>{item.path}</div>
+                              <div className="text-xs text-slate-400">{item.fullPath}</div>
+                            </div>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </div>
               ) : (
                 <Text className="workspace-paragraph">当前没有命中接口，请检查输入链接是否属于本项目。</Text>
               )}

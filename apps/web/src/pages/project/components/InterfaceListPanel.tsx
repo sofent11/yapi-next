@@ -1,5 +1,6 @@
 import { Alert, Badge, Button, Select, Table, Text, TextInput, Tooltip } from '@mantine/core';
 import { IconCopy, IconEye, IconSearch, IconTrash } from '@tabler/icons-react';
+import type { KeyboardEvent } from 'react';
 import { AdaptiveDataView } from '../../../components/patterns/AdaptiveDataView';
 import { DataPagination } from '../../../components/patterns/DataPagination';
 import { DataToolbar } from '../../../components/patterns/DataToolbar';
@@ -49,6 +50,14 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
   const pagedFilteredList = props.filteredList.slice((props.listPage - 1) * tablePageSize, props.listPage * tablePageSize);
   const hasActiveFilters = props.listKeyword.trim().length > 0 || props.statusFilter !== 'all';
   const totalPages = Math.max(1, Math.ceil(props.filteredList.length / tablePageSize));
+
+  function handleCardKeyDown(event: KeyboardEvent<HTMLElement>, rowId: number) {
+    if (event.currentTarget !== event.target) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      props.onNavigateInterface(rowId);
+    }
+  }
 
   return (
     <div className="interface-table-panel space-y-4">
@@ -201,10 +210,21 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
                       <Table.Td onClick={event => event.stopPropagation()}>
                         {props.canEdit ? (
                           <div className="flex gap-2">
-                            <Button size="compact-sm" variant="default" onClick={() => props.onCopyInterface(row)}>
+                            <Button
+                              size="compact-sm"
+                              variant="default"
+                              aria-label={`复制接口 ${row.title || row._id || ''}`}
+                              onClick={() => props.onCopyInterface(row)}
+                            >
                               <IconCopy size={14} />
                             </Button>
-                            <Button size="compact-sm" color="red" variant="light" onClick={() => props.onDeleteInterface(Number(row._id || 0))}>
+                            <Button
+                              size="compact-sm"
+                              color="red"
+                              variant="light"
+                              aria-label={`删除接口 ${row.title || row._id || ''}`}
+                              onClick={() => props.onDeleteInterface(Number(row._id || 0))}
+                            >
                               <IconTrash size={14} />
                             </Button>
                           </div>
@@ -222,11 +242,15 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
             pagedFilteredList.map(row => {
               const rowId = Number(row._id || 0);
               return (
-                <div
-                  key={`mobile-iface-${rowId}`}
-                  className={`adaptive-data-card${rowId === props.activeInterfaceId ? ' adaptive-data-card-active' : ''}`}
-                  onClick={() => props.onNavigateInterface(rowId)}
-                >
+                  <div
+                    key={`mobile-iface-${rowId}`}
+                    className={`adaptive-data-card${rowId === props.activeInterfaceId ? ' adaptive-data-card-active' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`打开接口 ${row.title || rowId}`}
+                    onClick={() => props.onNavigateInterface(rowId)}
+                    onKeyDown={event => handleCardKeyDown(event, rowId)}
+                  >
                   <div className="adaptive-data-card-head">
                     <button
                       type="button"
@@ -274,10 +298,21 @@ export function InterfaceListPanel(props: InterfaceListPanelProps) {
                   <div className="adaptive-data-card-actions" onClick={event => event.stopPropagation()}>
                     {props.canEdit ? (
                       <>
-                        <Button size="xs" variant="default" onClick={() => props.onCopyInterface(row)}>
+                        <Button
+                          size="xs"
+                          variant="default"
+                          aria-label={`复制接口 ${row.title || rowId}`}
+                          onClick={() => props.onCopyInterface(row)}
+                        >
                           <IconCopy size={14} />
                         </Button>
-                        <Button size="xs" color="red" variant="light" onClick={() => props.onDeleteInterface(rowId)}>
+                        <Button
+                          size="xs"
+                          color="red"
+                          variant="light"
+                          aria-label={`删除接口 ${row.title || rowId}`}
+                          onClick={() => props.onDeleteInterface(rowId)}
+                        >
                           <IconTrash size={14} />
                         </Button>
                       </>

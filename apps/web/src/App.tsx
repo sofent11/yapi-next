@@ -13,7 +13,7 @@ import { WorkspaceShell } from './app/shells/WorkspaceShell';
 const publicShellClassName = 'min-h-screen bg-[var(--surface-canvas)] text-[var(--text-primary)]';
 const contentClassName = 'flex-1 px-6 py-6';
 const skipLinkClassName =
-  'sr-only focus:not-sr-only focus:absolute focus:left-6 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow';
+  'sr-only focus:not-sr-only focus:absolute focus:left-6 focus:top-4 focus:z-50 focus:rounded-[var(--radius-md)] focus:bg-[var(--surface-panel)] focus:px-3 focus:py-2 focus:text-sm focus:text-[var(--text-primary)] focus:shadow-[var(--shadow-float)]';
 const browserHintClassName = 'mb-4';
 
 function createLazyRouteComponent(
@@ -66,8 +66,8 @@ function shouldShowBrowserHint(): boolean {
 
 function LoadingView() {
   return (
-    <Center className="min-h-[240px]">
-      <Loader size="lg" />
+    <Center className="min-h-[240px]" aria-live="polite">
+      <Loader size="lg" aria-label="加载中" />
     </Center>
   );
 }
@@ -77,7 +77,7 @@ function StatusErrorView(props: { onRetry: () => void }) {
     <Center className="min-h-[260px]">
       <Stack align="center" gap="xs">
         <Title order={4}>登录状态检查失败</Title>
-        <p className="text-sm text-slate-600">网络或服务暂时不可用，请重试。</p>
+        <p className="text-sm text-[var(--text-secondary)]">网络或服务暂时不可用，请重试。</p>
         <Button onClick={props.onRetry}>重试</Button>
       </Stack>
     </Center>

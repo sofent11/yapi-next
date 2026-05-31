@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, useEffect, useMemo, useState } from 'react';
 import type { ComponentType } from 'react';
 import type { AnyAction, Reducer } from '@reduxjs/toolkit';
 import { useParams } from 'react-router-dom';
@@ -99,6 +99,15 @@ type ModernWebPlugin = {
   id: string;
   setup(api: PluginRegistryApi): void;
 };
+
+function createLazyPluginComponent<TProps extends object>(
+  loader: () => Promise<{ default: ComponentType<any> }>
+): ComponentType<TProps> {
+  const LazyComponent = lazy(loader as () => Promise<{ default: ComponentType<TProps> }>);
+  return function LazyPluginComponent(props: TProps) {
+    return <LazyComponent {...props} />;
+  };
+}
 
 export function safeExecute(pluginId: string, label: string, fn: () => void) {
   try {
@@ -304,16 +313,29 @@ class WebPluginRuntime {
   }
 }
 
-import { StatisticsPluginPage } from './components/StatisticsPluginPage';
-import { AdvancedMockPluginTab } from './components/AdvancedMockPluginTab';
-import { ServicesPluginPage } from './components/ServicesPluginPage';
-import { SwaggerAutoSyncPluginPage } from './components/SwaggerAutoSyncPluginPage';
-import { ProjectWikiPluginPage } from './components/ProjectWikiPluginPage';
-import { SwaggerOpenapi3SyncPage } from './components/SwaggerOpenapi3SyncPage';
 import { createPostmanImporter } from './importers/createPostmanImporter';
 import { createHarImporter } from './importers/createHarImporter';
 import { createYapiJsonImporter } from './importers/createYapiJsonImporter';
 import advancedMockReducer from './slices/advancedMockSlice';
+
+const StatisticsPluginPage = createLazyPluginComponent<Record<string, never>>(() =>
+  import('./components/StatisticsPluginPage').then(mod => ({ default: mod.StatisticsPluginPage }))
+);
+const AdvancedMockPluginTab = createLazyPluginComponent<{ projectId: number; interfaceData: Record<string, unknown> }>(() =>
+  import('./components/AdvancedMockPluginTab').then(mod => ({ default: mod.AdvancedMockPluginTab }))
+);
+const ServicesPluginPage = createLazyPluginComponent<{ projectId: number }>(() =>
+  import('./components/ServicesPluginPage').then(mod => ({ default: mod.ServicesPluginPage }))
+);
+const SwaggerAutoSyncPluginPage = createLazyPluginComponent<{ projectId: number }>(() =>
+  import('./components/SwaggerAutoSyncPluginPage').then(mod => ({ default: mod.SwaggerAutoSyncPluginPage }))
+);
+const ProjectWikiPluginPage = createLazyPluginComponent<Record<string, never>>(() =>
+  import('./components/ProjectWikiPluginPage').then(mod => ({ default: mod.ProjectWikiPluginPage }))
+);
+const SwaggerOpenapi3SyncPage = createLazyPluginComponent<{ projectId: number }>(() =>
+  import('./components/SwaggerOpenapi3SyncPage').then(mod => ({ default: mod.SwaggerOpenapi3SyncPage }))
+);
 
 const statisticsPlugin: ModernWebPlugin = {
   id: 'statistics',

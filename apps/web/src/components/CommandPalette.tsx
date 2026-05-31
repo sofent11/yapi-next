@@ -48,7 +48,13 @@ function loadRecent(): RecentItem[] {
 function saveRecent(item: RecentItem) {
   const list = loadRecent().filter(r => r.path !== item.path);
   list.unshift(item);
-  localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, MAX_RECENT)));
+  const nextList = list.slice(0, MAX_RECENT);
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(nextList));
+  } catch {
+    // Recent navigation is a convenience; blocked storage should not interrupt navigation.
+  }
+  return nextList;
 }
 
 /* ─── icon helper ─── */
@@ -86,7 +92,7 @@ export function CommandPalette() {
   const [opened, setOpened] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
-  const [recentItems] = useState(loadRecent);
+  const [recentItems, setRecentItems] = useState(loadRecent);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [search, searchState] = useLazySearchProjectQuery();
@@ -199,7 +205,7 @@ export function CommandPalette() {
 
   const handleSelect = useCallback(
     (path: string, label: string) => {
-      saveRecent({ label, path, timestamp: Date.now() });
+      setRecentItems(saveRecent({ label, path, timestamp: Date.now() }));
       navigate(path);
       setOpened(false);
     },

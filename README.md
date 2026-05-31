@@ -153,6 +153,7 @@ npm run perf:roundtrip
 - `API_PORT`：用于 Vite 代理目标端口（默认 `3300`）
 - `API_PROXY_TARGET`：直接指定代理地址，优先于 `API_PORT`
 - `VITE_APP_BASE`：Web 部署子路径，默认 `/`。例如部署到 `/yapi/` 时设置为 `/yapi/`
+- `VITE_APP_VERSION_SOURCE`：可选的版本提示 JSON 地址，返回格式为 `{ "data": ["x.y.z"] }`。默认不请求外部地址。
 
 ### Debugger 开发相关
 - `apps/debugger` 默认在 `http://localhost:1420` 提供前端开发服务器，并由 Tauri 2 载入

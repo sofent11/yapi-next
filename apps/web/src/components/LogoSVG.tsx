@@ -6,9 +6,15 @@ interface LogoSVGProps {
 
 const LogoSVG: React.FC<LogoSVGProps> = ({ length }) => {
   return (
-    <svg className="svg" width={length} height={length} viewBox="0 0 64 64" version="1.1">
-      <title>Icon</title>
-      <desc>Created with Sketch.</desc>
+    <svg
+      className="svg"
+      width={length}
+      height={length}
+      viewBox="0 0 64 64"
+      version="1.1"
+      aria-hidden="true"
+      focusable="false"
+    >
       <defs>
         <linearGradient x1="50%" y1="0%" x2="50%" y2="100%" id="linearGradient-1">
           <stop stopColor="#FFFFFF" offset="0%" />

@@ -8,11 +8,13 @@ const webHost = process.env.VITE_HOST || '0.0.0.0';
 const apiPort = Number(process.env.API_PORT || 3300);
 const apiProxyTarget = process.env.API_PROXY_TARGET || `http://127.0.0.1:${apiPort}`;
 const appBase = process.env.VITE_APP_BASE || '/';
+const appVersionSource = process.env.VITE_APP_VERSION_SOURCE || '';
 
 export default defineConfig({
   base: appBase,
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version)
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION_SOURCE__: JSON.stringify(appVersionSource)
   },
   plugins: [react(), tailwindcss()],
   build: {

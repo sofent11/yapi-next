@@ -9,20 +9,18 @@ type VersionResponse = {
   data?: string[];
 };
 
-const VERSION_SOURCE =
-  'https://www.fastmock.site/mock/1529fa78fa4c4880ad153d115084a940/yapi/versions';
-
 export function AppNotify(props: AppNotifyProps) {
   const [latestVersion, setLatestVersion] = useState('');
   const currentVersion = useMemo(() => String(__APP_VERSION__ || '').trim(), []);
+  const versionSource = useMemo(() => String(__APP_VERSION_SOURCE__ || '').trim(), []);
 
   useEffect(() => {
-    if (!props.enabled) return;
+    if (!props.enabled || !versionSource) return;
     let canceled = false;
 
     async function loadVersion() {
       try {
-        const response = await fetch(VERSION_SOURCE, {
+        const response = await fetch(versionSource, {
           method: 'GET',
           credentials: 'omit'
         });
@@ -41,7 +39,7 @@ export function AppNotify(props: AppNotifyProps) {
     return () => {
       canceled = true;
     };
-  }, [props.enabled]);
+  }, [props.enabled, versionSource]);
 
   if (!props.enabled || !currentVersion || !latestVersion || latestVersion === currentVersion) {
     return null;
