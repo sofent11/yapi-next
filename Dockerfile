@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22-alpine AS base
+FROM node:24.22.1-alpine AS base
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ COPY packages/shared-types ./packages/shared-types
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --omit=dev --prefix apps/api
 
-FROM node:22-alpine AS api
+FROM node:24.22.1-alpine AS api
 
 WORKDIR /app
 
